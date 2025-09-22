@@ -1,0 +1,6 @@
+-làm trang login // done
+-làm trang phân quyền // pending
+-làm chức năng tutorial tour dùng driver.js // pending
+-làm trang tạo phiếu xuất nhập // pending
+-chức năng quét barcode/rfid // pending
+-làm trang xem lịch sử di chuyển của máy // pending
