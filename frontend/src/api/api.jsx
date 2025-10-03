@@ -48,6 +48,10 @@ export const api = {
       const response = await httpConnect.get(`/api/machines/${uuid}`);
       return response.data;
     },
+    create: async (data) => {
+      const response = await httpConnect.post("/api/machines", data);
+      return response.data;
+    },
     update: async (uuid, data) => {
       const response = await httpConnect.put(`/api/machines/${uuid}`, data);
       return response.data;

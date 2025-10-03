@@ -91,6 +91,33 @@ async function testConnections() {
 
 testConnections();
 
+// MARK: MIDDLEWARE - JWT Authentication
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers["authorization"];
+  const token = authHeader && authHeader.split(" ")[1]; // Bearer TOKEN
+
+  if (!token) {
+    return res.status(401).json({
+      success: false,
+      message: "Access token is required",
+    });
+  }
+
+  try {
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET || "your-default-secret-key"
+    );
+    req.user = decoded; // { id: user.id, ma_nv: user.ma_nv }
+    next();
+  } catch (error) {
+    return res.status(403).json({
+      success: false,
+      message: "Invalid or expired token",
+    });
+  }
+};
+
 // MARK: SERVER START
 
 app.listen(process.env.PORT || 8081, () => {
@@ -197,7 +224,7 @@ app.post("/auth/login", async (req, res) => {
 // MARK: MACHINE LIST
 
 // GET /api/machines - Get all machines with pagination
-app.get("/api/machines", async (req, res) => {
+app.get("/api/machines", authenticateToken, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
@@ -302,7 +329,7 @@ app.get("/api/machines", async (req, res) => {
 });
 
 // GET /api/machines/stats - Get machine statistics
-app.get("/api/machines/stats", async (req, res) => {
+app.get("/api/machines/stats", authenticateToken, async (req, res) => {
   try {
     const [stats] = await tpmConnection.execute(
       `
@@ -334,7 +361,7 @@ app.get("/api/machines/stats", async (req, res) => {
 });
 
 // GET /api/machines/:uuid - Get single machine details by UUID
-app.get("/api/machines/:uuid", async (req, res) => {
+app.get("/api/machines/:uuid", authenticateToken, async (req, res) => {
   try {
     const { uuid } = req.params;
 
@@ -386,8 +413,146 @@ app.get("/api/machines/:uuid", async (req, res) => {
   }
 });
 
+// POST /api/machines - Create new machine
+app.post("/api/machines", authenticateToken, async (req, res) => {
+  try {
+    const {
+      code_machine,
+      serial_machine,
+      RFID_machine,
+      name_machine,
+      manufacturer,
+      price,
+      date_of_use,
+      lifespan,
+      repair_cost,
+      note,
+      current_status,
+      id_category,
+    } = req.body;
+
+    // Validate required fields
+    if (!code_machine || !name_machine || !date_of_use) {
+      return res.status(400).json({
+        success: false,
+        message: "Mã máy, Tên máy và Ngày sử dụng là bắt buộc",
+      });
+    }
+
+    // Check if code_machine already exists
+    const [existingCode] = await tpmConnection.query(
+      "SELECT code_machine FROM tb_machine WHERE code_machine = ?",
+      [code_machine]
+    );
+
+    if (existingCode.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Mã máy đã tồn tại",
+      });
+    }
+
+    // Check if serial_machine already exists (if provided)
+    if (serial_machine) {
+      const [existingSerial] = await tpmConnection.query(
+        "SELECT serial_machine FROM tb_machine WHERE serial_machine = ?",
+        [serial_machine]
+      );
+
+      if (existingSerial.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Serial đã tồn tại",
+        });
+      }
+    }
+
+    // Format date to YYYY-MM-DD with timezone handling
+    let formattedDate = date_of_use;
+    if (date_of_use) {
+      const dateObj = new Date(date_of_use);
+      const year = dateObj.getFullYear();
+      const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+      const day = String(dateObj.getDate()).padStart(2, "0");
+      formattedDate = `${year}-${month}-${day}`;
+    }
+
+    // Get user ID from token
+    const userMANV = req.user.ma_nv;
+
+    // Insert new machine
+    const [result] = await tpmConnection.query(
+      `
+      INSERT INTO tb_machine 
+        (code_machine, serial_machine, RFID_machine, name_machine, manufacturer, 
+         price, date_of_use, lifespan, repair_cost, note, current_status, id_category,
+         created_by, updated_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        code_machine,
+        serial_machine,
+        RFID_machine,
+        name_machine || null,
+        manufacturer || null,
+        price || null,
+        formattedDate || null,
+        lifespan || null,
+        repair_cost || null,
+        note || null,
+        current_status || "available",
+        id_category || 1, // Default to category 1 if not provided
+        userMANV, // created_by
+        userMANV, // updated_by
+      ]
+    );
+
+    // Get the newly created machine
+    const [newMachine] = await tpmConnection.query(
+      `
+      SELECT 
+        m.uuid_machine,
+        m.serial_machine,
+        m.RFID_machine,
+        m.code_machine,
+        m.name_machine,
+        m.manufacturer,
+        m.price,
+        m.date_of_use,
+        m.lifespan,
+        m.repair_cost,
+        m.note,
+        m.current_status,
+        m.created_at,
+        m.updated_at,
+        m.created_by,
+        m.updated_by,
+        c.name_category,
+        c.id_category
+      FROM tb_machine m
+      LEFT JOIN tb_category c ON c.id_category = m.id_category
+      WHERE m.id_machine = ?
+      `,
+      [result.insertId]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: "Tạo máy móc thành công",
+      data: newMachine[0],
+    });
+  } catch (error) {
+    console.error("Error creating machine:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
 // PUT /api/machines/:uuid - Update machine by UUID
-app.put("/api/machines/:uuid", async (req, res) => {
+app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
   try {
     const { uuid } = req.params;
     const {
@@ -417,6 +582,21 @@ app.put("/api/machines/:uuid", async (req, res) => {
       });
     }
 
+    // Check if serial_machine and code_machine already exists for another machine (if provided)
+    if (serial_machine) {
+      const [existingSerial] = await tpmConnection.query(
+        "SELECT code_machine, serial_machine, uuid_machine FROM tb_machine WHERE code_machine = ? AND serial_machine = ? AND uuid_machine != ?",
+        [code_machine, serial_machine, uuid]
+      );
+
+      if (existingSerial.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Serial đã tồn tại",
+        });
+      }
+    }
+
     // Format date to YYYY-MM-DD with timezone handling
     let formattedDate = date_of_use;
     if (date_of_use) {
@@ -427,6 +607,9 @@ app.put("/api/machines/:uuid", async (req, res) => {
       const day = String(dateObj.getDate()).padStart(2, "0");
       formattedDate = `${year}-${month}-${day}`;
     }
+
+    // Get user ID from token
+    const userMANV = req.user.ma_nv;
 
     // Update machine
     await tpmConnection.query(
@@ -444,6 +627,7 @@ app.put("/api/machines/:uuid", async (req, res) => {
         repair_cost = ?,
         note = ?,
         current_status = ?,
+        updated_by = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE uuid_machine = ?
       `,
@@ -459,6 +643,7 @@ app.put("/api/machines/:uuid", async (req, res) => {
         repair_cost,
         note,
         current_status,
+        userMANV, // updated_by
         uuid,
       ]
     );
@@ -481,6 +666,8 @@ app.put("/api/machines/:uuid", async (req, res) => {
         m.current_status,
         m.created_at,
         m.updated_at,
+        m.created_by,
+        m.updated_by,
         c.name_category
       FROM tb_machine m
       LEFT JOIN tb_category c ON c.id_category = m.id_category

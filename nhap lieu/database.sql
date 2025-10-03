@@ -124,7 +124,7 @@ create table if not exists tb_machine
     lifespan int, -- tuổi thọ
     repair_cost decimal(15, 0), -- chi phí sửa chữa
     note text,
-    current_status enum('available', 'in_use', 'maintenance', 'rented_out', 'borrowed_out', 'scrapped') default 'available',
+    current_status enum('available', 'in_use', 'maintenance', 'rented_out', 'borrowed_out', 'scrapped', 'disabled') default 'available',
     
     -- key
     primary key (id_machine),

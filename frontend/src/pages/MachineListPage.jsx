@@ -34,6 +34,8 @@ import {
   DialogActions,
   IconButton,
   Divider,
+  Snackbar,
+  AlertTitle,
 } from "@mui/material";
 import {
   PrecisionManufacturing,
@@ -48,6 +50,7 @@ import {
   QrCode2,
   Print,
   Download,
+  Add,
 } from "@mui/icons-material";
 import { QRCodeSVG } from "qrcode.react";
 import NavigationBar from "../components/NavigationBar";
@@ -77,9 +80,18 @@ const MachineListPage = () => {
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedMachine, setSelectedMachine] = useState(null);
   const [editedData, setEditedData] = useState({});
+  const [isCreateMode, setIsCreateMode] = useState(false);
 
   // QR Code states
   const [showQRCode, setShowQRCode] = useState(false);
+
+  // Notification states
+  const [notification, setNotification] = useState({
+    open: false,
+    severity: "success", // 'success', 'error', 'warning', 'info'
+    title: "",
+    message: "",
+  });
 
   const fetchMachines = async (searchQuery = "") => {
     try {
@@ -150,6 +162,7 @@ const MachineListPage = () => {
       if (result.success) {
         setSelectedMachine(result.data);
         setEditedData(result.data);
+        setIsCreateMode(false);
         setOpenDialog(true);
       }
     } catch (err) {
@@ -157,10 +170,31 @@ const MachineListPage = () => {
     }
   };
 
+  const handleOpenCreateDialog = () => {
+    setSelectedMachine(null);
+    setEditedData({
+      code_machine: "",
+      serial_machine: "",
+      RFID_machine: "",
+      name_machine: "",
+      manufacturer: "",
+      price: "",
+      date_of_use: "",
+      lifespan: "",
+      repair_cost: "",
+      note: "",
+      current_status: "available",
+      id_category: 1, // Default category
+    });
+    setIsCreateMode(true);
+    setOpenDialog(true);
+  };
+
   const handleCloseDialog = () => {
     setOpenDialog(false);
     setSelectedMachine(null);
     setEditedData({});
+    setIsCreateMode(false);
     setShowQRCode(false);
   };
 
@@ -308,26 +342,137 @@ const MachineListPage = () => {
     setEditedData({ ...editedData, [field]: value });
   };
 
+  const showNotification = (severity, title, message) => {
+    setNotification({
+      open: true,
+      severity,
+      title,
+      message,
+    });
+  };
+
+  const handleCloseNotification = (event, reason) => {
+    if (reason === "clickaway") {
+      return;
+    }
+    setNotification({ ...notification, open: false });
+  };
+
+  const validateMachineData = () => {
+    const errors = [];
+
+    if (!editedData.code_machine || editedData.code_machine.trim() === "") {
+      errors.push("Mã máy");
+    }
+    if (!editedData.name_machine || editedData.name_machine.trim() === "") {
+      errors.push("Tên máy");
+    }
+    if (!editedData.serial_machine || editedData.serial_machine.trim() === "") {
+      errors.push("Serial");
+    }
+    if (!editedData.RFID_machine || editedData.RFID_machine.trim() === "") {
+      errors.push("RFID");
+    }
+    if (!editedData.date_of_use || editedData.date_of_use.trim() === "") {
+      errors.push("Ngày sử dụng");
+    }
+
+    return errors;
+  };
+
   const handleSave = async () => {
     try {
-      const result = await api.machines.update(
-        selectedMachine.uuid_machine,
-        editedData
-      );
-      if (result.success) {
-        // Refresh the list
-        fetchMachines(searchTerm);
-        fetchStats();
-        // Update selected machine with new data
-        setSelectedMachine(result.data);
-        setEditedData(result.data);
-        alert("Cập nhật thành công!");
+      // Validate required fields
+      const validationErrors = validateMachineData();
+      if (validationErrors.length > 0) {
+        showNotification(
+          "error",
+          "Vui lòng điền đầy đủ thông tin",
+          `Các trường bắt buộc: ${validationErrors.join(", ")}`
+        );
+        return;
+      }
+
+      if (isCreateMode) {
+        // Create new machine
+        const result = await api.machines.create(editedData);
+        if (result.success) {
+          // Refresh the list
+          fetchMachines(searchTerm);
+          fetchStats();
+          showNotification(
+            "success",
+            "Tạo máy móc thành công!",
+            `Máy móc "${editedData.code_machine}" đã được thêm vào hệ thống`
+          );
+          handleCloseDialog();
+        } else {
+          showNotification(
+            "error",
+            "Tạo máy móc thất bại",
+            result.message || "Đã xảy ra lỗi khi tạo máy móc"
+          );
+        }
       } else {
-        alert("Cập nhật thất bại: " + result.message);
+        // Update existing machine
+        const result = await api.machines.update(
+          selectedMachine.uuid_machine,
+          editedData
+        );
+        if (result.success) {
+          // Refresh the list
+          fetchMachines(searchTerm);
+          fetchStats();
+          // Update selected machine with new data
+          setSelectedMachine(result.data);
+          setEditedData(result.data);
+          showNotification(
+            "success",
+            "Cập nhật thành công!",
+            `Thông tin máy móc "${editedData.code_machine}" đã được cập nhật`
+          );
+          handleCloseDialog();
+        } else {
+          showNotification(
+            "error",
+            "Cập nhật thất bại",
+            result.message || "Đã xảy ra lỗi khi cập nhật máy móc"
+          );
+        }
       }
     } catch (err) {
-      console.error("Error updating machine:", err);
-      alert("Lỗi khi cập nhật máy móc");
+      console.error("Error saving machine:", err);
+
+      // Parse error message for more details
+      let errorMessage = "Đã xảy ra lỗi không xác định";
+
+      if (err.response) {
+        // Server responded with error
+        errorMessage = err.response.data?.message || err.response.statusText;
+
+        // Check for specific errors
+        if (err.response.status === 400) {
+          errorMessage = err.response.data?.message || "Dữ liệu không hợp lệ";
+        } else if (err.response.status === 401) {
+          errorMessage = "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại";
+        } else if (err.response.status === 403) {
+          errorMessage = "Bạn không có quyền thực hiện thao tác này";
+        } else if (err.response.status === 404) {
+          errorMessage = "Không tìm thấy máy móc";
+        } else if (err.response.status >= 500) {
+          errorMessage = "Lỗi máy chủ. Vui lòng thử lại sau";
+        }
+      } else if (err.request) {
+        // Request was made but no response
+        errorMessage =
+          "Không thể kết nối đến máy chủ. Vui lòng kiểm tra kết nối mạng";
+      }
+
+      showNotification(
+        "error",
+        isCreateMode ? "Lỗi khi tạo máy móc" : "Lỗi khi cập nhật máy móc",
+        errorMessage
+      );
     }
   };
 
@@ -339,6 +484,7 @@ const MachineListPage = () => {
       rented_out: { bg: "#9c27b022", color: "#9c27b0", label: "Cho thuê" },
       borrowed_out: { bg: "#00bcd422", color: "#00bcd4", label: "Cho mượn" },
       scrapped: { bg: "#f4433622", color: "#f44336", label: "Thanh lý" },
+      disabled: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Vô hiệu hóa" },
     };
     return statusColors[status] || statusColors.available;
   };
@@ -352,6 +498,8 @@ const MachineListPage = () => {
       case "maintenance":
         return <Build sx={{ fontSize: 16 }} />;
       case "scrapped":
+        return <Cancel sx={{ fontSize: 16 }} />;
+      case "disabled":
         return <Cancel sx={{ fontSize: 16 }} />;
       default:
         return <CheckCircle sx={{ fontSize: 16 }} />;
@@ -592,24 +740,44 @@ const MachineListPage = () => {
                   </Select>
                 </FormControl>
               </Stack>
-              <Button
-                variant="contained"
-                startIcon={<Refresh />}
-                onClick={() => fetchMachines(searchTerm)}
-                sx={{
-                  borderRadius: "12px",
-                  background: "linear-gradient(45deg, #667eea, #764ba2)",
-                  px: 3,
-                  py: 1.5,
-                  "&:hover": {
-                    transform: "translateY(-2px)",
-                    boxShadow: "0 8px 25px rgba(102, 126, 234, 0.3)",
-                  },
-                  transition: "all 0.3s ease",
-                }}
-              >
-                Làm mới
-              </Button>
+              <Stack direction="row" spacing={2}>
+                <Button
+                  variant="contained"
+                  startIcon={<Add />}
+                  onClick={handleOpenCreateDialog}
+                  sx={{
+                    borderRadius: "12px",
+                    background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                    px: 3,
+                    py: 1.5,
+                    "&:hover": {
+                      transform: "translateY(-2px)",
+                      boxShadow: "0 8px 25px rgba(46, 125, 50, 0.3)",
+                    },
+                    transition: "all 0.3s ease",
+                  }}
+                >
+                  Thêm máy
+                </Button>
+                <Button
+                  variant="contained"
+                  startIcon={<Refresh />}
+                  onClick={() => fetchMachines(searchTerm)}
+                  sx={{
+                    borderRadius: "12px",
+                    background: "linear-gradient(45deg, #667eea, #764ba2)",
+                    px: 3,
+                    py: 1.5,
+                    "&:hover": {
+                      transform: "translateY(-2px)",
+                      boxShadow: "0 8px 25px rgba(102, 126, 234, 0.3)",
+                    },
+                    transition: "all 0.3s ease",
+                  }}
+                >
+                  Làm mới
+                </Button>
+              </Stack>
             </Stack>
           </CardContent>
         </Card>
@@ -819,7 +987,7 @@ const MachineListPage = () => {
               justifyContent="space-between"
             >
               <Typography variant="h5" fontWeight="bold">
-                Chỉnh sửa máy móc
+                {isCreateMode ? "Thêm máy móc mới" : "Chỉnh sửa máy móc"}
               </Typography>
               <IconButton onClick={handleCloseDialog} size="small">
                 <Close />
@@ -828,7 +996,7 @@ const MachineListPage = () => {
           </DialogTitle>
           <Divider />
           <DialogContent sx={{ pt: 3 }}>
-            {selectedMachine && (
+            {(selectedMachine || isCreateMode) && (
               <Grid container spacing={3}>
                 {/* QR Code Section */}
                 {showQRCode && editedData.serial_machine && (
@@ -973,26 +1141,33 @@ const MachineListPage = () => {
                   <TextField
                     fullWidth
                     label="Mã máy"
+                    required
                     value={editedData.code_machine || ""}
                     onChange={(e) =>
                       handleInputChange("code_machine", e.target.value)
                     }
+                    disabled={!isCreateMode}
+                    variant={!isCreateMode ? "filled" : "outlined"}
                   />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
                     fullWidth
                     label="Serial"
+                    required
                     value={editedData.serial_machine || ""}
                     onChange={(e) =>
                       handleInputChange("serial_machine", e.target.value)
                     }
+                    disabled={!isCreateMode}
+                    variant={!isCreateMode ? "filled" : "outlined"}
                   />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
                     fullWidth
                     label="RFID"
+                    required
                     value={editedData.RFID_machine || ""}
                     onChange={(e) =>
                       handleInputChange("RFID_machine", e.target.value)
@@ -1000,18 +1175,35 @@ const MachineListPage = () => {
                   />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="Loại máy"
-                    value={editedData.name_category || ""}
-                    disabled={true}
-                    variant="filled"
-                  />
+                  {isCreateMode ? (
+                    <FormControl fullWidth>
+                      <InputLabel>Loại máy</InputLabel>
+                      <Select
+                        value={editedData.id_category || 1}
+                        label="Loại máy"
+                        onChange={(e) =>
+                          handleInputChange("id_category", e.target.value)
+                        }
+                      >
+                        <MenuItem value={1}>Máy móc thiết bị</MenuItem>
+                        <MenuItem value={2}>Phụ kiện</MenuItem>
+                      </Select>
+                    </FormControl>
+                  ) : (
+                    <TextField
+                      fullWidth
+                      label="Loại máy"
+                      value={editedData.name_category || ""}
+                      disabled={true}
+                      variant="filled"
+                    />
+                  )}
                 </Grid>
                 <Grid size={{ xs: 12 }}>
                   <TextField
                     fullWidth
                     label="Tên máy"
+                    required
                     value={editedData.name_machine || ""}
                     onChange={(e) =>
                       handleInputChange("name_machine", e.target.value)
@@ -1044,6 +1236,7 @@ const MachineListPage = () => {
                       <MenuItem value="rented_out">Cho thuê</MenuItem>
                       <MenuItem value="borrowed_out">Cho mượn</MenuItem>
                       <MenuItem value="scrapped">Thanh lý</MenuItem>
+                      <MenuItem value="disabled">Vô hiệu hóa</MenuItem>
                     </Select>
                   </FormControl>
                 </Grid>
@@ -1107,6 +1300,7 @@ const MachineListPage = () => {
                     fullWidth
                     label="Ngày sử dụng"
                     type="date"
+                    required
                     value={formatDateForInput(editedData.date_of_use)}
                     onChange={(e) =>
                       handleInputChange("date_of_use", e.target.value)
@@ -1124,24 +1318,28 @@ const MachineListPage = () => {
                     onChange={(e) => handleInputChange("note", e.target.value)}
                   />
                 </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="Ngày tạo"
-                    value={formatDate(selectedMachine.created_at)}
-                    disabled={true}
-                    variant="filled"
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="Ngày cập nhật"
-                    value={formatDate(selectedMachine.updated_at)}
-                    disabled={true}
-                    variant="filled"
-                  />
-                </Grid>
+                {!isCreateMode && (
+                  <>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField
+                        fullWidth
+                        label="Ngày tạo"
+                        value={formatDate(selectedMachine.created_at)}
+                        disabled={true}
+                        variant="filled"
+                      />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField
+                        fullWidth
+                        label="Ngày cập nhật"
+                        value={formatDate(selectedMachine.updated_at)}
+                        disabled={true}
+                        variant="filled"
+                      />
+                    </Grid>
+                  </>
+                )}
               </Grid>
             )}
           </DialogContent>
@@ -1164,10 +1362,35 @@ const MachineListPage = () => {
                 background: "linear-gradient(45deg, #667eea, #764ba2)",
               }}
             >
-              Lưu thay đổi
+              {isCreateMode ? "Thêm thiết bị mới" : "Lưu thay đổi"}
             </Button>
           </DialogActions>
         </Dialog>
+
+        {/* Notification Snackbar */}
+        <Snackbar
+          open={notification.open}
+          autoHideDuration={2000}
+          onClose={handleCloseNotification}
+          anchorOrigin={{ vertical: "top", horizontal: "right" }}
+        >
+          <Alert
+            onClose={handleCloseNotification}
+            severity={notification.severity}
+            variant="filled"
+            sx={{
+              width: "100%",
+              minWidth: "350px",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
+              borderRadius: "12px",
+            }}
+          >
+            <AlertTitle sx={{ fontWeight: "bold", fontSize: "1.1rem" }}>
+              {notification.title}
+            </AlertTitle>
+            {notification.message}
+          </Alert>
+        </Snackbar>
       </Container>
     </>
   );
