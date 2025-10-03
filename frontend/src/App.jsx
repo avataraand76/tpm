@@ -11,6 +11,7 @@ import { AuthProvider } from "./contexts/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import LoginPage from "./pages/LoginPage";
 import HomePage from "./pages/HomePage";
+import MachineListPage from "./pages/MachineListPage";
 import Test1 from "./pages/Test1";
 import Test2 from "./pages/Test2";
 
@@ -96,6 +97,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <HomePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/machines"
+              element={
+                <ProtectedRoute>
+                  <MachineListPage />
                 </ProtectedRoute>
               }
             />

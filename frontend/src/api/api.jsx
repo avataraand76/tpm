@@ -33,6 +33,26 @@ export const api = {
     const response = await httpConnect.post("/auth/login", data);
     return response.data;
   },
+
+  // MARK: MACHINES
+  machines: {
+    getAll: async (params = {}) => {
+      const response = await httpConnect.get("/api/machines", { params });
+      return response.data;
+    },
+    getStats: async () => {
+      const response = await httpConnect.get("/api/machines/stats");
+      return response.data;
+    },
+    getById: async (uuid) => {
+      const response = await httpConnect.get(`/api/machines/${uuid}`);
+      return response.data;
+    },
+    update: async (uuid, data) => {
+      const response = await httpConnect.put(`/api/machines/${uuid}`, data);
+      return response.data;
+    },
+  },
 };
 
 export default httpConnect;

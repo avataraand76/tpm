@@ -18,6 +18,26 @@ create table if not exists tb_permission
     updated_by bigint default '0'
 );
 
+-- MARK: role phân quyền
+create table if not exists tb_user_permission
+(
+    -- primary
+    id_user_permission bigint not null auto_increment,
+    uuid_user_permission varchar(36) not null unique default (UUID()),
+    
+    -- foreign
+    id_permission bigint,
+
+    -- key
+    primary key (id_user_permission),
+    
+    -- timestamp
+    created_at timestamp default current_timestamp,
+    created_by bigint default '0',
+    updated_at timestamp default current_timestamp on update current_timestamp,
+    updated_by bigint default '0'
+);
+
 -- MARK: department đơn vị
 create table if not exists tb_department
 (
@@ -39,28 +59,6 @@ create table if not exists tb_department
     updated_by bigint default '0'
 );
 
--- MARK: external đơn vị đối tác bên ngoài
-create table if not exists tb_external
-(
-    -- primary
-    id_external bigint not null auto_increment,
-    uuid_external varchar(36) not null unique default (UUID()),
-
-    -- properties
-    name_external text,
-    phone varchar(10),
-    address text,
-
-    -- key
-    primary key (id_external),
-
-    -- timestamp
-    created_at timestamp default current_timestamp,
-    created_by bigint default '0',
-    updated_at timestamp default current_timestamp on update current_timestamp,
-    updated_by bigint default '0'
-);
-
 -- MARK: location vị trí
 create table if not exists tb_location
 (
@@ -70,14 +68,13 @@ create table if not exists tb_location
     
     -- foreign
     id_department bigint,
-    id_external bigint,
 
     -- properties
     name_location text,
     
     -- key
     primary key (id_location),
-    unique (id_location, id_department, id_external),
+    unique (id_location, id_department),
 
     -- timestamp
     created_at timestamp default current_timestamp,
@@ -122,10 +119,10 @@ create table if not exists tb_machine
     code_machine varchar(30), -- sẽ là mã barcode tham chiếu theo code loại máy
     name_machine text,
     manufacturer text, -- hãng sản xuất
-    price decimal(15, 3), -- giá
+    price decimal(15, 0), -- giá
     date_of_use date, -- ngày sử dụng
     lifespan int, -- tuổi thọ
-    repair_cost decimal(15, 3), -- chi phí sửa chữa
+    repair_cost decimal(15, 0), -- chi phí sửa chữa
     note text,
     current_status enum('available', 'in_use', 'maintenance', 'rented_out', 'borrowed_out', 'scrapped') default 'available',
     
@@ -392,4 +389,60 @@ insert into tb_department (name_department, id_phong_ban) values
 ('Xưởng 4', 31),
 ('Phòng kỹ thuật', 28),
 ('Xưởng cắt', 57),
-('Kho nguyên phụ liệu', 3202);
+('Kho nguyên phụ liệu', 3202),
+('Đơn vị bên ngoài', null);
+
+insert into tb_location (name_location, id_department) values
+('Kho cơ điện', 1),
+('Chuyền 1', 2),
+('Chuyền 2', 2),
+('Chuyền 3', 2),
+('Chuyền 4', 2),
+('Chuyền 5', 2),
+('Chuyền 6', 2),
+('Chuyền 7', 2),
+('Chuyền 8', 2),
+('Chuyền 9', 2),
+('Chuyền 10', 2),
+('Chuyền 10.01', 2),
+('Chuyền chuyên dùng - Xưởng 1', 2),
+('Chuyền 11', 3),
+('Chuyền 12', 3),
+('Chuyền 20.01', 3),
+('Chuyền 13', 3),
+('Chuyền 14', 3),
+('Chuyền 15', 3),
+('Chuyền 16', 3),
+('Chuyền 17', 3),
+('Chuyền 18', 3),
+('Chuyền 19', 3),
+('Chuyền 20', 3),
+('Chuyền hoàn thành - Xưởng 2', 3),
+('Chuyền chuyên dùng - Xưởng 2', 3),
+('Chuyền 21', 4),
+('Chuyền 22', 4),
+('Chuyền 23', 4),
+('Chuyền 24', 4),
+('Chuyền 25', 4),
+('Chuyền 26', 4),
+('Chuyền 27', 4),
+('Chuyền 28', 4),
+('Chuyền 29', 4),
+('Chuyền 30', 4),
+('Chuyền chuyên dùng - Xưởng 3', 4),
+('Chuyền 31', 5),
+('Chuyền 32', 5),
+('Chuyền 33', 5),
+('Chuyền 34', 5),
+('Chuyền 35', 5),
+('Chuyền 36', 5),
+('Chuyền 37', 5),
+('Chuyền 38', 5),
+('Chuyền 39', 5),
+('Chuyền 40', 5),
+('Chuyền chuyên dùng - Xưởng 4', 5),
+('Chuyền hoàn thành 1 - Xưởng 4', 5),
+('Chuyền hoàn thành 2 - Xưởng 4', 5),
+('Công ty A', 6),
+('Công ty B', 6),
+('Công ty C', 6);

@@ -39,11 +39,11 @@ app.use((req, res, next) => {
 });
 
 // MySQL Configuration for main database
-const sigpWarehouseConnection = mysql.createPool({
+const tpmConnection = mysql.createPool({
   host: process.env.MYSQL_HOST,
   user: process.env.MYSQL_USER,
   password: process.env.MYSQL_PASSWORD,
-  database: process.env.SIGP_WAREHOUSE_DATABASE,
+  database: process.env.TPM_DATABASE,
   connectionLimit: 10,
   waitForConnections: true,
   queueLimit: 0,
@@ -73,11 +73,11 @@ const dataHiTimesheetConnection = mysql.createPool({
 // Test database connections
 async function testConnections() {
   try {
-    const sigpTest = await sigpWarehouseConnection.getConnection();
-    console.log("Successfully connected to SIGP Warehouse MySQL database");
-    sigpTest.release();
+    const tpmTest = await tpmConnection.getConnection();
+    console.log("Successfully connected to TPM MySQL database");
+    tpmTest.release();
   } catch (err) {
-    console.error("Error connecting to SIGP Warehouse MySQL database:", err);
+    console.error("Error connecting to TPM MySQL database:", err);
   }
 
   try {
@@ -186,6 +186,316 @@ app.post("/auth/login", async (req, res) => {
     });
   } catch (error) {
     console.error("Error during login:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+// MARK: MACHINE LIST
+
+// GET /api/machines - Get all machines with pagination
+app.get("/api/machines", async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const search = req.query.search || "";
+    const offset = (page - 1) * limit;
+
+    // Build search condition and params
+    let whereClause = "";
+    let countParams = [];
+    let dataParams = [];
+
+    if (search) {
+      const searchPattern = `%${search}%`;
+      whereClause = `
+        WHERE (m.name_machine LIKE ? 
+        OR m.code_machine LIKE ? 
+        OR m.serial_machine LIKE ? 
+        OR m.manufacturer LIKE ?
+        OR c.name_category LIKE ?)
+      `;
+      countParams = [
+        searchPattern,
+        searchPattern,
+        searchPattern,
+        searchPattern,
+        searchPattern,
+      ];
+      dataParams = [
+        searchPattern,
+        searchPattern,
+        searchPattern,
+        searchPattern,
+        searchPattern,
+        limit,
+        offset,
+      ];
+    } else {
+      dataParams = [limit, offset];
+    }
+
+    // Get total count
+    const countQuery = `
+      SELECT COUNT(*) as total
+      FROM tb_machine m
+      LEFT JOIN tb_category c ON c.id_category = m.id_category
+      ${whereClause}
+    `;
+
+    const [countResult] = await tpmConnection.query(countQuery, countParams);
+
+    const total = countResult[0].total;
+    const totalPages = Math.ceil(total / limit);
+
+    // Get paginated data
+    const dataQuery = `
+      SELECT 
+        m.uuid_machine,
+        m.serial_machine,
+        m.RFID_machine,
+        m.code_machine,
+        m.name_machine,
+        m.manufacturer,
+        m.price,
+        m.date_of_use,
+        m.lifespan,
+        m.repair_cost,
+        m.note,
+        m.current_status,
+        m.created_at,
+        m.updated_at,
+        c.name_category
+      FROM tb_machine m
+      LEFT JOIN tb_category c ON c.id_category = m.id_category
+      ${whereClause}
+      ORDER BY m.date_of_use DESC
+      LIMIT ? OFFSET ?
+    `;
+
+    const [machines] = await tpmConnection.query(dataQuery, dataParams);
+
+    res.json({
+      success: true,
+      message: "Machines retrieved successfully",
+      data: machines,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching machines:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+// GET /api/machines/stats - Get machine statistics
+app.get("/api/machines/stats", async (req, res) => {
+  try {
+    const [stats] = await tpmConnection.execute(
+      `
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN current_status = 'available' THEN 1 ELSE 0 END) as available,
+        SUM(CASE WHEN current_status = 'in_use' THEN 1 ELSE 0 END) as in_use,
+        SUM(CASE WHEN current_status = 'maintenance' THEN 1 ELSE 0 END) as maintenance,
+        SUM(CASE WHEN current_status = 'rented_out' THEN 1 ELSE 0 END) as rented_out,
+        SUM(CASE WHEN current_status = 'borrowed_out' THEN 1 ELSE 0 END) as borrowed_out,
+        SUM(CASE WHEN current_status = 'scrapped' THEN 1 ELSE 0 END) as scrapped
+      FROM tb_machine
+      `
+    );
+
+    res.json({
+      success: true,
+      message: "Statistics retrieved successfully",
+      data: stats[0],
+    });
+  } catch (error) {
+    console.error("Error fetching statistics:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+// GET /api/machines/:uuid - Get single machine details by UUID
+app.get("/api/machines/:uuid", async (req, res) => {
+  try {
+    const { uuid } = req.params;
+
+    const [machines] = await tpmConnection.query(
+      `
+      SELECT 
+        m.uuid_machine,
+        m.serial_machine,
+        m.RFID_machine,
+        m.code_machine,
+        m.name_machine,
+        m.manufacturer,
+        m.price,
+        m.date_of_use,
+        m.lifespan,
+        m.repair_cost,
+        m.note,
+        m.current_status,
+        m.created_at,
+        m.updated_at,
+        c.name_category,
+        c.id_category
+      FROM tb_machine m
+      LEFT JOIN tb_category c ON c.id_category = m.id_category
+      WHERE m.uuid_machine = ?
+      `,
+      [uuid]
+    );
+
+    if (machines.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Machine not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Machine details retrieved successfully",
+      data: machines[0],
+    });
+  } catch (error) {
+    console.error("Error fetching machine details:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+// PUT /api/machines/:uuid - Update machine by UUID
+app.put("/api/machines/:uuid", async (req, res) => {
+  try {
+    const { uuid } = req.params;
+    const {
+      code_machine,
+      serial_machine,
+      RFID_machine,
+      name_machine,
+      manufacturer,
+      price,
+      date_of_use,
+      lifespan,
+      repair_cost,
+      note,
+      current_status,
+    } = req.body;
+
+    // Check if machine exists
+    const [existing] = await tpmConnection.query(
+      "SELECT uuid_machine FROM tb_machine WHERE uuid_machine = ?",
+      [uuid]
+    );
+
+    if (existing.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Machine not found",
+      });
+    }
+
+    // Format date to YYYY-MM-DD with timezone handling
+    let formattedDate = date_of_use;
+    if (date_of_use) {
+      const dateObj = new Date(date_of_use);
+      // Get local date components to avoid timezone issues
+      const year = dateObj.getFullYear();
+      const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+      const day = String(dateObj.getDate()).padStart(2, "0");
+      formattedDate = `${year}-${month}-${day}`;
+    }
+
+    // Update machine
+    await tpmConnection.query(
+      `
+      UPDATE tb_machine 
+      SET 
+        code_machine = ?,
+        serial_machine = ?,
+        RFID_machine = ?,
+        name_machine = ?,
+        manufacturer = ?,
+        price = ?,
+        date_of_use = ?,
+        lifespan = ?,
+        repair_cost = ?,
+        note = ?,
+        current_status = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE uuid_machine = ?
+      `,
+      [
+        code_machine,
+        serial_machine,
+        RFID_machine,
+        name_machine,
+        manufacturer,
+        price,
+        formattedDate,
+        lifespan,
+        repair_cost,
+        note,
+        current_status,
+        uuid,
+      ]
+    );
+
+    // Get updated machine
+    const [updated] = await tpmConnection.query(
+      `
+      SELECT 
+        m.uuid_machine,
+        m.serial_machine,
+        m.RFID_machine,
+        m.code_machine,
+        m.name_machine,
+        m.manufacturer,
+        m.price,
+        m.date_of_use,
+        m.lifespan,
+        m.repair_cost,
+        m.note,
+        m.current_status,
+        m.created_at,
+        m.updated_at,
+        c.name_category
+      FROM tb_machine m
+      LEFT JOIN tb_category c ON c.id_category = m.id_category
+      WHERE m.uuid_machine = ?
+      `,
+      [uuid]
+    );
+
+    res.json({
+      success: true,
+      message: "Machine updated successfully",
+      data: updated[0],
+    });
+  } catch (error) {
+    console.error("Error updating machine:", error);
     res.status(500).json({
       success: false,
       message: "Internal server error",

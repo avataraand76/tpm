@@ -1,3 +1,5 @@
+// frontend/src/pages/HomePage.jsx
+
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -19,6 +21,7 @@ import {
   Psychology,
   Dashboard,
   ArrowForward,
+  PrecisionManufacturing,
 } from "@mui/icons-material";
 import NavigationBar from "../components/NavigationBar";
 
@@ -105,7 +108,7 @@ const HomePage = () => {
             🎉 Chào mừng đến với TPM System!
           </Typography>
           <Typography variant="h6" color="text.secondary" sx={{ mb: 4 }}>
-            Hệ thống quản lý và kiểm thử hiện đại với giao diện thân thiện
+            Hệ thống quản lý, bảo trì máy móc thiết bị sản xuất
           </Typography>
           <Stack
             direction="row"
@@ -115,7 +118,7 @@ const HomePage = () => {
             useFlexGap
           >
             <Chip
-              label="✅ Đã đăng nhập thành công"
+              label="✅ [placeholder]"
               sx={{
                 background: "linear-gradient(45deg, #2e7d3222, #4caf5044)",
                 color: "#2e7d32",
@@ -125,7 +128,7 @@ const HomePage = () => {
               }}
             />
             <Chip
-              label="🔒 Bảo mật cao"
+              label="🔒 [placeholder]"
               sx={{
                 background: "linear-gradient(45deg, #667eea22, #764ba244)",
                 color: "#667eea",
@@ -135,7 +138,7 @@ const HomePage = () => {
               }}
             />
             <Chip
-              label="⚡ Hiệu suất tối ưu"
+              label="⚡ [placeholder]"
               sx={{
                 background: "linear-gradient(45deg, #dc004e22, #f5005744)",
                 color: "#dc004e",
@@ -315,40 +318,36 @@ const HomePage = () => {
                       mb: 3,
                     }}
                   >
-                    <Dashboard sx={{ fontSize: 35 }} />
+                    <PrecisionManufacturing sx={{ fontSize: 35 }} />
                   </Avatar>
                   <Typography variant="h5" fontWeight="bold" gutterBottom>
-                    📊 Analytics
+                    🔧 Danh sách máy móc
                   </Typography>
                   <Typography
                     variant="body1"
                     color="text.secondary"
                     sx={{ mb: 3 }}
                   >
-                    Xem tổng quan, thống kê và báo cáo chi tiết của hệ thống TPM
+                    Quản lý và xem thông tin chi tiết máy móc thiết bị sản xuất
                   </Typography>
                   <Button
-                    variant="outlined"
+                    variant="contained"
                     size="large"
                     endIcon={<ArrowForward />}
-                    onClick={() => handleNavigate("/")}
+                    onClick={() => handleNavigate("/machines")}
                     sx={{
                       borderRadius: "12px",
-                      borderColor: "#2e7d32",
-                      color: "#2e7d32",
+                      background: "linear-gradient(45deg, #2e7d32, #4caf50)",
                       px: 4,
                       py: 1.5,
                       "&:hover": {
                         transform: "translateY(-2px)",
-                        background:
-                          "linear-gradient(45deg, #2e7d3211, #4caf5011)",
-                        borderColor: "#2e7d32",
-                        boxShadow: "0 8px 25px rgba(46, 125, 50, 0.2)",
+                        boxShadow: "0 8px 25px rgba(46, 125, 50, 0.3)",
                       },
                       transition: "all 0.3s ease",
                     }}
                   >
-                    Xem chi tiết
+                    Xem danh sách
                   </Button>
                 </CardContent>
               </Card>

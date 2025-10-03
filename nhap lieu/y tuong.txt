@@ -4,3 +4,5 @@
 -làm trang tạo phiếu xuất nhập // pending
 -chức năng quét barcode/rfid // pending
 -làm trang xem lịch sử di chuyển của máy // pending
+-trang danh sách thiết bị // done
+-in mã QR or RFID // pending in được nhưng hold vì không biết khổ giấy

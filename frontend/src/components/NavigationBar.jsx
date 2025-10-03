@@ -1,3 +1,5 @@
+// frontend/src/components/NavigationBar.jsx
+
 import React from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
@@ -20,6 +22,7 @@ import {
   Science,
   Psychology,
   Dashboard,
+  PrecisionManufacturing,
 } from "@mui/icons-material";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -32,13 +35,14 @@ const NavigationBar = () => {
   const getCurrentTab = () => {
     const pathname = location.pathname;
     if (pathname === "/") return 0;
-    if (pathname === "/test1") return 1;
-    if (pathname === "/test2") return 2;
+    if (pathname === "/machines") return 1;
+    if (pathname === "/test1") return 2;
+    if (pathname === "/test2") return 3;
     return 0;
   };
 
   const handleTabChange = (event, newValue) => {
-    const routes = ["/", "/test1", "/test2"];
+    const routes = ["/", "/machines", "/test1", "/test2"];
     navigate(routes[newValue]);
   };
 
@@ -132,6 +136,11 @@ const NavigationBar = () => {
             }}
           >
             <Tab icon={<Home />} label="Trang chủ" iconPosition="start" />
+            <Tab
+              icon={<PrecisionManufacturing />}
+              label="Máy móc"
+              iconPosition="start"
+            />
             <Tab icon={<Science />} label="Test 1" iconPosition="start" />
             <Tab icon={<Psychology />} label="Test 2" iconPosition="start" />
           </Tabs>
