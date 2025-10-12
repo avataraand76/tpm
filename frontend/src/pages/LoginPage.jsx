@@ -193,7 +193,7 @@ const LoginPage = () => {
                   required
                   fullWidth
                   id="ma_nv"
-                  label="🆔 Mã Nhân Viên"
+                  label="🆔 Số thẻ"
                   name="ma_nv"
                   autoComplete="username"
                   autoFocus
@@ -305,7 +305,7 @@ const LoginPage = () => {
                       <Typography>Đang đăng nhập...</Typography>
                     </Stack>
                   ) : (
-                    "🚀 Đăng Nhập"
+                    "Đăng Nhập"
                   )}
                 </Button>
               </Stack>

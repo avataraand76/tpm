@@ -51,6 +51,8 @@ import {
   Print,
   Download,
   Add,
+  ReceiptLong,
+  SwapHoriz,
 } from "@mui/icons-material";
 import { QRCodeSVG } from "qrcode.react";
 import NavigationBar from "../components/NavigationBar";
@@ -63,6 +65,11 @@ const MachineListPage = () => {
     available: 0,
     in_use: 0,
     maintenance: 0,
+    borrowed_out: 0,
+    liquidation: 0,
+    disabled: 0,
+    rented: 0,
+    borrowed: 0,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -148,7 +155,7 @@ const MachineListPage = () => {
 
   const handlePageChange = (event, newPage) => {
     setPage(newPage);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 730, behavior: "smooth" });
   };
 
   const handleRowsPerPageChange = (event) => {
@@ -284,8 +291,10 @@ const MachineListPage = () => {
             <div class="info">
               <div class="code">${editedData.code_machine || ""}</div>
               <div class="serial">Serial: ${
-                editedData.serial_machine || ""
-              }</div>
+                editedData.name_category === "Máy móc thiết bị"
+                  ? "MAY"
+                  : "PHUKIEN"
+              }-${editedData.serial_machine || ""}</div>
               <div class="name">${editedData.name_machine || ""}</div>
             </div>
           </div>
@@ -370,9 +379,10 @@ const MachineListPage = () => {
     if (!editedData.serial_machine || editedData.serial_machine.trim() === "") {
       errors.push("Serial");
     }
-    if (!editedData.RFID_machine || editedData.RFID_machine.trim() === "") {
-      errors.push("RFID");
-    }
+    // MARK: E^E^E^E^E^E^E^E
+    // if (!editedData.RFID_machine || editedData.RFID_machine.trim() === "") {
+    //   errors.push("RFID");
+    // }
     if (!editedData.date_of_use || editedData.date_of_use.trim() === "") {
       errors.push("Ngày sử dụng");
     }
@@ -481,9 +491,10 @@ const MachineListPage = () => {
       available: { bg: "#2e7d3222", color: "#2e7d32", label: "Sẵn sàng" },
       in_use: { bg: "#667eea22", color: "#667eea", label: "Đang sử dụng" },
       maintenance: { bg: "#ff980022", color: "#ff9800", label: "Bảo trì" },
-      rented_out: { bg: "#9c27b022", color: "#9c27b0", label: "Cho thuê" },
+      rented: { bg: "#673ab722", color: "#673ab7", label: "Thuê" },
+      borrowed: { bg: "#03a9f422", color: "#03a9f4", label: "Mượn" },
       borrowed_out: { bg: "#00bcd422", color: "#00bcd4", label: "Cho mượn" },
-      scrapped: { bg: "#f4433622", color: "#f44336", label: "Thanh lý" },
+      liquidation: { bg: "#f4433622", color: "#f44336", label: "Thanh lý" },
       disabled: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Vô hiệu hóa" },
     };
     return statusColors[status] || statusColors.available;
@@ -492,17 +503,23 @@ const MachineListPage = () => {
   const getStatusIcon = (status) => {
     switch (status) {
       case "available":
-        return <CheckCircle sx={{ color: "#2e7d32", fontSize: 16 }} />;
+        return <CheckCircle />;
       case "in_use":
-        return <Build sx={{ fontSize: 16 }} />;
+        return <Build />;
       case "maintenance":
-        return <Build sx={{ fontSize: 16 }} />;
-      case "scrapped":
-        return <Cancel sx={{ fontSize: 16 }} />;
+        return <Build />;
+      case "rented":
+        return <ReceiptLong />;
+      case "borrowed":
+        return <SwapHoriz />;
+      case "borrowed_out":
+        return <SwapHoriz />;
+      case "liquidation":
+        return <Cancel />;
       case "disabled":
-        return <Cancel sx={{ fontSize: 16 }} />;
+        return <Cancel />;
       default:
-        return <CheckCircle sx={{ fontSize: 16 }} />;
+        return <CheckCircle />;
     }
   };
 
@@ -574,9 +591,10 @@ const MachineListPage = () => {
                   backgroundClip: "text",
                   WebkitBackgroundClip: "text",
                   WebkitTextFillColor: "transparent",
+                  textTransform: "uppercase",
                 }}
               >
-                Danh sách Máy móc
+                Danh sách Máy móc thiết bị
               </Typography>
               <Typography variant="h6" color="text.secondary">
                 Quản lý thông tin máy móc thiết bị
@@ -587,7 +605,9 @@ const MachineListPage = () => {
 
         {/* Statistics Cards */}
         <Grid container spacing={3} sx={{ mb: 4 }}>
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          {/* Tổng số máy */}
+          <Grid size={{ xs: 12 }}>
+            {" "}
             <Card
               elevation={0}
               sx={{
@@ -611,6 +631,8 @@ const MachineListPage = () => {
               </CardContent>
             </Card>
           </Grid>
+
+          {/* Sẵn sàng */}
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <Card
               elevation={0}
@@ -635,6 +657,8 @@ const MachineListPage = () => {
               </CardContent>
             </Card>
           </Grid>
+
+          {/* Đang sử dụng */}
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <Card
               elevation={0}
@@ -659,6 +683,8 @@ const MachineListPage = () => {
               </CardContent>
             </Card>
           </Grid>
+
+          {/* Bảo trì */}
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <Card
               elevation={0}
@@ -679,6 +705,136 @@ const MachineListPage = () => {
                   sx={{ mt: 1 }}
                 >
                   Bảo trì
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Đi thuê */}
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <Card
+              elevation={0}
+              sx={{
+                borderRadius: "20px",
+                background:
+                  "linear-gradient(135deg, #673ab722 0%, #673ab722 100%)",
+                border: "1px solid rgba(0, 0, 0, 0.05)",
+              }}
+            >
+              <CardContent sx={{ textAlign: "center", py: 3 }}>
+                <Typography variant="h3" fontWeight="bold" color="#673ab7">
+                  {stats.rented}
+                </Typography>
+                <Typography
+                  variant="body1"
+                  color="text.secondary"
+                  sx={{ mt: 1 }}
+                >
+                  Thuê
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Đi mượn */}
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <Card
+              elevation={0}
+              sx={{
+                borderRadius: "20px",
+                background:
+                  "linear-gradient(135deg, #03a9f422 0%, #03a9f422 100%)",
+                border: "1px solid rgba(0, 0, 0, 0.05)",
+              }}
+            >
+              <CardContent sx={{ textAlign: "center", py: 3 }}>
+                <Typography variant="h3" fontWeight="bold" color="#03a9f4">
+                  {stats.borrowed}
+                </Typography>
+                <Typography
+                  variant="body1"
+                  color="text.secondary"
+                  sx={{ mt: 1 }}
+                >
+                  Mượn
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Cho mượn */}
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <Card
+              elevation={0}
+              sx={{
+                borderRadius: "20px",
+                background:
+                  "linear-gradient(135deg, #00bcd422 0%, #00bcd422 100%)",
+                border: "1px solid rgba(0, 0, 0, 0.05)",
+              }}
+            >
+              <CardContent sx={{ textAlign: "center", py: 3 }}>
+                <Typography variant="h3" fontWeight="bold" color="#00bcd4">
+                  {stats.borrowed_out}
+                </Typography>
+                <Typography
+                  variant="body1"
+                  color="text.secondary"
+                  sx={{ mt: 1 }}
+                >
+                  Cho mượn
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Thanh lý */}
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <Card
+              elevation={0}
+              sx={{
+                borderRadius: "20px",
+                background:
+                  "linear-gradient(135deg, #f4433622 0%, #f4433622 100%)",
+                border: "1px solid rgba(0, 0, 0, 0.05)",
+              }}
+            >
+              <CardContent sx={{ textAlign: "center", py: 3 }}>
+                <Typography variant="h3" fontWeight="bold" color="#f44336">
+                  {stats.liquidation}
+                </Typography>
+                <Typography
+                  variant="body1"
+                  color="text.secondary"
+                  sx={{ mt: 1 }}
+                >
+                  Thanh lý
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Vô hiệu hóa */}
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <Card
+              elevation={0}
+              sx={{
+                borderRadius: "20px",
+                background:
+                  "linear-gradient(135deg, #9e9e9e22 0%, #9e9e9e22 100%)",
+                border: "1px solid rgba(0, 0, 0, 0.05)",
+              }}
+            >
+              <CardContent sx={{ textAlign: "center", py: 3 }}>
+                <Typography variant="h3" fontWeight="bold" color="#9e9e9e">
+                  {stats.disabled}
+                </Typography>
+                <Typography
+                  variant="body1"
+                  color="text.secondary"
+                  sx={{ mt: 1 }}
+                >
+                  Vô hiệu hóa
                 </Typography>
               </CardContent>
             </Card>
@@ -852,7 +1008,7 @@ const MachineListPage = () => {
                       const statusInfo = getStatusColor(machine.current_status);
                       return (
                         <TableRow
-                          key={machine.id_machine}
+                          key={machine.uuid_machine}
                           sx={{
                             "&:hover": {
                               bgcolor: "#f8f9fa",
@@ -896,6 +1052,7 @@ const MachineListPage = () => {
                                 color: statusInfo.color,
                                 fontWeight: 600,
                                 borderRadius: "8px",
+                                textTransform: "uppercase",
                               }}
                             />
                           </TableCell>
@@ -1026,12 +1183,20 @@ const MachineListPage = () => {
                           >
                             <QRCodeSVG
                               id="qr-code-svg"
-                              value={editedData.serial_machine}
+                              value={`${
+                                editedData.name_category === "Máy móc thiết bị"
+                                  ? "MAY"
+                                  : "PHUKIEN"
+                              }-${editedData.serial_machine}`}
                               size={150}
                               level="H"
                               includeMargin={true}
                             />
-                            <Box sx={{ textAlign: "center", display: "none" }}>
+                          </Box>
+
+                          {/* QR Code Info */}
+                          <Box sx={{ flex: 1 }}>
+                            {/* <Box sx={{ textAlign: "left", display: "", mb: 2 }}>
                               <Typography variant="h6" fontWeight="bold">
                                 {editedData.code_machine}
                               </Typography>
@@ -1039,7 +1204,11 @@ const MachineListPage = () => {
                                 variant="body2"
                                 color="text.secondary"
                               >
-                                Serial: {editedData.serial_machine}
+                                Serial:{" "}
+                                {editedData.id_category === 1
+                                  ? "MAY"
+                                  : "PHUKIEN"}
+                                -{editedData.serial_machine}
                               </Typography>
                               <Typography
                                 variant="body2"
@@ -1047,11 +1216,7 @@ const MachineListPage = () => {
                               >
                                 {editedData.name_machine}
                               </Typography>
-                            </Box>
-                          </Box>
-
-                          {/* QR Code Info */}
-                          <Box sx={{ flex: 1 }}>
+                            </Box> */}
                             <Typography
                               variant="h6"
                               fontWeight="bold"
@@ -1233,9 +1398,10 @@ const MachineListPage = () => {
                       <MenuItem value="available">Sẵn sàng</MenuItem>
                       <MenuItem value="in_use">Đang sử dụng</MenuItem>
                       <MenuItem value="maintenance">Bảo trì</MenuItem>
-                      <MenuItem value="rented_out">Cho thuê</MenuItem>
+                      <MenuItem value="rented">Thuê</MenuItem>
+                      <MenuItem value="borrowed">Mượn</MenuItem>
                       <MenuItem value="borrowed_out">Cho mượn</MenuItem>
-                      <MenuItem value="scrapped">Thanh lý</MenuItem>
+                      <MenuItem value="liquidation">Thanh lý</MenuItem>
                       <MenuItem value="disabled">Vô hiệu hóa</MenuItem>
                     </Select>
                   </FormControl>

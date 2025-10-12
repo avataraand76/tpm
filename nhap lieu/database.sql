@@ -124,7 +124,9 @@ create table if not exists tb_machine
     lifespan int, -- tuổi thọ
     repair_cost decimal(15, 0), -- chi phí sửa chữa
     note text,
-    current_status enum('available', 'in_use', 'maintenance', 'rented_out', 'borrowed_out', 'scrapped', 'disabled') default 'available',
+    current_status enum('available', 'in_use', 'maintenance', 'borrowed_out', 'liquidation', 'disabled', 'borrowed', 'rented') default 'available',
+    borrowed_from text, -- người mượn
+    rented_from text, -- người thuê
     
     -- key
     primary key (id_machine),
@@ -145,7 +147,6 @@ create table if not exists tb_machine_import
     uuid_machine_import varchar(36) not null unique default (UUID()),
     
     -- foreign
-    from_location_id bigint,
     to_location_id bigint,
 
     -- properties
@@ -171,10 +172,6 @@ create table if not exists tb_machine_import
 -- MARK: import details thông tin chi tiết máy móc nhập vào
 create table if not exists tb_machine_import_detail
 (
-    -- primary
-    id_machine_import_detail bigint not null auto_increment,
-    uuid_machine_import_detail varchar(36) not null unique default (UUID()),
-    
     -- foreign
     id_machine_import bigint,
     id_machine bigint,
@@ -183,8 +180,7 @@ create table if not exists tb_machine_import_detail
     note text,
     
     -- key
-    primary key (id_machine_import_detail),
-    unique (id_machine_import_detail, id_machine_import, id_machine),
+    unique (id_machine_import, id_machine),
     
     -- timestamp
     created_at timestamp default current_timestamp,
@@ -201,11 +197,10 @@ create table if not exists tb_machine_export
     uuid_machine_export varchar(36) not null unique default (UUID()),
     
     -- foreign
-    from_location_id bigint,
     to_location_id bigint,
     
     -- properties
-    export_type enum('internal', 'maintenance', 'lend_out', 'scrapped'),
+    export_type enum('internal', 'maintenance', 'borrowed_out', 'liquidation'),
     export_date date,
     -- thông tin bảo trì
     -- thông tin cho mượn
@@ -226,10 +221,6 @@ create table if not exists tb_machine_export
 -- MARK: export details thông tin chi tiết máy móc xuất ra
 create table if not exists tb_machine_export_detail
 (
-    -- primary
-    id_machine_export_detail bigint not null auto_increment,
-    uuid_machine_export_detail varchar(36) not null unique default (UUID()),
-    
     -- foreign
     id_machine_export bigint,
     id_machine bigint,
@@ -238,8 +229,7 @@ create table if not exists tb_machine_export_detail
     note text,
     
     -- key
-    primary key (id_machine_export_detail),
-    unique (id_machine_export_detail, id_machine_export, id_machine),
+    unique (id_machine_export, id_machine),
     
     -- timestamp
     created_at timestamp default current_timestamp,
@@ -248,20 +238,15 @@ create table if not exists tb_machine_export_detail
     updated_by bigint default '0'
 );
 
--- MARK: machine location thông tin vị trí máy móc
+-- MARK: machine location thông tin vị trí hiện tại của máy móc
 create table if not exists tb_machine_location
 (
-    -- primary
-    id_machine_location bigint not null auto_increment,
-    uuid_machine_location varchar(36) not null unique default (UUID()),
-    
     -- foreign
     id_machine bigint,
     id_location bigint,
 
     -- key
-    primary key (id_machine_location),
-    unique (id_machine_location, id_machine, id_location),
+    unique (id_machine, id_location),
     
     -- timestamp
     created_at timestamp default current_timestamp,
@@ -394,6 +379,7 @@ insert into tb_department (name_department, id_phong_ban) values
 
 insert into tb_location (name_location, id_department) values
 ('Kho cơ điện', 1),
+('Kho tạm Xưởng 1', 2),
 ('Chuyền 1', 2),
 ('Chuyền 2', 2),
 ('Chuyền 3', 2),
@@ -406,6 +392,7 @@ insert into tb_location (name_location, id_department) values
 ('Chuyền 10', 2),
 ('Chuyền 10.01', 2),
 ('Chuyền chuyên dùng - Xưởng 1', 2),
+('Kho tạm Xưởng 2', 3),
 ('Chuyền 11', 3),
 ('Chuyền 12', 3),
 ('Chuyền 20.01', 3),
@@ -419,6 +406,7 @@ insert into tb_location (name_location, id_department) values
 ('Chuyền 20', 3),
 ('Chuyền hoàn thành - Xưởng 2', 3),
 ('Chuyền chuyên dùng - Xưởng 2', 3),
+('Kho tạm Xưởng 3', 4),
 ('Chuyền 21', 4),
 ('Chuyền 22', 4),
 ('Chuyền 23', 4),
@@ -430,6 +418,7 @@ insert into tb_location (name_location, id_department) values
 ('Chuyền 29', 4),
 ('Chuyền 30', 4),
 ('Chuyền chuyên dùng - Xưởng 3', 4),
+('Kho tạm Xưởng 4', 5),
 ('Chuyền 31', 5),
 ('Chuyền 32', 5),
 ('Chuyền 33', 5),

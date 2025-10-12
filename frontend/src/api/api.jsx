@@ -56,6 +56,72 @@ export const api = {
       const response = await httpConnect.put(`/api/machines/${uuid}`, data);
       return response.data;
     },
+    search: async (searchTerm, params = {}) => {
+      // Đảm bảo params bao gồm cả tham số search term
+      const allParams = { ...params, search: searchTerm };
+      const response = await httpConnect.get(`/api/machines/search`, {
+        params: allParams,
+      });
+      return response.data;
+    },
+    getBySerial: async (serial) => {
+      const response = await httpConnect.get(
+        `/api/machines/by-serial/${serial}`
+      );
+      return response.data;
+    },
+  },
+
+  // MARK: LOCATIONS
+  locations: {
+    getAll: async (params = {}) => {
+      const response = await httpConnect.get("/api/locations", { params });
+      return response.data;
+    },
+  },
+
+  // MARK: IMPORTS
+  imports: {
+    getAll: async (params = {}) => {
+      const response = await httpConnect.get("/api/imports", { params });
+      return response.data;
+    },
+    getById: async (uuid) => {
+      const response = await httpConnect.get(`/api/imports/${uuid}`);
+      return response.data;
+    },
+    create: async (data) => {
+      const response = await httpConnect.post("/api/imports", data);
+      return response.data;
+    },
+    updateStatus: async (uuid, status) => {
+      const response = await httpConnect.put(`/api/imports/${uuid}/status`, {
+        status,
+      });
+      return response.data;
+    },
+  },
+
+  // MARK: EXPORTS
+  exports: {
+    getAll: async (params = {}) => {
+      const response = await httpConnect.get("/api/exports", { params });
+      return response.data;
+    },
+    getById: async (uuid) => {
+      const response = await httpConnect.get(`/api/exports/${uuid}`);
+      return response.data;
+    },
+    create: async (data) => {
+      const response = await httpConnect.post("/api/exports", data);
+      return response.data;
+    },
+    updateStatus: async (uuid, status) => {
+      const response = await httpConnect.put(`/api/exports/${uuid}/status`, {
+        status,
+      });
+      return response.data;
+    },
   },
 };
 

@@ -22,6 +22,7 @@ import {
   Dashboard,
   ArrowForward,
   PrecisionManufacturing,
+  Receipt,
 } from "@mui/icons-material";
 import NavigationBar from "../components/NavigationBar";
 
@@ -63,7 +64,7 @@ const HomePage = () => {
                 TPM
               </Typography>
               <Typography variant="h6" color="text.secondary">
-                Hệ thống quản lý và kiểm thử TPM
+                Hệ thống quản lý máy móc thiết bị TPM
               </Typography>
             </Box>
           </Stack>
@@ -168,7 +169,7 @@ const HomePage = () => {
             🚀 Điều hướng nhanh
           </Typography>
           <Grid container spacing={3}>
-            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+            {/* <Grid size={{ xs: 12, sm: 6, md: 4 }}>
               <Card
                 elevation={0}
                 sx={{
@@ -228,9 +229,9 @@ const HomePage = () => {
                   </Button>
                 </CardContent>
               </Card>
-            </Grid>
+            </Grid> */}
 
-            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+            {/* <Grid size={{ xs: 12, sm: 6, md: 4 }}>
               <Card
                 elevation={0}
                 sx={{
@@ -290,7 +291,7 @@ const HomePage = () => {
                   </Button>
                 </CardContent>
               </Card>
-            </Grid>
+            </Grid> */}
 
             <Grid size={{ xs: 12, sm: 6, md: 4 }}>
               <Card
@@ -348,6 +349,67 @@ const HomePage = () => {
                     }}
                   >
                     Xem danh sách
+                  </Button>
+                </CardContent>
+              </Card>
+            </Grid>
+
+            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+              <Card
+                elevation={0}
+                sx={{
+                  height: "100%",
+                  borderRadius: "20px",
+                  border: "1px solid rgba(0, 0, 0, 0.05)",
+                  background:
+                    "linear-gradient(135deg, #ff6b6b22 0%, #ee5a6f22 100%)",
+                  transition: "all 0.3s ease",
+                  "&:hover": {
+                    transform: "translateY(-8px)",
+                    boxShadow: "0 20px 40px rgba(255, 107, 107, 0.2)",
+                  },
+                }}
+              >
+                <CardContent sx={{ p: 4, textAlign: "center" }}>
+                  <Avatar
+                    sx={{
+                      width: 70,
+                      height: 70,
+                      background: "linear-gradient(45deg, #ff6b6b, #ee5a6f)",
+                      mx: "auto",
+                      mb: 3,
+                    }}
+                  >
+                    <Receipt sx={{ fontSize: 35 }} />
+                  </Avatar>
+                  <Typography variant="h5" fontWeight="bold" gutterBottom>
+                    📋 Phiếu xuất nhập
+                  </Typography>
+                  <Typography
+                    variant="body1"
+                    color="text.secondary"
+                    sx={{ mb: 3 }}
+                  >
+                    Tạo và quản lý phiếu nhập xuất máy móc thiết bị
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    size="large"
+                    endIcon={<ArrowForward />}
+                    onClick={() => handleNavigate("/tickets")}
+                    sx={{
+                      borderRadius: "12px",
+                      background: "linear-gradient(45deg, #ff6b6b, #ee5a6f)",
+                      px: 4,
+                      py: 1.5,
+                      "&:hover": {
+                        transform: "translateY(-2px)",
+                        boxShadow: "0 8px 25px rgba(255, 107, 107, 0.3)",
+                      },
+                      transition: "all 0.3s ease",
+                    }}
+                  >
+                    Quản lý phiếu
                   </Button>
                 </CardContent>
               </Card>

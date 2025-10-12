@@ -12,6 +12,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import LoginPage from "./pages/LoginPage";
 import HomePage from "./pages/HomePage";
 import MachineListPage from "./pages/MachineListPage";
+import TicketManagementPage from "./pages/TicketManagementPage";
 import Test1 from "./pages/Test1";
 import Test2 from "./pages/Test2";
 
@@ -105,6 +106,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <MachineListPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/tickets"
+              element={
+                <ProtectedRoute>
+                  <TicketManagementPage />
                 </ProtectedRoute>
               }
             />
