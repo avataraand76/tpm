@@ -1,8 +1,60 @@
 -làm trang login // done
--làm trang phân quyền // pending
+-làm trang phân quyền // done
 -làm chức năng tutorial tour dùng driver.js // pending
--làm trang tạo phiếu xuất nhập // pending
--chức năng quét barcode/rfid // pending
--làm trang xem lịch sử di chuyển của máy // pending
+-làm trang tạo phiếu xuất nhập // done
+-chức năng quét barcode/rfid // pending done QR còn rfid
+-làm trang xem lịch sử di chuyển của máy // done
 -trang danh sách thiết bị // done
 -in mã QR or RFID // pending in được nhưng hold vì không biết khổ giấy
+
+nhửng gì đả lèm dc
+
+1.trang danh sách thiết bị
+-user khai báo thiết bị, nhập các thông tin: mã máy, serial, rfid, loại, loại máy, model máy, hãng sản xuất,...
+-các thông tin giá tiền, tuổi thọ, ngày sử dụng có thể nhập sau
+-user có thể in mã QR để dán lên máy
+
+2.trang nhập xuất
+
+tôi muốn chỉnh sửa backend và frontend của phần tạo phiếu, liên quan tới phần cập nhật trạng thái của máy móc khi duyệt phiếu
+
+hiện tại trong database
+tb_machine:
+-trạng thái của máy móc (available, in_use, maintance, liquidation, disabled)
+-trạng thái mượn/thuê/cho thuê (borrowed, rented, borrowed_out)
+
+tb_import
+-loại phiếu ('internal', 'borrowed', 'rented', 'purchased', 'maintenance_return', 'borrowed_out_return')
+
+tb_export
+-loại phiếu ('internal', 'maintenance', 'borrowed_out', 'liquidation', 'borrowed_return', 'rented_return')
+
+1. điều chuyển nội bộ internal
+-khi làm phiếu này sẽ tạo 2 phiếu trong database import và export cùng 1 lúc, khi duyệt cũng sẽ duyệt cùng 1 lúc, nhưng trên giao diện sẽ chỉ hiện 1 phiếu là phiếu điều chuyển nội bộ
+
+-điều chuyển nội bộ sẽ không hiện các location có tb_department là '%Đơn vị bên ngoài%'
+
+-nếu điều chuyển nội bộ tới các khu vực có '%kho%', khi duyệt thì set status của máy thành available
+
+-nếu điều chuyển nội bộ tới các khu vực không có '%kho%', khi duyệt thì set status của máy thành in_use
+
+2. làm phiếu nhập mua, bảo trì, trả mượn purchased, maintance_return, borrowed_out_return
+-làm các loại phiếu này sẽ chỉ hiện các khu vực có '%kho%', khi duyệt sẽ set status máy là available
+
+-riêng loại phiếu là borrowed_out_return thì sẽ xóa các thông tin is_borrowed_or_rented_or_borrowed_out_name, is_borrowed_or_rented_or_borrowed_out_date, is_borrowed_or_rented_or_borrowed_out_return_date trong tb_machine
+
+3. làm phiếu nhập mượn, thuê borrowed, rented
+-làm phiếu này sẽ chỉ hiện các location có '%kho%', khi duyệt sẽ set status là available
+
+-lưu các thông tin is_borrowed_or_rented_or_borrowed_out_name, is_borrowed_or_rented_or_borrowed_out_date, is_borrowed_or_rented_or_borrowed_out_return_date trong tb_machine vào trong tb_machine
+
+4. làm phiếu xuất bảo trì, thanh lí maintance, liquidation
+-làm phiếu này sẽ chỉ hiện các location có tb_department là '%Đơn vị bên ngoài%', khi duyệt sẽ set status máy là maintance, liquidation
+
+5. làm phiếu xuất cho mượn borrowed_out
+-làm phiếu này sẽ chỉ hiện các location có tb_department là '%Đơn vị bên ngoài%', khi duyệt phiếu sẽ set status disabled
+
+-khi duyệt cũng sẽ lưu thông tin is_borrowed_or_rented_or_borrowed_out_name, is_borrowed_or_rented_or_borrowed_out_date, is_borrowed_or_rented_or_borrowed_out_return_date trong tb_machine vào trong tb_machine
+
+6. làm phiếu trả mượn/thuê borrowed_return, rented_return
+-làm phiếu này sẽ chỉ hiện các location có tb_department là '%Đơn vị bên ngoài%', khi duyệt phiếu sẽ set status disabled

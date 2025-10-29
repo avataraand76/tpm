@@ -36,6 +36,10 @@ import {
   Divider,
   Snackbar,
   AlertTitle,
+  TableSortLabel,
+  Menu,
+  Checkbox,
+  ListItemText,
 } from "@mui/material";
 import {
   PrecisionManufacturing,
@@ -44,7 +48,6 @@ import {
   CheckCircle,
   Build,
   Cancel,
-  Settings,
   Close,
   Save,
   QrCode2,
@@ -53,10 +56,84 @@ import {
   Add,
   ReceiptLong,
   SwapHoriz,
+  ViewColumn,
 } from "@mui/icons-material";
 import { QRCodeSVG } from "qrcode.react";
 import NavigationBar from "../components/NavigationBar";
 import { api } from "../api/api";
+
+// Thêm style cho các trường bị disabled/filled để dễ nhận biết (từ yêu cầu trước)
+const DISABLED_VIEW_SX = {
+  // Ghi đè cho disabled
+  "& .MuiInputBase-root.Mui-disabled": {
+    backgroundColor: "#fffbe5 !important", // Nền vàng nhạt
+    "& fieldset": {
+      borderColor: "#f44336 !important", // Viền đỏ
+    },
+    "& .MuiInputBase-input": {
+      color: "#f44336", // Chữ đỏ
+      WebkitTextFillColor: "#f44336 !important", // Ghi đè màu chữ
+      fontWeight: 600,
+      opacity: 1, // Đảm bảo độ mờ không làm mờ chữ
+    },
+    "& .MuiFormLabel-root": {
+      color: "#f44336 !important", // Nhãn đỏ
+    },
+  },
+  // Ghi đè cho variant="filled" (khi disabled=false)
+  "& .MuiFilledInput-root": {
+    backgroundColor: "#fffbe5 !important",
+    "& input": {
+      color: "#f44336",
+      fontWeight: 600,
+    },
+    "& .MuiFormLabel-root": {
+      color: "#f44336",
+    },
+  },
+};
+
+// Column configuration for visibility toggle
+const columnConfig = {
+  code_machine: "Mã máy",
+  type_machine: "Loại máy",
+  model_machine: "Model",
+  manufacturer: "Hãng SX",
+  serial_machine: "Serial",
+  RFID_machine: "RFID",
+  name_category: "Loại",
+  name_location: "Vị trí hiện tại",
+  current_status: "Trạng thái (chính)",
+  is_borrowed_or_rented_or_borrowed_out: "Trạng thái (mượn/thuê)",
+  is_borrowed_or_rented_or_borrowed_out_name: "Đơn vị (mượn/thuê)",
+  is_borrowed_or_rented_or_borrowed_out_date: "Ngày (mượn/thuê)",
+  is_borrowed_or_rented_or_borrowed_out_return_date: "Ngày trả (mượn/thuê)",
+  price: "Giá",
+  lifespan: "Tuổi thọ (năm)",
+  repair_cost: "Chi phí SC",
+  date_of_use: "Ngày sử dụng",
+};
+
+// Initial visibility state
+const initialColumnVisibility = {
+  code_machine: true,
+  type_machine: true,
+  model_machine: true,
+  manufacturer: true,
+  serial_machine: true,
+  RFID_machine: false,
+  name_category: false,
+  name_location: true,
+  current_status: true,
+  is_borrowed_or_rented_or_borrowed_out: true,
+  is_borrowed_or_rented_or_borrowed_out_name: true,
+  is_borrowed_or_rented_or_borrowed_out_date: true,
+  is_borrowed_or_rented_or_borrowed_out_return_date: true,
+  price: false,
+  lifespan: false,
+  repair_cost: false,
+  date_of_use: true,
+};
 
 const MachineListPage = () => {
   const [machines, setMachines] = useState([]);
@@ -99,6 +176,16 @@ const MachineListPage = () => {
     title: "",
     message: "",
   });
+
+  // State for sorting
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
+  // State for column visibility
+  const [columnVisibility, setColumnVisibility] = useState(
+    initialColumnVisibility
+  );
+  const [columnMenuAnchor, setColumnMenuAnchor] = useState(null);
+  const [machineHistory, setMachineHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const fetchMachines = async (searchQuery = "") => {
     try {
@@ -155,7 +242,7 @@ const MachineListPage = () => {
 
   const handlePageChange = (event, newPage) => {
     setPage(newPage);
-    window.scrollTo({ top: 730, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleRowsPerPageChange = (event) => {
@@ -165,15 +252,33 @@ const MachineListPage = () => {
 
   const handleOpenDialog = async (uuid) => {
     try {
+      setMachineHistory([]); // Đặt lại lịch sử
+      setHistoryLoading(true);
+
       const result = await api.machines.getById(uuid);
       if (result.success) {
         setSelectedMachine(result.data);
         setEditedData(result.data);
         setIsCreateMode(false);
         setOpenDialog(true);
+        try {
+          const historyResult = await api.tracking.getMachineHistory(uuid);
+          if (historyResult.success) {
+            setMachineHistory(historyResult.data.history);
+          } else {
+            console.error("Failed to fetch history:", historyResult.message);
+            setMachineHistory([]);
+          }
+        } catch (historyErr) {
+          console.error("Error fetching machine history:", historyErr);
+          setMachineHistory([]);
+        } finally {
+          setHistoryLoading(false); // Dừng tải lịch sử
+        }
       }
     } catch (err) {
       console.error("Error fetching machine details:", err);
+      setHistoryLoading(false);
     }
   };
 
@@ -183,7 +288,8 @@ const MachineListPage = () => {
       code_machine: "",
       serial_machine: "",
       RFID_machine: "",
-      name_machine: "",
+      type_machine: "",
+      model_machine: "",
       manufacturer: "",
       price: "",
       date_of_use: "",
@@ -192,6 +298,7 @@ const MachineListPage = () => {
       note: "",
       current_status: "available",
       id_category: 1, // Default category
+      // Các trường is_borrowed... không cần khởi tạo vì form tạo mới không có
     });
     setIsCreateMode(true);
     setOpenDialog(true);
@@ -203,6 +310,8 @@ const MachineListPage = () => {
     setEditedData({});
     setIsCreateMode(false);
     setShowQRCode(false);
+    setMachineHistory([]);
+    setHistoryLoading(false);
   };
 
   const handlePrintQRCode = () => {
@@ -295,7 +404,9 @@ const MachineListPage = () => {
                   ? "MAY"
                   : "PHUKIEN"
               }-${editedData.serial_machine || ""}</div>
-              <div class="name">${editedData.name_machine || ""}</div>
+              <div class="name">${editedData.type_machine || ""} - ${
+      editedData.model_machine || ""
+    }</div> 
             </div>
           </div>
           <script>
@@ -373,9 +484,12 @@ const MachineListPage = () => {
     if (!editedData.code_machine || editedData.code_machine.trim() === "") {
       errors.push("Mã máy");
     }
-    if (!editedData.name_machine || editedData.name_machine.trim() === "") {
-      errors.push("Tên máy");
+    if (!editedData.type_machine || editedData.type_machine.trim() === "") {
+      errors.push("Loại máy");
     }
+    // if (!editedData.model_machine || editedData.model_machine.trim() === "") {
+    //   errors.push("Model máy");
+    // }
     if (!editedData.serial_machine || editedData.serial_machine.trim() === "") {
       errors.push("Serial");
     }
@@ -383,9 +497,9 @@ const MachineListPage = () => {
     // if (!editedData.RFID_machine || editedData.RFID_machine.trim() === "") {
     //   errors.push("RFID");
     // }
-    if (!editedData.date_of_use || editedData.date_of_use.trim() === "") {
-      errors.push("Ngày sử dụng");
-    }
+    // if (!editedData.date_of_use || editedData.date_of_use.trim() === "") {
+    //   errors.push("Ngày sử dụng");
+    // }
 
     return errors;
   };
@@ -497,7 +611,7 @@ const MachineListPage = () => {
       liquidation: { bg: "#f4433622", color: "#f44336", label: "Thanh lý" },
       disabled: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Vô hiệu hóa" },
     };
-    return statusColors[status] || statusColors.available;
+    return statusColors[status] || { bg: "#f0f0f0", color: "#555", label: "-" };
   };
 
   const getStatusIcon = (status) => {
@@ -565,6 +679,74 @@ const MachineListPage = () => {
     return `${year}-${month}-${day}`;
   };
 
+  // Sorting logic
+  const handleSortRequest = (key) => {
+    let direction = "asc";
+    if (sortConfig.key === key && sortConfig.direction === "asc") {
+      direction = "desc";
+    } else if (sortConfig.key === key && sortConfig.direction === "desc") {
+      key = null; // Clear sort
+      direction = "asc";
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const sortedMachines = React.useMemo(() => {
+    let sortableMachines = [...machines];
+    if (sortConfig.key) {
+      sortableMachines.sort((a, b) => {
+        const aVal = a[sortConfig.key];
+        const bVal = b[sortConfig.key];
+
+        // Handle nulls/undefined to sort them at the end
+        if (aVal == null && bVal == null) return 0;
+        if (aVal == null) return 1;
+        if (bVal == null) return -1;
+
+        let compare = 0;
+        // Check for specific data types
+        if (["price", "lifespan", "repair_cost"].includes(sortConfig.key)) {
+          compare = aVal - bVal;
+        } else if (
+          [
+            "date_of_use",
+            "is_borrowed_or_rented_or_borrowed_out_date",
+            "is_borrowed_or_rented_or_borrowed_out_return_date",
+          ].includes(sortConfig.key)
+        ) {
+          compare = new Date(aVal) - new Date(bVal);
+        } else {
+          // Default to string comparison
+          compare = aVal.toString().localeCompare(bVal.toString());
+        }
+
+        return sortConfig.direction === "asc" ? compare : -compare;
+      });
+    }
+    return sortableMachines;
+  }, [machines, sortConfig]);
+
+  // Column visibility logic
+  const handleColumnMenuOpen = (event) => {
+    setColumnMenuAnchor(event.currentTarget);
+  };
+
+  const handleColumnMenuClose = () => {
+    setColumnMenuAnchor(null);
+  };
+
+  const handleColumnToggle = (columnKey) => {
+    setColumnVisibility((prev) => ({
+      ...prev,
+      [columnKey]: !prev[columnKey],
+    }));
+  };
+
+  // <<< CHANGED: Adjust column count (removed Action column) >>>
+  const visibleColumnCount =
+    1 + Object.values(columnVisibility).filter((v) => v).length;
+  // <<< END OF CHANGE >>>
+
   return (
     <>
       <NavigationBar />
@@ -605,9 +787,8 @@ const MachineListPage = () => {
 
         {/* Statistics Cards */}
         <Grid container spacing={3} sx={{ mb: 4 }}>
-          {/* Tổng số máy */}
-          <Grid size={{ xs: 12 }}>
-            {" "}
+          {/* Cột chính cho thẻ "Hero" */}
+          <Grid size={{ xs: 12, md: 5, lg: 4 }}>
             <Card
               elevation={0}
               sx={{
@@ -615,229 +796,191 @@ const MachineListPage = () => {
                 background:
                   "linear-gradient(135deg, #667eea22 0%, #764ba222 100%)",
                 border: "1px solid rgba(0, 0, 0, 0.05)",
+                height: "100%", // Kéo dài thẻ để cân đối
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "center",
               }}
             >
-              <CardContent sx={{ textAlign: "center", py: 3 }}>
-                <Typography variant="h3" fontWeight="bold" color="#667eea">
-                  {stats.total}
-                </Typography>
+              <CardContent sx={{ textAlign: "center", p: 4 }}>
                 <Typography
                   variant="body1"
                   color="text.secondary"
-                  sx={{ mt: 1 }}
+                  sx={{ mb: 1, textTransform: "uppercase" }}
                 >
                   Tổng số máy
                 </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-
-          {/* Sẵn sàng */}
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <Card
-              elevation={0}
-              sx={{
-                borderRadius: "20px",
-                background:
-                  "linear-gradient(135deg, #2e7d3222 0%, #4caf5022 100%)",
-                border: "1px solid rgba(0, 0, 0, 0.05)",
-              }}
-            >
-              <CardContent sx={{ textAlign: "center", py: 3 }}>
-                <Typography variant="h3" fontWeight="bold" color="#2e7d32">
-                  {stats.available}
-                </Typography>
-                <Typography
-                  variant="body1"
-                  color="text.secondary"
-                  sx={{ mt: 1 }}
-                >
-                  Sẵn sàng
+                <Typography variant="h1" fontWeight="bold" color="#667eea">
+                  {stats.total}
                 </Typography>
               </CardContent>
             </Card>
           </Grid>
 
-          {/* Đang sử dụng */}
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <Card
-              elevation={0}
-              sx={{
-                borderRadius: "20px",
-                background:
-                  "linear-gradient(135deg, #1976d222 0%, #42a5f522 100%)",
-                border: "1px solid rgba(0, 0, 0, 0.05)",
-              }}
-            >
-              <CardContent sx={{ textAlign: "center", py: 3 }}>
-                <Typography variant="h3" fontWeight="bold" color="#1976d2">
-                  {stats.in_use}
-                </Typography>
-                <Typography
-                  variant="body1"
-                  color="text.secondary"
-                  sx={{ mt: 1 }}
+          {/* Cột phụ cho các thẻ còn lại */}
+          <Grid size={{ xs: 12, md: 7, lg: 8 }}>
+            <Grid container spacing={3}>
+              {/* Sẵn sàng */}
+              <Grid size={{ xs: 6, sm: 4, md: 3 }}>
+                <Card
+                  elevation={0}
+                  sx={{
+                    borderRadius: "20px",
+                    background: "#2e7d3211",
+                    border: "1px solid rgba(0, 0, 0, 0.05)",
+                  }}
                 >
-                  Đang sử dụng
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-
-          {/* Bảo trì */}
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <Card
-              elevation={0}
-              sx={{
-                borderRadius: "20px",
-                background:
-                  "linear-gradient(135deg, #ff980022 0%, #ffa72622 100%)",
-                border: "1px solid rgba(0, 0, 0, 0.05)",
-              }}
-            >
-              <CardContent sx={{ textAlign: "center", py: 3 }}>
-                <Typography variant="h3" fontWeight="bold" color="#ff9800">
-                  {stats.maintenance}
-                </Typography>
-                <Typography
-                  variant="body1"
-                  color="text.secondary"
-                  sx={{ mt: 1 }}
+                  <CardContent sx={{ textAlign: "center", py: 3 }}>
+                    <Typography variant="h4" fontWeight="bold" color="#2e7d32">
+                      {stats.available}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Sẵn sàng
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+              {/* Đang sử dụng */}
+              <Grid size={{ xs: 6, sm: 4, md: 3 }}>
+                <Card
+                  elevation={0}
+                  sx={{
+                    borderRadius: "20px",
+                    background: "#1976d211",
+                    border: "1px solid rgba(0, 0, 0, 0.05)",
+                  }}
                 >
-                  Bảo trì
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-
-          {/* Đi thuê */}
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <Card
-              elevation={0}
-              sx={{
-                borderRadius: "20px",
-                background:
-                  "linear-gradient(135deg, #673ab722 0%, #673ab722 100%)",
-                border: "1px solid rgba(0, 0, 0, 0.05)",
-              }}
-            >
-              <CardContent sx={{ textAlign: "center", py: 3 }}>
-                <Typography variant="h3" fontWeight="bold" color="#673ab7">
-                  {stats.rented}
-                </Typography>
-                <Typography
-                  variant="body1"
-                  color="text.secondary"
-                  sx={{ mt: 1 }}
+                  <CardContent sx={{ textAlign: "center", py: 3 }}>
+                    <Typography variant="h4" fontWeight="bold" color="#1976d2">
+                      {stats.in_use}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Đang sử dụng
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+              {/* Bảo trì */}
+              <Grid size={{ xs: 6, sm: 4, md: 3 }}>
+                <Card
+                  elevation={0}
+                  sx={{
+                    borderRadius: "20px",
+                    background: "#ff980011",
+                    border: "1px solid rgba(0, 0, 0, 0.05)",
+                  }}
                 >
-                  Thuê
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-
-          {/* Đi mượn */}
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <Card
-              elevation={0}
-              sx={{
-                borderRadius: "20px",
-                background:
-                  "linear-gradient(135deg, #03a9f422 0%, #03a9f422 100%)",
-                border: "1px solid rgba(0, 0, 0, 0.05)",
-              }}
-            >
-              <CardContent sx={{ textAlign: "center", py: 3 }}>
-                <Typography variant="h3" fontWeight="bold" color="#03a9f4">
-                  {stats.borrowed}
-                </Typography>
-                <Typography
-                  variant="body1"
-                  color="text.secondary"
-                  sx={{ mt: 1 }}
+                  <CardContent sx={{ textAlign: "center", py: 3 }}>
+                    <Typography variant="h4" fontWeight="bold" color="#ff9800">
+                      {stats.maintenance}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Bảo trì
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+              {/* Thanh lý */}
+              <Grid size={{ xs: 6, sm: 4, md: 3 }}>
+                <Card
+                  elevation={0}
+                  sx={{
+                    borderRadius: "20px",
+                    background: "#f4433611",
+                    border: "1px solid rgba(0, 0, 0, 0.05)",
+                  }}
                 >
-                  Mượn
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-
-          {/* Cho mượn */}
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <Card
-              elevation={0}
-              sx={{
-                borderRadius: "20px",
-                background:
-                  "linear-gradient(135deg, #00bcd422 0%, #00bcd422 100%)",
-                border: "1px solid rgba(0, 0, 0, 0.05)",
-              }}
-            >
-              <CardContent sx={{ textAlign: "center", py: 3 }}>
-                <Typography variant="h3" fontWeight="bold" color="#00bcd4">
-                  {stats.borrowed_out}
-                </Typography>
-                <Typography
-                  variant="body1"
-                  color="text.secondary"
-                  sx={{ mt: 1 }}
+                  <CardContent sx={{ textAlign: "center", py: 3 }}>
+                    <Typography variant="h4" fontWeight="bold" color="#f44336">
+                      {stats.liquidation}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Thanh lý
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+              {/* Thuê */}
+              <Grid size={{ xs: 6, sm: 4, md: 3 }}>
+                <Card
+                  elevation={0}
+                  sx={{
+                    borderRadius: "20px",
+                    background: "#673ab711",
+                    border: "1px solid rgba(0, 0, 0, 0.05)",
+                  }}
                 >
-                  Cho mượn
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-
-          {/* Thanh lý */}
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <Card
-              elevation={0}
-              sx={{
-                borderRadius: "20px",
-                background:
-                  "linear-gradient(135deg, #f4433622 0%, #f4433622 100%)",
-                border: "1px solid rgba(0, 0, 0, 0.05)",
-              }}
-            >
-              <CardContent sx={{ textAlign: "center", py: 3 }}>
-                <Typography variant="h3" fontWeight="bold" color="#f44336">
-                  {stats.liquidation}
-                </Typography>
-                <Typography
-                  variant="body1"
-                  color="text.secondary"
-                  sx={{ mt: 1 }}
+                  <CardContent sx={{ textAlign: "center", py: 3 }}>
+                    <Typography variant="h4" fontWeight="bold" color="#673ab7">
+                      {stats.rented}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Thuê
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+              {/* Mượn */}
+              <Grid size={{ xs: 6, sm: 4, md: 3 }}>
+                <Card
+                  elevation={0}
+                  sx={{
+                    borderRadius: "20px",
+                    background: "#03a9f411",
+                    border: "1px solid rgba(0, 0, 0, 0.05)",
+                  }}
                 >
-                  Thanh lý
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-
-          {/* Vô hiệu hóa */}
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <Card
-              elevation={0}
-              sx={{
-                borderRadius: "20px",
-                background:
-                  "linear-gradient(135deg, #9e9e9e22 0%, #9e9e9e22 100%)",
-                border: "1px solid rgba(0, 0, 0, 0.05)",
-              }}
-            >
-              <CardContent sx={{ textAlign: "center", py: 3 }}>
-                <Typography variant="h3" fontWeight="bold" color="#9e9e9e">
-                  {stats.disabled}
-                </Typography>
-                <Typography
-                  variant="body1"
-                  color="text.secondary"
-                  sx={{ mt: 1 }}
+                  <CardContent sx={{ textAlign: "center", py: 3 }}>
+                    <Typography variant="h4" fontWeight="bold" color="#03a9f4">
+                      {stats.borrowed}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Mượn
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+              {/* Cho mượn */}
+              <Grid size={{ xs: 6, sm: 4, md: 3 }}>
+                <Card
+                  elevation={0}
+                  sx={{
+                    borderRadius: "20px",
+                    background: "#00bcd411",
+                    border: "1px solid rgba(0, 0, 0, 0.05)",
+                  }}
                 >
-                  Vô hiệu hóa
-                </Typography>
-              </CardContent>
-            </Card>
+                  <CardContent sx={{ textAlign: "center", py: 3 }}>
+                    <Typography variant="h4" fontWeight="bold" color="#00bcd4">
+                      {stats.borrowed_out}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Cho mượn
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+              {/* Vô hiệu hóa */}
+              <Grid size={{ xs: 6, sm: 4, md: 3 }}>
+                <Card
+                  elevation={0}
+                  sx={{
+                    borderRadius: "20px",
+                    background: "#9e9e9e11",
+                    border: "1px solid rgba(0, 0, 0, 0.05)",
+                  }}
+                >
+                  <CardContent sx={{ textAlign: "center", py: 3 }}>
+                    <Typography variant="h4" fontWeight="bold" color="#9e9e9e">
+                      {stats.disabled}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Vô hiệu hóa
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
           </Grid>
         </Grid>
 
@@ -889,10 +1032,13 @@ const MachineListPage = () => {
                       borderRadius: "12px",
                     }}
                   >
+                    <MenuItem value={5}>5</MenuItem>
                     <MenuItem value={10}>10</MenuItem>
                     <MenuItem value={20}>20</MenuItem>
                     <MenuItem value={50}>50</MenuItem>
                     <MenuItem value={100}>100</MenuItem>
+                    <MenuItem value={200}>200</MenuItem>
+                    <MenuItem value={500}>500</MenuItem>
                   </Select>
                 </FormControl>
               </Stack>
@@ -915,6 +1061,23 @@ const MachineListPage = () => {
                 >
                   Thêm máy
                 </Button>
+
+                {/* Column Visibility Button */}
+                <Button
+                  variant="outlined"
+                  startIcon={<ViewColumn />}
+                  onClick={handleColumnMenuOpen}
+                  sx={{
+                    borderRadius: "12px",
+                    px: 3,
+                    py: 1.5,
+                    color: "#667eea",
+                    borderColor: "#667eea",
+                  }}
+                >
+                  Cột
+                </Button>
+
                 <Button
                   variant="contained"
                   startIcon={<Refresh />}
@@ -938,6 +1101,20 @@ const MachineListPage = () => {
           </CardContent>
         </Card>
 
+        {/* Column Visibility Menu */}
+        <Menu
+          anchorEl={columnMenuAnchor}
+          open={Boolean(columnMenuAnchor)}
+          onClose={handleColumnMenuClose}
+        >
+          {Object.entries(columnConfig).map(([key, name]) => (
+            <MenuItem key={key} onClick={() => handleColumnToggle(key)}>
+              <Checkbox checked={columnVisibility[key]} />
+              <ListItemText primary={name} />
+            </MenuItem>
+          ))}
+        </Menu>
+
         {/* Machine Table */}
         {loading ? (
           <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
@@ -958,125 +1135,492 @@ const MachineListPage = () => {
             <TableContainer>
               <Table>
                 <TableHead>
-                  <TableRow sx={{ bgcolor: "#f8f9fa" }}>
+                  <TableRow
+                    sx={{ backgroundColor: "rgba(102, 126, 234, 0.05)" }}
+                  >
                     <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
                       STT
                     </TableCell>
-                    <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
-                      Mã máy
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
-                      Tên máy
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
-                      Hãng SX
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
-                      Serial
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
-                      RFID
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
-                      Loại máy
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
-                      Trạng thái
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
-                      Giá
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
-                      Ngày sử dụng
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
-                      Thao tác
-                    </TableCell>
+
+                    {/* Added sort labels and visibility checks */}
+                    {columnVisibility.code_machine && (
+                      <TableCell
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: "0.95rem",
+                        }}
+                      >
+                        <TableSortLabel
+                          active={sortConfig.key === "code_machine"}
+                          direction={
+                            sortConfig.key === "code_machine"
+                              ? sortConfig.direction
+                              : "asc"
+                          }
+                          onClick={() => handleSortRequest("code_machine")}
+                        >
+                          Mã máy
+                        </TableSortLabel>
+                      </TableCell>
+                    )}
+                    {columnVisibility.type_machine && (
+                      <TableCell
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: "0.95rem",
+                          minWidth: "150px",
+                        }}
+                      >
+                        <TableSortLabel
+                          active={sortConfig.key === "type_machine"}
+                          direction={
+                            sortConfig.key === "type_machine"
+                              ? sortConfig.direction
+                              : "asc"
+                          }
+                          onClick={() => handleSortRequest("type_machine")}
+                        >
+                          Loại máy
+                        </TableSortLabel>
+                      </TableCell>
+                    )}
+                    {columnVisibility.model_machine && (
+                      <TableCell
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: "0.95rem",
+                          minWidth: "200px",
+                        }}
+                      >
+                        <TableSortLabel
+                          active={sortConfig.key === "model_machine"}
+                          direction={
+                            sortConfig.key === "model_machine"
+                              ? sortConfig.direction
+                              : "asc"
+                          }
+                          onClick={() => handleSortRequest("model_machine")}
+                        >
+                          Model
+                        </TableSortLabel>
+                      </TableCell>
+                    )}
+                    {columnVisibility.manufacturer && (
+                      <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                        <TableSortLabel
+                          active={sortConfig.key === "manufacturer"}
+                          direction={
+                            sortConfig.key === "manufacturer"
+                              ? sortConfig.direction
+                              : "asc"
+                          }
+                          onClick={() => handleSortRequest("manufacturer")}
+                        >
+                          Hãng SX
+                        </TableSortLabel>
+                      </TableCell>
+                    )}
+                    {columnVisibility.serial_machine && (
+                      <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                        <TableSortLabel
+                          active={sortConfig.key === "serial_machine"}
+                          direction={
+                            sortConfig.key === "serial_machine"
+                              ? sortConfig.direction
+                              : "asc"
+                          }
+                          onClick={() => handleSortRequest("serial_machine")}
+                        >
+                          Serial
+                        </TableSortLabel>
+                      </TableCell>
+                    )}
+                    {columnVisibility.RFID_machine && (
+                      <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                        <TableSortLabel
+                          active={sortConfig.key === "RFID_machine"}
+                          direction={
+                            sortConfig.key === "RFID_machine"
+                              ? sortConfig.direction
+                              : "asc"
+                          }
+                          onClick={() => handleSortRequest("RFID_machine")}
+                        >
+                          RFID
+                        </TableSortLabel>
+                      </TableCell>
+                    )}
+                    {columnVisibility.name_category && (
+                      <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                        <TableSortLabel
+                          active={sortConfig.key === "name_category"}
+                          direction={
+                            sortConfig.key === "name_category"
+                              ? sortConfig.direction
+                              : "asc"
+                          }
+                          onClick={() => handleSortRequest("name_category")}
+                        >
+                          Loại
+                        </TableSortLabel>
+                      </TableCell>
+                    )}
+                    {columnVisibility.name_location && (
+                      <TableCell
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: "0.95rem",
+                          minWidth: "150px",
+                        }}
+                      >
+                        <TableSortLabel
+                          active={sortConfig.key === "name_location"}
+                          direction={
+                            sortConfig.key === "name_location"
+                              ? sortConfig.direction
+                              : "asc"
+                          }
+                          onClick={() => handleSortRequest("name_location")}
+                        >
+                          Vị trí hiện tại
+                        </TableSortLabel>
+                      </TableCell>
+                    )}
+                    {columnVisibility.current_status && (
+                      <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                        <TableSortLabel
+                          active={sortConfig.key === "current_status"}
+                          direction={
+                            sortConfig.key === "current_status"
+                              ? sortConfig.direction
+                              : "asc"
+                          }
+                          onClick={() => handleSortRequest("current_status")}
+                        >
+                          Trạng thái (chính)
+                        </TableSortLabel>
+                      </TableCell>
+                    )}
+                    {columnVisibility.is_borrowed_or_rented_or_borrowed_out && (
+                      <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                        <TableSortLabel
+                          active={
+                            sortConfig.key ===
+                            "is_borrowed_or_rented_or_borrowed_out"
+                          }
+                          direction={
+                            sortConfig.key ===
+                            "is_borrowed_or_rented_or_borrowed_out"
+                              ? sortConfig.direction
+                              : "asc"
+                          }
+                          onClick={() =>
+                            handleSortRequest(
+                              "is_borrowed_or_rented_or_borrowed_out"
+                            )
+                          }
+                        >
+                          Trạng thái (mượn/thuê)
+                        </TableSortLabel>
+                      </TableCell>
+                    )}
+                    {columnVisibility.is_borrowed_or_rented_or_borrowed_out_name && (
+                      <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                        <TableSortLabel
+                          active={
+                            sortConfig.key ===
+                            "is_borrowed_or_rented_or_borrowed_out_name"
+                          }
+                          direction={
+                            sortConfig.key ===
+                            "is_borrowed_or_rented_or_borrowed_out_name"
+                              ? sortConfig.direction
+                              : "asc"
+                          }
+                          onClick={() =>
+                            handleSortRequest(
+                              "is_borrowed_or_rented_or_borrowed_out_name"
+                            )
+                          }
+                        >
+                          Đơn vị (mượn/thuê)
+                        </TableSortLabel>
+                      </TableCell>
+                    )}
+                    {columnVisibility.is_borrowed_or_rented_or_borrowed_out_date && (
+                      <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                        <TableSortLabel
+                          active={
+                            sortConfig.key ===
+                            "is_borrowed_or_rented_or_borrowed_out_date"
+                          }
+                          direction={
+                            sortConfig.key ===
+                            "is_borrowed_or_rented_or_borrowed_out_date"
+                              ? sortConfig.direction
+                              : "asc"
+                          }
+                          onClick={() =>
+                            handleSortRequest(
+                              "is_borrowed_or_rented_or_borrowed_out_date"
+                            )
+                          }
+                        >
+                          Ngày (mượn/thuê)
+                        </TableSortLabel>
+                      </TableCell>
+                    )}
+                    {columnVisibility.is_borrowed_or_rented_or_borrowed_out_return_date && (
+                      <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                        <TableSortLabel
+                          active={
+                            sortConfig.key ===
+                            "is_borrowed_or_rented_or_borrowed_out_return_date"
+                          }
+                          direction={
+                            sortConfig.key ===
+                            "is_borrowed_or_rented_or_borrowed_out_return_date"
+                              ? sortConfig.direction
+                              : "asc"
+                          }
+                          onClick={() =>
+                            handleSortRequest(
+                              "is_borrowed_or_rented_or_borrowed_out_return_date"
+                            )
+                          }
+                        >
+                          Ngày trả (mượn/thuê)
+                        </TableSortLabel>
+                      </TableCell>
+                    )}
+                    {columnVisibility.price && (
+                      <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                        <TableSortLabel
+                          active={sortConfig.key === "price"}
+                          direction={
+                            sortConfig.key === "price"
+                              ? sortConfig.direction
+                              : "asc"
+                          }
+                          onClick={() => handleSortRequest("price")}
+                        >
+                          Giá
+                        </TableSortLabel>
+                      </TableCell>
+                    )}
+                    {columnVisibility.lifespan && (
+                      <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                        <TableSortLabel
+                          active={sortConfig.key === "lifespan"}
+                          direction={
+                            sortConfig.key === "lifespan"
+                              ? sortConfig.direction
+                              : "asc"
+                          }
+                          onClick={() => handleSortRequest("lifespan")}
+                        >
+                          Tuổi thọ (năm)
+                        </TableSortLabel>
+                      </TableCell>
+                    )}
+                    {columnVisibility.repair_cost && (
+                      <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                        <TableSortLabel
+                          active={sortConfig.key === "repair_cost"}
+                          direction={
+                            sortConfig.key === "repair_cost"
+                              ? sortConfig.direction
+                              : "asc"
+                          }
+                          onClick={() => handleSortRequest("repair_cost")}
+                        >
+                          Chi phí SC
+                        </TableSortLabel>
+                      </TableCell>
+                    )}
+                    {columnVisibility.date_of_use && (
+                      <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                        <TableSortLabel
+                          active={sortConfig.key === "date_of_use"}
+                          direction={
+                            sortConfig.key === "date_of_use"
+                              ? sortConfig.direction
+                              : "asc"
+                          }
+                          onClick={() => handleSortRequest("date_of_use")}
+                        >
+                          Ngày sử dụng
+                        </TableSortLabel>
+                      </TableCell>
+                    )}
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {machines.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={11} align="center" sx={{ py: 4 }}>
+                      <TableCell
+                        colSpan={visibleColumnCount}
+                        align="center"
+                        sx={{ py: 4 }}
+                      >
                         <Typography color="text.secondary">
                           Không tìm thấy máy móc nào
                         </Typography>
                       </TableCell>
                     </TableRow>
                   ) : (
-                    machines.map((machine, index) => {
-                      const statusInfo = getStatusColor(machine.current_status);
+                    /* Map over sortedMachines */
+                    sortedMachines.map((machine, index) => {
+                      const mainStatusInfo = getStatusColor(
+                        machine.current_status
+                      );
                       return (
                         <TableRow
                           key={machine.uuid_machine}
+                          hover
+                          // <<< CHANGED: Added onClick and cursor >>>
+                          onClick={() => handleOpenDialog(machine.uuid_machine)}
                           sx={{
+                            cursor: "pointer", // Make row look clickable
                             "&:hover": {
-                              bgcolor: "#f8f9fa",
+                              bgcolor: "rgba(102, 126, 234, 0.03)", // Màu hover nhẹ
                             },
                             transition: "all 0.2s ease",
                           }}
+                          // <<< END OF CHANGE >>>
                         >
                           <TableCell>
                             {(page - 1) * rowsPerPage + index + 1}
                           </TableCell>
-                          <TableCell sx={{ fontWeight: 500 }}>
-                            {machine.code_machine || "-"}
-                          </TableCell>
-                          <TableCell sx={{ fontWeight: 500 }}>
-                            {machine.name_machine || "-"}
-                          </TableCell>
-                          <TableCell>{machine.manufacturer || "-"}</TableCell>
-                          <TableCell>{machine.serial_machine || "-"}</TableCell>
-                          <TableCell>{machine.RFID_machine || "-"}</TableCell>
-                          <TableCell>
-                            {machine.name_category ? (
+
+                          {/* Added visibility checks */}
+                          {columnVisibility.code_machine && (
+                            <TableCell sx={{ fontWeight: 500 }}>
+                              {machine.code_machine || "-"}
+                            </TableCell>
+                          )}
+                          {columnVisibility.type_machine && (
+                            <TableCell>{machine.type_machine || "-"}</TableCell>
+                          )}
+                          {columnVisibility.model_machine && (
+                            <TableCell sx={{ fontWeight: 500 }}>
+                              {machine.model_machine || "-"}
+                            </TableCell>
+                          )}
+                          {columnVisibility.manufacturer && (
+                            <TableCell>{machine.manufacturer || "-"}</TableCell>
+                          )}
+                          {columnVisibility.serial_machine && (
+                            <TableCell>
+                              {machine.serial_machine || "-"}
+                            </TableCell>
+                          )}
+                          {columnVisibility.RFID_machine && (
+                            <TableCell>{machine.RFID_machine || "-"}</TableCell>
+                          )}
+                          {columnVisibility.name_category && (
+                            <TableCell>
+                              {machine.name_category ? (
+                                <Chip
+                                  label={machine.name_category}
+                                  size="small"
+                                  sx={{
+                                    background: "#f0f0f0",
+                                    fontWeight: 500,
+                                  }}
+                                />
+                              ) : (
+                                "-"
+                              )}
+                            </TableCell>
+                          )}
+                          {columnVisibility.name_location && (
+                            <TableCell sx={{ fontWeight: 500 }}>
+                              {machine.name_location || "-"}
+                            </TableCell>
+                          )}
+                          {columnVisibility.current_status && (
+                            <TableCell>
                               <Chip
-                                label={machine.name_category}
+                                icon={getStatusIcon(machine.current_status)}
+                                label={mainStatusInfo.label}
                                 size="small"
                                 sx={{
-                                  background: "#f0f0f0",
-                                  fontWeight: 500,
+                                  background: mainStatusInfo.bg,
+                                  color: mainStatusInfo.color,
+                                  fontWeight: 600,
+                                  borderRadius: "8px",
+                                  textTransform: "uppercase",
                                 }}
                               />
-                            ) : (
-                              "-"
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <Chip
-                              icon={getStatusIcon(machine.current_status)}
-                              label={statusInfo.label}
-                              size="small"
-                              sx={{
-                                background: statusInfo.bg,
-                                color: statusInfo.color,
-                                fontWeight: 600,
-                                borderRadius: "8px",
-                                textTransform: "uppercase",
-                              }}
-                            />
-                          </TableCell>
-                          <TableCell>{formatCurrency(machine.price)}</TableCell>
-                          <TableCell>
-                            {formatDate(machine.date_of_use)}
-                          </TableCell>
-                          <TableCell>
-                            <IconButton
-                              color="primary"
-                              size="small"
-                              onClick={() =>
-                                handleOpenDialog(machine.uuid_machine)
-                              }
-                              sx={{
-                                "&:hover": {
-                                  background:
-                                    "linear-gradient(45deg, #667eea22, #764ba222)",
-                                },
-                              }}
-                            >
-                              <Settings />
-                            </IconButton>
-                          </TableCell>
+                            </TableCell>
+                          )}
+                          {columnVisibility.is_borrowed_or_rented_or_borrowed_out && (
+                            <TableCell>
+                              {machine.is_borrowed_or_rented_or_borrowed_out
+                                ? (() => {
+                                    const borrowStatusInfo = getStatusColor(
+                                      machine.is_borrowed_or_rented_or_borrowed_out
+                                    );
+                                    return (
+                                      <Chip
+                                        icon={getStatusIcon(
+                                          machine.is_borrowed_or_rented_or_borrowed_out
+                                        )}
+                                        label={borrowStatusInfo.label}
+                                        size="small"
+                                        sx={{
+                                          background: borrowStatusInfo.bg,
+                                          color: borrowStatusInfo.color,
+                                          fontWeight: 600,
+                                          borderRadius: "8px",
+                                          textTransform: "uppercase",
+                                        }}
+                                      />
+                                    );
+                                  })()
+                                : "-"}
+                            </TableCell>
+                          )}
+                          {columnVisibility.is_borrowed_or_rented_or_borrowed_out_name && (
+                            <TableCell>
+                              {machine.is_borrowed_or_rented_or_borrowed_out_name ||
+                                "-"}
+                            </TableCell>
+                          )}
+                          {columnVisibility.is_borrowed_or_rented_or_borrowed_out_date && (
+                            <TableCell>
+                              {formatDate(
+                                machine.is_borrowed_or_rented_or_borrowed_out_date
+                              )}
+                            </TableCell>
+                          )}
+                          {columnVisibility.is_borrowed_or_rented_or_borrowed_out_return_date && (
+                            <TableCell>
+                              {formatDate(
+                                machine.is_borrowed_or_rented_or_borrowed_out_return_date
+                              )}
+                            </TableCell>
+                          )}
+                          {columnVisibility.price && (
+                            <TableCell>
+                              {formatCurrency(machine.price)}
+                            </TableCell>
+                          )}
+                          {columnVisibility.lifespan && (
+                            <TableCell>{machine.lifespan || "-"}</TableCell>
+                          )}
+                          {columnVisibility.repair_cost && (
+                            <TableCell>
+                              {formatCurrency(machine.repair_cost)}
+                            </TableCell>
+                          )}
+                          {columnVisibility.date_of_use && (
+                            <TableCell>
+                              {formatDate(machine.date_of_use)}
+                            </TableCell>
+                          )}
+                          {/* <<< CHANGED: Removed Action cell >>> */}
                         </TableRow>
                       );
                     })
@@ -1137,7 +1681,17 @@ const MachineListPage = () => {
             },
           }}
         >
-          <DialogTitle sx={{ pb: 1 }}>
+          {/* Cập nhật style DialogTitle để giống TicketManagementPage */}
+          <DialogTitle
+            sx={{
+              pb: 1,
+              background: "linear-gradient(45deg, #667eea, #764ba2)",
+              color: "white",
+              fontWeight: 700,
+              borderTopLeftRadius: "20px", // Đảm bảo bo tròn góc
+              borderTopRightRadius: "20px", // Đảm bảo bo tròn góc
+            }}
+          >
             <Stack
               direction="row"
               alignItems="center"
@@ -1146,7 +1700,11 @@ const MachineListPage = () => {
               <Typography variant="h5" fontWeight="bold">
                 {isCreateMode ? "Thêm máy móc mới" : "Chỉnh sửa máy móc"}
               </Typography>
-              <IconButton onClick={handleCloseDialog} size="small">
+              <IconButton
+                onClick={handleCloseDialog}
+                size="small"
+                sx={{ color: "white" }}
+              >
                 <Close />
               </IconButton>
             </Stack>
@@ -1214,7 +1772,8 @@ const MachineListPage = () => {
                                 variant="body2"
                                 color="text.secondary"
                               >
-                                {editedData.name_machine}
+                                {editedData.type_machine} -{" "}
+                                {editedData.model_machine}
                               </Typography>
                             </Box> */}
                             <Typography
@@ -1302,6 +1861,11 @@ const MachineListPage = () => {
                   </Grid>
                 )}
 
+                <Grid size={{ xs: 12 }}>
+                  <Divider sx={{ my: 2 }}>
+                    <Chip label="Thông tin chung" />
+                  </Divider>
+                </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
                     fullWidth
@@ -1312,7 +1876,7 @@ const MachineListPage = () => {
                       handleInputChange("code_machine", e.target.value)
                     }
                     disabled={!isCreateMode}
-                    variant={!isCreateMode ? "filled" : "outlined"}
+                    sx={!isCreateMode ? DISABLED_VIEW_SX : {}} // Áp dụng style bị khóa
                   />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
@@ -1325,14 +1889,13 @@ const MachineListPage = () => {
                       handleInputChange("serial_machine", e.target.value)
                     }
                     disabled={!isCreateMode}
-                    variant={!isCreateMode ? "filled" : "outlined"}
+                    sx={!isCreateMode ? DISABLED_VIEW_SX : {}} // Áp dụng style bị khóa
                   />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
                     fullWidth
                     label="RFID"
-                    required
                     value={editedData.RFID_machine || ""}
                     onChange={(e) =>
                       handleInputChange("RFID_machine", e.target.value)
@@ -1342,10 +1905,10 @@ const MachineListPage = () => {
                 <Grid size={{ xs: 12, sm: 6 }}>
                   {isCreateMode ? (
                     <FormControl fullWidth>
-                      <InputLabel>Loại máy</InputLabel>
+                      <InputLabel>Loại</InputLabel>
                       <Select
                         value={editedData.id_category || 1}
-                        label="Loại máy"
+                        label="Loại"
                         onChange={(e) =>
                           handleInputChange("id_category", e.target.value)
                         }
@@ -1357,24 +1920,37 @@ const MachineListPage = () => {
                   ) : (
                     <TextField
                       fullWidth
-                      label="Loại máy"
+                      label="Loại"
                       value={editedData.name_category || ""}
                       disabled={true}
-                      variant="filled"
+                      sx={DISABLED_VIEW_SX} // Áp dụng style bị khóa
                     />
                   )}
                 </Grid>
-                <Grid size={{ xs: 12 }}>
+
+                <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
                     fullWidth
-                    label="Tên máy"
+                    label="Loại máy"
                     required
-                    value={editedData.name_machine || ""}
+                    value={editedData.type_machine || ""}
                     onChange={(e) =>
-                      handleInputChange("name_machine", e.target.value)
+                      handleInputChange("type_machine", e.target.value)
                     }
                   />
                 </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    fullWidth
+                    label="Model máy"
+                    required
+                    value={editedData.model_machine || ""}
+                    onChange={(e) =>
+                      handleInputChange("model_machine", e.target.value)
+                    }
+                  />
+                </Grid>
+
                 <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
                     fullWidth
@@ -1398,13 +1974,176 @@ const MachineListPage = () => {
                       <MenuItem value="available">Sẵn sàng</MenuItem>
                       <MenuItem value="in_use">Đang sử dụng</MenuItem>
                       <MenuItem value="maintenance">Bảo trì</MenuItem>
-                      <MenuItem value="rented">Thuê</MenuItem>
-                      <MenuItem value="borrowed">Mượn</MenuItem>
-                      <MenuItem value="borrowed_out">Cho mượn</MenuItem>
                       <MenuItem value="liquidation">Thanh lý</MenuItem>
                       <MenuItem value="disabled">Vô hiệu hóa</MenuItem>
                     </Select>
                   </FormControl>
+                </Grid>
+
+                {!isCreateMode && (
+                  <>
+                    <Grid size={{ xs: 12 }}>
+                      <Divider sx={{ my: 2 }}>
+                        <Chip label="Lịch sử vị trí" />
+                      </Divider>
+                    </Grid>
+                    <Grid size={{ xs: 12 }}>
+                      <TextField
+                        fullWidth
+                        label="Vị trí hiện tại"
+                        value={editedData.name_location || "Chưa có vị trí"}
+                        disabled
+                        sx={DISABLED_VIEW_SX}
+                        InputLabelProps={{ shrink: true }}
+                      />
+                    </Grid>
+                    <Grid size={{ xs: 12 }}>
+                      {historyLoading ? (
+                        <Box
+                          sx={{
+                            display: "flex",
+                            justifyContent: "center",
+                            my: 3,
+                          }}
+                        >
+                          <CircularProgress />
+                        </Box>
+                      ) : machineHistory.length === 0 ? (
+                        <Typography
+                          align="center"
+                          color="text.secondary"
+                          sx={{ my: 2 }}
+                        >
+                          Không có lịch sử di chuyển.
+                        </Typography>
+                      ) : (
+                        <TableContainer
+                          component={Paper}
+                          elevation={0}
+                          variant="outlined"
+                          sx={{ borderRadius: "12px", maxHeight: 300 }}
+                        >
+                          <Table stickyHeader size="small">
+                            <TableHead>
+                              <TableRow>
+                                <TableCell sx={{ fontWeight: "bold" }}>
+                                  Ngày di chuyển
+                                </TableCell>
+                                <TableCell sx={{ fontWeight: "bold" }}>
+                                  Từ vị trí
+                                </TableCell>
+                                <TableCell sx={{ fontWeight: "bold" }}>
+                                  Đến vị trí
+                                </TableCell>
+                                <TableCell sx={{ fontWeight: "bold" }}>
+                                  Người thực hiện
+                                </TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {machineHistory.map((entry, index) => (
+                                <TableRow key={index}>
+                                  <TableCell>
+                                    {formatDate(entry.move_date)}
+                                  </TableCell>
+                                  <TableCell>
+                                    {entry.from_location_name || "-"}
+                                  </TableCell>
+                                  <TableCell>
+                                    {entry.to_location_name || "-"}
+                                  </TableCell>
+                                  <TableCell>{entry.created_by}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                      )}
+                    </Grid>
+                  </>
+                )}
+
+                {/* Thêm thông tin Mượn/Thuê (chỉ đọc) */}
+                {!isCreateMode && (
+                  <>
+                    <Grid size={{ xs: 12 }}>
+                      <Divider sx={{ my: 2 }}>
+                        <Chip label="Thông tin Mượn / Thuê / Cho mượn" />
+                      </Divider>
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField
+                        fullWidth
+                        value={(() => {
+                          if (
+                            editedData.is_borrowed_or_rented_or_borrowed_out ===
+                            "borrowed"
+                          )
+                            return "Mượn";
+                          if (
+                            editedData.is_borrowed_or_rented_or_borrowed_out ===
+                            "rented"
+                          )
+                            return "Thuê";
+                          if (
+                            editedData.is_borrowed_or_rented_or_borrowed_out ===
+                            "borrowed_out"
+                          )
+                            return "Cho mượn";
+                          return "NULL";
+                        })()}
+                        label="Trạng thái Mượn/Thuê"
+                        disabled
+                        sx={DISABLED_VIEW_SX}
+                        InputLabelProps={{ shrink: true }}
+                      />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField
+                        fullWidth
+                        label="Đơn vị (mượn/thuê)"
+                        value={
+                          editedData.is_borrowed_or_rented_or_borrowed_out_name ||
+                          "NULL"
+                        }
+                        disabled
+                        sx={DISABLED_VIEW_SX}
+                        InputLabelProps={{ shrink: true }}
+                      />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField
+                        fullWidth
+                        label="Ngày (mượn/thuê)"
+                        type="date"
+                        value={formatDateForInput(
+                          editedData.is_borrowed_or_rented_or_borrowed_out_date
+                        )}
+                        disabled
+                        sx={DISABLED_VIEW_SX}
+                        InputLabelProps={{ shrink: true }}
+                      />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField
+                        fullWidth
+                        label="Ngày trả (dự kiến)"
+                        type="date"
+                        value={formatDateForInput(
+                          editedData.is_borrowed_or_rented_or_borrowed_out_return_date
+                        )}
+                        disabled
+                        sx={DISABLED_VIEW_SX}
+                        InputLabelProps={{ shrink: true }}
+                      />
+                    </Grid>
+                  </>
+                )}
+
+                <Grid size={{ xs: 12 }}>
+                  <Divider sx={{ my: 2 }}>
+                    <Chip label="Thông tin Chi phí & Thời gian" />
+                  </Divider>
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
@@ -1492,7 +2231,7 @@ const MachineListPage = () => {
                         label="Ngày tạo"
                         value={formatDate(selectedMachine.created_at)}
                         disabled={true}
-                        variant="filled"
+                        sx={DISABLED_VIEW_SX} // Áp dụng style bị khóa
                       />
                     </Grid>
                     <Grid size={{ xs: 12, sm: 6 }}>
@@ -1501,7 +2240,7 @@ const MachineListPage = () => {
                         label="Ngày cập nhật"
                         value={formatDate(selectedMachine.updated_at)}
                         disabled={true}
-                        variant="filled"
+                        sx={DISABLED_VIEW_SX} // Áp dụng style bị khóa
                       />
                     </Grid>
                   </>

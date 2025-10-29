@@ -23,6 +23,7 @@ import {
   ArrowForward,
   PrecisionManufacturing,
   Receipt,
+  LocationOn,
 } from "@mui/icons-material";
 import NavigationBar from "../components/NavigationBar";
 
@@ -169,130 +170,7 @@ const HomePage = () => {
             🚀 Điều hướng nhanh
           </Typography>
           <Grid container spacing={3}>
-            {/* <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-              <Card
-                elevation={0}
-                sx={{
-                  height: "100%",
-                  borderRadius: "20px",
-                  border: "1px solid rgba(0, 0, 0, 0.05)",
-                  background:
-                    "linear-gradient(135deg, #667eea22 0%, #764ba222 100%)",
-                  transition: "all 0.3s ease",
-                  "&:hover": {
-                    transform: "translateY(-8px)",
-                    boxShadow: "0 20px 40px rgba(102, 126, 234, 0.2)",
-                  },
-                }}
-              >
-                <CardContent sx={{ p: 4, textAlign: "center" }}>
-                  <Avatar
-                    sx={{
-                      width: 70,
-                      height: 70,
-                      background: "linear-gradient(45deg, #667eea, #764ba2)",
-                      mx: "auto",
-                      mb: 3,
-                    }}
-                  >
-                    <Science sx={{ fontSize: 35 }} />
-                  </Avatar>
-                  <Typography variant="h5" fontWeight="bold" gutterBottom>
-                    🔬 Test Module 1
-                  </Typography>
-                  <Typography
-                    variant="body1"
-                    color="text.secondary"
-                    sx={{ mb: 3 }}
-                  >
-                    Module kiểm thử cơ bản với các tính năng CRUD, validation và
-                    performance testing
-                  </Typography>
-                  <Button
-                    variant="contained"
-                    size="large"
-                    endIcon={<ArrowForward />}
-                    onClick={() => handleNavigate("/test1")}
-                    sx={{
-                      borderRadius: "12px",
-                      background: "linear-gradient(45deg, #667eea, #764ba2)",
-                      px: 4,
-                      py: 1.5,
-                      "&:hover": {
-                        transform: "translateY(-2px)",
-                        boxShadow: "0 8px 25px rgba(102, 126, 234, 0.3)",
-                      },
-                      transition: "all 0.3s ease",
-                    }}
-                  >
-                    Khám phá ngay
-                  </Button>
-                </CardContent>
-              </Card>
-            </Grid> */}
-
-            {/* <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-              <Card
-                elevation={0}
-                sx={{
-                  height: "100%",
-                  borderRadius: "20px",
-                  border: "1px solid rgba(0, 0, 0, 0.05)",
-                  background:
-                    "linear-gradient(135deg, #dc004e22 0%, #f5005722 100%)",
-                  transition: "all 0.3s ease",
-                  "&:hover": {
-                    transform: "translateY(-8px)",
-                    boxShadow: "0 20px 40px rgba(220, 0, 78, 0.2)",
-                  },
-                }}
-              >
-                <CardContent sx={{ p: 4, textAlign: "center" }}>
-                  <Avatar
-                    sx={{
-                      width: 70,
-                      height: 70,
-                      background: "linear-gradient(45deg, #dc004e, #f50057)",
-                      mx: "auto",
-                      mb: 3,
-                    }}
-                  >
-                    <Psychology sx={{ fontSize: 35 }} />
-                  </Avatar>
-                  <Typography variant="h5" fontWeight="bold" gutterBottom>
-                    🧠 Test Module 2
-                  </Typography>
-                  <Typography
-                    variant="body1"
-                    color="text.secondary"
-                    sx={{ mb: 3 }}
-                  >
-                    Module kiểm thử nâng cao với AI, Machine Learning và
-                    Security Testing
-                  </Typography>
-                  <Button
-                    variant="contained"
-                    size="large"
-                    endIcon={<ArrowForward />}
-                    onClick={() => handleNavigate("/test2")}
-                    sx={{
-                      borderRadius: "12px",
-                      background: "linear-gradient(45deg, #dc004e, #f50057)",
-                      px: 4,
-                      py: 1.5,
-                      "&:hover": {
-                        transform: "translateY(-2px)",
-                        boxShadow: "0 8px 25px rgba(220, 0, 78, 0.3)",
-                      },
-                      transition: "all 0.3s ease",
-                    }}
-                  >
-                    Khám phá ngay
-                  </Button>
-                </CardContent>
-              </Card>
-            </Grid> */}
-
+            {/* Danh sách máy móc */}
             <Grid size={{ xs: 12, sm: 6, md: 4 }}>
               <Card
                 elevation={0}
@@ -354,6 +232,7 @@ const HomePage = () => {
               </Card>
             </Grid>
 
+            {/* Phiếu xuất nhập */}
             <Grid size={{ xs: 12, sm: 6, md: 4 }}>
               <Card
                 elevation={0}
@@ -410,6 +289,68 @@ const HomePage = () => {
                     }}
                   >
                     Quản lý phiếu
+                  </Button>
+                </CardContent>
+              </Card>
+            </Grid>
+
+            {/* Theo dõi vị trí (CARD MỚI) */}
+            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+              <Card
+                elevation={0}
+                sx={{
+                  height: "100%",
+                  borderRadius: "20px",
+                  border: "1px solid rgba(0, 0, 0, 0.05)",
+                  background:
+                    "linear-gradient(135deg, #03a9f422 0%, #00bcd422 100%)",
+                  transition: "all 0.3s ease",
+                  "&:hover": {
+                    transform: "translateY(-8px)",
+                    boxShadow: "0 20px 40px rgba(3, 169, 244, 0.2)",
+                  },
+                }}
+              >
+                <CardContent sx={{ p: 4, textAlign: "center" }}>
+                  <Avatar
+                    sx={{
+                      width: 70,
+                      height: 70,
+                      background: "linear-gradient(45deg, #03a9f4, #00bcd4)",
+                      mx: "auto",
+                      mb: 3,
+                    }}
+                  >
+                    <LocationOn sx={{ fontSize: 35 }} />
+                  </Avatar>
+                  <Typography variant="h5" fontWeight="bold" gutterBottom>
+                    🗺️ Theo dõi vị trí
+                  </Typography>
+                  <Typography
+                    variant="body1"
+                    color="text.secondary"
+                    sx={{ mb: 3 }}
+                  >
+                    Kiểm tra máy móc tại một vị trí và xem lịch sử điều chuyển
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    size="large"
+                    endIcon={<ArrowForward />}
+                    onClick={() => handleNavigate("/location-track")}
+                    sx={{
+                      borderRadius: "12px",
+                      background: "linear-gradient(45deg, #03a9f4, #00bcd4)",
+                      px: 4,
+                      py: 1.5,
+                      "&:hover": {
+                        transform: "translateY(-2px)",
+                        boxShadow: "0 8px 25px rgba(3, 169, 244, 0.3)",
+                      },
+                      transition: "all 0.3s ease",
+                    }}
+                  >
+                    Theo dõi ngay
                   </Button>
                 </CardContent>
               </Card>

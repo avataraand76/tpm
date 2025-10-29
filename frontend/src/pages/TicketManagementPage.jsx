@@ -40,57 +40,63 @@ import {
 } from "@mui/material";
 import {
   Add,
-  Visibility,
+  Autorenew,
   Search,
   FileDownload,
   FileUpload,
-  Close,
-  Save,
   Receipt,
   Delete,
-  QrCode2, // Thêm QrCode2
+  QrCode2,
+  Refresh,
 } from "@mui/icons-material";
 import NavigationBar from "../components/NavigationBar";
 import { api } from "../api/api";
-import MachineQRScanner from "../components/MachineQRScanner"; // IMPORT COMPONENT MỚI
+import MachineQRScanner from "../components/MachineQRScanner";
 
 const TicketManagementPage = () => {
-  const [activeTab, setActiveTab] = useState(0); // 0: Import, 1: Export
+  const [activeTab, setActiveTab] = useState(0); // 0: Import, 1: Export, 2: Internal
   const [imports, setImports] = useState([]);
   const [exports, setExports] = useState([]);
+  const [transfers, setTransfers] = useState([]); // <<< THÊM STATE MỚI
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [statusFilter, setStatusFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
-  const [locations, setLocations] = useState([]);
+  const [filteredLocations, setFilteredLocations] = useState([]);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [externalLocations, setExternalLocations] = useState([]);
+  const [externalLocationLoading, setExternalLocationLoading] = useState(false);
 
   // Dialog states
   const [openDialog, setOpenDialog] = useState(false);
   const [dialogMode, setDialogMode] = useState("create"); // create, edit, view
-  const [dialogType, setDialogType] = useState("import"); // import, export
+  const [dialogType, setDialogType] = useState("import"); // import, export, internal
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
   // Form states
   const [formData, setFormData] = useState({
+    // from_location_uuid: "", // <<< ĐÃ XÓA
     to_location_uuid: "",
     type: "",
     date: new Date().toISOString().split("T")[0],
     note: "",
     machines: [],
+    is_borrowed_or_rented_or_borrowed_out_name: "",
+    is_borrowed_or_rented_or_borrowed_out_date: "",
+    is_borrowed_or_rented_or_borrowed_out_return_date: "",
   });
 
   // States cho tìm kiếm máy móc
   const [searchMachineTerm, setSearchMachineTerm] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
-  // NEW STATES FOR SEARCH PAGINATION
   const [searchPage, setSearchPage] = useState(1);
   const [searchTotalPages, setSearchTotalPages] = useState(1);
-  const SEARCH_LIMIT = 5; // Giới hạn số lượng kết quả tìm kiếm hiển thị
+  const SEARCH_LIMIT = 5;
 
-  // States cho QR Scanner (Mới)
+  // States cho QR Scanner
   const [openScanDialog, setOpenScanDialog] = useState(false);
 
   // Snackbar
@@ -101,7 +107,7 @@ const TicketManagementPage = () => {
     message: "",
   });
 
-  // ĐỊNH NGHĨA CONFIG TRẠNG THÁI ĐỒNG BỘ VỚI MachineListPage.jsx
+  // Config trạng thái
   const STATUS_CONFIG = {
     // Trạng thái máy móc
     available: { bg: "#2e7d3222", color: "#2e7d32", label: "Sẵn sàng" },
@@ -115,8 +121,32 @@ const TicketManagementPage = () => {
 
     // Trạng thái phiếu
     pending: { bg: "#ff980022", color: "#ff9800", label: "Chờ xử lý" },
-    completed: { bg: "#2e7d3222", color: "#2e7d32", label: "Hoàn thành" },
+    completed: { bg: "#2e7d3222", color: "#2e7d32", label: "Đã duyệt" },
     cancelled: { bg: "#f4433622", color: "#f44336", label: "Đã hủy" },
+  };
+
+  // Style chung
+  const DISABLED_VIEW_SX = {
+    "& .MuiInputBase-root.Mui-disabled": {
+      backgroundColor: "#fffbe5",
+      "& fieldset": {
+        borderColor: "#f44336 !important",
+      },
+      "& .MuiInputBase-input": {
+        color: "#f44336",
+        WebkitTextFillColor: "#f44336 !important",
+        fontWeight: 600,
+      },
+      "& .MuiFormLabel-root": {
+        color: "#f44336 !important",
+      },
+    },
+    "& .MuiOutlinedInput-root.Mui-disabled": {
+      backgroundColor: "#fffbe5",
+    },
+    "& .MuiOutlinedInput-root": {
+      borderRadius: "12px",
+    },
   };
 
   const getStatusInfo = (statusKey) => {
@@ -138,15 +168,30 @@ const TicketManagementPage = () => {
     });
   }, []);
 
-  const fetchLocations = useCallback(async () => {
-    try {
-      const response = await api.locations.getAll();
-      setLocations(response.data);
-    } catch (error) {
-      console.error("Error fetching locations:", error);
-      showNotification("error", "Tải thất bại", "Lỗi khi tải danh sách vị trí");
-    }
-  }, [showNotification]);
+  const fetchLocations = useCallback(
+    async (filterType = null) => {
+      setLocationLoading(true);
+      try {
+        const params = {};
+        if (filterType) {
+          params.filter_type = filterType;
+        }
+        const response = await api.locations.getAll(params);
+        setFilteredLocations(response.data);
+      } catch (error) {
+        console.error("Error fetching locations:", error);
+        showNotification(
+          "error",
+          "Tải thất bại",
+          "Lỗi khi tải danh sách vị trí"
+        );
+        setFilteredLocations([]);
+      } finally {
+        setLocationLoading(false);
+      }
+    },
+    [showNotification]
+  );
 
   // Fetch data based on active tab
   const fetchData = useCallback(async () => {
@@ -163,11 +208,21 @@ const TicketManagementPage = () => {
         const response = await api.imports.getAll(params);
         setImports(response.data);
         setTotalPages(response.pagination.totalPages);
-      } else {
+      } else if (activeTab === 1) {
         params.export_type = typeFilter;
         const response = await api.exports.getAll(params);
         setExports(response.data);
         setTotalPages(response.pagination.totalPages);
+      } else if (activeTab === 2) {
+        // <<< START: LOGIC TAB ĐIỀU CHUYỂN
+        // Không cần typeFilter cho điều chuyển
+        delete params.import_type;
+        delete params.export_type;
+
+        const response = await api.internal_transfers.getAll(params);
+        setTransfers(response.data);
+        setTotalPages(response.pagination.totalPages);
+        // <<< END: LOGIC TAB ĐIỀU CHUYỂN
       }
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -188,7 +243,6 @@ const TicketManagementPage = () => {
       }
       setSearchLoading(true);
       try {
-        // API gọi đã được cập nhật để chấp nhận page và limit
         const response = await api.machines.search(searchTerm, {
           page: pageNumber,
           limit: SEARCH_LIMIT,
@@ -207,13 +261,32 @@ const TicketManagementPage = () => {
     [showNotification]
   );
 
+  const fetchExternalLocations = useCallback(async () => {
+    setExternalLocationLoading(true);
+    try {
+      const response = await api.locations.getAll({
+        filter_type: "external_only",
+      });
+      setExternalLocations(response.data);
+    } catch (error) {
+      console.error("Error fetching external locations:", error);
+      showNotification(
+        "error",
+        "Tải thất bại",
+        "Lỗi khi tải danh sách đơn vị ngoài"
+      );
+    } finally {
+      setExternalLocationLoading(false);
+    }
+  }, [showNotification]);
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
   useEffect(() => {
-    fetchLocations();
-  }, [fetchLocations]);
+    fetchExternalLocations();
+  }, [fetchExternalLocations]);
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
@@ -225,81 +298,173 @@ const TicketManagementPage = () => {
   const handleSearchTermChange = (e) => {
     const term = e.target.value;
     setSearchMachineTerm(term);
-    // Khi thay đổi term, reset về trang 1
     searchMachines(term, 1);
   };
 
   const handleSearchPageChange = (event, value) => {
-    // 1. Cập nhật state trang mới
     setSearchPage(value);
-
-    // 2. Chỉ gọi API nếu có từ khóa tìm kiếm hợp lệ
     if (searchMachineTerm && searchMachineTerm.length >= 2) {
-      // Gọi hàm tìm kiếm với từ khóa hiện tại và trang mới được chọn
       searchMachines(searchMachineTerm, value);
     }
   };
 
+  const getLocationFilterForType = (type) => {
+    // Req 1.2 (Đã bị xóa, nhưng logic vẫn dùng cho Nhập/Xuất)
+    // if (type === "internal") return "internal"; // Đã xóa
+
+    // Req 2.1, 3.1
+    if (
+      [
+        "purchased",
+        "maintenance_return",
+        "borrowed_out_return",
+        "borrowed",
+        "rented",
+      ].includes(type)
+    ) {
+      return "warehouse_only";
+    }
+
+    // Req 4.1, 5.1, 6.1
+    if (
+      [
+        "maintenance",
+        "liquidation",
+        "borrowed_out",
+        "borrowed_return",
+        "rented_return",
+      ].includes(type)
+    ) {
+      return "external_only";
+    }
+
+    return null; // No filter
+  };
+
   const handleOpenDialog = async (mode, type, ticket = null) => {
     setDialogMode(mode);
-    setDialogType(type);
+    setDialogType(type); // type sẽ là 'import', 'export', hoặc 'internal'
     setOpenDialog(true);
     setSearchResults([]);
     setSearchMachineTerm("");
-    setSearchPage(1); // Reset search pagination
-    setOpenScanDialog(false); // Đảm bảo đóng scanner dialog
+    setSearchPage(1);
+    setOpenScanDialog(false);
+    setFilteredLocations([]); // Clear locations
 
     if (mode === "create") {
       setSelectedTicket(null);
       setFormData({
+        // from_location_uuid: "", // <<< ĐÃ XÓA
         to_location_uuid: "",
         type: "",
         date: new Date().toISOString().split("T")[0],
         note: "",
         machines: [],
+        is_borrowed_or_rented_or_borrowed_out_name: "",
+        is_borrowed_or_rented_or_borrowed_out_date: "",
+        is_borrowed_or_rented_or_borrowed_out_return_date: "",
       });
+
+      // <<< START: CẬP NHẬT LOGIC TẢI LOCATION >>>
+      if (type === "internal") {
+        // Req 2: Chỉ tải location nội bộ
+        await fetchLocations("internal");
+      } else {
+        // Tải tất cả locations cho phiếu Nhập/Xuất lúc ban đầu
+        await fetchLocations();
+      }
+      // <<< END: CẬP NHẬT LOGIC TẢI LOCATION >>>
     } else if (mode === "view" && ticket) {
       setSelectedTicket(ticket);
       setDetailLoading(true);
       setFormData({
+        // from_location_uuid: "", // <<< ĐÃ XÓA
         to_location_uuid: "",
         type: "",
         date: "",
         note: "",
         machines: [],
+        is_borrowed_or_rented_or_borrowed_out_name: "",
+        is_borrowed_or_rented_or_borrowed_out_date: "",
+        is_borrowed_or_rented_or_borrowed_out_return_date: "",
       });
 
       try {
-        const uuid = ticket.uuid_machine_import || ticket.uuid_machine_export;
+        const uuid =
+          ticket.uuid_machine_import ||
+          ticket.uuid_machine_export ||
+          ticket.uuid_machine_internal_transfer; // <<< THÊM uuid_machine_internal_transfer
         let response;
+        let ticketDetails;
+        let ticketDate;
 
         if (type === "import") {
           response = await api.imports.getById(uuid);
-        } else {
+          ticketDetails = response.data.import;
+          ticketDate = ticketDetails.import_date;
+        } else if (type === "export") {
           response = await api.exports.getById(uuid);
+          ticketDetails = response.data.export;
+          ticketDate = ticketDetails.export_date;
+        } else if (type === "internal") {
+          // <<< START: LOGIC XEM PHIẾU ĐIỀU CHUYỂN
+          response = await api.internal_transfers.getById(uuid);
+          ticketDetails = response.data.transfer;
+          ticketDate = ticketDetails.transfer_date;
+          // <<< END
         }
 
-        const ticketDetails = response.data.import || response.data.export;
-        const ticketDate =
-          ticketDetails.import_date || ticketDetails.export_date || "";
+        // Tải location filter dựa trên loại phiếu
+        const ticketType =
+          ticketDetails.import_type || ticketDetails.export_type || "internal";
+
+        // <<< START: CẬP NHẬT LOGIC FILTER
+        let filter = null;
+        if (type === "internal") {
+          filter = "internal"; // Req 2
+        } else {
+          filter = getLocationFilterForType(ticketType);
+        }
+        await fetchLocations(filter);
+        // <<< END
 
         setFormData({
+          // from_location_uuid: ticketDetails.from_location_uuid || "", // <<< ĐÃ XÓA
           to_location_uuid: ticketDetails.to_location_uuid || "",
-          type: ticketDetails.import_type || ticketDetails.export_type || "",
+          type: ticketType || "",
           date: ticketDate
             ? new Date(ticketDate).toISOString().split("T")[0]
             : "",
           note: ticketDetails.note || "",
-          // Cập nhật machines để hiển thị chi tiết đầy đủ thông tin máy
           machines: response.data.details.map((d) => ({
             uuid_machine: d.uuid_machine,
             code_machine: d.code_machine,
-            name_machine: d.name_machine,
+            type_machine: d.type_machine,
+            model_machine: d.model_machine,
             serial_machine: d.serial_machine,
-            current_status: d.current_status, // Thêm trạng thái hiện tại
-            name_category: d.name_category, // Thêm loại máy
+            current_status: d.current_status,
+            name_category: d.name_category,
+            name_location: d.name_location,
             note: d.note,
           })),
+          is_borrowed_or_rented_or_borrowed_out_name:
+            ticketDetails.is_borrowed_or_rented_or_borrowed_out_name || "",
+          is_borrowed_or_rented_or_borrowed_out_date:
+            ticketDetails.is_borrowed_or_rented_or_borrowed_out_date
+              ? new Date(
+                  ticketDetails.is_borrowed_or_rented_or_borrowed_out_date
+                )
+                  .toISOString()
+                  .split("T")[0]
+              : "",
+          is_borrowed_or_rented_or_borrowed_out_return_date:
+            ticketDetails.is_borrowed_or_rented_or_borrowed_out_return_date
+              ? new Date(
+                  ticketDetails.is_borrowed_or_rented_or_borrowed_out_return_date
+                )
+                  .toISOString()
+                  .split("T")[0]
+              : "",
         });
       } catch (error) {
         console.error("Error fetching ticket details:", error);
@@ -315,43 +480,51 @@ const TicketManagementPage = () => {
     setOpenDialog(false);
     setSelectedTicket(null);
     setFormData({
+      // from_location_uuid: "", // <<< ĐÃ XÓA
       to_location_uuid: "",
       type: "",
       date: new Date().toISOString().split("T")[0],
       note: "",
       machines: [],
+      is_borrowed_or_rented_or_borrowed_out_name: "",
+      is_borrowed_or_rented_or_borrowed_out_date: "",
+      is_borrowed_or_rented_or_borrowed_out_return_date: "",
     });
-    setOpenScanDialog(false); // Đảm bảo đóng scanner dialog
+    setOpenScanDialog(false);
   };
 
   const handleFormChange = (field, value) => {
-    setFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
+    // Nếu thay đổi 'type' (và không phải phiếu điều chuyển), tải lại location
+    if (field === "type" && dialogType !== "internal") {
+      const filter = getLocationFilterForType(value);
+      fetchLocations(filter); // Tải lại locations
+
+      setFormData((prev) => ({
+        ...prev,
+        [field]: value,
+        to_location_uuid: "", // Reset vị trí đã chọn
+      }));
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        [field]: value,
+      }));
+    }
   };
 
   const handleSelectMachine = (machine) => {
-    // Kiểm tra xem máy đã được chọn chưa (dựa vào id_machine)
     const isSelected = formData.machines.some(
       (m) => m.uuid_machine === machine.uuid_machine
     );
 
     if (isSelected) {
-      // Bỏ chọn
       setFormData((prev) => ({
         ...prev,
         machines: prev.machines.filter(
           (m) => m.uuid_machine !== machine.uuid_machine
         ),
       }));
-      // showNotification(
-      //   "info",
-      //   "Đã xóa",
-      //   `Máy ${machine.code_machine} đã bị xóa khỏi phiếu.`
-      // );
     } else {
-      // Chọn: thêm vào danh sách (giữ lại các trường quan trọng cho hiển thị và gửi đi)
       setFormData((prev) => ({
         ...prev,
         machines: [
@@ -359,26 +532,19 @@ const TicketManagementPage = () => {
           {
             uuid_machine: machine.uuid_machine,
             code_machine: machine.code_machine,
-            name_machine: machine.name_machine,
+            type_machine: machine.type_machine,
+            model_machine: machine.model_machine,
             serial_machine: machine.serial_machine,
-            // Thêm các trường vị trí và trạng thái để hiển thị trong danh sách đã chọn
             name_location: machine.name_location,
             current_status: machine.current_status,
-            note: "", // Ghi chú riêng cho máy trong phiếu
+            note: "",
           },
         ],
       }));
-      // showNotification(
-      //   "success",
-      //   "Đã thêm",
-      //   `Máy ${machine.code_machine} đã được thêm vào phiếu.`
-      // );
     }
   };
 
-  // Hàm xử lý khi máy được thêm từ QR Scanner (MỚI)
   const handleAddMachineFromScanner = (machine) => {
-    // Tái sử dụng logic chọn máy
     handleSelectMachine(machine);
   };
 
@@ -402,7 +568,6 @@ const TicketManagementPage = () => {
     try {
       setLoading(true);
 
-      // Lọc dữ liệu máy móc để gửi: chỉ giữ lại id_machine và note
       const machinesToSend = formData.machines
         .map((m) => ({
           uuid_machine: m.uuid_machine,
@@ -420,35 +585,79 @@ const TicketManagementPage = () => {
         return;
       }
 
-      // Kiểm tra vị trí đích
-      if (!formData.to_location_uuid) {
+      // <<< START: LOGIC MỚI CHO ĐIỀU CHUYỂN
+      if (dialogType === "internal") {
+        if (!formData.to_location_uuid) {
+          // <<< SỬA VALIDATION
+          showNotification(
+            "error",
+            "Lỗi nhập liệu",
+            "Vui lòng chọn vị trí đến." // <<< SỬA VALIDATION
+          );
+          setLoading(false);
+          return;
+        }
+
+        const submitData = {
+          // from_location_uuid: formData.from_location_uuid, // <<< ĐÃ XÓA
+          to_location_uuid: formData.to_location_uuid,
+          transfer_date: formData.date,
+          note: formData.note,
+          machines: machinesToSend,
+        };
+
+        await api.internal_transfers.create(submitData);
         showNotification(
-          "error",
-          "Lỗi nhập liệu",
-          "Vui lòng chọn vị trí nhập/xuất."
+          "success",
+          "Thành công",
+          "Tạo phiếu điều chuyển thành công"
         );
-        setLoading(false);
-        return;
-      }
-
-      const submitData = {
-        note: formData.note,
-        machines: machinesToSend,
-        to_location_uuid: formData.to_location_uuid,
-      };
-
-      if (dialogType === "import") {
-        submitData.import_type = formData.type;
-        submitData.import_date = formData.date;
-
-        await api.imports.create(submitData);
-        showNotification("success", "Thành công", "Tạo phiếu nhập thành công");
+        // <<< END: LOGIC MỚI
       } else {
-        submitData.export_type = formData.type;
-        submitData.export_date = formData.date;
+        // Logic cũ cho Nhập/Xuất
+        if (!formData.to_location_uuid) {
+          showNotification(
+            "error",
+            "Lỗi nhập liệu",
+            "Vui lòng chọn vị trí nhập/xuất."
+          );
+          setLoading(false);
+          return;
+        }
 
-        await api.exports.create(submitData);
-        showNotification("success", "Thành công", "Tạo phiếu xuất thành công");
+        const submitData = {
+          note: formData.note,
+          machines: machinesToSend,
+          to_location_uuid: formData.to_location_uuid,
+          is_borrowed_or_rented_or_borrowed_out_name:
+            formData.is_borrowed_or_rented_or_borrowed_out_name || null,
+          is_borrowed_or_rented_or_borrowed_out_date:
+            formData.is_borrowed_or_rented_or_borrowed_out_date || null,
+          is_borrowed_or_rented_or_borrowed_out_return_date:
+            formData.is_borrowed_or_rented_or_borrowed_out_return_date || null,
+        };
+
+        if (dialogType === "import") {
+          submitData.import_type = formData.type;
+          submitData.import_date = formData.date;
+
+          await api.imports.create(submitData);
+          showNotification(
+            "success",
+            "Thành công",
+            "Tạo phiếu nhập thành công"
+          );
+        } else {
+          submitData.export_type = formData.type;
+          submitData.export_date = formData.date;
+
+          await api.exports.create(submitData);
+          showNotification(
+            "success",
+            "Thành công",
+            "Tạo phiếu xuất thành công"
+          );
+        }
       }
 
       handleCloseDialog();
@@ -469,8 +678,12 @@ const TicketManagementPage = () => {
     try {
       if (type === "import") {
         await api.imports.updateStatus(uuid, status);
-      } else {
+      } else if (type === "export") {
+        // <<< THÊM "else if"
         await api.exports.updateStatus(uuid, status);
+      } else if (type === "internal") {
+        // <<< THÊM LOGIC MỚI
+        await api.internal_transfers.updateStatus(uuid, status);
       }
       showNotification(
         "success",
@@ -478,6 +691,7 @@ const TicketManagementPage = () => {
         "Cập nhật trạng thái thành công"
       );
       fetchData();
+      handleCloseDialog();
     } catch (error) {
       console.error("Error updating status:", error);
       showNotification("error", "Thất bại", "Lỗi khi cập nhật trạng thái");
@@ -492,7 +706,6 @@ const TicketManagementPage = () => {
   };
 
   const getStatusColor = (status) => {
-    // Hàm này được dùng trong bảng danh sách phiếu, trả về tên màu Mui
     switch (status) {
       case "pending":
         return "warning";
@@ -506,12 +719,11 @@ const TicketManagementPage = () => {
   };
 
   const getStatusLabel = (status) => {
-    // Hàm dịch trạng thái phiếu
     switch (status) {
       case "pending":
         return "Chờ xử lý";
       case "completed":
-        return "Hoàn thành";
+        return "Đã duyệt";
       case "cancelled":
         return "Đã hủy";
       default:
@@ -519,23 +731,25 @@ const TicketManagementPage = () => {
     }
   };
 
-  // HÀM DỊCH TRẠNG THÁI MÁY MÓC (SỬ DỤNG LẠI TỪ CONFIG)
   const getMachineStatusLabel = (status) => {
     return getStatusInfo(status).label;
   };
 
   const getTypeLabel = (type) => {
     const typeMap = {
-      internal: "Điều chuyển nội bộ",
+      internal: "Điều chuyển nội bộ", // Vẫn giữ lại label này
       // Import types
-      borrowed: "Nhập đi mượn",
-      rented: "Nhập đi thuê",
+      borrowed: "Nhập mượn",
+      rented: "Nhập thuê",
       purchased: "Nhập mua mới",
       maintenance_return: "Nhập sau bảo trì",
+      borrowed_out_return: "Nhập trả (từ cho mượn)",
       // Export types
       maintenance: "Xuất bảo trì",
       borrowed_out: "Xuất cho mượn",
       liquidation: "Xuất thanh lý",
+      borrowed_return: "Xuất trả (máy mượn)",
+      rented_return: "Xuất trả (máy thuê)",
     };
     return typeMap[type] || type;
   };
@@ -550,12 +764,13 @@ const TicketManagementPage = () => {
   };
 
   const renderTableContent = () => {
-    const data = activeTab === 0 ? imports : exports;
+    const data =
+      activeTab === 0 ? imports : activeTab === 1 ? exports : transfers; // <<< CẬP NHẬT
 
     if (loading) {
       return (
         <TableRow>
-          <TableCell colSpan={8} align="center" sx={{ py: 8 }}>
+          <TableCell colSpan={7} align="center" sx={{ py: 8 }}>
             <CircularProgress />
           </TableCell>
         </TableRow>
@@ -565,7 +780,7 @@ const TicketManagementPage = () => {
     if (data.length === 0) {
       return (
         <TableRow>
-          <TableCell colSpan={8} align="center" sx={{ py: 8 }}>
+          <TableCell colSpan={7} align="center" sx={{ py: 8 }}>
             <Typography variant="body1" color="text.secondary">
               Không có dữ liệu
             </Typography>
@@ -575,21 +790,54 @@ const TicketManagementPage = () => {
     }
 
     return data.map((item) => {
-      const locationName = item.to_location_name || "Bên ngoài (Xuất/Nhập)";
+      // <<< START: CẬP NHẬT LOGIC LẤY DỮ LIỆU >>>
+      const uuid =
+        item.uuid_machine_import ||
+        item.uuid_machine_export ||
+        item.uuid_machine_internal_transfer;
+      const date = item.import_date || item.export_date || item.transfer_date;
+      const type = item.import_type || item.export_type || "internal";
+      // <<< END
 
       return (
         <TableRow
-          key={item.uuid_machine_import || item.uuid_machine_export}
+          key={uuid}
           hover
+          onClick={() =>
+            handleOpenDialog(
+              "view",
+              // <<< START: CẬP NHẬT LOGIC CLICK >>>
+              activeTab === 0
+                ? "import"
+                : activeTab === 1
+                ? "export"
+                : "internal",
+              // <<< END >>>
+              item
+            )
+          }
+          sx={{ cursor: "pointer" }}
         >
-          <TableCell>
-            {formatDate(item.import_date || item.export_date)}
-          </TableCell>
-          <TableCell>
-            {getTypeLabel(item.import_type || item.export_type)}
-          </TableCell>
+          <TableCell>{formatDate(date)}</TableCell>
+          <TableCell>{getTypeLabel(type)}</TableCell>
 
-          <TableCell>{locationName}</TableCell>
+          {/* <<< START: CỘT VỊ TRÍ (ĐÃ SỬA) >>> */}
+          {activeTab === 2 ? (
+            <>
+              {/* <TableCell>{item.from_location_name || "-"}</TableCell> */}{" "}
+              {/* <<< ĐÃ XÓA */}
+              <TableCell colSpan={2}>
+                {item.to_location_name || "-"}
+              </TableCell>{" "}
+              {/* <<< ĐÃ SỬA */}
+            </>
+          ) : (
+            <TableCell colSpan={2}>
+              {item.to_location_name || "Bên ngoài (Xuất/Nhập)"}
+            </TableCell>
+          )}
+          {/* <<< END: CỘT VỊ TRÍ >>> */}
+
           <TableCell align="center">{item.machine_count || 0}</TableCell>
           <TableCell>
             <Chip
@@ -599,58 +847,6 @@ const TicketManagementPage = () => {
             />
           </TableCell>
           <TableCell>{item.note || "-"}</TableCell>
-          <TableCell>
-            <Stack direction="row" spacing={1}>
-              <Tooltip title="Xem chi tiết">
-                <IconButton
-                  size="small"
-                  onClick={() =>
-                    handleOpenDialog(
-                      "view",
-                      activeTab === 0 ? "import" : "export",
-                      item
-                    )
-                  }
-                >
-                  <Visibility fontSize="small" />
-                </IconButton>
-              </Tooltip>
-              {item.status === "pending" && (
-                <>
-                  <Tooltip title="Hoàn thành">
-                    <IconButton
-                      size="small"
-                      color="success"
-                      onClick={() =>
-                        handleUpdateStatus(
-                          item.uuid_machine_import || item.uuid_machine_export,
-                          "completed",
-                          activeTab === 0 ? "import" : "export"
-                        )
-                      }
-                    >
-                      <Save fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                  <Tooltip title="Hủy">
-                    <IconButton
-                      size="small"
-                      color="error"
-                      onClick={() =>
-                        handleUpdateStatus(
-                          item.uuid_machine_import || item.uuid_machine_export,
-                          "cancelled",
-                          activeTab === 0 ? "import" : "export"
-                        )
-                      }
-                    >
-                      <Close fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </>
-              )}
-            </Stack>
-          </TableCell>
         </TableRow>
       );
     });
@@ -688,7 +884,7 @@ const TicketManagementPage = () => {
                 Quản lý phiếu
               </Typography>
               <Typography variant="h6" color="text.secondary">
-                Tạo và quản lý phiếu nhập xuất máy móc thiết bị
+                Tạo và quản lý phiếu nhập xuất, điều chuyển máy móc
               </Typography>
             </Box>
           </Stack>
@@ -743,36 +939,78 @@ const TicketManagementPage = () => {
                   label="Phiếu xuất"
                   iconPosition="start"
                 />
+                {/* <<< START: THÊM TAB MỚI >>> */}
+                <Tab
+                  icon={<Autorenew />}
+                  label="Điều chuyển"
+                  iconPosition="start"
+                />
+                {/* <<< END: THÊM TAB MỚI >>> */}
               </Tabs>
 
-              <Button
-                variant="contained"
-                startIcon={<Add />}
-                onClick={() =>
-                  handleOpenDialog(
-                    "create",
-                    activeTab === 0 ? "import" : "export"
-                  )
-                }
-                sx={{
-                  borderRadius: "12px",
-                  background: "linear-gradient(45deg, #667eea, #764ba2)",
-                  px: 4,
-                  py: 1.5,
-                  "&:hover": {
-                    transform: "translateY(-2px)",
-                    boxShadow: "0 8px 25px rgba(102, 126, 234, 0.3)",
-                  },
-                  transition: "all 0.3s ease",
-                }}
-              >
-                Tạo phiếu {activeTab === 0 ? "nhập" : "xuất"}
-              </Button>
+              <Stack direction="row" spacing={2}>
+                {/* NÚT TẠO PHIẾU (Cập nhật) */}
+                <Button
+                  variant="contained"
+                  startIcon={<Add />}
+                  onClick={() =>
+                    handleOpenDialog(
+                      "create",
+                      // <<< START: CẬP NHẬT LOGIC NÚT BẤM >>>
+                      activeTab === 0
+                        ? "import"
+                        : activeTab === 1
+                        ? "export"
+                        : "internal"
+                      // <<< END >>>
+                    )
+                  }
+                  sx={{
+                    borderRadius: "12px",
+                    background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                    px: 4,
+                    py: 1.5,
+                    "&:hover": {
+                      transform: "translateY(-2px)",
+                      boxShadow: "0 8px 25px rgba(46, 125, 50, 0.3)",
+                    },
+                    transition: "all 0.3s ease",
+                  }}
+                >
+                  Tạo phiếu {/* <<< START: CẬP NHẬT LOGIC NÚT BẤM >>> */}
+                  {activeTab === 0
+                    ? "nhập"
+                    : activeTab === 1
+                    ? "xuất"
+                    : "điều chuyển"}
+                  {/* <<< END >>> */}
+                </Button>
+
+                {/* NÚT LÀM MỚI */}
+                <Button
+                  variant="contained"
+                  startIcon={<Refresh />}
+                  onClick={fetchData}
+                  sx={{
+                    borderRadius: "12px",
+                    background: "linear-gradient(45deg, #667eea, #764ba2)",
+                    px: 3,
+                    py: 1.5,
+                    "&:hover": {
+                      transform: "translateY(-2px)",
+                      boxShadow: "0 8px 25px rgba(102, 126, 234, 0.3)",
+                    },
+                    transition: "all 0.3s ease",
+                  }}
+                >
+                  Làm mới
+                </Button>
+              </Stack>
             </Box>
 
             {/* Filters */}
             <Grid container spacing={2} sx={{ mb: 3 }}>
-              <Grid size={{ xs: 12, md: 6 }}>
+              <Grid size={{ xs: 12, md: activeTab === 2 ? 12 : 6 }}>
                 <TextField
                   fullWidth
                   select
@@ -787,61 +1025,77 @@ const TicketManagementPage = () => {
                 >
                   <MenuItem value="">Tất cả</MenuItem>
                   <MenuItem value="pending">Chờ xử lý</MenuItem>
-                  <MenuItem value="completed">Hoàn thành</MenuItem>
+                  <MenuItem value="completed">Đã duyệt</MenuItem>
                   <MenuItem value="cancelled">Đã hủy</MenuItem>
                 </TextField>
               </Grid>
-              <Grid size={{ xs: 12, md: 6 }}>
-                <TextField
-                  fullWidth
-                  select
-                  label="Loại phiếu"
-                  value={typeFilter}
-                  onChange={(e) => setTypeFilter(e.target.value)}
-                  sx={{
-                    "& .MuiOutlinedInput-root": {
-                      borderRadius: "12px",
-                    },
-                  }}
-                >
-                  <MenuItem value="">Tất cả</MenuItem>
-                  {activeTab === 0
-                    ? [
-                        <MenuItem key="purchased" value="purchased">
-                          Nhập mua mới
-                        </MenuItem>,
-                        <MenuItem
-                          key="maintenance_return"
-                          value="maintenance_return"
-                        >
-                          Nhập sau bảo trì
-                        </MenuItem>,
-                        <MenuItem key="rented" value="rented">
-                          Nhập đi thuê
-                        </MenuItem>,
-                        <MenuItem key="borrowed" value="borrowed">
-                          Nhập đi mượn
-                        </MenuItem>,
-                        <MenuItem key="internal" value="internal">
-                          Điều chuyển nội bộ
-                        </MenuItem>,
-                      ]
-                    : [
-                        <MenuItem key="liquidation" value="liquidation">
-                          Xuất thanh lý
-                        </MenuItem>,
-                        <MenuItem key="maintenance" value="maintenance">
-                          Xuất bảo trì
-                        </MenuItem>,
-                        <MenuItem key="borrowed_out" value="borrowed_out">
-                          Xuất cho mượn
-                        </MenuItem>,
-                        <MenuItem key="internal" value="internal">
-                          Điều chuyển nội bộ
-                        </MenuItem>,
-                      ]}
-                </TextField>
-              </Grid>
+
+              {/* <<< START: ẨN KHI LÀ TAB ĐIỀU CHUYỂN >>> */}
+              {activeTab !== 2 && (
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <TextField
+                    fullWidth
+                    select
+                    label="Loại phiếu"
+                    value={typeFilter}
+                    onChange={(e) => setTypeFilter(e.target.value)}
+                    sx={{
+                      "& .MuiOutlinedInput-root": {
+                        borderRadius: "12px",
+                      },
+                    }}
+                  >
+                    <MenuItem value="">Tất cả</MenuItem>
+                    {activeTab === 0
+                      ? [
+                          <MenuItem key="purchased" value="purchased">
+                            Nhập mua mới
+                          </MenuItem>,
+                          <MenuItem
+                            key="maintenance_return"
+                            value="maintenance_return"
+                          >
+                            Nhập sau bảo trì
+                          </MenuItem>,
+                          <MenuItem key="rented" value="rented">
+                            Nhập thuê
+                          </MenuItem>,
+                          <MenuItem key="borrowed" value="borrowed">
+                            Nhập mượn
+                          </MenuItem>,
+                          <MenuItem
+                            key="borrowed_out_return"
+                            value="borrowed_out_return"
+                          >
+                            Nhập trả (từ cho mượn)
+                          </MenuItem>,
+                          // <<< "internal" ĐÃ BỊ XÓA
+                        ]
+                      : [
+                          <MenuItem key="liquidation" value="liquidation">
+                            Xuất thanh lý
+                          </MenuItem>,
+                          <MenuItem key="maintenance" value="maintenance">
+                            Xuất bảo trì
+                          </MenuItem>,
+                          <MenuItem key="borrowed_out" value="borrowed_out">
+                            Xuất cho mượn
+                          </MenuItem>,
+                          <MenuItem
+                            key="borrowed_return"
+                            value="borrowed_return"
+                          >
+                            Xuất trả (máy mượn)
+                          </MenuItem>,
+                          <MenuItem key="rented_return" value="rented_return">
+                            Xuất trả (máy thuê)
+                          </MenuItem>,
+                          // <<< "internal" ĐÃ BỊ XÓA
+                        ]}
+                  </TextField>
+                </Grid>
+              )}
+              {/* <<< END: ẨN >>> */}
             </Grid>
 
             {/* Table */}
@@ -860,15 +1114,29 @@ const TicketManagementPage = () => {
                   >
                     <TableCell sx={{ fontWeight: 600 }}>Ngày</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Loại</TableCell>
-                    <TableCell sx={{ fontWeight: 600 }}>
-                      {activeTab === 0 ? "Nhập vào" : "Xuất đến"}
-                    </TableCell>
+
+                    {/* <<< START: THAY ĐỔI TIÊU ĐỀ BẢNG (ĐÃ SỬA) >>> */}
+                    {activeTab === 2 ? (
+                      <>
+                        {/* <TableCell sx={{ fontWeight: 600 }}>Từ vị trí</TableCell> */}{" "}
+                        {/* <<< ĐÃ XÓA */}
+                        <TableCell sx={{ fontWeight: 600 }} colSpan={2}>
+                          Đến vị trí
+                        </TableCell>{" "}
+                        {/* <<< ĐÃ SỬA */}
+                      </>
+                    ) : (
+                      <TableCell sx={{ fontWeight: 600 }} colSpan={2}>
+                        {activeTab === 0 ? "Nhập vào" : "Xuất đến"}
+                      </TableCell>
+                    )}
+                    {/* <<< END: THAY ĐỔI TIÊU ĐỀ BẢNG >>> */}
+
                     <TableCell sx={{ fontWeight: 600 }} align="center">
                       Số lượng máy
                     </TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Trạng thái</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Ghi chú</TableCell>
-                    <TableCell sx={{ fontWeight: 600 }}>Thao tác</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>{renderTableContent()}</TableBody>
@@ -896,7 +1164,7 @@ const TicketManagementPage = () => {
         <Dialog
           open={openDialog}
           onClose={handleCloseDialog}
-          maxWidth="lg" // ĐÃ CHỈNH SỬA MAX WIDTH
+          maxWidth="lg"
           fullScreen
           fullWidth
           PaperProps={{
@@ -910,13 +1178,32 @@ const TicketManagementPage = () => {
               background: "linear-gradient(45deg, #667eea, #764ba2)",
               color: "white",
               fontWeight: 700,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
             }}
           >
-            {dialogMode === "create"
-              ? `Tạo phiếu ${dialogType === "import" ? "nhập" : "xuất"}`
-              : dialogMode === "edit"
-              ? "Chỉnh sửa phiếu"
-              : "Chi tiết phiếu"}
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                {dialogMode === "create"
+                  ? `Tạo phiếu ${
+                      dialogType === "import"
+                        ? "nhập"
+                        : dialogType === "export"
+                        ? "xuất"
+                        : "điều chuyển" // <<< CẬP NHẬT
+                    }`
+                  : "Chi tiết phiếu"}
+              </Typography>
+
+              {dialogMode === "view" && selectedTicket && (
+                <Chip
+                  label={getStatusLabel(selectedTicket.status)}
+                  color={getStatusColor(selectedTicket.status)}
+                  size="medium"
+                />
+              )}
+            </Box>
           </DialogTitle>
           <DialogContent sx={{ mt: 3 }}>
             {detailLoading ? (
@@ -932,118 +1219,228 @@ const TicketManagementPage = () => {
               </Box>
             ) : (
               <Stack spacing={3}>
-                <TextField
-                  fullWidth
-                  select
-                  label={`Loại ${dialogType === "import" ? "nhập" : "xuất"}`}
-                  value={formData.type}
-                  onChange={(e) => handleFormChange("type", e.target.value)}
-                  disabled={dialogMode === "view"}
-                  required
-                  sx={{
-                    "& .MuiOutlinedInput-root": {
-                      borderRadius: "12px",
-                    },
-                  }}
-                >
-                  {dialogType === "import"
-                    ? [
-                        <MenuItem key="purchased" value="purchased">
-                          Nhập mua mới
-                        </MenuItem>,
-                        <MenuItem
-                          key="maintenance_return"
-                          value="maintenance_return"
-                        >
-                          Nhập sau bảo trì
-                        </MenuItem>,
-                        <MenuItem key="rented" value="rented">
-                          Nhập đi thuê
-                        </MenuItem>,
-                        <MenuItem key="borrowed" value="borrowed">
-                          Nhập đi mượn
-                        </MenuItem>,
-                        <MenuItem key="internal" value="internal">
-                          Điều chuyển nội bộ
-                        </MenuItem>,
-                      ]
-                    : [
-                        <MenuItem key="liquidation" value="liquidation">
-                          Xuất thanh lý
-                        </MenuItem>,
-                        <MenuItem key="maintenance" value="maintenance">
-                          Xuất bảo trì
-                        </MenuItem>,
-                        <MenuItem key="borrowed_out" value="borrowed_out">
-                          Xuất cho mượn
-                        </MenuItem>,
-                        <MenuItem key="internal" value="internal">
-                          Điều chuyển nội bộ
-                        </MenuItem>,
-                      ]}
-                </TextField>
+                {/* <<< START: ẨN KHI LÀ PHIẾU ĐIỀU CHUYỂN >>> */}
+                {dialogType !== "internal" && (
+                  <TextField
+                    fullWidth
+                    select
+                    label={`Loại ${dialogType === "import" ? "nhập" : "xuất"}`}
+                    value={formData.type}
+                    onChange={(e) => handleFormChange("type", e.target.value)}
+                    disabled={dialogMode === "view"}
+                    required
+                    sx={DISABLED_VIEW_SX}
+                  >
+                    {dialogType === "import"
+                      ? [
+                          <MenuItem key="purchased" value="purchased">
+                            Nhập mua mới
+                          </MenuItem>,
+                          <MenuItem
+                            key="maintenance_return"
+                            value="maintenance_return"
+                          >
+                            Nhập sau bảo trì
+                          </MenuItem>,
+                          <MenuItem key="rented" value="rented">
+                            Nhập thuê
+                          </MenuItem>,
+                          <MenuItem key="borrowed" value="borrowed">
+                            Nhập mượn
+                          </MenuItem>,
+                          <MenuItem
+                            key="borrowed_out_return"
+                            value="borrowed_out_return"
+                          >
+                            Nhập trả (từ cho mượn)
+                          </MenuItem>,
+                          // <<< "internal" ĐÃ BỊ XÓA
+                        ]
+                      : [
+                          <MenuItem key="liquidation" value="liquidation">
+                            Xuất thanh lý
+                          </MenuItem>,
+                          <MenuItem key="maintenance" value="maintenance">
+                            Xuất bảo trì
+                          </MenuItem>,
+                          <MenuItem key="borrowed_out" value="borrowed_out">
+                            Xuất cho mượn
+                          </MenuItem>,
+                          <MenuItem
+                            key="borrowed_return"
+                            value="borrowed_return"
+                          >
+                            Xuất trả (máy mượn)
+                          </MenuItem>,
+                          <MenuItem key="rented_return" value="rented_return">
+                            Xuất trả (máy thuê)
+                          </MenuItem>,
+                          // <<< "internal" ĐÃ BỊ XÓA
+                        ]}
+                  </TextField>
+                )}
+                {/* <<< END: ẨN >>> */}
+
+                {["borrowed", "rented", "borrowed_out"].includes(
+                  formData.type
+                ) && (
+                  <Card variant="outlined" sx={{ borderRadius: "12px" }}>
+                    <CardContent>
+                      <Typography variant="h6" gutterBottom>
+                        Thông tin bổ sung
+                      </Typography>
+                      <Stack spacing={2}>
+                        <Autocomplete
+                          fullWidth
+                          options={externalLocations}
+                          loading={externalLocationLoading}
+                          getOptionLabel={(option) =>
+                            option.name_location || ""
+                          }
+                          onChange={(event, newValue) => {
+                            handleFormChange(
+                              "is_borrowed_or_rented_or_borrowed_out_name",
+                              newValue ? newValue.name_location : ""
+                            );
+                          }}
+                          value={
+                            externalLocations.find(
+                              (loc) =>
+                                loc.name_location ===
+                                formData.is_borrowed_or_rented_or_borrowed_out_name
+                            ) || null
+                          }
+                          disabled={dialogMode === "view"}
+                          renderInput={(params) => (
+                            <TextField
+                              {...params}
+                              label="Tên người/đơn vị (mượn/thuê/cho mượn)"
+                              required
+                              sx={DISABLED_VIEW_SX}
+                              InputProps={{
+                                ...params.InputProps,
+                                endAdornment: (
+                                  <>
+                                    {externalLocationLoading ? (
+                                      <CircularProgress
+                                        color="inherit"
+                                        size={20}
+                                      />
+                                    ) : null}
+                                    {params.InputProps.endAdornment}
+                                  </>
+                                ),
+                              }}
+                            />
+                          )}
+                          sx={DISABLED_VIEW_SX}
+                        />
+                        <TextField
+                          fullWidth
+                          type="date"
+                          label="Ngày (mượn/thuê/cho mượn)"
+                          value={
+                            formData.is_borrowed_or_rented_or_borrowed_out_date
+                          }
+                          onChange={(e) =>
+                            handleFormChange(
+                              "is_borrowed_or_rented_or_borrowed_out_date",
+                              e.target.value
+                            )
+                          }
+                          disabled={dialogMode === "view"}
+                          required
+                          InputLabelProps={{ shrink: true }}
+                          sx={DISABLED_VIEW_SX}
+                        />
+                        <TextField
+                          fullWidth
+                          type="date"
+                          label="Ngày dự kiến trả"
+                          value={
+                            formData.is_borrowed_or_rented_or_borrowed_out_return_date
+                          }
+                          onChange={(e) =>
+                            handleFormChange(
+                              "is_borrowed_or_rented_or_borrowed_out_return_date",
+                              e.target.value
+                            )
+                          }
+                          disabled={dialogMode === "view"}
+                          InputLabelProps={{ shrink: true }}
+                          sx={DISABLED_VIEW_SX}
+                        />
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                )}
 
                 <TextField
                   fullWidth
                   type="date"
-                  label="Ngày"
+                  label={
+                    dialogType === "internal" ? "Ngày điều chuyển" : "Ngày"
+                  } // <<< CẬP NHẬT
                   value={formData.date}
                   onChange={(e) => handleFormChange("date", e.target.value)}
                   disabled={dialogMode === "view"}
                   required
                   InputLabelProps={{ shrink: true }}
-                  sx={{
-                    "& .MuiOutlinedInput-root": {
-                      borderRadius: "12px",
-                    },
-                  }}
+                  sx={DISABLED_VIEW_SX}
                 />
+
+                {/* <<< KHỐI "TỪ VỊ TRÍ" ĐÃ BỊ XÓA >>> */}
 
                 <Autocomplete
                   fullWidth
-                  // 1. Danh sách các tùy chọn
-                  options={locations}
-                  // 2. Cách hiển thị nhãn của mỗi tùy chọn
+                  options={filteredLocations}
                   getOptionLabel={(option) => option.name_location || ""}
-                  // 3. Xử lý khi giá trị thay đổi
                   onChange={(event, newValue) => {
-                    // newValue là object { uuid_location: '...', name_location: '...' } hoặc null
                     handleFormChange(
                       "to_location_uuid",
                       newValue ? newValue.uuid_location : ""
                     );
                   }}
-                  // 4. Giá trị hiện tại được chọn (dựa trên uuid)
                   value={
-                    locations.find(
+                    filteredLocations.find(
                       (loc) => loc.uuid_location === formData.to_location_uuid
                     ) || null
                   }
-                  // 5. Vô hiệu hóa
-                  disabled={dialogMode === "view"}
-                  // 6. Cấu hình TextField bên trong
+                  disabled={dialogMode === "view" || locationLoading}
+                  loading={locationLoading}
                   renderInput={(params) => (
                     <TextField
                       {...params}
-                      label={dialogType === "import" ? "Nhập vào" : "Xuất đến"}
+                      label={
+                        dialogType === "import"
+                          ? "Nhập vào"
+                          : dialogType === "export"
+                          ? "Xuất đến"
+                          : "Đến vị trí" // <<< CẬP NHẬT LABEL
+                      }
                       required
                       sx={{
                         "& .MuiOutlinedInput-root": {
                           borderRadius: "12px",
                         },
                       }}
+                      InputProps={{
+                        ...params.InputProps,
+                        endAdornment: (
+                          <>
+                            {locationLoading ? (
+                              <CircularProgress color="inherit" size={20} />
+                            ) : null}
+                            {params.InputProps.endAdornment}
+                          </>
+                        ),
+                      }}
                     />
                   )}
-                  // 7. Cấu hình box
-                  sx={{
-                    "& .MuiOutlinedInput-root": {
-                      borderRadius: "12px",
-                      padding: "9px 10px !important", // Để phù hợp với style chung
-                    },
-                  }}
+                  sx={DISABLED_VIEW_SX}
                 />
 
-                {/* --- PHẦN TÌM KIẾM VÀ CHỌN MÁY MÓC (CHỈ HIỆN KHI mode="create") --- */}
+                {/* --- PHẦN TÌM KIẾM VÀ CHỌN MÁY MÓC --- */}
                 {dialogMode === "create" && (
                   <Card variant="outlined" sx={{ borderRadius: "12px" }}>
                     <CardContent>
@@ -1054,7 +1451,7 @@ const TicketManagementPage = () => {
                       <Button
                         variant="outlined"
                         startIcon={<QrCode2 />}
-                        onClick={() => setOpenScanDialog(true)} // Mở dialog quét QR
+                        onClick={() => setOpenScanDialog(true)}
                         sx={{
                           borderRadius: "12px",
                           py: 1,
@@ -1091,7 +1488,6 @@ const TicketManagementPage = () => {
                         sx={{ mb: 2 }}
                       />
 
-                      {/* Hiển thị kết quả tìm kiếm */}
                       {searchResults.length > 0 && (
                         <>
                           <Paper
@@ -1138,13 +1534,13 @@ const TicketManagementPage = () => {
                                             sx={{ fontWeight: 600 }}
                                           >
                                             {machine.code_machine} -{" "}
-                                            {machine.name_machine}
+                                            {machine.type_machine} -{" "}
+                                            {machine.model_machine}
                                             <Chip
                                               label={getMachineStatusLabel(
                                                 machine.current_status
                                               )}
                                               size="small"
-                                              // SỬ DỤNG MÀU TỪ CONFIG ĐÃ ĐỒNG BỘ
                                               sx={{
                                                 ml: 1,
                                                 height: 20,
@@ -1178,7 +1574,6 @@ const TicketManagementPage = () => {
                               </TableBody>
                             </Table>
                           </Paper>
-                          {/* PHÂN TRANG KẾT QUẢ TÌM KIẾM */}
                           {searchTotalPages > 1 && (
                             <Box
                               sx={{
@@ -1202,7 +1597,6 @@ const TicketManagementPage = () => {
                         </>
                       )}
 
-                      {/* Danh sách máy móc đã chọn */}
                       {formData.machines.length > 0 && (
                         <Box sx={{ mt: 2 }}>
                           <Typography
@@ -1229,13 +1623,13 @@ const TicketManagementPage = () => {
                                       sx={{ fontWeight: 600 }}
                                     >
                                       {machine.code_machine} -{" "}
-                                      {machine.name_machine}
+                                      {machine.type_machine} -{" "}
+                                      {machine.model_machine}
                                       <Chip
                                         label={getMachineStatusLabel(
                                           machine.current_status
                                         )}
                                         size="small"
-                                        // SỬ DỤNG MÀU TỪ CONFIG ĐÃ ĐỒNG BỘ
                                         sx={{
                                           ml: 1,
                                           height: 20,
@@ -1295,7 +1689,6 @@ const TicketManagementPage = () => {
                     </CardContent>
                   </Card>
                 )}
-                {/* --- KẾT THÚC PHẦN TÌM KIẾM VÀ CHỌN MÁY MÓC --- */}
 
                 <TextField
                   fullWidth
@@ -1305,11 +1698,7 @@ const TicketManagementPage = () => {
                   value={formData.note}
                   onChange={(e) => handleFormChange("note", e.target.value)}
                   disabled={dialogMode === "view"}
-                  sx={{
-                    "& .MuiOutlinedInput-root": {
-                      borderRadius: "12px",
-                    },
-                  }}
+                  sx={DISABLED_VIEW_SX}
                 />
 
                 {/* Phần hiển thị chi tiết máy khi ở chế độ xem */}
@@ -1331,19 +1720,25 @@ const TicketManagementPage = () => {
                                 Mã máy
                               </TableCell>
                               <TableCell sx={{ fontWeight: 600 }}>
-                                Tên máy
+                                Loại máy
+                              </TableCell>
+                              <TableCell sx={{ fontWeight: 600 }}>
+                                Model
                               </TableCell>
                               <TableCell sx={{ fontWeight: 600 }}>
                                 Serial
                               </TableCell>
                               <TableCell sx={{ fontWeight: 600 }}>
-                                Loại máy
+                                Vị trí hiện tại
+                              </TableCell>
+                              <TableCell sx={{ fontWeight: 600 }}>
+                                Loại
                               </TableCell>
                               <TableCell sx={{ fontWeight: 600 }}>
                                 Trạng thái
                               </TableCell>
                               <TableCell sx={{ fontWeight: 600 }}>
-                                Ghi chú phiếu
+                                Ghi chú
                               </TableCell>
                             </TableRow>
                           </TableHead>
@@ -1351,9 +1746,13 @@ const TicketManagementPage = () => {
                             {formData.machines.map((machine, index) => (
                               <TableRow key={machine.uuid_machine || index}>
                                 <TableCell>{machine.code_machine}</TableCell>
-                                <TableCell>{machine.name_machine}</TableCell>
+                                <TableCell>{machine.type_machine}</TableCell>
+                                <TableCell>{machine.model_machine}</TableCell>
                                 <TableCell>
                                   {machine.serial_machine || "-"}
+                                </TableCell>
+                                <TableCell>
+                                  {machine.name_location || "-"}
                                 </TableCell>
                                 <TableCell>
                                   {machine.name_category || "-"}
@@ -1364,7 +1763,6 @@ const TicketManagementPage = () => {
                                       machine.current_status
                                     )}
                                     size="small"
-                                    // SỬ DỤNG MÀU TỪ CONFIG ĐÃ ĐỒNG BỘ
                                     sx={{
                                       background: getStatusInfo(
                                         machine.current_status
@@ -1390,10 +1788,6 @@ const TicketManagementPage = () => {
                 {dialogMode === "view" && selectedTicket && (
                   <Alert severity="info">
                     <Typography variant="body2">
-                      <strong>Trạng thái:</strong>{" "}
-                      {getStatusLabel(selectedTicket.status)}
-                    </Typography>
-                    <Typography variant="body2">
                       <strong>Tạo lúc:</strong>{" "}
                       {new Date(selectedTicket.created_at).toLocaleString(
                         "vi-VN"
@@ -1410,35 +1804,82 @@ const TicketManagementPage = () => {
               </Stack>
             )}
           </DialogContent>
-          <DialogActions sx={{ p: 3 }}>
-            <Button
-              variant="outlined"
-              onClick={handleCloseDialog}
-              sx={{
-                borderRadius: "12px",
-                px: 3,
-              }}
-            >
-              {dialogMode === "view" ? "Đóng" : "Hủy"}
-            </Button>
-            {dialogMode === "create" && (
+          <DialogActions sx={{ p: 3, justifyContent: "space-between" }}>
+            {/* Cụm bên trái (Duyệt - Hủy) */}
+            <Box sx={{ display: "flex", gap: 2 }}>
+              {dialogMode === "view" && selectedTicket?.status === "pending" ? (
+                <>
+                  <Button
+                    variant="contained"
+                    color="success"
+                    onClick={() =>
+                      handleUpdateStatus(
+                        selectedTicket.uuid_machine_import ||
+                          selectedTicket.uuid_machine_export ||
+                          selectedTicket.uuid_machine_internal_transfer, // <<< CẬP NHẬT
+                        "completed",
+                        dialogType
+                      )
+                    }
+                    disabled={loading}
+                    sx={{ borderRadius: "12px", px: 3 }}
+                  >
+                    {loading ? <CircularProgress size={24} /> : "Duyệt phiếu"}
+                  </Button>
+                  <Button
+                    variant="contained"
+                    color="error"
+                    onClick={() =>
+                      handleUpdateStatus(
+                        selectedTicket.uuid_machine_import ||
+                          selectedTicket.uuid_machine_export ||
+                          selectedTicket.uuid_machine_internal_transfer, // <<< CẬP NHẬT
+                        "cancelled",
+                        dialogType
+                      )
+                    }
+                    disabled={loading}
+                    sx={{ borderRadius: "12px", px: 3 }}
+                  >
+                    {loading ? <CircularProgress size={24} /> : "Hủy phiếu"}
+                  </Button>
+                </>
+              ) : (
+                <Box sx={{ width: "1px" }} />
+              )}
+            </Box>
+
+            {/* Cụm bên phải (Đóng - Tạo) */}
+            <Box sx={{ display: "flex", gap: 2 }}>
               <Button
-                variant="contained"
-                onClick={handleSubmit}
-                disabled={loading}
+                variant="outlined"
+                onClick={handleCloseDialog}
                 sx={{
                   borderRadius: "12px",
-                  background: "linear-gradient(45deg, #667eea, #764ba2)",
                   px: 3,
                 }}
               >
-                {loading ? <CircularProgress size={24} /> : "Tạo phiếu"}
+                {dialogMode === "view" ? "Đóng" : "Hủy"}
               </Button>
-            )}
+              {dialogMode === "create" && (
+                <Button
+                  variant="contained"
+                  onClick={handleSubmit}
+                  disabled={loading}
+                  sx={{
+                    borderRadius: "12px",
+                    background: "linear-gradient(45deg, #667eea, #764ba2)",
+                    px: 3,
+                  }}
+                >
+                  {loading ? <CircularProgress size={24} /> : "Tạo phiếu"}
+                </Button>
+              )}
+            </Box>
           </DialogActions>
         </Dialog>
 
-        {/* --- COMPONENT QR SCANNER (MỚI) --- */}
+        {/* --- COMPONENT QR SCANNER --- */}
         <MachineQRScanner
           isOpen={openScanDialog}
           onClose={() => setOpenScanDialog(false)}

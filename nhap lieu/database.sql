@@ -117,17 +117,20 @@ create table if not exists tb_machine
     serial_machine varchar(30),
     RFID_machine varchar(30),
     code_machine varchar(30), -- sẽ là mã barcode tham chiếu theo code loại máy
-    name_machine text,
+    type_machine text,
+    model_machine text,
     manufacturer text, -- hãng sản xuất
     price decimal(15, 0), -- giá
     date_of_use date, -- ngày sử dụng
     lifespan int, -- tuổi thọ
     repair_cost decimal(15, 0), -- chi phí sửa chữa
-    note text,
-    current_status enum('available', 'in_use', 'maintenance', 'borrowed_out', 'liquidation', 'disabled', 'borrowed', 'rented') default 'available',
-    borrowed_from text, -- người mượn
-    rented_from text, -- người thuê
-    
+    current_status enum('available', 'in_use', 'maintenance', 'liquidation', 'disabled') default 'available',
+	is_borrowed_or_rented_or_borrowed_out enum ('borrowed', 'rented', 'borrowed_out'),
+    is_borrowed_or_rented_or_borrowed_out_name text,
+	is_borrowed_or_rented_or_borrowed_out_date date,
+	is_borrowed_or_rented_or_borrowed_out_return_date date,
+	note text,
+
     -- key
     primary key (id_machine),
     unique (id_machine, id_category),
@@ -150,13 +153,16 @@ create table if not exists tb_machine_import
     to_location_id bigint,
 
     -- properties
-    import_type enum('internal', 'borrowed', 'rented', 'purchased', 'maintenance_return'),
+    import_type enum('borrowed', 'rented', 'purchased', 'maintenance_return', 'borrowed_out_return'),
     import_date date,
     -- thông tin mượn từ bên ngoài (mượn thuê khác gì nhau)
     -- thông tin thuê từ bên ngoài
     -- thông tin mua máy từ bên ngoài
     -- thông tin nhập máy đã sửa chửa
     status enum('pending', 'completed', 'cancelled') default 'pending', -- trạng thái của phiếu
+    is_borrowed_or_rented_or_borrowed_out_name text,
+	is_borrowed_or_rented_or_borrowed_out_date date,
+	is_borrowed_or_rented_or_borrowed_out_return_date date,
     note text,
 
     -- key
@@ -200,12 +206,15 @@ create table if not exists tb_machine_export
     to_location_id bigint,
     
     -- properties
-    export_type enum('internal', 'maintenance', 'borrowed_out', 'liquidation'),
+    export_type enum('maintenance', 'borrowed_out', 'liquidation', 'borrowed_return', 'rented_return'),
     export_date date,
     -- thông tin bảo trì
     -- thông tin cho mượn
     -- thông tin thanh lý
     status enum('pending', 'completed', 'cancelled') default 'pending', -- trạng thái của phiếu
+    is_borrowed_or_rented_or_borrowed_out_name text,
+	is_borrowed_or_rented_or_borrowed_out_date date,
+	is_borrowed_or_rented_or_borrowed_out_return_date date,
     note text,
 
     -- key
@@ -238,6 +247,51 @@ create table if not exists tb_machine_export_detail
     updated_by bigint default '0'
 );
 
+-- MARK: machine internal transfer thông tin phiếu điều chuyển nội bộ
+create table if not exists tb_machine_internal_transfer
+(
+    -- primary
+    id_machine_internal_transfer bigint not null auto_increment,
+    uuid_machine_internal_transfer varchar(36) not null unique default (UUID()),
+    
+    -- foreign
+    to_location_id bigint,
+
+    -- properties
+    transfer_date date,
+    status enum('pending', 'completed', 'cancelled') default 'pending',
+    note text,
+
+    -- key
+    primary key (id_machine_internal_transfer),
+    
+    -- timestamp
+    created_at timestamp default current_timestamp,
+    created_by bigint default '0',
+    updated_at timestamp default current_timestamp on update current_timestamp,
+    updated_by bigint default '0'
+);
+
+-- MARK: machine internal transfer details thông tin chi tiết phiếu điều chuyển nội bộ
+create table if not exists tb_machine_internal_transfer_detail
+(
+    -- foreign
+    id_machine_internal_transfer bigint,
+    id_machine bigint,
+
+    -- properties
+    note text,
+    
+    -- key
+    unique (id_machine_internal_transfer, id_machine),
+    
+    -- timestamp
+    created_at timestamp default current_timestamp,
+    created_by bigint default '0',
+    updated_at timestamp default current_timestamp on update current_timestamp,
+    updated_by bigint default '0'
+);
+
 -- MARK: machine location thông tin vị trí hiện tại của máy móc
 create table if not exists tb_machine_location
 (
@@ -258,6 +312,7 @@ create table if not exists tb_machine_location
 -- MARK: machine location history thông tin lịch sử vị trí máy móc
 create table if not exists tb_machine_location_history
 (
+    -- primary
     id_machine_location_history bigint not null auto_increment,
     uuid_machine_location_history varchar(36) not null unique default (UUID()),
 
@@ -432,6 +487,8 @@ insert into tb_location (name_location, id_department) values
 ('Chuyền chuyên dùng - Xưởng 4', 5),
 ('Chuyền hoàn thành 1 - Xưởng 4', 5),
 ('Chuyền hoàn thành 2 - Xưởng 4', 5),
-('Công ty A', 6),
-('Công ty B', 6),
-('Công ty C', 6);
+('Công ty A', 9),
+('Công ty B', 9),
+('Công ty C', 9),
+('Đơn vị thanh lý', 9),
+('Đơn vị bảo trì', 9);

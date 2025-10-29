@@ -72,6 +72,14 @@ export const api = {
     },
   },
 
+  // MARK: DEPARTMENTS
+  departments: {
+    getAll: async (params = {}) => {
+      const response = await httpConnect.get("/api/departments", { params });
+      return response.data;
+    },
+  },
+
   // MARK: LOCATIONS
   locations: {
     getAll: async (params = {}) => {
@@ -120,6 +128,49 @@ export const api = {
       const response = await httpConnect.put(`/api/exports/${uuid}/status`, {
         status,
       });
+      return response.data;
+    },
+  },
+
+  internal_transfers: {
+    getAll: async (params = {}) => {
+      const response = await httpConnect.get("/api/internal-transfers", {
+        params,
+      });
+      return response.data;
+    },
+    getById: async (uuid) => {
+      const response = await httpConnect.get(`/api/internal-transfers/${uuid}`);
+      return response.data;
+    },
+    create: async (data) => {
+      const response = await httpConnect.post("/api/internal-transfers", data);
+      return response.data;
+    },
+    updateStatus: async (uuid, status) => {
+      const response = await httpConnect.put(
+        `/api/internal-transfers/${uuid}/status`,
+        {
+          status,
+        }
+      );
+      return response.data;
+    },
+  },
+
+  // MARK: LOCATION TRACKING
+  tracking: {
+    getMachinesByLocation: async (locationUuid, params = {}) => {
+      const response = await httpConnect.get(
+        `/api/locations/${locationUuid}/machines`,
+        { params }
+      );
+      return response.data;
+    },
+    getMachineHistory: async (machineUuid) => {
+      const response = await httpConnect.get(
+        `/api/machines/${machineUuid}/history`
+      );
       return response.data;
     },
   },

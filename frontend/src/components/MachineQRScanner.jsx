@@ -170,8 +170,8 @@ const useMachineQRScannerLogic = (videoRef, handleScanResult) => {
             scanRegion: {
               x: 5, // Bắt đầu từ 5% (5% offset)
               y: 5, // Bắt đầu từ 5% (5% offset)
-              width: 500, // Chiều rộng 90%
-              height: 500, // Chiều cao 90%
+              width: 90, // Chiều rộng 90%
+              height: 90, // Chiều cao 90%
             },
           }
         );
@@ -404,7 +404,8 @@ const MachineQRScanner = ({
         // KHÔNG GỬI id_machine
         uuid_machine: scanResult.machine.uuid_machine,
         code_machine: scanResult.machine.code_machine,
-        name_machine: scanResult.machine.name_machine,
+        type_machine: scanResult.machine.type_machine,
+        model_machine: scanResult.machine.model_machine,
         serial_machine: scanResult.machine.serial_machine,
         name_location: scanResult.machine.name_location,
         current_status: scanResult.machine.current_status,
@@ -442,8 +443,7 @@ const MachineQRScanner = ({
     <Dialog
       open={isOpen}
       onClose={onClose}
-      maxWidth="sm"
-      maxHeight="sm"
+      maxWidth="md"
       fullWidth
       PaperProps={{ sx: { borderRadius: "20px" } }}
     >
@@ -458,12 +458,21 @@ const MachineQRScanner = ({
           <Close />
         </IconButton>
       </DialogTitle>
-      <DialogContent dividers sx={{ p: 0 }}>
+      <DialogContent
+        dividers
+        sx={{
+          p: 0,
+          // THAY ĐỔI: Giới hạn chiều cao tối đa và cho phép cuộn nội dung
+          maxHeight: "80vh", // Chiều cao tối đa là 80% viewport height
+          overflowY: "hidden", // Bật cuộn dọc
+          overflowX: "hidden", // Ẩn cuộn ngang
+        }}
+      >
         <Box
           sx={{
             position: "relative",
             width: "100%",
-            aspectRatio: "1/1",
+            aspectRatio: "16/9",
             bgcolor: "black",
           }}
         >
@@ -562,7 +571,8 @@ const MachineQRScanner = ({
                 <Alert severity="success">
                   <Typography variant="body2" fontWeight="bold">
                     Máy tìm thấy: {scanResult.machine.code_machine} -{" "}
-                    {scanResult.machine.name_machine}
+                    {scanResult.machine.type_machine} -
+                    {scanResult.machine.model_machine}
                   </Typography>
                   <Typography variant="caption" component="div">
                     Serial: {scanResult.machine.serial_machine} | Vị trí:{" "}

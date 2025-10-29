@@ -13,8 +13,7 @@ import LoginPage from "./pages/LoginPage";
 import HomePage from "./pages/HomePage";
 import MachineListPage from "./pages/MachineListPage";
 import TicketManagementPage from "./pages/TicketManagementPage";
-import Test1 from "./pages/Test1";
-import Test2 from "./pages/Test2";
+import LocationTrackPage from "./pages/LocationTrackPage";
 
 // Create MUI theme
 const theme = createTheme({
@@ -118,18 +117,10 @@ function App() {
               }
             />
             <Route
-              path="/test1"
+              path="/location-track"
               element={
                 <ProtectedRoute>
-                  <Test1 />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/test2"
-              element={
-                <ProtectedRoute>
-                  <Test2 />
+                  <LocationTrackPage />
                 </ProtectedRoute>
               }
             />

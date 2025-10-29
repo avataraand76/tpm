@@ -24,6 +24,7 @@ import {
   Dashboard,
   PrecisionManufacturing,
   Receipt,
+  LocationOn,
 } from "@mui/icons-material";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -38,18 +39,12 @@ const NavigationBar = () => {
     if (pathname === "/") return 0;
     if (pathname === "/machines") return 1;
     if (pathname === "/tickets") return 2;
-    // if (pathname === "/test1") return 3;
-    // if (pathname === "/test2") return 4;
+    if (pathname === "/location-track") return 3;
     return 0;
   };
 
   const handleTabChange = (event, newValue) => {
-    const routes = [
-      "/",
-      "/machines",
-      "/tickets",
-      // , "/test1", "/test2"
-    ];
+    const routes = ["/", "/machines", "/tickets", "/location-track"];
     navigate(routes[newValue]);
   };
 
@@ -153,8 +148,7 @@ const NavigationBar = () => {
               label="Phiếu xuất nhập"
               iconPosition="start"
             />
-            {/* <Tab icon={<Science />} label="Test 1" iconPosition="start" />
-            <Tab icon={<Psychology />} label="Test 2" iconPosition="start" /> */}
+            <Tab icon={<LocationOn />} label="Vị trí" iconPosition="start" />
           </Tabs>
         </Box>
 

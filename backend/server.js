@@ -227,11 +227,12 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
     if (search) {
       const searchPattern = `%${search}%`;
       whereClause = `
-        WHERE (m.name_machine LIKE ? 
+        WHERE (m.type_machine LIKE ?
+        OR m.model_machine LIKE ?
         OR m.code_machine LIKE ? 
         OR m.serial_machine LIKE ? 
         OR m.manufacturer LIKE ?
-        OR c.name_category LIKE ?)
+        OR tl.name_location LIKE ?)
       `;
       countParams = [
         searchPattern,
@@ -239,8 +240,10 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
         searchPattern,
         searchPattern,
         searchPattern,
+        searchPattern,
       ];
       dataParams = [
+        searchPattern,
         searchPattern,
         searchPattern,
         searchPattern,
@@ -258,6 +261,8 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
       SELECT COUNT(*) as total
       FROM tb_machine m
       LEFT JOIN tb_category c ON c.id_category = m.id_category
+      LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
+      LEFT JOIN tb_location tl ON tl.id_location = ml.id_location
       ${whereClause}
     `;
 
@@ -273,7 +278,8 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
         m.serial_machine,
         m.RFID_machine,
         m.code_machine,
-        m.name_machine,
+        m.type_machine,
+        m.model_machine,
         m.manufacturer,
         m.price,
         m.date_of_use,
@@ -281,13 +287,20 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
         m.repair_cost,
         m.note,
         m.current_status,
+        m.is_borrowed_or_rented_or_borrowed_out,
+        m.is_borrowed_or_rented_or_borrowed_out_name,
+        m.is_borrowed_or_rented_or_borrowed_out_date,
+        m.is_borrowed_or_rented_or_borrowed_out_return_date,
         m.created_at,
         m.updated_at,
-        c.name_category
+        c.name_category,
+        tl.name_location
       FROM tb_machine m
       LEFT JOIN tb_category c ON c.id_category = m.id_category
+      LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
+      LEFT JOIN tb_location tl ON tl.id_location = ml.id_location
       ${whereClause}
-      ORDER BY m.date_of_use DESC
+      ORDER BY m.code_machine ASC
       LIMIT ? OFFSET ?
     `;
 
@@ -326,11 +339,11 @@ app.get("/api/machines/stats", authenticateToken, async (req, res) => {
         SUM(CASE WHEN current_status = 'available' THEN 1 ELSE 0 END) as available,
         SUM(CASE WHEN current_status = 'in_use' THEN 1 ELSE 0 END) as in_use,
         SUM(CASE WHEN current_status = 'maintenance' THEN 1 ELSE 0 END) as maintenance,
-        SUM(CASE WHEN current_status = 'borrowed_out' THEN 1 ELSE 0 END) as borrowed_out,
         SUM(CASE WHEN current_status = 'liquidation' THEN 1 ELSE 0 END) as liquidation,
         SUM(CASE WHEN current_status = 'disabled' THEN 1 ELSE 0 END) as disabled,
-        SUM(CASE WHEN current_status = 'borrowed' THEN 1 ELSE 0 END) as borrowed,
-        SUM(CASE WHEN current_status = 'rented' THEN 1 ELSE 0 END) as rented
+        SUM(CASE WHEN is_borrowed_or_rented_or_borrowed_out = 'borrowed' THEN 1 ELSE 0 END) as borrowed,
+        SUM(CASE WHEN is_borrowed_or_rented_or_borrowed_out = 'rented' THEN 1 ELSE 0 END) as rented,
+        SUM(CASE WHEN is_borrowed_or_rented_or_borrowed_out = 'borrowed_out' THEN 1 ELSE 0 END) as borrowed_out
       FROM tb_machine
       `
     );
@@ -367,14 +380,19 @@ app.get("/api/machines/search", authenticateToken, async (req, res) => {
     }
 
     const searchPattern = `%${search}%`;
-    const searchParams = [searchPattern, searchPattern, searchPattern];
+    const searchParams = [
+      searchPattern,
+      searchPattern,
+      searchPattern,
+      searchPattern,
+    ]; // <<< CHANGED (4 params)
 
     // 1. Get total count
     const countQuery = `
       SELECT COUNT(*) as total
       FROM tb_machine m
-      WHERE (m.name_machine LIKE ? OR m.code_machine LIKE ? OR m.serial_machine LIKE ?)
-      AND m.current_status = 'available'
+      WHERE (m.type_machine LIKE ? OR m.model_machine LIKE ? OR m.code_machine LIKE ? OR m.serial_machine LIKE ?) -- <<< CHANGED
+      -- AND m.current_status = 'available'
     `;
 
     const [countResult] = await tpmConnection.query(countQuery, searchParams);
@@ -387,9 +405,11 @@ app.get("/api/machines/search", authenticateToken, async (req, res) => {
       SELECT 
         m.uuid_machine,
         m.code_machine,
-        m.name_machine,
+        m.type_machine,  -- <<< CHANGED
+        m.model_machine, -- <<< CHANGED
         m.serial_machine,
         m.current_status,
+        m.is_borrowed_or_rented_or_borrowed_out,
         c.name_category,
         tl.uuid_location,
         tl.name_location
@@ -397,8 +417,8 @@ app.get("/api/machines/search", authenticateToken, async (req, res) => {
       LEFT JOIN tb_category c ON c.id_category = m.id_category
       LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
       LEFT JOIN tb_location tl ON tl.id_location = ml.id_location
-      WHERE (m.name_machine LIKE ? OR m.code_machine LIKE ? OR m.serial_machine LIKE ?)
-      AND m.current_status = 'available'
+      WHERE (m.type_machine LIKE ? OR m.model_machine LIKE ? OR m.code_machine LIKE ? OR m.serial_machine LIKE ?) -- <<< CHANGED
+      -- AND m.current_status = 'available'
       ORDER BY m.code_machine ASC
       LIMIT ? OFFSET ?
     `;
@@ -444,7 +464,8 @@ app.get("/api/machines/:uuid", authenticateToken, async (req, res) => {
         m.serial_machine,
         m.RFID_machine,
         m.code_machine,
-        m.name_machine,
+        m.type_machine,
+        m.model_machine,
         m.manufacturer,
         m.price,
         m.date_of_use,
@@ -452,12 +473,20 @@ app.get("/api/machines/:uuid", authenticateToken, async (req, res) => {
         m.repair_cost,
         m.note,
         m.current_status,
+        m.is_borrowed_or_rented_or_borrowed_out,
+        m.is_borrowed_or_rented_or_borrowed_out_name,
+        m.is_borrowed_or_rented_or_borrowed_out_date,
+        m.is_borrowed_or_rented_or_borrowed_out_return_date,
         m.created_at,
         m.updated_at,
         c.name_category,
-        c.uuid_category
+        c.uuid_category,
+        tl.name_location,
+        tl.uuid_location
       FROM tb_machine m
       LEFT JOIN tb_category c ON c.id_category = m.id_category
+      LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
+      LEFT JOIN tb_location tl ON tl.id_location = ml.id_location
       WHERE m.uuid_machine = ?
       `,
       [uuid]
@@ -505,9 +534,14 @@ app.get(
       SELECT 
         m.uuid_machine,
         m.code_machine,
-        m.name_machine,
+        m.type_machine,  -- <<< CHANGED
+        m.model_machine, -- <<< CHANGED
         m.serial_machine,
         m.current_status,
+        m.is_borrowed_or_rented_or_borrowed_out,
+        m.is_borrowed_or_rented_or_borrowed_out_name,
+        m.is_borrowed_or_rented_or_borrowed_out_date,
+        m.is_borrowed_or_rented_or_borrowed_out_return_date,
         c.name_category,
         tl.uuid_location,
         tl.name_location
@@ -552,7 +586,8 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
       code_machine,
       serial_machine,
       RFID_machine,
-      name_machine,
+      type_machine, // <<< CHANGED
+      model_machine, // <<< CHANGED
       manufacturer,
       price,
       date_of_use,
@@ -564,10 +599,10 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
     } = req.body;
 
     // Validate required fields
-    if (!code_machine || !name_machine || !date_of_use) {
+    if (!code_machine || !type_machine || !serial_machine) {
       return res.status(400).json({
         success: false,
-        message: "Mã máy, Tên máy và Ngày sử dụng là bắt buộc",
+        message: "Mã máy, Loại máy, Serial máy là bắt buộc",
       });
     }
 
@@ -616,16 +651,17 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
     const [result] = await tpmConnection.query(
       `
       INSERT INTO tb_machine 
-        (code_machine, serial_machine, RFID_machine, name_machine, manufacturer, 
+        (code_machine, serial_machine, RFID_machine, type_machine, model_machine, manufacturer, 
          price, date_of_use, lifespan, repair_cost, note, current_status, id_category,
          created_by, updated_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, // <<< CHANGED (15 placeholders)
       [
         code_machine,
         serial_machine,
         RFID_machine || null,
-        name_machine || null,
+        type_machine || null, // <<< CHANGED
+        model_machine || null, // <<< CHANGED
         manufacturer || null,
         price || null,
         formattedDate || null,
@@ -647,7 +683,8 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
         m.serial_machine,
         m.RFID_machine,
         m.code_machine,
-        m.name_machine,
+        m.type_machine,  -- <<< CHANGED
+        m.model_machine, -- <<< CHANGED
         m.manufacturer,
         m.price,
         m.date_of_use,
@@ -691,7 +728,8 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
       code_machine,
       serial_machine,
       RFID_machine,
-      name_machine,
+      type_machine, // <<< CHANGED
+      model_machine, // <<< CHANGED
       manufacturer,
       price,
       date_of_use,
@@ -751,7 +789,8 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         code_machine = ?,
         serial_machine = ?,
         RFID_machine = ?,
-        name_machine = ?,
+        type_machine = ?,  -- <<< CHANGED
+        model_machine = ?, -- <<< CHANGED
         manufacturer = ?,
         price = ?,
         date_of_use = ?,
@@ -767,7 +806,8 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         code_machine,
         serial_machine,
         RFID_machine,
-        name_machine,
+        type_machine, // <<< CHANGED
+        model_machine, // <<< CHANGED
         manufacturer,
         price,
         formattedDate,
@@ -788,7 +828,8 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         m.serial_machine,
         m.RFID_machine,
         m.code_machine,
-        m.name_machine,
+        m.type_machine,  -- <<< CHANGED
+        m.model_machine, -- <<< CHANGED
         m.manufacturer,
         m.price,
         m.date_of_use,
@@ -823,20 +864,82 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
   }
 });
 
+// MARK: DEPARTMENTS
+
+// GET /api/departments - Get all departments
+app.get("/api/departments", authenticateToken, async (req, res) => {
+  try {
+    const [departments] = await tpmConnection.query(
+      `
+      SELECT 
+        uuid_department, 
+        name_department 
+      FROM tb_department 
+      ORDER BY id_department ASC
+      `
+    );
+
+    res.json({
+      success: true,
+      message: "Departments retrieved successfully",
+      data: departments,
+    });
+  } catch (error) {
+    console.error("Error fetching departments:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
 // MARK: LOCATIONS
 
 // GET /api/locations - Get all locations for dropdowns
 app.get("/api/locations", authenticateToken, async (req, res) => {
   try {
-    const [locations] = await tpmConnection.query(
-      `
+    const { filter_type, department_uuid } = req.query; // <<< CHANGED: Thêm department_uuid
+
+    let query = `
       SELECT 
-        uuid_location, 
-        name_location 
-      FROM tb_location 
-      ORDER BY id_location, name_location ASC
-      `
-    );
+        tl.uuid_location, 
+        tl.name_location,
+        td.name_department
+      FROM tb_location tl
+      LEFT JOIN tb_department td ON td.id_department = tl.id_department
+    `;
+    let params = [];
+    let whereConditions = [];
+
+    // <<< START: THÊM LOGIC LỌC THEO ĐƠN VỊ >>>
+    if (department_uuid) {
+      whereConditions.push(`td.uuid_department = ?`);
+      params.push(department_uuid);
+    }
+    // <<< END: THÊM LOGIC LỌC THEO ĐƠN VỊ >>>
+
+    if (filter_type === "internal") {
+      // Req 1.2: HIDE external
+      whereConditions.push(
+        `(td.name_department NOT LIKE '%Đơn vị bên ngoài%' OR td.name_department IS NULL)`
+      );
+    } else if (filter_type === "warehouse_only") {
+      // Req 2.1, 3.1: SHOW ONLY warehouse
+      whereConditions.push(`tl.name_location LIKE '%Kho%'`);
+    } else if (filter_type === "external_only") {
+      // Req 4.1, 5.1, 6.1: SHOW ONLY external
+      whereConditions.push(`td.name_department LIKE '%Đơn vị bên ngoài%'`);
+    }
+    // No filter_type: return all
+
+    if (whereConditions.length > 0) {
+      query += ` WHERE ${whereConditions.join(" AND ")}`;
+    }
+
+    // query += ` ORDER BY tl.name_location ASC`; // <<< CHANGED: Bật lại sắp xếp
+
+    const [locations] = await tpmConnection.query(query, params);
 
     res.json({
       success: true,
@@ -866,7 +969,10 @@ app.post("/api/imports", authenticateToken, async (req, res) => {
       import_type,
       import_date,
       note,
-      machines, // Array of machine objects: [{ uuid_machine, note }]
+      machines,
+      is_borrowed_or_rented_or_borrowed_out_name,
+      is_borrowed_or_rented_or_borrowed_out_date,
+      is_borrowed_or_rented_or_borrowed_out_return_date,
     } = req.body;
 
     // Validate required fields
@@ -893,6 +999,19 @@ app.post("/api/imports", authenticateToken, async (req, res) => {
       to_location_id = toLoc[0].id_location;
     }
 
+    const isBorrowOrRent = ["borrowed", "rented"].includes(import_type);
+    if (
+      isBorrowOrRent &&
+      (!is_borrowed_or_rented_or_borrowed_out_name ||
+        !is_borrowed_or_rented_or_borrowed_out_date)
+    ) {
+      await connection.rollback();
+      return res.status(400).json({
+        success: false,
+        message: "Tên người/đơn vị và Ngày mượn/thuê là bắt buộc.",
+      });
+    }
+
     // Format date
     const dateObj = new Date(import_date);
     const formattedDate = `${dateObj.getFullYear()}-${String(
@@ -905,8 +1024,11 @@ app.post("/api/imports", authenticateToken, async (req, res) => {
     const [importResult] = await connection.query(
       `
       INSERT INTO tb_machine_import 
-        (to_location_id, import_type, import_date, status, note, created_by, updated_by)
-      VALUES (?, ?, ?, 'pending', ?, ?, ?)
+        (to_location_id, import_type, import_date, status, note, created_by, updated_by,
+         is_borrowed_or_rented_or_borrowed_out_name,
+         is_borrowed_or_rented_or_borrowed_out_date,
+         is_borrowed_or_rented_or_borrowed_out_return_date)
+      VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)
       `,
       [
         to_location_id,
@@ -915,6 +1037,11 @@ app.post("/api/imports", authenticateToken, async (req, res) => {
         note || null,
         userMANV,
         userMANV,
+        isBorrowOrRent ? is_borrowed_or_rented_or_borrowed_out_name : null,
+        isBorrowOrRent ? is_borrowed_or_rented_or_borrowed_out_date : null,
+        isBorrowOrRent
+          ? is_borrowed_or_rented_or_borrowed_out_return_date || null
+          : null,
       ]
     );
 
@@ -1002,7 +1129,8 @@ app.post("/api/imports", authenticateToken, async (req, res) => {
         d.updated_at,
         m.uuid_machine,
         m.code_machine,
-        m.name_machine,
+        m.type_machine,  -- <<< CHANGED
+        m.model_machine, -- <<< CHANGED
         m.serial_machine
       FROM tb_machine_import_detail d
       LEFT JOIN tb_machine m ON m.id_machine = d.id_machine
@@ -1090,6 +1218,9 @@ app.get("/api/imports", authenticateToken, async (req, res) => {
         i.note,
         i.created_at,
         i.updated_at,
+        i.is_borrowed_or_rented_or_borrowed_out_name,
+        i.is_borrowed_or_rented_or_borrowed_out_date,
+        i.is_borrowed_or_rented_or_borrowed_out_return_date,
         tl.uuid_location as to_location_uuid,
         tl.name_location as to_location_name,
         td.uuid_department as to_department_uuid,
@@ -1161,6 +1292,9 @@ app.get("/api/imports/:uuid", authenticateToken, async (req, res) => {
         i.note,
         i.created_at,
         i.updated_at,
+        i.is_borrowed_or_rented_or_borrowed_out_name,
+        i.is_borrowed_or_rented_or_borrowed_out_date,
+        i.is_borrowed_or_rented_or_borrowed_out_return_date,
         tl.uuid_location as to_location_uuid,
         tl.name_location as to_location_name,
         td.uuid_department as to_department_uuid,
@@ -1189,14 +1323,18 @@ app.get("/api/imports/:uuid", authenticateToken, async (req, res) => {
         d.updated_at,
         m.uuid_machine,
         m.code_machine,
-        m.name_machine,
+        m.type_machine,
+        m.model_machine,
         m.serial_machine,
         m.current_status,
         c.uuid_category,
-        c.name_category
+        c.name_category,
+        tl.name_location
       FROM tb_machine_import_detail d
       LEFT JOIN tb_machine m ON m.id_machine = d.id_machine
       LEFT JOIN tb_category c ON c.id_category = m.id_category
+      LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
+      LEFT JOIN tb_location tl ON tl.id_location = ml.id_location
       WHERE d.id_machine_import = ?
       `,
       [importId]
@@ -1237,8 +1375,21 @@ app.put("/api/imports/:uuid/status", authenticateToken, async (req, res) => {
       });
     }
 
+    // MODIFIED: Fetch more data from ticket
     const [existing] = await connection.query(
-      "SELECT id_machine_import FROM tb_machine_import WHERE uuid_machine_import = ?",
+      `
+      SELECT 
+        i.id_machine_import, 
+        i.to_location_id, 
+        i.import_type,
+        i.is_borrowed_or_rented_or_borrowed_out_name,
+        i.is_borrowed_or_rented_or_borrowed_out_date,
+        i.is_borrowed_or_rented_or_borrowed_out_return_date,
+        l.name_location
+      FROM tb_machine_import i
+      LEFT JOIN tb_location l ON l.id_location = i.to_location_id
+      WHERE i.uuid_machine_import = ?
+      `,
       [uuid]
     );
 
@@ -1250,8 +1401,18 @@ app.put("/api/imports/:uuid/status", authenticateToken, async (req, res) => {
       });
     }
 
+    const {
+      id_machine_import,
+      to_location_id,
+      import_type,
+      name_location, // NEW
+      is_borrowed_or_rented_or_borrowed_out_name, // NEW
+      is_borrowed_or_rented_or_borrowed_out_date, // NEW
+      is_borrowed_or_rented_or_borrowed_out_return_date, // NEW
+    } = existing[0];
     const userMANV = req.user.ma_nv;
 
+    // 1. Update ticket status
     await connection.query(
       `
       UPDATE tb_machine_import 
@@ -1260,6 +1421,27 @@ app.put("/api/imports/:uuid/status", authenticateToken, async (req, res) => {
       `,
       [status, userMANV, uuid]
     );
+
+    // 2. UNCOMMENTED AND UPDATED
+    if (status === "completed") {
+      const ticketBorrowInfo = {
+        name: is_borrowed_or_rented_or_borrowed_out_name,
+        date: is_borrowed_or_rented_or_borrowed_out_date,
+        return_date: is_borrowed_or_rented_or_borrowed_out_return_date,
+      };
+
+      await updateMachineLocationAndStatus(
+        connection,
+        "import",
+        id_machine_import,
+        to_location_id,
+        name_location, // NEW
+        status,
+        import_type,
+        ticketBorrowInfo, // NEW
+        userMANV
+      );
+    }
 
     await connection.commit();
 
@@ -1293,7 +1475,10 @@ app.post("/api/exports", authenticateToken, async (req, res) => {
       export_type,
       export_date,
       note,
-      machines, // Array of machine objects: [{ uuid_machine, note }]
+      machines,
+      is_borrowed_or_rented_or_borrowed_out_name,
+      is_borrowed_or_rented_or_borrowed_out_date,
+      is_borrowed_or_rented_or_borrowed_out_return_date,
     } = req.body;
 
     // Validate required fields
@@ -1320,6 +1505,19 @@ app.post("/api/exports", authenticateToken, async (req, res) => {
       to_location_id = toLoc[0].id_location;
     }
 
+    const isBorrowOut = export_type === "borrowed_out";
+    if (
+      isBorrowOut &&
+      (!is_borrowed_or_rented_or_borrowed_out_name ||
+        !is_borrowed_or_rented_or_borrowed_out_date)
+    ) {
+      await connection.rollback();
+      return res.status(400).json({
+        success: false,
+        message: "Tên người/đơn vị và Ngày cho mượn là bắt buộc.",
+      });
+    }
+
     // Format date
     const dateObj = new Date(export_date);
     const formattedDate = `${dateObj.getFullYear()}-${String(
@@ -1332,8 +1530,11 @@ app.post("/api/exports", authenticateToken, async (req, res) => {
     const [exportResult] = await connection.query(
       `
       INSERT INTO tb_machine_export 
-        (to_location_id, export_type, export_date, status, note, created_by, updated_by)
-      VALUES (?, ?, ?, 'pending', ?, ?, ?)
+        (to_location_id, export_type, export_date, status, note, created_by, updated_by,
+         is_borrowed_or_rented_or_borrowed_out_name,
+         is_borrowed_or_rented_or_borrowed_out_date,
+         is_borrowed_or_rented_or_borrowed_out_return_date)
+      VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)
       `,
       [
         to_location_id,
@@ -1342,6 +1543,11 @@ app.post("/api/exports", authenticateToken, async (req, res) => {
         note || null,
         userMANV,
         userMANV,
+        isBorrowOut ? is_borrowed_or_rented_or_borrowed_out_name : null,
+        isBorrowOut ? is_borrowed_or_rented_or_borrowed_out_date : null,
+        isBorrowOut
+          ? is_borrowed_or_rented_or_borrowed_out_return_date || null
+          : null,
       ]
     );
 
@@ -1433,7 +1639,8 @@ app.post("/api/exports", authenticateToken, async (req, res) => {
         d.updated_at,
         m.uuid_machine,
         m.code_machine,
-        m.name_machine,
+        m.type_machine,  -- <<< CHANGED
+        m.model_machine, -- <<< CHANGED
         m.serial_machine
       FROM tb_machine_export_detail d
       LEFT JOIN tb_machine m ON m.id_machine = d.id_machine
@@ -1521,6 +1728,9 @@ app.get("/api/exports", authenticateToken, async (req, res) => {
         e.note,
         e.created_at,
         e.updated_at,
+        e.is_borrowed_or_rented_or_borrowed_out_name,
+        e.is_borrowed_or_rented_or_borrowed_out_date,
+        e.is_borrowed_or_rented_or_borrowed_out_return_date,
         tl.uuid_location as to_location_uuid,
         tl.name_location as to_location_name,
         td.uuid_department as to_department_uuid,
@@ -1592,6 +1802,9 @@ app.get("/api/exports/:uuid", authenticateToken, async (req, res) => {
         e.note,
         e.created_at,
         e.updated_at,
+        e.is_borrowed_or_rented_or_borrowed_out_name,
+        e.is_borrowed_or_rented_or_borrowed_out_date,
+        e.is_borrowed_or_rented_or_borrowed_out_return_date,
         tl.uuid_location as to_location_uuid,
         tl.name_location as to_location_name,
         td.uuid_department as to_department_uuid,
@@ -1620,14 +1833,18 @@ app.get("/api/exports/:uuid", authenticateToken, async (req, res) => {
         d.updated_at,
         m.uuid_machine,
         m.code_machine,
-        m.name_machine,
+        m.type_machine,
+        m.model_machine,
         m.serial_machine,
         m.current_status,
         c.uuid_category,
-        c.name_category
+        c.name_category,
+        tl.name_location
       FROM tb_machine_export_detail d
       LEFT JOIN tb_machine m ON m.id_machine = d.id_machine
       LEFT JOIN tb_category c ON c.id_category = m.id_category
+      LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
+      LEFT JOIN tb_location tl ON tl.id_location = ml.id_location
       WHERE d.id_machine_export = ?
       `,
       [exportId]
@@ -1668,8 +1885,21 @@ app.put("/api/exports/:uuid/status", authenticateToken, async (req, res) => {
       });
     }
 
+    // MODIFIED: Fetch more data from ticket
     const [existing] = await connection.query(
-      "SELECT id_machine_export FROM tb_machine_export WHERE uuid_machine_export = ?",
+      `
+      SELECT 
+        e.id_machine_export, 
+        e.to_location_id, 
+        e.export_type,
+        e.is_borrowed_or_rented_or_borrowed_out_name,
+        e.is_borrowed_or_rented_or_borrowed_out_date,
+        e.is_borrowed_or_rented_or_borrowed_out_return_date,
+        l.name_location
+      FROM tb_machine_export e
+      LEFT JOIN tb_location l ON l.id_location = e.to_location_id
+      WHERE e.uuid_machine_export = ?
+      `,
       [uuid]
     );
 
@@ -1681,8 +1911,18 @@ app.put("/api/exports/:uuid/status", authenticateToken, async (req, res) => {
       });
     }
 
+    const {
+      id_machine_export,
+      to_location_id,
+      export_type,
+      name_location, // NEW
+      is_borrowed_or_rented_or_borrowed_out_name, // NEW
+      is_borrowed_or_rented_or_borrowed_out_date, // NEW
+      is_borrowed_or_rented_or_borrowed_out_return_date, // NEW
+    } = existing[0];
     const userMANV = req.user.ma_nv;
 
+    // 1. Update ticket status
     await connection.query(
       `
       UPDATE tb_machine_export 
@@ -1691,6 +1931,27 @@ app.put("/api/exports/:uuid/status", authenticateToken, async (req, res) => {
       `,
       [status, userMANV, uuid]
     );
+
+    // 2. UNCOMMENTED AND UPDATED
+    if (status === "completed") {
+      const ticketBorrowInfo = {
+        name: is_borrowed_or_rented_or_borrowed_out_name,
+        date: is_borrowed_or_rented_or_borrowed_out_date,
+        return_date: is_borrowed_or_rented_or_borrowed_out_return_date,
+      };
+
+      await updateMachineLocationAndStatus(
+        connection,
+        "export",
+        id_machine_export,
+        to_location_id,
+        name_location, // NEW
+        status,
+        export_type,
+        ticketBorrowInfo, // NEW
+        userMANV
+      );
+    }
 
     await connection.commit();
 
@@ -1708,5 +1969,780 @@ app.put("/api/exports/:uuid/status", authenticateToken, async (req, res) => {
     });
   } finally {
     connection.release();
+  }
+});
+
+// Function to handle location and status updates in a transaction
+// Requires an active connection from a pool
+const updateMachineLocationAndStatus = async (
+  connection,
+  ticketType, // "import" or "export"
+  ticketId, // id_machine_import or id_machine_export
+  toLocationId,
+  toLocationName, // NEW: Needed for warehouse check
+  ticketStatus,
+  ticketTypeDetail, // import_type or export_type
+  ticketBorrowInfo, // NEW: Object { name, date, return_date }
+  userMANV
+) => {
+  if (ticketStatus !== "completed") {
+    return; // Chỉ xử lý khi phiếu được duyệt
+  }
+
+  // 1. Get all machines related to this ticket
+  const detailTable =
+    ticketType === "import"
+      ? "tb_machine_import_detail"
+      : "tb_machine_export_detail";
+  const ticketIdField =
+    ticketType === "import" ? "id_machine_import" : "id_machine_export";
+
+  const [details] = await connection.query(
+    `SELECT id_machine FROM ${detailTable} WHERE ${ticketIdField} = ?`,
+    [ticketId]
+  );
+
+  if (details.length === 0) {
+    console.warn(`No machines found for ${ticketType} ID: ${ticketId}`);
+    return;
+  }
+
+  let newMachineStatus = "available"; // Default
+  let newBorrowStatus = null;
+  let newBorrowName = null;
+  let newBorrowDate = null;
+  let newBorrowReturnDate = null;
+
+  // --- START NEW LOGIC ---
+  if (ticketType === "import") {
+    switch (ticketTypeDetail) {
+      // Req 2
+      case "purchased":
+      case "maintenance_return":
+        newMachineStatus = "available"; // Req 2.2
+        newBorrowStatus = null;
+        break;
+
+      // Req 2
+      case "borrowed_out_return":
+        newMachineStatus = "available"; // Req 2.2
+        newBorrowStatus = null; // Req 2.3 (Clear all borrow fields)
+        newBorrowName = null;
+        newBorrowDate = null;
+        newBorrowReturnDate = null;
+        break;
+
+      // Req 3
+      case "borrowed":
+        newMachineStatus = "available"; // Req 3.2 (User requested 'available', not 'in_use')
+        newBorrowStatus = "borrowed"; // Req 3.3
+        newBorrowName = ticketBorrowInfo.name;
+        newBorrowDate = ticketBorrowInfo.date;
+        newBorrowReturnDate = ticketBorrowInfo.return_date;
+        break;
+
+      // Req 3
+      case "rented":
+        newMachineStatus = "available"; // Req 3.2 (User requested 'available', not 'in_use')
+        newBorrowStatus = "rented"; // Req 3.3
+        newBorrowName = ticketBorrowInfo.name;
+        newBorrowDate = ticketBorrowInfo.date;
+        newBorrowReturnDate = ticketBorrowInfo.return_date;
+        break;
+
+      default:
+        newMachineStatus = "available";
+        newBorrowStatus = null;
+    }
+  } else {
+    // ticketType === 'export'
+    switch (ticketTypeDetail) {
+      // Req 4
+      case "maintenance":
+        newMachineStatus = "maintenance"; // Req 4.2
+        newBorrowStatus = null;
+        break;
+      case "liquidation":
+        newMachineStatus = "liquidation"; // Req 4.2
+        newBorrowStatus = null;
+        break;
+
+      // Req 5
+      case "borrowed_out":
+        newMachineStatus = "disabled"; // Req 5.2
+        newBorrowStatus = "borrowed_out"; // Req 5.3
+        newBorrowName = ticketBorrowInfo.name;
+        newBorrowDate = ticketBorrowInfo.date;
+        newBorrowReturnDate = ticketBorrowInfo.return_date;
+        break;
+
+      // Req 6
+      case "borrowed_return":
+      case "rented_return":
+        newMachineStatus = "disabled"; // Req 6.2
+        newBorrowStatus = null; // Clear borrow status
+        newBorrowName = null;
+        newBorrowDate = null;
+        newBorrowReturnDate = null;
+        break;
+
+      default:
+        newMachineStatus = "available";
+        newBorrowStatus = null;
+    }
+  }
+  // --- END NEW LOGIC ---
+
+  // 2. Loop through each machine for updates
+  for (const detail of details) {
+    const idMachine = detail.id_machine;
+
+    // a. Get current location (id_from_location)
+    const [currentLocResult] = await connection.query(
+      "SELECT id_location FROM tb_machine_location WHERE id_machine = ?",
+      [idMachine]
+    );
+    const idFromLocation =
+      currentLocResult.length > 0 ? currentLocResult[0].id_location : null;
+
+    // b. Insert into tb_machine_location_history
+    if (idFromLocation !== toLocationId) {
+      // Only insert if location changes
+      await connection.query(
+        `
+        INSERT INTO tb_machine_location_history
+          (id_machine, id_from_location, id_to_location, move_date, created_by, updated_by)
+        VALUES (?, ?, ?, CURDATE(), ?, ?)
+        `,
+        [idMachine, idFromLocation, toLocationId, userMANV, userMANV]
+      );
+    }
+
+    // c. Update/Insert into tb_machine_location
+    if (currentLocResult.length === 0) {
+      // Insert
+      await connection.query(
+        `
+        INSERT INTO tb_machine_location
+          (id_machine, id_location, created_by, updated_by)
+        VALUES (?, ?, ?, ?)
+        `,
+        [idMachine, toLocationId, userMANV, userMANV]
+      );
+    } else if (idFromLocation !== toLocationId) {
+      // Update
+      await connection.query(
+        `
+        UPDATE tb_machine_location
+        SET id_location = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id_machine = ?
+        `,
+        [toLocationId, userMANV, idMachine]
+      );
+    } else {
+      // No change, just touch updated_at
+      await connection.query(
+        `
+        UPDATE tb_machine_location
+        SET updated_by = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id_machine = ?
+        `,
+        [userMANV, idMachine]
+      );
+    }
+
+    // d. Update tb_machine status
+    await connection.query(
+      `
+      UPDATE tb_machine
+      SET 
+        current_status = ?, 
+        is_borrowed_or_rented_or_borrowed_out = ?,
+        is_borrowed_or_rented_or_borrowed_out_name = ?,
+        is_borrowed_or_rented_or_borrowed_out_date = ?,
+        is_borrowed_or_rented_or_borrowed_out_return_date = ?,
+        updated_by = ?, 
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id_machine = ?
+      `,
+      [
+        newMachineStatus,
+        newBorrowStatus,
+        newBorrowName,
+        newBorrowDate,
+        newBorrowReturnDate,
+        userMANV,
+        idMachine,
+      ]
+    );
+  }
+};
+
+// MARK: MACHINE INTERNAL TRANSFER
+
+// GET /api/internal-transfers - Get all internal transfer slips
+app.get("/api/internal-transfers", authenticateToken, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const status = req.query.status || "";
+    const offset = (page - 1) * limit;
+
+    let whereConditions = [];
+    let params = [];
+
+    if (status) {
+      whereConditions.push(`t.status = ?`);
+      params.push(status);
+    }
+
+    const whereClause =
+      whereConditions.length > 0
+        ? `WHERE ${whereConditions.join(" AND ")}`
+        : "";
+
+    // Get total count
+    const [countResult] = await tpmConnection.query(
+      `SELECT COUNT(*) as total FROM tb_machine_internal_transfer t ${whereClause}`,
+      params
+    );
+    const total = countResult[0].total;
+    const totalPages = Math.ceil(total / limit);
+
+    // Get paginated data
+    const [transfers] = await tpmConnection.query(
+      `
+        SELECT 
+          t.uuid_machine_internal_transfer,
+          t.transfer_date,
+          t.status,
+          t.note,
+          t.created_at,
+          t.updated_at,
+          loc_to.name_location as to_location_name,
+          COUNT(d.id_machine) as machine_count
+        FROM tb_machine_internal_transfer t
+        LEFT JOIN tb_location loc_to ON loc_to.id_location = t.to_location_id
+        LEFT JOIN tb_machine_internal_transfer_detail d ON d.id_machine_internal_transfer = t.id_machine_internal_transfer
+        ${whereClause}
+        GROUP BY t.id_machine_internal_transfer
+        ORDER BY t.transfer_date DESC, t.created_at DESC
+        LIMIT ? OFFSET ?
+        `,
+      [...params, limit, offset]
+    );
+
+    res.json({
+      success: true,
+      message: "Transfers retrieved successfully",
+      data: transfers,
+      pagination: { page, limit, total, totalPages },
+    });
+  } catch (error) {
+    console.error("Error fetching internal transfers:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+// GET /api/internal-transfers/:uuid - Get single internal transfer details
+app.get(
+  "/api/internal-transfers/:uuid",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { uuid } = req.params;
+
+      const [idResult] = await tpmConnection.query(
+        "SELECT id_machine_internal_transfer FROM tb_machine_internal_transfer WHERE uuid_machine_internal_transfer = ?",
+        [uuid]
+      );
+      if (idResult.length === 0) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Transfer not found" });
+      }
+      const transferId = idResult[0].id_machine_internal_transfer;
+
+      // Get ticket details
+      const [transferData] = await tpmConnection.query(
+        `
+        SELECT 
+          t.uuid_machine_internal_transfer,
+          t.transfer_date,
+          t.status,
+          t.note,
+          t.created_at,
+          t.updated_at,
+          loc_to.uuid_location as to_location_uuid,
+          loc_to.name_location as to_location_name
+        FROM tb_machine_internal_transfer t
+        LEFT JOIN tb_location loc_to ON loc_to.id_location = t.to_location_id
+        WHERE t.id_machine_internal_transfer = ?
+        `,
+        [transferId]
+      );
+
+      // Get machine details
+      const [details] = await tpmConnection.query(
+        `
+        SELECT 
+          d.note,
+          m.uuid_machine,
+          m.code_machine,
+          m.type_machine,
+          m.model_machine,
+          m.serial_machine,
+          m.current_status,
+          c.name_category,
+          tl.name_location
+        FROM tb_machine_internal_transfer_detail d
+        LEFT JOIN tb_machine m ON m.id_machine = d.id_machine
+        LEFT JOIN tb_category c ON c.id_category = m.id_category
+        LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
+        LEFT JOIN tb_location tl ON tl.id_location = ml.id_location
+        WHERE d.id_machine_internal_transfer = ?
+        `,
+        [transferId]
+      );
+
+      res.json({
+        success: true,
+        message: "Transfer details retrieved successfully",
+        data: {
+          transfer: transferData[0],
+          details: details,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching internal transfer details:", error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// POST /api/internal-transfers - Create new internal transfer slip
+app.post("/api/internal-transfers", authenticateToken, async (req, res) => {
+  const connection = await tpmConnection.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const { to_location_uuid, transfer_date, note, machines } = req.body;
+
+    if (!to_location_uuid || !transfer_date) {
+      await connection.rollback();
+      return res.status(400).json({
+        success: false,
+        message: "Vị trí đến và ngày là bắt buộc",
+      });
+    }
+
+    // Lấy ID nội bộ của vị trí
+    const [toLoc] = await connection.query(
+      "SELECT id_location FROM tb_location WHERE uuid_location = ?",
+      [to_location_uuid]
+    );
+
+    if (toLoc.length === 0) {
+      await connection.rollback();
+      return res
+        .status(404)
+        .json({ success: false, message: "Không tìm thấy vị trí đến." });
+    }
+    const to_location_id = toLoc[0].id_location;
+
+    const dateObj = new Date(transfer_date);
+    const formattedDate = `${dateObj.getFullYear()}-${String(
+      dateObj.getMonth() + 1
+    ).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")}`;
+    const userMANV = req.user.ma_nv;
+
+    // 1. Insert phiếu
+    const [transferResult] = await connection.query(
+      `
+        INSERT INTO tb_machine_internal_transfer
+          (to_location_id, transfer_date, status, note, created_by, updated_by)
+        VALUES (?, ?, 'pending', ?, ?, ?)
+        `,
+      [to_location_id, formattedDate, note || null, userMANV, userMANV]
+    );
+    const transferId = transferResult.insertId;
+
+    // 2. Insert chi tiết máy
+    if (machines && Array.isArray(machines) && machines.length > 0) {
+      for (const machine of machines) {
+        const [machineResult] = await connection.query(
+          "SELECT id_machine FROM tb_machine WHERE uuid_machine = ?",
+          [machine.uuid_machine]
+        );
+        if (machineResult.length > 0) {
+          const idMachine = machineResult[0].id_machine;
+          await connection.query(
+            `
+              INSERT INTO tb_machine_internal_transfer_detail
+                (id_machine_internal_transfer, id_machine, note, created_by, updated_by)
+              VALUES (?, ?, ?, ?, ?)
+              `,
+            [transferId, idMachine, machine.note || null, userMANV, userMANV]
+          );
+        }
+      }
+    }
+
+    await connection.commit();
+    res
+      .status(201)
+      .json({ success: true, message: "Tạo phiếu điều chuyển thành công" });
+  } catch (error) {
+    await connection.rollback();
+    console.error("Error creating internal transfer:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  } finally {
+    connection.release();
+  }
+});
+
+// PUT /api/internal-transfers/:uuid/status - Update internal transfer status
+app.put(
+  "/api/internal-transfers/:uuid/status",
+  authenticateToken,
+  async (req, res) => {
+    const connection = await tpmConnection.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      const { uuid } = req.params;
+      const { status } = req.body;
+
+      if (!status || !["pending", "completed", "cancelled"].includes(status)) {
+        await connection.rollback();
+        return res
+          .status(400)
+          .json({ success: false, message: "Invalid status" });
+      }
+
+      // Lấy thông tin phiếu
+      const [existing] = await connection.query(
+        `
+        SELECT 
+          t.id_machine_internal_transfer, 
+          t.to_location_id,
+          l_to.name_location as to_location_name
+        FROM tb_machine_internal_transfer t
+        LEFT JOIN tb_location l_to ON l_to.id_location = t.to_location_id
+        WHERE t.uuid_machine_internal_transfer = ?
+        `,
+        [uuid]
+      );
+
+      if (existing.length === 0) {
+        await connection.rollback();
+        return res
+          .status(404)
+          .json({ success: false, message: "Transfer not found" });
+      }
+
+      const { id_machine_internal_transfer, to_location_id, to_location_name } =
+        existing[0];
+      const userMANV = req.user.ma_nv;
+
+      // 1. Cập nhật trạng thái phiếu
+      await connection.query(
+        `
+        UPDATE tb_machine_internal_transfer 
+        SET status = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id_machine_internal_transfer = ?
+        `,
+        [status, userMANV, id_machine_internal_transfer]
+      );
+
+      // 2. Kích hoạt logic duyệt phiếu
+      if (status === "completed") {
+        await handleInternalTransferApproval(
+          connection,
+          id_machine_internal_transfer,
+          to_location_id,
+          to_location_name,
+          userMANV
+        );
+      }
+
+      await connection.commit();
+      res.json({
+        success: true,
+        message: "Transfer status updated successfully",
+      });
+    } catch (error) {
+      await connection.rollback();
+      console.error("Error updating transfer status:", error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    } finally {
+      connection.release();
+    }
+  }
+);
+
+const handleInternalTransferApproval = async (
+  connection,
+  ticketId,
+  toLocationId,
+  toLocationName, // Cần tên vị trí đến
+  userMANV
+) => {
+  // 1. Lấy tất cả máy móc trong phiếu
+  const [details] = await connection.query(
+    `SELECT id_machine FROM tb_machine_internal_transfer_detail WHERE id_machine_internal_transfer = ?`,
+    [ticketId]
+  );
+
+  if (details.length === 0) {
+    console.warn(`No machines found for internal transfer ID: ${ticketId}`);
+    return;
+  }
+
+  // 2. Xác định trạng thái mới
+  const newMachineStatus =
+    toLocationName && toLocationName.toLowerCase().includes("kho")
+      ? "available"
+      : "in_use";
+
+  // 3. Lặp qua từng máy để cập nhật
+  for (const detail of details) {
+    const idMachine = detail.id_machine;
+    const idToLocation = toLocationId;
+
+    // a. Lấy vị trí hiện tại (id_from_location) của MÁY NÀY
+    const [currentLocResult] = await connection.query(
+      "SELECT id_location FROM tb_machine_location WHERE id_machine = ?",
+      [idMachine]
+    );
+    const idFromLocation =
+      currentLocResult.length > 0 ? currentLocResult[0].id_location : null;
+
+    // b. Ghi lịch sử
+    if (idFromLocation !== idToLocation) {
+      await connection.query(
+        `
+        INSERT INTO tb_machine_location_history
+          (id_machine, id_from_location, id_to_location, move_date, created_by, updated_by)
+        VALUES (?, ?, ?, CURDATE(), ?, ?)
+        `,
+        [idMachine, idFromLocation, idToLocation, userMANV, userMANV]
+      );
+    }
+
+    // <<< START: SỬA LỖI LOGIC TẠI ĐÂY >>>
+    // c. Cập nhật/Thêm vào tb_machine_location
+    if (currentLocResult.length === 0) {
+      // INSERT nếu máy chưa có vị trí
+      await connection.query(
+        `
+        INSERT INTO tb_machine_location
+          (id_machine, id_location, created_by, updated_by)
+        VALUES (?, ?, ?, ?)
+        `,
+        [idMachine, idToLocation, userMANV, userMANV]
+      );
+    } else if (idFromLocation !== idToLocation) {
+      // UPDATE nếu vị trí thay đổi
+      await connection.query(
+        `
+        UPDATE tb_machine_location
+        SET id_location = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id_machine = ?
+        `,
+        [idToLocation, userMANV, idMachine]
+      );
+    } else {
+      // Vị trí không thay đổi, chỉ cập nhật (touch)
+      await connection.query(
+        `
+        UPDATE tb_machine_location
+        SET updated_by = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id_machine = ?
+        `,
+        [userMANV, idMachine]
+      );
+    }
+    // <<< END: SỬA LỖI LOGIC >>>
+
+    // d. Cập nhật trạng thái máy (tb_machine)
+    await connection.query(
+      `
+      UPDATE tb_machine
+      SET 
+        current_status = ?, 
+        is_borrowed_or_rented_or_borrowed_out = NULL,
+        is_borrowed_or_rented_or_borrowed_out_name = NULL,
+        is_borrowed_or_rented_or_borrowed_out_date = NULL,
+        is_borrowed_or_rented_or_borrowed_out_return_date = NULL,
+        updated_by = ?, 
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id_machine = ?
+      `,
+      [newMachineStatus, userMANV, idMachine]
+    );
+  }
+};
+
+// MARK: LOCATION TRACKING
+
+// GET /api/locations/:uuid/machines - Get all machines currently at a location
+app.get(
+  "/api/locations/:uuid/machines",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { uuid } = req.params;
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 20;
+      const offset = (page - 1) * limit;
+
+      // 1. Get internal location ID
+      const [locResult] = await tpmConnection.query(
+        "SELECT id_location FROM tb_location WHERE uuid_location = ?",
+        [uuid]
+      );
+
+      if (locResult.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Location not found",
+        });
+      }
+      const idLocation = locResult[0].id_location;
+
+      // 2. Get total count for pagination
+      const countQuery = `
+        SELECT COUNT(*) as total
+        FROM tb_machine_location ml
+        WHERE ml.id_location = ?
+      `;
+      const [countResult] = await tpmConnection.query(countQuery, [idLocation]);
+
+      const total = countResult[0].total;
+      const totalPages = Math.ceil(total / limit);
+
+      // 3. Get paginated machines at that location
+      const dataQuery = `
+        SELECT 
+          m.uuid_machine,
+          m.code_machine,
+          m.type_machine,  -- <<< CHANGED
+          m.model_machine, -- <<< CHANGED
+          m.serial_machine,
+          m.current_status,
+          m.is_borrowed_or_rented_or_borrowed_out,
+          c.name_category,
+          m.manufacturer
+        FROM tb_machine_location ml
+        JOIN tb_machine m ON m.id_machine = ml.id_machine
+        LEFT JOIN tb_category c ON c.id_category = m.id_category
+        WHERE ml.id_location = ?
+        ORDER BY m.code_machine ASC
+        LIMIT ? OFFSET ?
+      `;
+      const [machines] = await tpmConnection.query(dataQuery, [
+        idLocation,
+        limit,
+        offset,
+      ]);
+
+      res.json({
+        success: true,
+        message: "Machines at location retrieved successfully",
+        data: machines,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching machines by location:", error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// GET /api/machines/:uuid/history - Get location history for a specific machine
+app.get("/api/machines/:uuid/history", authenticateToken, async (req, res) => {
+  try {
+    const { uuid } = req.params;
+
+    // 1. Get internal machine ID
+    const [machineResult] = await tpmConnection.query(
+      "SELECT id_machine, code_machine, type_machine, model_machine FROM tb_machine WHERE uuid_machine = ?", // <<< CHANGED
+      [uuid]
+    );
+
+    if (machineResult.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Machine not found",
+      });
+    }
+    const idMachine = machineResult[0].id_machine;
+
+    // 2. Get history
+    const [history] = await tpmConnection.query(
+      `
+      SELECT 
+        h.move_date,
+        l_from.name_location as from_location_name,
+        l_to.name_location as to_location_name,
+        h.created_at,
+        h.created_by
+      FROM tb_machine_location_history h
+      LEFT JOIN tb_location l_from ON l_from.id_location = h.id_from_location
+      LEFT JOIN tb_location l_to ON l_to.id_location = h.id_to_location
+      WHERE h.id_machine = ?
+      ORDER BY h.move_date DESC, h.created_at DESC
+      `,
+      [idMachine]
+    );
+
+    res.json({
+      success: true,
+      message: "Machine location history retrieved successfully",
+      data: {
+        machine: {
+          uuid_machine: uuid,
+          code_machine: machineResult[0].code_machine,
+          type_machine: machineResult[0].type_machine, // <<< CHANGED
+          model_machine: machineResult[0].model_machine, // <<< CHANGED
+        },
+        history: history,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching machine location history:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
   }
 });
