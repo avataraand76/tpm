@@ -70,6 +70,13 @@ export const api = {
       );
       return response.data;
     },
+    batchImport: async (data) => {
+      const response = await httpConnect.post(
+        "/api/machines/batch-import",
+        data
+      );
+      return response.data;
+    },
   },
 
   // MARK: DEPARTMENTS
@@ -170,6 +177,13 @@ export const api = {
     getMachineHistory: async (machineUuid) => {
       const response = await httpConnect.get(
         `/api/machines/${machineUuid}/history`
+      );
+      return response.data;
+    },
+    updateMachineLocationsDirectly: async (data) => {
+      const response = await httpConnect.post(
+        "/api/locations/update-machines",
+        data
       );
       return response.data;
     },

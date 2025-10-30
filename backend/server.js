@@ -189,10 +189,10 @@ app.post("/auth/login", async (req, res) => {
           ma_nv: user.ma_nv,
           name: user.ten_nv,
           job: user.cong_viec_phu_trach,
-          department_id: user.id_bo_phan,
-          department_name: user.ten_bo_phan,
-          division_id: user.id_phong_ban,
-          division_name: user.ten_phong_ban,
+          bophan_id: user.id_bo_phan,
+          bophan_name: user.ten_bo_phan,
+          phongban_id: user.id_phong_ban,
+          phongban_name: user.ten_phong_ban,
           company_id: user.id_company,
           company_name: user.ten_cong_ty,
           id_department: user.id_department, // LƯU Ý id sẽ gồm id_company+id_phong_ban
@@ -737,6 +737,7 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
       repair_cost,
       note,
       current_status,
+      is_borrowed_or_rented_or_borrowed_out_return_date,
     } = req.body;
 
     // Check if machine exists
@@ -789,8 +790,8 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         code_machine = ?,
         serial_machine = ?,
         RFID_machine = ?,
-        type_machine = ?,  -- <<< CHANGED
-        model_machine = ?, -- <<< CHANGED
+        type_machine = ?,
+        model_machine = ?,
         manufacturer = ?,
         price = ?,
         date_of_use = ?,
@@ -798,6 +799,7 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         repair_cost = ?,
         note = ?,
         current_status = ?,
+        is_borrowed_or_rented_or_borrowed_out_return_date = ?,
         updated_by = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE uuid_machine = ?
@@ -815,6 +817,7 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         repair_cost,
         note,
         current_status,
+        is_borrowed_or_rented_or_borrowed_out_return_date,
         userMANV, // updated_by
         uuid,
       ]
@@ -861,6 +864,205 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
       message: "Internal server error",
       error: error.message,
     });
+  }
+});
+
+// POST /api/machines/batch-import - Import multiple machines from Excel
+app.post("/api/machines/batch-import", authenticateToken, async (req, res) => {
+  const connection = await tpmConnection.getConnection();
+  try {
+    const { machines } = req.body; // Expect an array of machine objects
+    const userMANV = req.user.ma_nv;
+
+    if (!machines || !Array.isArray(machines) || machines.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No machine data provided",
+      });
+    }
+
+    await connection.beginTransaction();
+
+    const errors = [];
+    const successes = [];
+    const machinesToInsert = [];
+
+    // --- 1. Lấy tất cả code và serial từ file ---
+    const codesInFile = machines.map((m) => m.code_machine).filter(Boolean);
+    const serialsInFile = machines.map((m) => m.serial_machine).filter(Boolean);
+
+    // --- 2. Kiểm tra trùng lặp trong DB ---
+    let existingCodes = new Set();
+    let existingSerials = new Set();
+
+    if (codesInFile.length > 0) {
+      const [codeRows] = await connection.query(
+        "SELECT code_machine FROM tb_machine WHERE code_machine IN (?)",
+        [codesInFile]
+      );
+      existingCodes = new Set(codeRows.map((r) => r.code_machine));
+    }
+
+    if (serialsInFile.length > 0) {
+      const [serialRows] = await connection.query(
+        "SELECT serial_machine FROM tb_machine WHERE serial_machine IN (?)",
+        [serialsInFile]
+      );
+      existingSerials = new Set(serialRows.map((r) => r.serial_machine));
+    }
+
+    // --- 3. Kiểm tra trùng lặp trong file (nội bộ) ---
+    const codesInThisBatch = new Set();
+    const serialsInThisBatch = new Set();
+
+    // --- 4. Lặp qua để xác thực ---
+    for (let i = 0; i < machines.length; i++) {
+      const machine = machines[i];
+      const line = i + 2; // Giả sử dòng 1 là header
+
+      // Bắt buộc
+      if (
+        !machine.code_machine ||
+        !machine.serial_machine ||
+        !machine.type_machine
+      ) {
+        errors.push({
+          line,
+          code: machine.code_machine || "N/A",
+          serial: machine.serial_machine || "N/A",
+          message: "Thiếu thông tin bắt buộc (Mã máy, Serial, Loại máy)",
+        });
+        continue;
+      }
+
+      // Check DB duplicates
+      if (existingCodes.has(machine.code_machine)) {
+        errors.push({
+          line,
+          code: machine.code_machine,
+          serial: machine.serial_machine,
+          message: `Mã máy "${machine.code_machine}" đã tồn tại trong Cơ sở dữ liệu`,
+        });
+        continue;
+      }
+      if (existingSerials.has(machine.serial_machine)) {
+        errors.push({
+          line,
+          code: machine.code_machine,
+          serial: machine.serial_machine,
+          message: `Serial "${machine.serial_machine}" đã tồn tại trong Cơ sở dữ liệu`,
+        });
+        continue;
+      }
+
+      // Check in-file duplicates
+      if (codesInThisBatch.has(machine.code_machine)) {
+        errors.push({
+          line,
+          code: machine.code_machine,
+          serial: machine.serial_machine,
+          message: `Mã máy "${machine.code_machine}" bị trùng lặp trong file`,
+        });
+        continue;
+      }
+      if (serialsInThisBatch.has(machine.serial_machine)) {
+        errors.push({
+          line,
+          code: machine.code_machine,
+          serial: machine.serial_machine,
+          message: `Serial "${machine.serial_machine}" bị trùng lặp trong file`,
+        });
+        continue;
+      }
+
+      codesInThisBatch.add(machine.code_machine);
+      serialsInThisBatch.add(machine.serial_machine);
+      machinesToInsert.push(machine);
+    }
+
+    // --- 5. Chèn những máy hợp lệ ---
+    if (machinesToInsert.length > 0) {
+      for (const machine of machinesToInsert) {
+        let formattedDate = machine.date_of_use;
+        if (machine.date_of_use) {
+          // Logic định dạng ngày từ Excel (Excel có thể trả về số)
+          if (typeof machine.date_of_use === "number") {
+            // Excel date serial number to JS Date
+            const jsDate = new Date(
+              Math.round((machine.date_of_use - 25569) * 86400 * 1000)
+            );
+            formattedDate = jsDate.toISOString().split("T")[0];
+          } else {
+            // Thử parse string
+            const dateObj = new Date(machine.date_of_use);
+            if (!isNaN(dateObj.getTime())) {
+              const year = dateObj.getFullYear();
+              const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+              const day = String(dateObj.getDate()).padStart(2, "0");
+              formattedDate = `${year}-${month}-${day}`;
+            } else {
+              formattedDate = null; // Hoặc giữ nguyên giá trị nếu không parse được
+            }
+          }
+        }
+
+        await connection.query(
+          `
+          INSERT INTO tb_machine 
+            (code_machine, serial_machine, RFID_machine, type_machine, model_machine, manufacturer, 
+             price, date_of_use, lifespan, repair_cost, note, current_status, id_category,
+             created_by, updated_by)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `,
+          [
+            machine.code_machine,
+            machine.serial_machine,
+            machine.RFID_machine || null,
+            machine.type_machine || null,
+            machine.model_machine || null,
+            machine.manufacturer || null,
+            machine.price || null,
+            formattedDate || null,
+            machine.lifespan || null,
+            machine.repair_cost || null,
+            machine.note || null,
+            machine.current_status || "available",
+            machine.id_category || 1,
+            userMANV, // created_by
+            userMANV, // updated_by
+          ]
+        );
+        successes.push({
+          code: machine.code_machine,
+          serial: machine.serial_machine,
+        });
+      }
+    }
+
+    // Nếu có lỗi nhưng không có máy nào được chèn, vẫn commit (vì không thay đổi DB)
+    // Nếu có máy được chèn, commit
+    await connection.commit();
+
+    res.status(201).json({
+      success: true,
+      message: "Import processing complete",
+      data: {
+        successCount: successes.length,
+        errorCount: errors.length,
+        successes,
+        errors,
+      },
+    });
+  } catch (error) {
+    await connection.rollback();
+    console.error("Error during batch import:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error during import",
+      error: error.message,
+    });
+  } finally {
+    connection.release();
   }
 });
 
@@ -912,12 +1114,10 @@ app.get("/api/locations", authenticateToken, async (req, res) => {
     let params = [];
     let whereConditions = [];
 
-    // <<< START: THÊM LOGIC LỌC THEO ĐƠN VỊ >>>
     if (department_uuid) {
       whereConditions.push(`td.uuid_department = ?`);
       params.push(department_uuid);
     }
-    // <<< END: THÊM LOGIC LỌC THEO ĐƠN VỊ >>>
 
     if (filter_type === "internal") {
       // Req 1.2: HIDE external
@@ -930,6 +1130,12 @@ app.get("/api/locations", authenticateToken, async (req, res) => {
     } else if (filter_type === "external_only") {
       // Req 4.1, 5.1, 6.1: SHOW ONLY external
       whereConditions.push(`td.name_department LIKE '%Đơn vị bên ngoài%'`);
+    } else if (filter_type === "internal_no_warehouse") {
+      // Show internal locations, EXCLUDING warehouses
+      whereConditions.push(
+        `(td.name_department NOT LIKE '%Đơn vị bên ngoài%' OR td.name_department IS NULL)` // Internal
+      );
+      whereConditions.push(`tl.name_location NOT LIKE '%Kho%'`); // Exclude warehouse
     }
     // No filter_type: return all
 
@@ -2007,7 +2213,8 @@ const updateMachineLocationAndStatus = async (
     return;
   }
 
-  let newMachineStatus = "available"; // Default
+  let newMachineStatus = "available";
+  let shouldUpdateBorrowInfo = false; // Flag to control borrow info update
   let newBorrowStatus = null;
   let newBorrowName = null;
   let newBorrowDate = null;
@@ -2016,78 +2223,90 @@ const updateMachineLocationAndStatus = async (
   // --- START NEW LOGIC ---
   if (ticketType === "import") {
     switch (ticketTypeDetail) {
-      // Req 2
-      case "purchased":
-      case "maintenance_return":
-        newMachineStatus = "available"; // Req 2.2
+      case "purchased": // Still clears borrow info
+        newMachineStatus = "available";
+        shouldUpdateBorrowInfo = true; // Clear existing info
         newBorrowStatus = null;
-        break;
-
-      // Req 2
-      case "borrowed_out_return":
-        newMachineStatus = "available"; // Req 2.2
-        newBorrowStatus = null; // Req 2.3 (Clear all borrow fields)
         newBorrowName = null;
         newBorrowDate = null;
         newBorrowReturnDate = null;
         break;
 
-      // Req 3
-      case "borrowed":
-        newMachineStatus = "available"; // Req 3.2 (User requested 'available', not 'in_use')
-        newBorrowStatus = "borrowed"; // Req 3.3
-        newBorrowName = ticketBorrowInfo.name;
-        newBorrowDate = ticketBorrowInfo.date;
-        newBorrowReturnDate = ticketBorrowInfo.return_date;
-        break;
-
-      // Req 3
-      case "rented":
-        newMachineStatus = "available"; // Req 3.2 (User requested 'available', not 'in_use')
-        newBorrowStatus = "rented"; // Req 3.3
-        newBorrowName = ticketBorrowInfo.name;
-        newBorrowDate = ticketBorrowInfo.date;
-        newBorrowReturnDate = ticketBorrowInfo.return_date;
-        break;
-
-      default:
+      // <<< CHANGED: Keep borrow info >>>
+      case "maintenance_return":
         newMachineStatus = "available";
+        shouldUpdateBorrowInfo = false; // Do NOT clear borrow info
+        break;
+
+      case "borrowed_out_return": // Still clears borrow info
+        newMachineStatus = "available";
+        shouldUpdateBorrowInfo = true; // Clear existing info
+        newBorrowStatus = null;
+        newBorrowName = null;
+        newBorrowDate = null;
+        newBorrowReturnDate = null;
+        break;
+
+      case "borrowed": // Sets new borrow info
+        newMachineStatus = "available";
+        shouldUpdateBorrowInfo = true; // Set new info
+        newBorrowStatus = "borrowed";
+        newBorrowName = ticketBorrowInfo.name;
+        newBorrowDate = ticketBorrowInfo.date;
+        newBorrowReturnDate = ticketBorrowInfo.return_date;
+        break;
+
+      case "rented": // Sets new borrow info
+        newMachineStatus = "available";
+        shouldUpdateBorrowInfo = true; // Set new info
+        newBorrowStatus = "rented";
+        newBorrowName = ticketBorrowInfo.name;
+        newBorrowDate = ticketBorrowInfo.date;
+        newBorrowReturnDate = ticketBorrowInfo.return_date;
+        break;
+
+      default: // Default case clears borrow info (shouldn't happen with ENUM)
+        newMachineStatus = "available";
+        shouldUpdateBorrowInfo = true;
         newBorrowStatus = null;
     }
   } else {
     // ticketType === 'export'
     switch (ticketTypeDetail) {
-      // Req 4
+      // <<< CHANGED: Keep borrow info >>>
       case "maintenance":
-        newMachineStatus = "maintenance"; // Req 4.2
-        newBorrowStatus = null;
-        break;
-      case "liquidation":
-        newMachineStatus = "liquidation"; // Req 4.2
-        newBorrowStatus = null;
+        newMachineStatus = "maintenance";
+        shouldUpdateBorrowInfo = false; // Do NOT clear borrow info
         break;
 
-      // Req 5
-      case "borrowed_out":
-        newMachineStatus = "disabled"; // Req 5.2
-        newBorrowStatus = "borrowed_out"; // Req 5.3
-        newBorrowName = ticketBorrowInfo.name;
-        newBorrowDate = ticketBorrowInfo.date;
-        newBorrowReturnDate = ticketBorrowInfo.return_date;
-        break;
-
-      // Req 6
-      case "borrowed_return":
-      case "rented_return":
-        newMachineStatus = "disabled"; // Req 6.2
-        newBorrowStatus = null; // Clear borrow status
+      case "liquidation": // Still clears borrow info
+        newMachineStatus = "liquidation";
+        shouldUpdateBorrowInfo = true; // Clear existing info
+        newBorrowStatus = null;
         newBorrowName = null;
         newBorrowDate = null;
         newBorrowReturnDate = null;
         break;
 
-      default:
+      case "borrowed_out": // Sets new borrow info
+        newMachineStatus = "disabled";
+        shouldUpdateBorrowInfo = true; // Set new info
+        newBorrowStatus = "borrowed_out";
+        newBorrowName = ticketBorrowInfo.name;
+        newBorrowDate = ticketBorrowInfo.date;
+        newBorrowReturnDate = ticketBorrowInfo.return_date;
+        break;
+
+      // <<< CHANGED: Keep borrow info >>>
+      case "borrowed_return":
+      case "rented_return":
+        newMachineStatus = "disabled";
+        shouldUpdateBorrowInfo = false; // Do NOT clear borrow info
+        break;
+
+      default: // Default case clears borrow info (shouldn't happen with ENUM)
         newMachineStatus = "available";
+        shouldUpdateBorrowInfo = true;
         newBorrowStatus = null;
     }
   }
@@ -2152,29 +2371,29 @@ const updateMachineLocationAndStatus = async (
     }
 
     // d. Update tb_machine status
-    await connection.query(
-      `
+    let updateQuery = `
       UPDATE tb_machine
-      SET 
-        current_status = ?, 
+      SET current_status = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP`;
+    let updateParams = [newMachineStatus, userMANV];
+
+    if (shouldUpdateBorrowInfo) {
+      updateQuery += `, 
         is_borrowed_or_rented_or_borrowed_out = ?,
         is_borrowed_or_rented_or_borrowed_out_name = ?,
         is_borrowed_or_rented_or_borrowed_out_date = ?,
-        is_borrowed_or_rented_or_borrowed_out_return_date = ?,
-        updated_by = ?, 
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id_machine = ?
-      `,
-      [
-        newMachineStatus,
+        is_borrowed_or_rented_or_borrowed_out_return_date = ?`;
+      updateParams.push(
         newBorrowStatus,
         newBorrowName,
         newBorrowDate,
-        newBorrowReturnDate,
-        userMANV,
-        idMachine,
-      ]
-    );
+        newBorrowReturnDate
+      );
+    } // If shouldUpdateBorrowInfo is false, borrow fields are NOT included in the UPDATE
+
+    updateQuery += ` WHERE id_machine = ?`;
+    updateParams.push(idMachine);
+
+    await connection.query(updateQuery, updateParams);
   }
 };
 
@@ -2586,11 +2805,7 @@ const handleInternalTransferApproval = async (
       `
       UPDATE tb_machine
       SET 
-        current_status = ?, 
-        is_borrowed_or_rented_or_borrowed_out = NULL,
-        is_borrowed_or_rented_or_borrowed_out_name = NULL,
-        is_borrowed_or_rented_or_borrowed_out_date = NULL,
-        is_borrowed_or_rented_or_borrowed_out_return_date = NULL,
+        current_status = ?,
         updated_by = ?, 
         updated_at = CURRENT_TIMESTAMP
       WHERE id_machine = ?
@@ -2746,3 +2961,158 @@ app.get("/api/machines/:uuid/history", authenticateToken, async (req, res) => {
     });
   }
 });
+
+// POST /api/locations/update-machines - Update locations for multiple machines directly
+app.post(
+  "/api/locations/update-machines",
+  authenticateToken,
+  async (req, res) => {
+    const connection = await tpmConnection.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      const { to_location_uuid, machines } = req.body; // machines: [{ uuid_machine }]
+      const userMANV = req.user.ma_nv;
+
+      if (!to_location_uuid || !machines || machines.length === 0) {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Vị trí đích và danh sách máy là bắt buộc.",
+        });
+      }
+
+      // 1. Lấy ID và tên vị trí đích
+      const [toLocResult] = await connection.query(
+        "SELECT id_location, name_location FROM tb_location WHERE uuid_location = ?",
+        [to_location_uuid]
+      );
+
+      if (toLocResult.length === 0) {
+        await connection.rollback();
+        return res
+          .status(404)
+          .json({ success: false, message: "Không tìm thấy vị trí đích." });
+      }
+      const toLocationId = toLocResult[0].id_location;
+      const toLocationName = toLocResult[0].name_location;
+
+      // 2. Xác định trạng thái mới dựa trên vị trí đích
+      const newMachineStatus =
+        toLocationName && toLocationName.toLowerCase().includes("kho")
+          ? "available"
+          : "in_use";
+
+      // 3. Lặp qua từng máy để cập nhật
+      for (const machine of machines) {
+        if (!machine.uuid_machine) continue;
+
+        // a. Lấy ID máy
+        const [machineResult] = await connection.query(
+          "SELECT id_machine FROM tb_machine WHERE uuid_machine = ?",
+          [machine.uuid_machine]
+        );
+
+        if (machineResult.length === 0) {
+          console.warn(
+            `Machine with UUID ${machine.uuid_machine} not found during direct update. Skipping.`
+          );
+          continue; // Bỏ qua nếu không tìm thấy máy
+        }
+        const idMachine = machineResult[0].id_machine;
+
+        // b. Lấy vị trí hiện tại (from_location_id)
+        const [currentLocResult] = await connection.query(
+          "SELECT id_location FROM tb_machine_location WHERE id_machine = ?",
+          [idMachine]
+        );
+        const idFromLocation =
+          currentLocResult.length > 0 ? currentLocResult[0].id_location : null;
+
+        // Chỉ xử lý nếu vị trí thay đổi hoặc chưa có vị trí
+        if (idFromLocation !== toLocationId) {
+          // c. Ghi lịch sử
+          await connection.query(
+            `
+            INSERT INTO tb_machine_location_history
+              (id_machine, id_from_location, id_to_location, move_date, created_by, updated_by)
+            VALUES (?, ?, ?, CURDATE(), ?, ?)
+            `,
+            [idMachine, idFromLocation, toLocationId, userMANV, userMANV]
+          );
+
+          // d. Cập nhật/Thêm vào tb_machine_location
+          if (currentLocResult.length === 0) {
+            // INSERT
+            await connection.query(
+              `
+              INSERT INTO tb_machine_location
+                (id_machine, id_location, created_by, updated_by)
+              VALUES (?, ?, ?, ?)
+              `,
+              [idMachine, toLocationId, userMANV, userMANV]
+            );
+          } else {
+            // UPDATE
+            await connection.query(
+              `
+              UPDATE tb_machine_location
+              SET id_location = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
+              WHERE id_machine = ?
+              `,
+              [toLocationId, userMANV, idMachine]
+            );
+          }
+
+          // e. Cập nhật trạng thái máy (tb_machine)
+          await connection.query(
+            `
+            UPDATE tb_machine
+            SET 
+              current_status = ?,
+              updated_by = ?, 
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id_machine = ?
+            `,
+            [newMachineStatus, userMANV, idMachine]
+          );
+        } else {
+          // Nếu vị trí không đổi, chỉ cập nhật updated_at và updated_by
+          await connection.query(
+            `
+             UPDATE tb_machine_location
+             SET updated_by = ?, updated_at = CURRENT_TIMESTAMP
+             WHERE id_machine = ?
+             `,
+            [userMANV, idMachine]
+          );
+          // Cũng cập nhật updated_at trên tb_machine
+          await connection.query(
+            `
+              UPDATE tb_machine
+              SET updated_by = ?, updated_at = CURRENT_TIMESTAMP
+              WHERE id_machine = ?
+              `,
+            [userMANV, idMachine]
+          );
+        }
+      } // End for loop
+
+      await connection.commit();
+      res.json({
+        success: true,
+        message: "Cập nhật vị trí máy móc thành công.",
+      });
+    } catch (error) {
+      await connection.rollback();
+      console.error("Error updating machine locations directly:", error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    } finally {
+      connection.release();
+    }
+  }
+);

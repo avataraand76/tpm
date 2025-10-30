@@ -40,6 +40,10 @@ import {
   Menu,
   Checkbox,
   ListItemText,
+  List,
+  ListItem,
+  ListItemIcon,
+  Link,
 } from "@mui/material";
 import {
   PrecisionManufacturing,
@@ -57,7 +61,11 @@ import {
   ReceiptLong,
   SwapHoriz,
   ViewColumn,
+  FileUpload,
+  CheckCircleOutline,
+  ErrorOutline,
 } from "@mui/icons-material";
+import * as XLSX from "xlsx-js-style";
 import { QRCodeSVG } from "qrcode.react";
 import NavigationBar from "../components/NavigationBar";
 import { api } from "../api/api";
@@ -186,6 +194,11 @@ const MachineListPage = () => {
   const [columnMenuAnchor, setColumnMenuAnchor] = useState(null);
   const [machineHistory, setMachineHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importResults, setImportResults] = useState(null);
+  const [fileName, setFileName] = useState("");
 
   const fetchMachines = async (searchQuery = "") => {
     try {
@@ -600,6 +613,263 @@ const MachineListPage = () => {
     }
   };
 
+  const excelHeaderMapping = {
+    // Vietnamese Header : English JSON Key
+    "Mã máy": "code_machine",
+    Serial: "serial_machine",
+    "Loại máy": "type_machine",
+    "Model máy": "model_machine",
+    "Hãng sản xuất": "manufacturer",
+    RFID: "RFID_machine",
+    "Giá (VNĐ)": "price",
+    "Ngày sử dụng (DD/MM/YYYY)": "date_of_use",
+    "Tuổi thọ (năm)": "lifespan",
+    "Chi phí sửa chữa (VNĐ)": "repair_cost",
+    "Ghi chú": "note",
+    "Loại (Máy móc thiết bị/Phụ kiện)": "id_category",
+  };
+  // Lấy danh sách các cột bắt buộc (sẽ dùng để tô màu)
+  const requiredHeaders = [
+    "Mã máy",
+    "Serial",
+    "Loại máy",
+    "Loại (Máy móc thiết bị/Phụ kiện)",
+  ];
+
+  const handleOpenImportDialog = () => {
+    setImportFile(null);
+    setFileName("");
+    setImportResults(null);
+    setIsImporting(false);
+    setImportDialogOpen(true);
+  };
+
+  const handleCloseImportDialog = () => {
+    setImportDialogOpen(false);
+  };
+
+  const handleFileChange = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      setImportFile(file);
+      setFileName(file.name);
+      setImportResults(null); // Reset kết quả khi chọn file mới
+    }
+    // Reset giá trị của input để có thể chọn lại cùng 1 file
+    event.target.value = null;
+  };
+
+  const handleImport = async () => {
+    if (!importFile) {
+      showNotification(
+        "error",
+        "Chưa chọn file",
+        "Vui lòng chọn một file Excel"
+      );
+      return;
+    }
+
+    setIsImporting(true);
+    setImportResults(null);
+
+    // Tạo map dịch ngược (English Key -> Vietnamese Header)
+    const reverseMapping = {};
+    for (const key in excelHeaderMapping) {
+      reverseMapping[excelHeaderMapping[key]] = key;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const data = e.target.result;
+        const workbook = XLSX.read(data, { type: "binary", cellDates: true });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+
+        // Đọc file, sử dụng `raw: false` để lấy giá trị string đã format (ví dụ: ngày tháng)
+        const json = XLSX.utils.sheet_to_json(worksheet, { raw: false });
+
+        if (json.length === 0) {
+          showNotification("error", "File rỗng", "File Excel không có dữ liệu");
+          setIsImporting(false);
+          return;
+        }
+
+        // Kiểm tra header (bằng tiếng Việt)
+        const headersInFile = Object.keys(json[0]);
+        const missingHeaders = requiredHeaders.filter(
+          (h) => !headersInFile.includes(h)
+        );
+
+        if (missingHeaders.length > 0) {
+          showNotification(
+            "error",
+            "File không hợp lệ",
+            `File Excel thiếu các cột bắt buộc: ${missingHeaders.join(", ")}`
+          );
+          setIsImporting(false);
+          return;
+        }
+
+        // --- Chuyển đổi dữ liệu sang định dạng backend ---
+        const machinesToImport = json.map((row) => {
+          const newRow = {};
+
+          // Dịch từ Tiếng Việt -> Tiếng Anh
+          for (const vietnameseHeader in excelHeaderMapping) {
+            const englishKey = excelHeaderMapping[vietnameseHeader];
+            if (row[vietnameseHeader] !== undefined) {
+              newRow[englishKey] = row[vietnameseHeader];
+            }
+          }
+
+          // Xử lý 'id_category'
+          const categoryString = (newRow.id_category || "").toLowerCase();
+          if (categoryString.includes("máy móc")) {
+            newRow.id_category = 1;
+          } else if (categoryString.includes("phụ kiện")) {
+            newRow.id_category = 2;
+          } else {
+            // Mặc định là 1 nếu không điền hoặc điền sai
+            newRow.id_category = 1;
+          }
+
+          // Xử lý 'date_of_use' (DD/MM/YYYY)
+          const dateString = newRow.date_of_use; // Đây có thể là string "DD/MM/YYYY"
+          if (dateString && typeof dateString === "string") {
+            const parts = dateString.split("/");
+            if (parts.length === 3) {
+              // new Date(YYYY, MM-1, DD)
+              const jsDate = new Date(+parts[2], parts[1] - 1, +parts[0]);
+              // Gửi đi dưới dạng ISO string hoặc Date object
+              // server.js đã có logic xử lý Date object, nên ta gửi Date object
+              newRow.date_of_use = jsDate;
+            } else {
+              newRow.date_of_use = null; // Sai định dạng
+            }
+          }
+          // Nếu `cellDates: true` và `raw: false` trả về Date object, nó sẽ được giữ nguyên và server.js xử lý được
+
+          return newRow;
+        });
+
+        // Gửi dữ liệu đã chuyển đổi lên backend
+        const result = await api.machines.batchImport({
+          machines: machinesToImport,
+        });
+
+        if (result.success) {
+          setImportResults(result.data);
+          // Thông báo thành công sẽ hiển thị số lỗi từ backend
+          const errorCount = result.data.errorCount;
+          showNotification(
+            errorCount > 0 ? "warning" : "success",
+            "Hoàn tất import",
+            `Thành công: ${result.data.successCount}, Thất bại: ${errorCount}`
+          );
+          // Tải lại danh sách máy
+          fetchMachines(searchTerm);
+          fetchStats();
+        } else {
+          showNotification(
+            "error",
+            "Lỗi import",
+            result.message || "Lỗi không xác định từ server"
+          );
+        }
+      } catch (err) {
+        console.error("Error parsing or importing file:", err);
+        showNotification(
+          "error",
+          "Lỗi xử lý file",
+          err.response?.data?.message || err.message || "Không thể đọc file"
+        );
+      } finally {
+        setIsImporting(false);
+      }
+    };
+    reader.readAsBinaryString(importFile);
+  };
+
+  const handleDownloadTemplate = () => {
+    // 1. Lấy danh sách header tiếng Việt
+    const headers = Object.keys(excelHeaderMapping);
+
+    // 2. Dữ liệu mẫu
+    const sampleData = [
+      headers, // Dòng 1 là header
+      [
+        // Dữ liệu mẫu 1 (Máy móc)
+        "MAY-MAU-001", // Mã máy
+        "SERIAL-MAU-001", // Serial
+        "Máy phay CNC", // Loại máy
+        "Model-XYZ-123", // Model máy
+        "Hãng SX A", // Hãng sản xuất
+        "RFID-12345", // RFID
+        150000000, // Giá (VNĐ)
+        "15/01/2023", // Ngày sử dụng (DD/MM/YYYY)
+        10, // Tuổi thọ (năm)
+        0, // Chi phí sửa chữa (VNĐ)
+        "Ghi chú cho máy mẫu 1", // Ghi chú
+        "Máy móc thiết bị", // Loại
+      ],
+      [
+        // Dữ liệu mẫu 2 (Phụ kiện)
+        "PK-MAU-002", // Mã máy
+        "SERIAL-MAU-002", // Serial
+        "Đầu kẹp dao", // Loại máy
+        "Model-PK-456", // Model máy
+        "Hãng SX B", // Hãng sản xuất
+        "RFID-67890", // RFID
+        5000000, // Giá (VNĐ)
+        "20/02/2024", // Ngày sử dụng (DD/MM/YYYY)
+        5, // Tuổi thọ (năm)
+        0, // Chi phí sửa chữa (VNĐ)
+        "Ghi chú cho phụ kiện mẫu 2", // Ghi chú
+        "Phụ kiện", // Loại
+      ],
+    ];
+
+    // 3. Tạo Worksheet
+    const ws = XLSX.utils.aoa_to_sheet(sampleData);
+
+    // 4. Tùy chỉnh độ rộng cột
+    ws["!cols"] = [
+      { wch: 20 }, // Mã máy
+      { wch: 20 }, // Serial
+      { wch: 25 }, // Loại máy
+      { wch: 20 }, // Model máy
+      { wch: 15 }, // Hãng sản xuất
+      { wch: 15 }, // RFID
+      { wch: 15 }, // Giá (VNĐ)
+      { wch: 25 }, // Ngày sử dụng (DD/MM/YYYY)
+      { wch: 15 }, // Tuổi thọ (năm)
+      { wch: 25 }, // Chi phí sửa chữa (VNĐ)
+      { wch: 40 }, // Ghi chú
+      { wch: 30 }, // Loại (Máy móc thiết bị/Phụ kiện)
+    ];
+
+    // 5. Tô màu vàng cho header bắt buộc
+    const yellowFill = {
+      fill: {
+        fgColor: { rgb: "FFFF00" }, // Mã màu ARGB
+      },
+    };
+
+    headers.forEach((header, index) => {
+      if (requiredHeaders.includes(header)) {
+        const cellRef = XLSX.utils.encode_cell({ r: 0, c: index }); // Lấy ô (0, index) -> A1, B1, ...
+        if (!ws[cellRef]) ws[cellRef] = {}; // Khởi tạo nếu chưa có
+        ws[cellRef].s = yellowFill; // Áp dụng style (chữ 's' là style)
+      }
+    });
+
+    // 6. Tạo Workbook và tải về
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "DanhSachMayMoc");
+    XLSX.writeFile(wb, "Mau_Excel_MayMoc.xlsx");
+  };
+
   const getStatusColor = (status) => {
     const statusColors = {
       available: { bg: "#2e7d3222", color: "#2e7d32", label: "Sẵn sàng" },
@@ -742,10 +1012,8 @@ const MachineListPage = () => {
     }));
   };
 
-  // <<< CHANGED: Adjust column count (removed Action column) >>>
   const visibleColumnCount =
     1 + Object.values(columnVisibility).filter((v) => v).length;
-  // <<< END OF CHANGE >>>
 
   return (
     <>
@@ -1042,7 +1310,21 @@ const MachineListPage = () => {
                   </Select>
                 </FormControl>
               </Stack>
-              <Stack direction="row" spacing={2}>
+              <Stack direction="row" spacing={2} flexWrap="wrap">
+                <Button
+                  variant="outlined"
+                  startIcon={<FileUpload />}
+                  onClick={handleOpenImportDialog}
+                  sx={{
+                    borderRadius: "12px",
+                    color: "#2e7d32",
+                    borderColor: "#2e7d32",
+                    px: 3,
+                    py: 1.5,
+                  }}
+                >
+                  Nhập Excel
+                </Button>
                 <Button
                   variant="contained"
                   startIcon={<Add />}
@@ -2132,8 +2414,12 @@ const MachineListPage = () => {
                         value={formatDateForInput(
                           editedData.is_borrowed_or_rented_or_borrowed_out_return_date
                         )}
-                        disabled
-                        sx={DISABLED_VIEW_SX}
+                        onChange={(e) =>
+                          handleInputChange(
+                            "is_borrowed_or_rented_or_borrowed_out_return_date",
+                            e.target.value || null // Gửi null nếu ngày bị xóa
+                          )
+                        }
                         InputLabelProps={{ shrink: true }}
                       />
                     </Grid>
@@ -2268,6 +2554,212 @@ const MachineListPage = () => {
               }}
             >
               {isCreateMode ? "Thêm thiết bị mới" : "Lưu thay đổi"}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog
+          open={importDialogOpen}
+          onClose={handleCloseImportDialog}
+          maxWidth="md"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: "20px",
+            },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              pb: 1,
+              background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+              color: "white",
+              fontWeight: 700,
+              borderTopLeftRadius: "20px",
+              borderTopRightRadius: "20px",
+            }}
+          >
+            <Stack
+              direction="row"
+              alignItems="center"
+              justifyContent="space-between"
+            >
+              <Typography variant="h5" fontWeight="bold">
+                Nhập máy móc từ file Excel
+              </Typography>
+              <IconButton
+                onClick={handleCloseImportDialog}
+                size="small"
+                sx={{ color: "white" }}
+              >
+                <Close />
+              </IconButton>
+            </Stack>
+          </DialogTitle>
+          <Divider />
+          <DialogContent
+            sx={{ pt: 3, display: "flex", flexDirection: "column", gap: 3 }}
+          >
+            {/* Hướng dẫn */}
+            <Alert severity="info" sx={{ borderRadius: "12px" }}>
+              <AlertTitle>Hướng dẫn</AlertTitle>
+              <Typography variant="body2" gutterBottom>
+                1. Chuẩn bị file Excel (.xlsx hoặc .xls) với các cột dữ liệu
+                theo đúng tên cột.
+              </Typography>
+              <Typography variant="body2" gutterBottom>
+                2. Các cột <strong>bắt buộc</strong> (được tô vàng trong file
+                mẫu): <strong>Mã máy</strong>, <strong>Serial</strong>,{" "}
+                <strong>Loại máy</strong>,{" "}
+                <strong>Loại (Máy móc thiết bị/Phụ kiện)</strong>.
+              </Typography>
+              <Typography variant="body2" gutterBottom>
+                3. Cột <strong>Loại</strong>: Nhập "
+                <strong>Máy móc thiết bị</strong>" hoặc "
+                <strong>Phụ kiện</strong>".
+              </Typography>
+              <Typography variant="body2" gutterBottom>
+                4. Cột <strong>Ngày sử dụng</strong>: Nhập định dạng{" "}
+                <strong>DD/MM/YYYY</strong> (ví dụ: 31/10/2025).
+              </Typography>
+              <Typography variant="body2">
+                5. Hệ thống sẽ kiểm tra trùng lặp <strong>Mã máy</strong> và{" "}
+                <strong>Serial</strong> đã có trong CSDL.
+              </Typography>
+
+              <Link
+                component="button" // Làm cho nó hoạt động như một nút
+                variant="body2"
+                onClick={handleDownloadTemplate} // Gọi hàm mới tạo
+                sx={{
+                  mt: 1,
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  textDecoration: "underline",
+                }}
+              >
+                Tải xuống file Excel mẫu tại đây
+              </Link>
+            </Alert>
+
+            {/* Chọn file */}
+            <Box>
+              <Button
+                variant="contained"
+                component="label"
+                startIcon={<FileUpload />}
+                sx={{
+                  borderRadius: "12px",
+                  background: "linear-gradient(45deg, #667eea, #764ba2)",
+                }}
+              >
+                Chọn file Excel
+                <input
+                  type="file"
+                  hidden
+                  accept=".xlsx, .xls"
+                  onChange={handleFileChange}
+                />
+              </Button>
+              {fileName && (
+                <Typography variant="body1" sx={{ mt: 2, ml: 1 }}>
+                  Đã chọn: <strong>{fileName}</strong>
+                </Typography>
+              )}
+            </Box>
+
+            {/* Kết quả */}
+            {importResults && (
+              <Box>
+                <Divider sx={{ my: 2 }}>
+                  <Chip label="Kết quả Nhập Excel" />
+                </Divider>
+                <Alert
+                  severity={
+                    importResults.errorCount > 0 ? "warning" : "success"
+                  }
+                  sx={{ borderRadius: "12px", mb: 2 }}
+                >
+                  <AlertTitle>Nhập Excel hoàn tất</AlertTitle>
+                  Đã thêm thành công:{" "}
+                  <strong>{importResults.successCount}</strong> máy.
+                  <br />
+                  Số dòng bị lỗi: <strong>{importResults.errorCount}</strong>.
+                </Alert>
+
+                {importResults.errors.length > 0 && (
+                  <Box>
+                    <Typography variant="h6" color="error" gutterBottom>
+                      Chi tiết lỗi:
+                    </Typography>
+                    <Paper
+                      variant="outlined"
+                      sx={{
+                        maxHeight: 300,
+                        overflow: "auto",
+                        borderRadius: "12px",
+                      }}
+                    >
+                      <List dense>
+                        {importResults.errors.map((err, index) => (
+                          <React.Fragment key={index}>
+                            <ListItem>
+                              <ListItemIcon sx={{ minWidth: "30px" }}>
+                                <ErrorOutline color="error" fontSize="small" />
+                              </ListItemIcon>
+                              <ListItemText
+                                primary={`Dòng ${err.line}: ${err.message}`}
+                                secondary={`Mã máy: ${err.code} | Serial: ${err.serial}`}
+                              />
+                            </ListItem>
+                            <Divider component="li" />
+                          </React.Fragment>
+                        ))}
+                      </List>
+                    </Paper>
+                  </Box>
+                )}
+              </Box>
+            )}
+
+            {isImporting && (
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 2,
+                  justifyContent: "center",
+                  p: 2,
+                }}
+              >
+                <CircularProgress />
+                <Typography>Đang xử lý, vui lòng chờ...</Typography>
+              </Box>
+            )}
+          </DialogContent>
+          <Divider />
+          <DialogActions sx={{ p: 3 }}>
+            <Button
+              onClick={handleCloseImportDialog}
+              variant="outlined"
+              color="inherit"
+              sx={{ borderRadius: "12px" }}
+              disabled={isImporting}
+            >
+              Đóng
+            </Button>
+            <Button
+              onClick={handleImport}
+              variant="contained"
+              startIcon={<Save />}
+              sx={{
+                borderRadius: "12px",
+                background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+              }}
+              disabled={!importFile || isImporting}
+            >
+              {isImporting ? "Đang nhập Excel..." : "Bắt đầu Nhập Excel"}
             </Button>
           </DialogActions>
         </Dialog>
