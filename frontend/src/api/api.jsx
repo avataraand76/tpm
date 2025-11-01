@@ -34,6 +34,13 @@ export const api = {
     return response.data;
   },
 
+  auth: {
+    getPermissions: async () => {
+      const response = await httpConnect.get("/api/auth/permissions");
+      return response.data;
+    },
+  },
+
   // MARK: MACHINES
   machines: {
     getAll: async (params = {}) => {

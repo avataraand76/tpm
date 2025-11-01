@@ -26,10 +26,13 @@ import {
   LocationOn,
 } from "@mui/icons-material";
 import NavigationBar from "../components/NavigationBar";
+import { useAuth } from "../hooks/useAuth";
 
 const HomePage = () => {
   const navigate = useNavigate();
-
+  const { permissions } = useAuth();
+  const canEdit = permissions.includes("edit");
+  const isAdmin = permissions.includes("admin");
   const handleNavigate = (path) => {
     navigate(path);
   };
@@ -350,12 +353,18 @@ const HomePage = () => {
                       transition: "all 0.3s ease",
                     }}
                   >
-                    Theo dõi ngay
+                    Truy cập
                   </Button>
                 </CardContent>
               </Card>
             </Grid>
           </Grid>
+
+          <div style={{ marginTop: "50px" }}>
+            {isAdmin && <>chỉ người có quyền Admin mới thấy</>}
+            {canEdit && <>chỉ người có quyền Edit mới thấy</>}
+            {!canEdit && !isAdmin && <>chỉ người có quyền xem mới thấy</>}
+          </div>
         </Box>
       </Container>
     </>

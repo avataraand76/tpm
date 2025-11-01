@@ -209,6 +209,49 @@ app.post("/auth/login", async (req, res) => {
   }
 });
 
+// GET /api/auth/permissions - Get current user permissions
+app.get("/api/auth/permissions", authenticateToken, async (req, res) => {
+  try {
+    // req.user.id chính là id_nhan_vien (nv.id) đã được gán vào token khi login
+    const id_nhan_vien = req.user.id;
+
+    if (!id_nhan_vien) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID not found in token",
+      });
+    }
+
+    // Truy vấn để lấy tên các quyền từ tb_permission
+    const [permissions] = await tpmConnection.query(
+      `
+      SELECT 
+        p.name_permission
+      FROM tb_user_permission up
+      JOIN tb_permission p ON up.id_permission = p.id_permission
+      WHERE up.id_nhan_vien = ?
+      `,
+      [id_nhan_vien]
+    );
+
+    // Trả về một mảng các tên quyền, ví dụ: ['admin', 'edit']
+    const permissionNames = permissions.map((p) => p.name_permission);
+
+    res.json({
+      success: true,
+      message: "Permissions retrieved successfully",
+      data: permissionNames,
+    });
+  } catch (error) {
+    console.error("Error fetching user permissions:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
 // MARK: MACHINE LIST
 
 // GET /api/machines - Get all machines with pagination
@@ -343,7 +386,9 @@ app.get("/api/machines/stats", authenticateToken, async (req, res) => {
         SUM(CASE WHEN current_status = 'disabled' THEN 1 ELSE 0 END) as disabled,
         SUM(CASE WHEN is_borrowed_or_rented_or_borrowed_out = 'borrowed' THEN 1 ELSE 0 END) as borrowed,
         SUM(CASE WHEN is_borrowed_or_rented_or_borrowed_out = 'rented' THEN 1 ELSE 0 END) as rented,
-        SUM(CASE WHEN is_borrowed_or_rented_or_borrowed_out = 'borrowed_out' THEN 1 ELSE 0 END) as borrowed_out
+        SUM(CASE WHEN is_borrowed_or_rented_or_borrowed_out = 'borrowed_out' THEN 1 ELSE 0 END) as borrowed_out,
+        SUM(CASE WHEN is_borrowed_or_rented_or_borrowed_out = 'borrowed_return' THEN 1 ELSE 0 END) as borrowed_return,
+        SUM(CASE WHEN is_borrowed_or_rented_or_borrowed_out = 'rented_return' THEN 1 ELSE 0 END) as rented_return
       FROM tb_machine
       `
     );
@@ -1035,6 +1080,8 @@ app.post("/api/machines/batch-import", authenticateToken, async (req, res) => {
         successes.push({
           code: machine.code_machine,
           serial: machine.serial_machine,
+          type: machine.type_machine,
+          model: machine.model_machine,
         });
       }
     }
@@ -2207,12 +2254,12 @@ const updateMachineLocationAndStatus = async (
     `SELECT id_machine FROM ${detailTable} WHERE ${ticketIdField} = ?`,
     [ticketId]
   );
-
   if (details.length === 0) {
     console.warn(`No machines found for ${ticketType} ID: ${ticketId}`);
     return;
   }
 
+  // Variables to hold NEW status and borrow info
   let newMachineStatus = "available";
   let shouldUpdateBorrowInfo = false; // Flag to control borrow info update
   let newBorrowStatus = null;
@@ -2220,52 +2267,45 @@ const updateMachineLocationAndStatus = async (
   let newBorrowDate = null;
   let newBorrowReturnDate = null;
 
-  // --- START NEW LOGIC ---
   if (ticketType === "import") {
     switch (ticketTypeDetail) {
-      case "purchased": // Still clears borrow info
+      case "purchased":
         newMachineStatus = "available";
-        shouldUpdateBorrowInfo = true; // Clear existing info
+        shouldUpdateBorrowInfo = true;
         newBorrowStatus = null;
         newBorrowName = null;
         newBorrowDate = null;
         newBorrowReturnDate = null;
         break;
-
-      // <<< CHANGED: Keep borrow info >>>
       case "maintenance_return":
         newMachineStatus = "available";
-        shouldUpdateBorrowInfo = false; // Do NOT clear borrow info
+        shouldUpdateBorrowInfo = false;
         break;
-
-      case "borrowed_out_return": // Still clears borrow info
+      case "borrowed_out_return":
         newMachineStatus = "available";
-        shouldUpdateBorrowInfo = true; // Clear existing info
+        shouldUpdateBorrowInfo = true;
         newBorrowStatus = null;
         newBorrowName = null;
         newBorrowDate = null;
         newBorrowReturnDate = null;
         break;
-
-      case "borrowed": // Sets new borrow info
+      case "borrowed":
         newMachineStatus = "available";
-        shouldUpdateBorrowInfo = true; // Set new info
+        shouldUpdateBorrowInfo = true;
         newBorrowStatus = "borrowed";
         newBorrowName = ticketBorrowInfo.name;
         newBorrowDate = ticketBorrowInfo.date;
         newBorrowReturnDate = ticketBorrowInfo.return_date;
         break;
-
-      case "rented": // Sets new borrow info
+      case "rented":
         newMachineStatus = "available";
-        shouldUpdateBorrowInfo = true; // Set new info
+        shouldUpdateBorrowInfo = true;
         newBorrowStatus = "rented";
         newBorrowName = ticketBorrowInfo.name;
         newBorrowDate = ticketBorrowInfo.date;
         newBorrowReturnDate = ticketBorrowInfo.return_date;
         break;
-
-      default: // Default case clears borrow info (shouldn't happen with ENUM)
+      default:
         newMachineStatus = "available";
         shouldUpdateBorrowInfo = true;
         newBorrowStatus = null;
@@ -2273,44 +2313,44 @@ const updateMachineLocationAndStatus = async (
   } else {
     // ticketType === 'export'
     switch (ticketTypeDetail) {
-      // <<< CHANGED: Keep borrow info >>>
       case "maintenance":
         newMachineStatus = "maintenance";
-        shouldUpdateBorrowInfo = false; // Do NOT clear borrow info
+        shouldUpdateBorrowInfo = false;
         break;
-
-      case "liquidation": // Still clears borrow info
+      case "liquidation":
         newMachineStatus = "liquidation";
-        shouldUpdateBorrowInfo = true; // Clear existing info
+        shouldUpdateBorrowInfo = true;
         newBorrowStatus = null;
         newBorrowName = null;
         newBorrowDate = null;
         newBorrowReturnDate = null;
         break;
-
-      case "borrowed_out": // Sets new borrow info
+      case "borrowed_out":
         newMachineStatus = "disabled";
-        shouldUpdateBorrowInfo = true; // Set new info
+        shouldUpdateBorrowInfo = true;
         newBorrowStatus = "borrowed_out";
         newBorrowName = ticketBorrowInfo.name;
         newBorrowDate = ticketBorrowInfo.date;
         newBorrowReturnDate = ticketBorrowInfo.return_date;
         break;
 
-      // <<< CHANGED: Keep borrow info >>>
       case "borrowed_return":
+        newMachineStatus = "disabled";
+        shouldUpdateBorrowInfo = false;
+        newBorrowStatus = "borrowed_return";
+        break;
       case "rented_return":
         newMachineStatus = "disabled";
-        shouldUpdateBorrowInfo = false; // Do NOT clear borrow info
+        shouldUpdateBorrowInfo = false;
+        newBorrowStatus = "rented_return";
         break;
 
-      default: // Default case clears borrow info (shouldn't happen with ENUM)
+      default:
         newMachineStatus = "available";
         shouldUpdateBorrowInfo = true;
         newBorrowStatus = null;
     }
   }
-  // --- END NEW LOGIC ---
 
   // 2. Loop through each machine for updates
   for (const detail of details) {
@@ -2376,7 +2416,15 @@ const updateMachineLocationAndStatus = async (
       SET current_status = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP`;
     let updateParams = [newMachineStatus, userMANV];
 
-    if (shouldUpdateBorrowInfo) {
+    if (
+      ticketTypeDetail === "borrowed_return" ||
+      ticketTypeDetail === "rented_return"
+    ) {
+      updateQuery += `, is_borrowed_or_rented_or_borrowed_out = ?`;
+      updateParams.push(newBorrowStatus); // newBorrowStatus đã được set trong switch case
+    }
+    // Xử lý cho các trường hợp XÓA hoặc CẬP NHẬT MỚI toàn bộ
+    else if (shouldUpdateBorrowInfo) {
       updateQuery += `, 
         is_borrowed_or_rented_or_borrowed_out = ?,
         is_borrowed_or_rented_or_borrowed_out_name = ?,
@@ -2388,7 +2436,7 @@ const updateMachineLocationAndStatus = async (
         newBorrowDate,
         newBorrowReturnDate
       );
-    } // If shouldUpdateBorrowInfo is false, borrow fields are NOT included in the UPDATE
+    }
 
     updateQuery += ` WHERE id_machine = ?`;
     updateParams.push(idMachine);

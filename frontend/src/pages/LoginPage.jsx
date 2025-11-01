@@ -17,7 +17,7 @@ import {
   InputAdornment,
 } from "@mui/material";
 import { Visibility, VisibilityOff, Warning } from "@mui/icons-material";
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 
 const LoginPage = () => {
   const [formData, setFormData] = useState({

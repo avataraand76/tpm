@@ -155,6 +155,8 @@ const MachineListPage = () => {
     disabled: 0,
     rented: 0,
     borrowed: 0,
+    borrowed_return: 0,
+    rented_return: 0,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -791,85 +793,6 @@ const MachineListPage = () => {
     reader.readAsBinaryString(importFile);
   };
 
-  const handleDownloadTemplate = () => {
-    // 1. Lấy danh sách header tiếng Việt
-    const headers = Object.keys(excelHeaderMapping);
-
-    // 2. Dữ liệu mẫu
-    const sampleData = [
-      headers, // Dòng 1 là header
-      [
-        // Dữ liệu mẫu 1 (Máy móc)
-        "MAY-MAU-001", // Mã máy
-        "SERIAL-MAU-001", // Serial
-        "Máy phay CNC", // Loại máy
-        "Model-XYZ-123", // Model máy
-        "Hãng SX A", // Hãng sản xuất
-        "RFID-12345", // RFID
-        150000000, // Giá (VNĐ)
-        "15/01/2023", // Ngày sử dụng (DD/MM/YYYY)
-        10, // Tuổi thọ (năm)
-        0, // Chi phí sửa chữa (VNĐ)
-        "Ghi chú cho máy mẫu 1", // Ghi chú
-        "Máy móc thiết bị", // Loại
-      ],
-      [
-        // Dữ liệu mẫu 2 (Phụ kiện)
-        "PK-MAU-002", // Mã máy
-        "SERIAL-MAU-002", // Serial
-        "Đầu kẹp dao", // Loại máy
-        "Model-PK-456", // Model máy
-        "Hãng SX B", // Hãng sản xuất
-        "RFID-67890", // RFID
-        5000000, // Giá (VNĐ)
-        "20/02/2024", // Ngày sử dụng (DD/MM/YYYY)
-        5, // Tuổi thọ (năm)
-        0, // Chi phí sửa chữa (VNĐ)
-        "Ghi chú cho phụ kiện mẫu 2", // Ghi chú
-        "Phụ kiện", // Loại
-      ],
-    ];
-
-    // 3. Tạo Worksheet
-    const ws = XLSX.utils.aoa_to_sheet(sampleData);
-
-    // 4. Tùy chỉnh độ rộng cột
-    ws["!cols"] = [
-      { wch: 20 }, // Mã máy
-      { wch: 20 }, // Serial
-      { wch: 25 }, // Loại máy
-      { wch: 20 }, // Model máy
-      { wch: 15 }, // Hãng sản xuất
-      { wch: 15 }, // RFID
-      { wch: 15 }, // Giá (VNĐ)
-      { wch: 25 }, // Ngày sử dụng (DD/MM/YYYY)
-      { wch: 15 }, // Tuổi thọ (năm)
-      { wch: 25 }, // Chi phí sửa chữa (VNĐ)
-      { wch: 40 }, // Ghi chú
-      { wch: 30 }, // Loại (Máy móc thiết bị/Phụ kiện)
-    ];
-
-    // 5. Tô màu vàng cho header bắt buộc
-    const yellowFill = {
-      fill: {
-        fgColor: { rgb: "FFFF00" }, // Mã màu ARGB
-      },
-    };
-
-    headers.forEach((header, index) => {
-      if (requiredHeaders.includes(header)) {
-        const cellRef = XLSX.utils.encode_cell({ r: 0, c: index }); // Lấy ô (0, index) -> A1, B1, ...
-        if (!ws[cellRef]) ws[cellRef] = {}; // Khởi tạo nếu chưa có
-        ws[cellRef].s = yellowFill; // Áp dụng style (chữ 's' là style)
-      }
-    });
-
-    // 6. Tạo Workbook và tải về
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "DanhSachMayMoc");
-    XLSX.writeFile(wb, "Mau_Excel_MayMoc.xlsx");
-  };
-
   const getStatusColor = (status) => {
     const statusColors = {
       available: { bg: "#2e7d3222", color: "#2e7d32", label: "Sẵn sàng" },
@@ -880,6 +803,16 @@ const MachineListPage = () => {
       borrowed_out: { bg: "#00bcd422", color: "#00bcd4", label: "Cho mượn" },
       liquidation: { bg: "#f4433622", color: "#f44336", label: "Thanh lý" },
       disabled: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Vô hiệu hóa" },
+      borrowed_return: {
+        bg: "#03a9f422",
+        color: "#03a9f4",
+        label: "Đã trả (Máy Mượn)",
+      },
+      rented_return: {
+        bg: "#673ab722",
+        color: "#673ab7",
+        label: "Đã trả (Máy Thuê)",
+      },
     };
     return statusColors[status] || { bg: "#f0f0f0", color: "#555", label: "-" };
   };
@@ -902,6 +835,10 @@ const MachineListPage = () => {
         return <Cancel />;
       case "disabled":
         return <Cancel />;
+      case "rented_return":
+        return <ReceiptLong />;
+      case "borrowed_return":
+        return <SwapHoriz />;
       default:
         return <CheckCircle />;
     }
@@ -1088,8 +1025,9 @@ const MachineListPage = () => {
           {/* Cột phụ cho các thẻ còn lại */}
           <Grid size={{ xs: 12, md: 7, lg: 8 }}>
             <Grid container spacing={3}>
+              {/* --- HÀNG 1: TRẠNG THÁI CHÍNH (5 THẺ) --- */}
               {/* Sẵn sàng */}
-              <Grid size={{ xs: 6, sm: 4, md: 3 }}>
+              <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
                 <Card
                   elevation={0}
                   sx={{
@@ -1100,7 +1038,7 @@ const MachineListPage = () => {
                 >
                   <CardContent sx={{ textAlign: "center", py: 3 }}>
                     <Typography variant="h4" fontWeight="bold" color="#2e7d32">
-                      {stats.available}
+                      {stats.available || 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       Sẵn sàng
@@ -1109,7 +1047,7 @@ const MachineListPage = () => {
                 </Card>
               </Grid>
               {/* Đang sử dụng */}
-              <Grid size={{ xs: 6, sm: 4, md: 3 }}>
+              <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
                 <Card
                   elevation={0}
                   sx={{
@@ -1120,7 +1058,7 @@ const MachineListPage = () => {
                 >
                   <CardContent sx={{ textAlign: "center", py: 3 }}>
                     <Typography variant="h4" fontWeight="bold" color="#1976d2">
-                      {stats.in_use}
+                      {stats.in_use || 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       Đang sử dụng
@@ -1129,7 +1067,7 @@ const MachineListPage = () => {
                 </Card>
               </Grid>
               {/* Bảo trì */}
-              <Grid size={{ xs: 6, sm: 4, md: 3 }}>
+              <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
                 <Card
                   elevation={0}
                   sx={{
@@ -1140,7 +1078,7 @@ const MachineListPage = () => {
                 >
                   <CardContent sx={{ textAlign: "center", py: 3 }}>
                     <Typography variant="h4" fontWeight="bold" color="#ff9800">
-                      {stats.maintenance}
+                      {stats.maintenance || 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       Bảo trì
@@ -1149,7 +1087,7 @@ const MachineListPage = () => {
                 </Card>
               </Grid>
               {/* Thanh lý */}
-              <Grid size={{ xs: 6, sm: 4, md: 3 }}>
+              <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
                 <Card
                   elevation={0}
                   sx={{
@@ -1160,7 +1098,7 @@ const MachineListPage = () => {
                 >
                   <CardContent sx={{ textAlign: "center", py: 3 }}>
                     <Typography variant="h4" fontWeight="bold" color="#f44336">
-                      {stats.liquidation}
+                      {stats.liquidation || 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       Thanh lý
@@ -1168,68 +1106,8 @@ const MachineListPage = () => {
                   </CardContent>
                 </Card>
               </Grid>
-              {/* Thuê */}
-              <Grid size={{ xs: 6, sm: 4, md: 3 }}>
-                <Card
-                  elevation={0}
-                  sx={{
-                    borderRadius: "20px",
-                    background: "#673ab711",
-                    border: "1px solid rgba(0, 0, 0, 0.05)",
-                  }}
-                >
-                  <CardContent sx={{ textAlign: "center", py: 3 }}>
-                    <Typography variant="h4" fontWeight="bold" color="#673ab7">
-                      {stats.rented}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Thuê
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-              {/* Mượn */}
-              <Grid size={{ xs: 6, sm: 4, md: 3 }}>
-                <Card
-                  elevation={0}
-                  sx={{
-                    borderRadius: "20px",
-                    background: "#03a9f411",
-                    border: "1px solid rgba(0, 0, 0, 0.05)",
-                  }}
-                >
-                  <CardContent sx={{ textAlign: "center", py: 3 }}>
-                    <Typography variant="h4" fontWeight="bold" color="#03a9f4">
-                      {stats.borrowed}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Mượn
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-              {/* Cho mượn */}
-              <Grid size={{ xs: 6, sm: 4, md: 3 }}>
-                <Card
-                  elevation={0}
-                  sx={{
-                    borderRadius: "20px",
-                    background: "#00bcd411",
-                    border: "1px solid rgba(0, 0, 0, 0.05)",
-                  }}
-                >
-                  <CardContent sx={{ textAlign: "center", py: 3 }}>
-                    <Typography variant="h4" fontWeight="bold" color="#00bcd4">
-                      {stats.borrowed_out}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Cho mượn
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-              {/* Vô hiệu hóa */}
-              <Grid size={{ xs: 6, sm: 4, md: 3 }}>
+              {/* Vô hiệu hóa (ĐÃ CHUYỂN LÊN) */}
+              <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
                 <Card
                   elevation={0}
                   sx={{
@@ -1240,10 +1118,112 @@ const MachineListPage = () => {
                 >
                   <CardContent sx={{ textAlign: "center", py: 3 }}>
                     <Typography variant="h4" fontWeight="bold" color="#9e9e9e">
-                      {stats.disabled}
+                      {stats.disabled || 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       Vô hiệu hóa
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* --- HÀNG 2: THUÊ, MƯỢN, CHO MƯỢN (5 THẺ) --- */}
+              {/* Thuê */}
+              <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
+                <Card
+                  elevation={0}
+                  sx={{
+                    borderRadius: "20px",
+                    background: "#673ab711",
+                    border: "1px solid rgba(0, 0, 0, 0.05)",
+                  }}
+                >
+                  <CardContent sx={{ textAlign: "center", py: 3 }}>
+                    <Typography variant="h4" fontWeight="bold" color="#673ab7">
+                      {stats.rented || 0}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Thuê
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+              {/* Đã trả (Máy thuê) */}
+              <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
+                <Card
+                  elevation={0}
+                  sx={{
+                    borderRadius: "20px",
+                    background: "#673ab711", // Màu tím thuê
+                    border: "1px solid rgba(0, 0, 0, 0.05)",
+                  }}
+                >
+                  <CardContent sx={{ textAlign: "center", py: 3 }}>
+                    <Typography variant="h4" fontWeight="bold" color="#673ab7">
+                      {stats.rented_return || 0}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Đã trả (Máy thuê)
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+              {/* Mượn */}
+              <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
+                <Card
+                  elevation={0}
+                  sx={{
+                    borderRadius: "20px",
+                    background: "#03a9f411",
+                    border: "1px solid rgba(0, 0, 0, 0.05)",
+                  }}
+                >
+                  <CardContent sx={{ textAlign: "center", py: 3 }}>
+                    <Typography variant="h4" fontWeight="bold" color="#03a9f4">
+                      {stats.borrowed || 0}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Mượn
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+              {/* Đã trả (Máy mượn) */}
+              <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
+                <Card
+                  elevation={0}
+                  sx={{
+                    borderRadius: "20px",
+                    background: "#03a9f411", // Màu xanh mượn
+                    border: "1px solid rgba(0, 0, 0, 0.05)",
+                  }}
+                >
+                  <CardContent sx={{ textAlign: "center", py: 3 }}>
+                    <Typography variant="h4" fontWeight="bold" color="#03a9f4">
+                      {stats.borrowed_return || 0}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Đã trả (Máy mượn)
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+              {/* Cho mượn (ĐÃ CHUYỂN LÊN) */}
+              <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
+                <Card
+                  elevation={0}
+                  sx={{
+                    borderRadius: "20px",
+                    background: "#00bcd411",
+                    border: "1px solid rgba(0, 0, 0, 0.05)",
+                  }}
+                >
+                  <CardContent sx={{ textAlign: "center", py: 3 }}>
+                    <Typography variant="h4" fontWeight="bold" color="#00bcd4">
+                      {stats.borrowed_out || 0}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Cho mượn
                     </Typography>
                   </CardContent>
                 </Card>
@@ -1363,7 +1343,7 @@ const MachineListPage = () => {
                 <Button
                   variant="contained"
                   startIcon={<Refresh />}
-                  onClick={() => fetchMachines(searchTerm)}
+                  onClick={() => fetchMachines(searchTerm) && fetchStats()}
                   sx={{
                     borderRadius: "12px",
                     background: "linear-gradient(45deg, #667eea, #764ba2)",
@@ -2587,13 +2567,6 @@ const MachineListPage = () => {
               <Typography variant="h5" fontWeight="bold">
                 Nhập máy móc từ file Excel
               </Typography>
-              <IconButton
-                onClick={handleCloseImportDialog}
-                size="small"
-                sx={{ color: "white" }}
-              >
-                <Close />
-              </IconButton>
             </Stack>
           </DialogTitle>
           <Divider />
@@ -2628,9 +2601,9 @@ const MachineListPage = () => {
               </Typography>
 
               <Link
-                component="button" // Làm cho nó hoạt động như một nút
+                href="/Mau_Excel_MayMoc.xlsx" // Đường dẫn tới file trong thư mục public
+                download="Mau_Excel_MayMoc.xlsx" // Tên file khi tải về
                 variant="body2"
-                onClick={handleDownloadTemplate} // Gọi hàm mới tạo
                 sx={{
                   mt: 1,
                   fontWeight: "bold",
@@ -2687,6 +2660,42 @@ const MachineListPage = () => {
                   <br />
                   Số dòng bị lỗi: <strong>{importResults.errorCount}</strong>.
                 </Alert>
+
+                {importResults.successes.length > 0 && (
+                  <Box sx={{ mb: 2 }}>
+                    <Typography variant="h6" color="success.main" gutterBottom>
+                      Chi tiết thành công:
+                    </Typography>
+                    <Paper
+                      variant="outlined"
+                      sx={{
+                        maxHeight: 300,
+                        overflow: "auto",
+                        borderRadius: "12px",
+                      }}
+                    >
+                      <List dense>
+                        {importResults.successes.map((succ, index) => (
+                          <React.Fragment key={index}>
+                            <ListItem>
+                              <ListItemIcon sx={{ minWidth: "30px" }}>
+                                <CheckCircleOutline
+                                  color="success"
+                                  fontSize="small"
+                                />
+                              </ListItemIcon>
+                              <ListItemText
+                                primary={`${succ.type} - ${succ.model}`}
+                                secondary={`Mã máy: ${succ.code} | Serial: ${succ.serial}`}
+                              />
+                            </ListItem>
+                            <Divider component="li" />
+                          </React.Fragment>
+                        ))}
+                      </List>
+                    </Paper>
+                  </Box>
+                )}
 
                 {importResults.errors.length > 0 && (
                   <Box>

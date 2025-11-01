@@ -26,7 +26,7 @@ import {
   Receipt,
   LocationOn,
 } from "@mui/icons-material";
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 
 const NavigationBar = () => {
   const { user, logout, isAuthenticated } = useAuth();

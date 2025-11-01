@@ -979,16 +979,16 @@ const TicketManagementPage = () => {
                                 Xuất cho mượn
                               </MenuItem>,
                               <MenuItem
-                                key="borrowed_return"
-                                value="borrowed_return"
-                              >
-                                Xuất trả (máy mượn)
-                              </MenuItem>,
-                              <MenuItem
                                 key="rented_return"
                                 value="rented_return"
                               >
                                 Xuất trả (máy thuê)
+                              </MenuItem>,
+                              <MenuItem
+                                key="borrowed_return"
+                                value="borrowed_return"
+                              >
+                                Xuất trả (máy mượn)
                               </MenuItem>,
                             ]}
                       </TextField>
@@ -1444,14 +1444,14 @@ const TicketManagementPage = () => {
                           <MenuItem key="borrowed_out" value="borrowed_out">
                             Xuất cho mượn
                           </MenuItem>,
+                          <MenuItem key="rented_return" value="rented_return">
+                            Xuất trả (máy thuê)
+                          </MenuItem>,
                           <MenuItem
                             key="borrowed_return"
                             value="borrowed_return"
                           >
                             Xuất trả (máy mượn)
-                          </MenuItem>,
-                          <MenuItem key="rented_return" value="rented_return">
-                            Xuất trả (máy thuê)
                           </MenuItem>,
                         ]}
                   </TextField>

@@ -21,15 +21,12 @@ create table if not exists tb_permission
 -- MARK: role phân quyền
 create table if not exists tb_user_permission
 (
-    -- primary
-    id_user_permission bigint not null auto_increment,
-    uuid_user_permission varchar(36) not null unique default (UUID()),
-    
     -- foreign
     id_permission bigint,
+    id_nhan_vien bigint, -- sync data hi time sheet
 
     -- key
-    primary key (id_user_permission),
+    unique (id_permission, id_nhan_vien),
     
     -- timestamp
     created_at timestamp default current_timestamp,
@@ -125,7 +122,7 @@ create table if not exists tb_machine
     lifespan int, -- tuổi thọ
     repair_cost decimal(15, 0), -- chi phí sửa chữa
     current_status enum('available', 'in_use', 'maintenance', 'liquidation', 'disabled') default 'available',
-	is_borrowed_or_rented_or_borrowed_out enum ('borrowed', 'rented', 'borrowed_out'),
+	is_borrowed_or_rented_or_borrowed_out enum ('borrowed', 'rented', 'borrowed_out', 'borrowed_return', 'rented_return'),
     is_borrowed_or_rented_or_borrowed_out_name text,
 	is_borrowed_or_rented_or_borrowed_out_date date,
 	is_borrowed_or_rented_or_borrowed_out_return_date date,
@@ -492,3 +489,5 @@ insert into tb_location (name_location, id_department) values
 ('Công ty C', 9),
 ('Đơn vị thanh lý', 9),
 ('Đơn vị bảo trì', 9);
+
+insert into tb_permission (name_permission) values ('admin'), ('edit'), ('view');
