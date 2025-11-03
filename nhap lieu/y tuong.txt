@@ -7,6 +7,7 @@
 -trang danh sách thiết bị // done
 -in mã QR or RFID // pending in được nhưng hold vì không biết khổ giấy
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 nhửng gì đả lèm dc
 
 1.trang danh sách thiết bị
@@ -18,6 +19,7 @@ nhửng gì đả lèm dc
 
 tôi muốn chỉnh sửa backend và frontend của phần tạo phiếu, liên quan tới phần cập nhật trạng thái của máy móc khi duyệt phiếu
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 hiện tại trong database
 tb_machine:
 -trạng thái của máy móc (available, in_use, maintance, liquidation, disabled)
@@ -58,3 +60,34 @@ tb_export
 
 6. làm phiếu trả mượn/thuê borrowed_return, rented_return
 -làm phiếu này sẽ chỉ hiện các location có tb_department là '%Đơn vị bên ngoài%', khi duyệt phiếu sẽ set status disabled
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+tôi có tạo các trường hợp status và is_borrowed_or_rented_or_borrowed_out như sau
+1 máy có status là available (sẵn sàng)
+2 máy có status là in_use (đang sử dụng)
+3 máy có status là maintenance (bảo trì)
+4 máy có status là liquidation (thanh lý)
+5 máy có status là broken (máy hư)
+6 máy có status là disabled và is_borrowed_or_rented_or_borrowed_out là borrowed_out (cho mượn)
+7 máy có status là available và is_borrowed_or_rented_or_borrowed_out là borrowed (máy mượn)
+8 máy có status là in_use và is_borrowed_or_rented_or_borrowed_out là borrowed (máy mượn)
+9 máy có status là broken và is_borrowed_or_rented_or_borrowed_out là borrowed (máy mượn)
+10 máy có status là available và is_borrowed_or_rented_or_borrowed_out là rented (máy thuê)
+11 máy có status là in_use và is_borrowed_or_rented_or_borrowed_out là rented (máy thuê)
+12 máy có status là broken và is_borrowed_or_rented_or_borrowed_out là rented (máy thuê)
+13 máy có status là disabled và is_borrowed_or_rented_or_borrowed_out là borrowed_return (trả máy mượn)
+14 máy có status là disabled và is_borrowed_or_rented_or_borrowed_out là rented_return (trả máy thuê)
+
+chỉnh sửa chức năng tìm kiếm và quét QR chỉ hiện các máy móc theo các trường hợp tạo phiếu nhập, xuất, điều chuyển nội bộ, cập nhật vị trí
+a. nhập mua mới (chỉ hiện trường hợp 1)
+b. nhập sau bảo trì (chỉ hiện trường hợp 3)
+c. nhập thuê (chỉ hiện trường hợp 1,13,14)
+d. nhập mượn (chỉ hiện trường hợp 1,13,14)
+e. nhập trả (máy cho mượn) (chỉ hiện trường hợp 6)
+f. xuất thanh lý (chỉ hiện trường hợp 1,2,5)
+g. xuất bảo trì (chỉ hiện trường hợp 1,2,5)
+h. xuất cho mượn (chỉ hiện trường hợp 1,2)
+i. xuất trả (máy thuê) (chỉ hiện trường hợp 10,11,12)
+j. xuất trả (máy mượn) (chỉ hiện trường hợp 7,8,9)
+k. điều chuyển nội bộ (chỉ hiện trường hợp 1,2,5,7,8,9,10,11,12)
+l. cập nhật vị trí (ko quan tâm status và is_borrowed_or_rented_or_borrowed_out)

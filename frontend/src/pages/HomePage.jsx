@@ -361,9 +361,9 @@ const HomePage = () => {
           </Grid>
 
           <div style={{ marginTop: "50px" }}>
-            {isAdmin && <>chỉ người có quyền Admin mới thấy</>}
-            {canEdit && <>chỉ người có quyền Edit mới thấy</>}
-            {!canEdit && !isAdmin && <>chỉ người có quyền xem mới thấy</>}
+            {isAdmin && <>chỉ người có quyền ADMIN mới thấy</>}
+            {canEdit && <>chỉ người có quyền EDIT mới thấy</>}
+            {!canEdit && !isAdmin && <>chỉ người có quyền VIEW mới thấy</>}
           </div>
         </Box>
       </Container>

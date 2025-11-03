@@ -343,7 +343,6 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
       LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
       LEFT JOIN tb_location tl ON tl.id_location = ml.id_location
       ${whereClause}
-      ORDER BY m.code_machine ASC
       LIMIT ? OFFSET ?
     `;
 
@@ -384,6 +383,7 @@ app.get("/api/machines/stats", authenticateToken, async (req, res) => {
         SUM(CASE WHEN current_status = 'maintenance' THEN 1 ELSE 0 END) as maintenance,
         SUM(CASE WHEN current_status = 'liquidation' THEN 1 ELSE 0 END) as liquidation,
         SUM(CASE WHEN current_status = 'disabled' THEN 1 ELSE 0 END) as disabled,
+        SUM(CASE WHEN current_status = 'broken' THEN 1 ELSE 0 END) as broken,
         SUM(CASE WHEN is_borrowed_or_rented_or_borrowed_out = 'borrowed' THEN 1 ELSE 0 END) as borrowed,
         SUM(CASE WHEN is_borrowed_or_rented_or_borrowed_out = 'rented' THEN 1 ELSE 0 END) as rented,
         SUM(CASE WHEN is_borrowed_or_rented_or_borrowed_out = 'borrowed_out' THEN 1 ELSE 0 END) as borrowed_out,
@@ -414,6 +414,7 @@ app.get("/api/machines/search", authenticateToken, async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10; // Giới hạn số lượng kết quả trả về
     const offset = (page - 1) * limit;
+    const { ticket_type } = req.query;
 
     if (!search || search.length < 2) {
       return res.json({
@@ -425,19 +426,35 @@ app.get("/api/machines/search", authenticateToken, async (req, res) => {
     }
 
     const searchPattern = `%${search}%`;
-    const searchParams = [
+    let searchParams = [
       searchPattern,
       searchPattern,
       searchPattern,
       searchPattern,
-    ]; // <<< CHANGED (4 params)
+      searchPattern,
+    ];
+
+    let whereConditions = [
+      `(m.type_machine LIKE ? OR m.model_machine LIKE ? OR m.code_machine LIKE ? OR m.serial_machine LIKE ? OR m.RFID_machine LIKE ?)`,
+    ];
+
+    // <<< BẮT ĐẦU THAY THẾ LOGIC LỌC
+    // Rule (l): Cập nhật vị trí không cần lọc gì thêm
+    if (ticket_type && ticket_type !== "update_location") {
+      const conditions = getMachineFilterConditions(ticket_type);
+      if (conditions.where) {
+        whereConditions.push(conditions.where);
+      }
+      // Không cần thêm params vì logic mới không dùng placeholder
+    }
+
+    const whereClause = `WHERE ${whereConditions.join(" AND ")}`;
 
     // 1. Get total count
     const countQuery = `
       SELECT COUNT(*) as total
       FROM tb_machine m
-      WHERE (m.type_machine LIKE ? OR m.model_machine LIKE ? OR m.code_machine LIKE ? OR m.serial_machine LIKE ?) -- <<< CHANGED
-      -- AND m.current_status = 'available'
+      ${whereClause} 
     `;
 
     const [countResult] = await tpmConnection.query(countQuery, searchParams);
@@ -450,9 +467,10 @@ app.get("/api/machines/search", authenticateToken, async (req, res) => {
       SELECT 
         m.uuid_machine,
         m.code_machine,
-        m.type_machine,  -- <<< CHANGED
-        m.model_machine, -- <<< CHANGED
+        m.type_machine,
+        m.model_machine,
         m.serial_machine,
+        m.RFID_machine,
         m.current_status,
         m.is_borrowed_or_rented_or_borrowed_out,
         c.name_category,
@@ -462,9 +480,7 @@ app.get("/api/machines/search", authenticateToken, async (req, res) => {
       LEFT JOIN tb_category c ON c.id_category = m.id_category
       LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
       LEFT JOIN tb_location tl ON tl.id_location = ml.id_location
-      WHERE (m.type_machine LIKE ? OR m.model_machine LIKE ? OR m.code_machine LIKE ? OR m.serial_machine LIKE ?) -- <<< CHANGED
-      -- AND m.current_status = 'available'
-      ORDER BY m.code_machine ASC
+      ${whereClause}
       LIMIT ? OFFSET ?
     `;
 
@@ -566,6 +582,7 @@ app.get(
   async (req, res) => {
     try {
       const { serial } = req.params;
+      const { ticket_type } = req.query;
 
       if (!serial) {
         return res.status(400).json({
@@ -573,6 +590,28 @@ app.get(
           message: "Serial number is required",
         });
       }
+
+      let whereConditions = [`m.serial_machine = ?`];
+      let queryParams = [serial];
+      let notFoundMessage;
+
+      const filterConditions = getMachineFilterConditions(ticket_type);
+
+      // Rule (l): Cập nhật vị trí không cần lọc gì thêm
+      if (ticket_type && ticket_type !== "update_location") {
+        if (filterConditions.where) {
+          whereConditions.push(filterConditions.where);
+        }
+      } else if (!ticket_type) {
+        // Nếu không có ticket_type (mặc định), áp dụng quy tắc 'purchased'
+        const defaultConditions = getMachineFilterConditions("purchased");
+        whereConditions.push(defaultConditions.where);
+      }
+      // Nếu là 'update_location', không thêm 'where'
+
+      notFoundMessage = filterConditions.message;
+
+      const whereClause = `WHERE ${whereConditions.join(" AND ")}`;
 
       // Truy vấn máy móc, loại máy, và vị trí hiện tại của nó
       const dataQuery = `
@@ -594,17 +633,16 @@ app.get(
       LEFT JOIN tb_category c ON c.id_category = m.id_category
       LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
       LEFT JOIN tb_location tl ON tl.id_location = ml.id_location
-      WHERE m.serial_machine = ?
-      AND m.current_status = 'available'
+      ${whereClause}
       LIMIT 1
     `;
 
-      const [machines] = await tpmConnection.query(dataQuery, [serial]);
+      const [machines] = await tpmConnection.query(dataQuery, queryParams);
 
       if (machines.length === 0) {
         return res.status(404).json({
           success: false,
-          message: "Không tìm thấy máy móc có sẵn với Serial này",
+          message: notFoundMessage,
         });
       }
 
@@ -623,6 +661,125 @@ app.get(
     }
   }
 );
+
+const getMachineFilterConditions = (ticket_type) => {
+  let where = "";
+  let message = "Không tìm thấy máy phù hợp với loại phiếu này.";
+
+  // Bảng chú thích các Case:
+  // Case 1: (status = 'available' AND is_... IS NULL)
+  // Case 2: (status = 'in_use' AND is_... IS NULL)
+  // Case 3: (status = 'maintenance' AND is_... IS NULL)
+  // Case 5: (status = 'broken' AND is_... IS NULL)
+  // Case 6: (status = 'disabled' AND is_... = 'borrowed_out')
+  // Case 7,8,9: (status IN ('available', 'in_use', 'broken') AND is_... = 'borrowed')
+  // Case 10,11,12: (status IN ('available', 'in_use', 'broken') AND is_... = 'rented')
+  // Case 13: (status = 'disabled' AND is_... = 'borrowed_return')
+  // Case 14: (status = 'disabled' AND is_... = 'rented_return')
+
+  switch (ticket_type) {
+    // a. nhập mua mới (chỉ hiện trường hợp 1)
+    case "purchased":
+      where = `(m.current_status = 'available' AND m.is_borrowed_or_rented_or_borrowed_out IS NULL)`;
+      message =
+        "Chỉ nhận những máy có trạng thái 'Sẵn sàng' (không mượn/thuê/cho mượn).";
+      break;
+
+    // b. nhập sau bảo trì (chỉ hiện trường hợp 3)
+    case "maintenance_return":
+      where = `(m.current_status = 'maintenance' AND m.is_borrowed_or_rented_or_borrowed_out IS NULL)`;
+      message = "Chỉ nhận những máy có trạng thái 'Bảo trì'.";
+      break;
+
+    // c. nhập thuê (chỉ hiện trường hợp 1,13,14)
+    case "rented":
+      where = `( 
+        (m.current_status = 'available' AND m.is_borrowed_or_rented_or_borrowed_out IS NULL) OR 
+        (m.current_status = 'disabled' AND m.is_borrowed_or_rented_or_borrowed_out = 'borrowed_return') OR
+        (m.current_status = 'disabled' AND m.is_borrowed_or_rented_or_borrowed_out = 'rented_return')
+      )`;
+      message =
+        "Chỉ nhận những máy có trạng thái 'Sẵn sàng' hoặc máy 'Đã trả' (mượn/thuê).";
+      break;
+
+    // d. nhập mượn (chỉ hiện trường hợp 1,13,14)
+    case "borrowed":
+      where = `( 
+        (m.current_status = 'available' AND m.is_borrowed_or_rented_or_borrowed_out IS NULL) OR 
+        (m.current_status = 'disabled' AND m.is_borrowed_or_rented_or_borrowed_out = 'borrowed_return') OR
+        (m.current_status = 'disabled' AND m.is_borrowed_or_rented_or_borrowed_out = 'rented_return')
+      )`;
+      message =
+        "Chỉ nhận những máy có trạng thái 'Sẵn sàng' hoặc máy 'Đã trả' (mượn/thuê).";
+      break;
+
+    // e. nhập trả (máy cho mượn) (chỉ hiện trường hợp 6)
+    case "borrowed_out_return":
+      where = `(m.current_status = 'disabled' AND m.is_borrowed_or_rented_or_borrowed_out = 'borrowed_out')`;
+      message = "Chỉ nhận những máy có trạng thái 'Cho mượn'.";
+      break;
+
+    // f. xuất thanh lý (chỉ hiện trường hợp 1,2,5)
+    case "liquidation":
+      where = `(m.current_status IN ('available', 'in_use', 'broken') AND m.is_borrowed_or_rented_or_borrowed_out IS NULL)`;
+      message =
+        "Chỉ nhận những máy có trạng thái 'Sẵn sàng', 'Đang sử dụng', 'Máy hư' (không mượn/thuê).";
+      break;
+
+    // g. xuất bảo trì (chỉ hiện trường hợp 1,2,5)
+    case "maintenance":
+      where = `(m.current_status IN ('available', 'in_use', 'broken') AND m.is_borrowed_or_rented_or_borrowed_out IS NULL)`;
+      message =
+        "Chỉ nhận những máy có trạng thái 'Sẵn sàng', 'Đang sử dụng', 'Máy hư' (không mượn/thuê).";
+      break;
+
+    // h. xuất cho mượn (chỉ hiện trường hợp 1,2)
+    case "borrowed_out":
+      where = `(m.current_status IN ('available', 'in_use') AND m.is_borrowed_or_rented_or_borrowed_out IS NULL)`;
+      message =
+        "Chỉ nhận những máy có trạng thái 'Sẵn sàng', 'Đang sử dụng' (không mượn/thuê).";
+      break;
+
+    // i. xuất trả (máy thuê) (chỉ hiện trường hợp 10,11,12)
+    case "rented_return":
+      where = `(m.current_status IN ('available', 'in_use', 'broken') AND m.is_borrowed_or_rented_or_borrowed_out = 'rented')`;
+      message =
+        "Chỉ nhận những máy có trạng thái 'Đang thuê' (Sẵn sàng/Sử dụng/Hư).";
+      break;
+
+    // j. xuất trả (máy mượn) (chỉ hiện trường hợp 7,8,9)
+    case "borrowed_return":
+      where = `(m.current_status IN ('available', 'in_use', 'broken') AND m.is_borrowed_or_rented_or_borrowed_out = 'borrowed')`;
+      message =
+        "Chỉ nhận những máy có trạng thái 'Đang mượn' (Sẵn sàng/Sử dụng/Hư).";
+      break;
+
+    // k. điều chuyển nội bộ (chỉ hiện trường hợp 1,2,5,7,8,9,10,11,12)
+    case "internal":
+      where = `(
+        m.current_status IN ('available', 'in_use', 'broken') AND 
+        (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out IN ('borrowed', 'rented'))
+      )`;
+      message =
+        "Chỉ nhận những máy có trạng thái 'Sẵn sàng', 'Đang sử dụng', 'Máy hư' (bao gồm cả máy đang mượn/thuê).";
+      break;
+
+    // l. cập nhật vị trí (ko quan tâm status và is_borrowed_or_rented_or_borrowed_out)
+    case "update_location":
+      where = null; // Không có điều kiện lọc
+      message = "Không tìm thấy máy."; // (Vẫn cần thông báo lỗi chung)
+      break;
+
+    // Mặc định (nếu ticket_type không xác định, ví dụ: scanner mở trước khi chọn loại phiếu)
+    default:
+      where = `(m.current_status = 'available' AND m.is_borrowed_or_rented_or_borrowed_out IS NULL)`;
+      message =
+        "Chỉ nhận những máy có trạng thái 'Sẵn sàng' (không mượn/thuê/cho mượn).";
+      break;
+  }
+
+  return { where, message };
+};
 
 // POST /api/machines - Create new machine
 app.post("/api/machines", authenticateToken, async (req, res) => {
@@ -1122,9 +1279,13 @@ app.get("/api/departments", authenticateToken, async (req, res) => {
       `
       SELECT 
         uuid_department, 
-        name_department 
-      FROM tb_department 
-      ORDER BY id_department ASC
+        name_department,
+        COUNT(ml.id_machine) AS machine_count
+      FROM tb_department td
+      LEFT JOIN tb_location tl ON tl.id_department = td.id_department
+      LEFT JOIN tb_machine_location ml ON ml.id_location = tl.id_location
+      GROUP BY td.id_department, td.name_department
+      ORDER BY td.id_department ASC
       `
     );
 
@@ -1154,9 +1315,11 @@ app.get("/api/locations", authenticateToken, async (req, res) => {
       SELECT 
         tl.uuid_location, 
         tl.name_location,
-        td.name_department
+        td.name_department,
+        COUNT(ml.id_machine) AS machine_count
       FROM tb_location tl
       LEFT JOIN tb_department td ON td.id_department = tl.id_department
+      LEFT JOIN tb_machine_location ml ON ml.id_location = tl.id_location
     `;
     let params = [];
     let whereConditions = [];
@@ -1190,7 +1353,7 @@ app.get("/api/locations", authenticateToken, async (req, res) => {
       query += ` WHERE ${whereConditions.join(" AND ")}`;
     }
 
-    // query += ` ORDER BY tl.name_location ASC`; // <<< CHANGED: Bật lại sắp xếp
+    query += ` GROUP BY tl.id_location, tl.name_location, td.name_department`;
 
     const [locations] = await tpmConnection.query(query, params);
 
@@ -1307,7 +1470,7 @@ app.post("/api/imports", authenticateToken, async (req, res) => {
 
         // 1. Tra cứu id_machine và kiểm tra trạng thái
         const [machineResult] = await connection.query(
-          "SELECT id_machine, current_status FROM tb_machine WHERE uuid_machine = ?",
+          "SELECT id_machine, current_status, is_borrowed_or_rented_or_borrowed_out FROM tb_machine WHERE uuid_machine = ?",
           [machine.uuid_machine]
         );
 
@@ -1319,15 +1482,77 @@ app.post("/api/imports", authenticateToken, async (req, res) => {
           });
         }
 
-        const idMachine = machineResult[0].id_machine;
-        const currentStatus = machineResult[0].current_status;
+        const {
+          id_machine,
+          current_status,
+          is_borrowed_or_rented_or_borrowed_out,
+        } = machineResult[0];
 
         // 2. Kiểm tra trạng thái máy (chỉ cho phép nhập máy không phải 'liquidation' hoặc 'disabled')
-        if (currentStatus === "liquidation" || currentStatus === "disabled") {
+        let isValid = false;
+        let errorMessage = `Máy ${machine.uuid_machine} (Trạng thái: ${
+          current_status || "NULL"
+        }, Mượn/Thuê: ${
+          is_borrowed_or_rented_or_borrowed_out || "NULL"
+        }) không hợp lệ cho loại phiếu '${import_type}'.`;
+
+        switch (import_type) {
+          // a. nhập mua mới (case 1)
+          case "purchased":
+            if (
+              current_status === "available" &&
+              is_borrowed_or_rented_or_borrowed_out === null
+            ) {
+              isValid = true;
+            }
+            break;
+
+          // b. nhập sau bảo trì (case 3)
+          case "maintenance_return":
+            if (
+              current_status === "maintenance" &&
+              is_borrowed_or_rented_or_borrowed_out === null
+            ) {
+              isValid = true;
+            }
+            break;
+
+          // c. nhập thuê (case 1, 13, 14)
+          case "rented":
+          // d. nhập mượn (case 1, 13, 14)
+          case "borrowed":
+            if (
+              (current_status === "available" &&
+                is_borrowed_or_rented_or_borrowed_out === null) ||
+              (current_status === "disabled" &&
+                is_borrowed_or_rented_or_borrowed_out === "borrowed_return") ||
+              (current_status === "disabled" &&
+                is_borrowed_or_rented_or_borrowed_out === "rented_return")
+            ) {
+              isValid = true;
+            }
+            break;
+
+          // e. nhập trả (máy cho mượn) (case 6)
+          case "borrowed_out_return":
+            if (
+              current_status === "disabled" &&
+              is_borrowed_or_rented_or_borrowed_out === "borrowed_out"
+            ) {
+              isValid = true;
+            }
+            break;
+
+          default:
+            isValid = false;
+            errorMessage = `Loại phiếu nhập '${import_type}' không có quy tắc kiểm tra hợp lệ.`;
+        }
+
+        if (!isValid) {
           await connection.rollback();
           return res.status(400).json({
             success: false,
-            message: `Máy ${machine.uuid_machine} đang ở trạng thái ${currentStatus}. Không thể nhập.`,
+            message: errorMessage,
           });
         }
 
@@ -1813,7 +2038,7 @@ app.post("/api/exports", authenticateToken, async (req, res) => {
 
         // 1. Tra cứu id_machine và kiểm tra trạng thái
         const [machineResult] = await connection.query(
-          "SELECT id_machine, current_status FROM tb_machine WHERE uuid_machine = ?",
+          "SELECT id_machine, current_status, is_borrowed_or_rented_or_borrowed_out FROM tb_machine WHERE uuid_machine = ?",
           [machine.uuid_machine]
         );
 
@@ -1825,19 +2050,81 @@ app.post("/api/exports", authenticateToken, async (req, res) => {
           });
         }
 
-        const idMachine = machineResult[0].id_machine;
-        const currentStatus = machineResult[0].current_status;
+        const {
+          id_machine,
+          current_status,
+          is_borrowed_or_rented_or_borrowed_out,
+        } = machineResult[0];
 
         // 2. Kiểm tra trạng thái máy: chỉ cho phép xuất máy đang 'available' hoặc 'maintenance' (nếu xuất bảo trì)
-        const isMaintenanceExport = export_type === "maintenance";
-        if (
-          currentStatus !== "available" &&
-          !(isMaintenanceExport && currentStatus === "maintenance")
-        ) {
+        let isValid = false;
+        let errorMessage = `Máy ${machine.uuid_machine} (Trạng thái: ${
+          current_status || "NULL"
+        }, Mượn/Thuê: ${
+          is_borrowed_or_rented_or_borrowed_out || "NULL"
+        }) không hợp lệ cho loại phiếu '${export_type}'.`;
+
+        switch (export_type) {
+          // f. xuất thanh lý (case 1, 2, 5)
+          case "liquidation":
+            if (
+              ["available", "in_use", "broken"].includes(current_status) &&
+              is_borrowed_or_rented_or_borrowed_out === null
+            ) {
+              isValid = true;
+            }
+            break;
+
+          // g. xuất bảo trì (case 1, 2, 5)
+          case "maintenance":
+            if (
+              ["available", "in_use", "broken"].includes(current_status) &&
+              is_borrowed_or_rented_or_borrowed_out === null
+            ) {
+              isValid = true;
+            }
+            break;
+
+          // h. xuất cho mượn (case 1, 2)
+          case "borrowed_out":
+            if (
+              ["available", "in_use"].includes(current_status) &&
+              is_borrowed_or_rented_or_borrowed_out === null
+            ) {
+              isValid = true;
+            }
+            break;
+
+          // i. xuất trả (máy thuê) (case 10, 11, 12)
+          case "rented_return":
+            if (
+              ["available", "in_use", "broken"].includes(current_status) &&
+              is_borrowed_or_rented_or_borrowed_out === "rented"
+            ) {
+              isValid = true;
+            }
+            break;
+
+          // j. xuất trả (máy mượn) (case 7, 8, 9)
+          case "borrowed_return":
+            if (
+              ["available", "in_use", "broken"].includes(current_status) &&
+              is_borrowed_or_rented_or_borrowed_out === "borrowed"
+            ) {
+              isValid = true;
+            }
+            break;
+
+          default:
+            isValid = false;
+            errorMessage = `Loại phiếu xuất '${export_type}' không có quy tắc kiểm tra hợp lệ.`;
+        }
+
+        if (!isValid) {
           await connection.rollback();
           return res.status(400).json({
             success: false,
-            message: `Máy ${machine.uuid_machine} không ở trạng thái 'available' hoặc 'maintenance' (nếu là phiếu xuất bảo trì). Trạng thái hiện tại: ${currentStatus}.`,
+            message: errorMessage,
           });
         }
 
@@ -2646,19 +2933,43 @@ app.post("/api/internal-transfers", authenticateToken, async (req, res) => {
     if (machines && Array.isArray(machines) && machines.length > 0) {
       for (const machine of machines) {
         const [machineResult] = await connection.query(
-          "SELECT id_machine FROM tb_machine WHERE uuid_machine = ?",
+          "SELECT id_machine, current_status, is_borrowed_or_rented_or_borrowed_out FROM tb_machine WHERE uuid_machine = ?",
           [machine.uuid_machine]
         );
-        if (machineResult.length > 0) {
-          const idMachine = machineResult[0].id_machine;
-          await connection.query(
-            `
-              INSERT INTO tb_machine_internal_transfer_detail
-                (id_machine_internal_transfer, id_machine, note, created_by, updated_by)
-              VALUES (?, ?, ?, ?, ?)
-              `,
-            [transferId, idMachine, machine.note || null, userMANV, userMANV]
+        if (machineResult.length === 0) {
+          await connection.rollback();
+          return res.status(404).json({
+            success: false,
+            message: `Máy có UUID ${machine.uuid_machine} không tồn tại.`,
+          });
+        }
+
+        const {
+          id_machine,
+          current_status,
+          is_borrowed_or_rented_or_borrowed_out,
+        } = machineResult[0];
+
+        // Quy tắc (k): (case 1,2,5,7,8,9,10,11,12)
+        const isStatusValid = ["available", "in_use", "broken"].includes(
+          current_status
+        );
+        const isBorrowValid =
+          is_borrowed_or_rented_or_borrowed_out === null ||
+          ["borrowed", "rented"].includes(
+            is_borrowed_or_rented_or_borrowed_out
           );
+
+        if (!(isStatusValid && isBorrowValid)) {
+          await connection.rollback();
+          return res.status(400).json({
+            success: false,
+            message: `Máy ${machine.uuid_machine} (Trạng thái: ${
+              current_status || "NULL"
+            }, Mượn/Thuê: ${
+              is_borrowed_or_rented_or_borrowed_out || "NULL"
+            }) không hợp lệ để điều chuyển nội bộ.`,
+          });
         }
       }
     }
@@ -2890,15 +3201,29 @@ app.get(
       }
       const idLocation = locResult[0].id_location;
 
-      // 2. Get total count for pagination
-      const countQuery = `
-        SELECT COUNT(*) as total
+      const statsQuery = `
+        SELECT
+          COUNT(*) as total,
+          SUM(CASE WHEN m.current_status = 'available' THEN 1 ELSE 0 END) as available,
+          SUM(CASE WHEN m.current_status = 'in_use' THEN 1 ELSE 0 END) as in_use,
+          SUM(CASE WHEN m.current_status = 'maintenance' THEN 1 ELSE 0 END) as maintenance,
+          SUM(CASE WHEN m.current_status = 'liquidation' THEN 1 ELSE 0 END) as liquidation,
+          SUM(CASE WHEN m.current_status = 'disabled' THEN 1 ELSE 0 END) as disabled,
+          SUM(CASE WHEN m.current_status = 'broken' THEN 1 ELSE 0 END) as broken,
+          SUM(CASE WHEN m.is_borrowed_or_rented_or_borrowed_out = 'borrowed' THEN 1 ELSE 0 END) as borrowed,
+          SUM(CASE WHEN m.is_borrowed_or_rented_or_borrowed_out = 'rented' THEN 1 ELSE 0 END) as rented,
+          SUM(CASE WHEN m.is_borrowed_or_rented_or_borrowed_out = 'borrowed_out' THEN 1 ELSE 0 END) as borrowed_out,
+          SUM(CASE WHEN m.is_borrowed_or_rented_or_borrowed_out = 'borrowed_return' THEN 1 ELSE 0 END) as borrowed_return,
+          SUM(CASE WHEN m.is_borrowed_or_rented_or_borrowed_out = 'rented_return' THEN 1 ELSE 0 END) as rented_return
         FROM tb_machine_location ml
+        JOIN tb_machine m ON m.id_machine = ml.id_machine
         WHERE ml.id_location = ?
       `;
-      const [countResult] = await tpmConnection.query(countQuery, [idLocation]);
+      const [statsResult] = await tpmConnection.query(statsQuery, [idLocation]);
+      const stats = statsResult[0];
 
-      const total = countResult[0].total;
+      // 2. Get total count for pagination
+      const total = stats.total; // <<< SỬA: Lấy total từ stats
       const totalPages = Math.ceil(total / limit);
 
       // 3. Get paginated machines at that location
@@ -2930,6 +3255,7 @@ app.get(
         success: true,
         message: "Machines at location retrieved successfully",
         data: machines,
+        stats: stats,
         pagination: {
           page,
           limit,

@@ -150,6 +150,7 @@ const MachineListPage = () => {
     available: 0,
     in_use: 0,
     maintenance: 0,
+    broken: 0,
     borrowed_out: 0,
     liquidation: 0,
     disabled: 0,
@@ -798,11 +799,12 @@ const MachineListPage = () => {
       available: { bg: "#2e7d3222", color: "#2e7d32", label: "Sẵn sàng" },
       in_use: { bg: "#667eea22", color: "#667eea", label: "Đang sử dụng" },
       maintenance: { bg: "#ff980022", color: "#ff9800", label: "Bảo trì" },
-      rented: { bg: "#673ab722", color: "#673ab7", label: "Thuê" },
-      borrowed: { bg: "#03a9f422", color: "#03a9f4", label: "Mượn" },
+      rented: { bg: "#673ab722", color: "#673ab7", label: "Đang thuê" },
+      borrowed: { bg: "#03a9f422", color: "#03a9f4", label: "Đang mượn" },
       borrowed_out: { bg: "#00bcd422", color: "#00bcd4", label: "Cho mượn" },
       liquidation: { bg: "#f4433622", color: "#f44336", label: "Thanh lý" },
       disabled: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Vô hiệu hóa" },
+      broken: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Máy hư" },
       borrowed_return: {
         bg: "#03a9f422",
         color: "#03a9f4",
@@ -834,6 +836,8 @@ const MachineListPage = () => {
       case "liquidation":
         return <Cancel />;
       case "disabled":
+        return <Cancel />;
+      case "broken":
         return <Cancel />;
       case "rented_return":
         return <ReceiptLong />;
@@ -1106,7 +1110,7 @@ const MachineListPage = () => {
                   </CardContent>
                 </Card>
               </Grid>
-              {/* Vô hiệu hóa (ĐÃ CHUYỂN LÊN) */}
+              {/* Vô hiệu hóa / Bị hỏng */}
               <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
                 <Card
                   elevation={0}
@@ -1118,10 +1122,10 @@ const MachineListPage = () => {
                 >
                   <CardContent sx={{ textAlign: "center", py: 3 }}>
                     <Typography variant="h4" fontWeight="bold" color="#9e9e9e">
-                      {stats.disabled || 0}
+                      {(stats.disabled || 0) + "/" + (stats.broken || 0)}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      Vô hiệu hóa
+                      Vô hiệu hóa/Máy hư
                     </Typography>
                   </CardContent>
                 </Card>
@@ -2238,6 +2242,7 @@ const MachineListPage = () => {
                       <MenuItem value="maintenance">Bảo trì</MenuItem>
                       <MenuItem value="liquidation">Thanh lý</MenuItem>
                       <MenuItem value="disabled">Vô hiệu hóa</MenuItem>
+                      <MenuItem value="broken">Máy hư</MenuItem>
                     </Select>
                   </FormControl>
                 </Grid>

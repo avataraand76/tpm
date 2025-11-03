@@ -71,9 +71,10 @@ export const api = {
       });
       return response.data;
     },
-    getBySerial: async (serial) => {
+    getBySerial: async (serial, params = {}) => {
       const response = await httpConnect.get(
-        `/api/machines/by-serial/${serial}`
+        `/api/machines/by-serial/${serial}`,
+        { params }
       );
       return response.data;
     },

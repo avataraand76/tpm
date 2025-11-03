@@ -1,4 +1,5 @@
 // frontend/src/components/MachineQRScanner.jsx
+// PHIÊN BẢN REMAKE (Đơn giản - Scan và Tự động thêm)
 
 import React, { useRef, useEffect, useState, useCallback } from "react";
 import QrScanner from "qr-scanner";
@@ -6,89 +7,56 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions,
-  Button,
   Box,
   Typography,
   CircularProgress,
   Alert,
   Stack,
   IconButton,
-  Chip,
 } from "@mui/material";
-import { Close, Add, Refresh, Cameraswitch } from "@mui/icons-material";
+import { useTheme } from "@mui/material/styles";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import { Close, QrCodeScanner, Cameraswitch, Error } from "@mui/icons-material";
 import { api } from "../api/api";
 
-// --- CONFIG CÁC HẰNG SỐ ---
-const STATUS_CONFIG = {
-  available: { bg: "#2e7d3222", color: "#2e7d32", label: "Sẵn sàng" },
-  in_use: { bg: "#667eea22", color: "#667eea", label: "Đang sử dụng" },
-  maintenance: { bg: "#ff980022", color: "#ff9800", label: "Bảo trì" },
-  rented: { bg: "#673ab722", color: "#673ab7", label: "Đang thuê" },
-  borrowed: { bg: "#03a9f422", color: "#03a9f4", label: "Đang mượn" },
-  borrowed_out: { bg: "#00bcd422", color: "#00bcd4", label: "Cho mượn" },
-  liquidation: { bg: "#f4433622", color: "#f44336", label: "Thanh lý" },
-  disabled: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Vô hiệu hóa" },
-};
-
-const getStatusInfo = (statusKey) => {
-  return (
-    STATUS_CONFIG[statusKey] || {
-      bg: "#9e9e9e22",
-      color: "#9e9e9e",
-      label: statusKey,
-    }
-  );
-};
-
-const getMachineStatusLabel = (status) => {
-  return getStatusInfo(status).label;
-};
-
-// --- CUSTOM HOOK CHO LOGIC QR SCANNER (Mô phỏng hook mẫu) ---
+// --- CUSTOM HOOK (Dựa trên code mẫu của bạn, đã sửa) ---
 const CAMERA_CACHE_KEY = "qr_scanner_preferred_camera";
 const LAST_SUCCESS_CAMERA_KEY = "qr_scanner_last_success_camera";
 
-const useMachineQRScannerLogic = (videoRef, handleScanResult) => {
+const useAppQRScanner = (videoRef, onScanAsync) => {
   const scannerRef = useRef(null);
+  const isPausedRef = useRef(false);
+
   const [isInitializing, setIsInitializing] = useState(false);
   const [isScanningActive, setIsScanningActive] = useState(false);
-  const [error, setError] = useState("");
   const [cameras, setCameras] = useState([]);
   const [selectedCameraId, setSelectedCameraId] = useState("environment");
+  const [error, setError] = useState("");
 
-  // Lưu camera đã quét thành công
   const saveSuccessCamera = useCallback((cameraId) => {
     try {
       localStorage.setItem(LAST_SUCCESS_CAMERA_KEY, cameraId);
-    } catch (error) {
-      console.error("Failed to save successful camera:", error);
+    } catch (e) {
+      console.error("Failed to save successful camera:", e);
     }
   }, []);
 
-  // Lấy camera ưu tiên (Ưu tiên camera đã quét thành công)
   const getPreferredCameraId = useCallback(async () => {
     try {
       const cameraList = await QrScanner.listCameras(true);
       setCameras(cameraList);
-
       const lastSuccessCamera = localStorage.getItem(LAST_SUCCESS_CAMERA_KEY);
       const cachedCamera = localStorage.getItem(CAMERA_CACHE_KEY);
-
       const preferredId = lastSuccessCamera || cachedCamera;
-
       if (preferredId && cameraList.find((cam) => cam.id === preferredId)) {
         return preferredId;
       }
-
-      // Ưu tiên camera sau (environment) nếu không có cache
       const backCamera = cameraList.find(
         (cam) =>
           cam.label.toLowerCase().includes("back") ||
           cam.label.toLowerCase().includes("rear") ||
           cam.label.toLowerCase().includes("environment")
       );
-
       return backCamera
         ? backCamera.id
         : cameraList.length > 0
@@ -100,90 +68,75 @@ const useMachineQRScannerLogic = (videoRef, handleScanResult) => {
     }
   }, []);
 
-  // Xử lý lỗi
   const handleCameraError = useCallback((err) => {
     console.error("Camera error:", err);
-
     let errorMsg;
     if (err.name === "NotAllowedError" || err.message?.includes("Permission")) {
       errorMsg =
-        "Cần cấp quyền truy cập camera. Vui lòng cho phép trong trình duyệt và nhấn 'Thử lại'.";
+        "Cần cấp quyền truy cập camera. Vui lòng cho phép trong trình duyệt.";
     } else if (err.name === "NotFoundError") {
       errorMsg = "Không tìm thấy camera. Vui lòng kiểm tra thiết bị.";
     } else if (err.name === "NotReadableError") {
-      errorMsg =
-        "Camera đang được sử dụng bởi ứng dụng khác. Vui lòng đóng ứng dụng khác và thử lại.";
+      errorMsg = "Camera đang được sử dụng bởi ứng dụng khác.";
     } else {
-      errorMsg = `Lỗi khởi tạo camera: ${
-        err.message || err.name || "Unknown error"
-      }`;
+      errorMsg = "Lỗi khởi tạo camera.";
     }
-
     setError(errorMsg);
     setIsInitializing(false);
     setIsScanningActive(false);
   }, []);
 
-  // Hàm khởi động/tái khởi động scan
   const startScanning = useCallback(
     async (newCameraId) => {
       if (!videoRef.current) return;
-
-      // 1. Dọn dẹp scanner cũ
       if (scannerRef.current) {
         scannerRef.current.destroy();
         scannerRef.current = null;
       }
-
       setIsInitializing(true);
       setIsScanningActive(false);
+      isPausedRef.current = false;
       setError("");
-
       try {
         if (!QrScanner.hasCamera()) {
-          throw new Error("Thiết bị không có camera hoặc không được hỗ trợ.");
+          throw new Error("Thiết bị không có camera.");
         }
-
-        // Xin quyền camera trước
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: "environment" },
         });
         stream.getTracks().forEach((track) => track.stop());
-
         const finalCameraId = newCameraId || (await getPreferredCameraId());
         setSelectedCameraId(finalCameraId);
-
-        // 2. Khởi tạo scanner
         const scanner = new QrScanner(
           videoRef.current,
-          (result) => {
-            // Lưu camera thành công
+          async (result) => {
+            if (isPausedRef.current) return;
+            isPausedRef.current = true; // Dừng quét
+            scanner.pause();
+
             saveSuccessCamera(scanner._preferredCamera);
-            handleScanResult(result);
+            if (window.navigator.vibrate) window.navigator.vibrate(100);
+
+            try {
+              // Chờ cho hàm onScanAsync (gọi API) thực thi xong
+              await onScanAsync(result.data);
+            } catch (e) {
+              console.error("onScanAsync callback failed:", e);
+            }
           },
           {
             returnDetailedScanResult: true,
             highlightScanRegion: true,
             highlightCodeOutline: true,
             preferredCamera: finalCameraId,
-            maxScansPerSecond: 1,
-            scanRegion: {
-              x: 5, // Bắt đầu từ 5% (5% offset)
-              y: 5, // Bắt đầu từ 5% (5% offset)
-              width: 90, // Chiều rộng 90%
-              height: 90, // Chiều cao 90%
-            },
+            maxScansPerSecond: 1, // 1 lần quét/giây là đủ
           }
         );
-
         await scanner.start();
-
         scannerRef.current = scanner;
         setIsInitializing(false);
         setIsScanningActive(true);
         setError("");
-
-        // Lưu camera hiện tại vào cache để dùng cho lần sau
         localStorage.setItem(CAMERA_CACHE_KEY, finalCameraId);
       } catch (err) {
         handleCameraError(err);
@@ -191,41 +144,48 @@ const useMachineQRScannerLogic = (videoRef, handleScanResult) => {
     },
     [
       videoRef,
-      handleScanResult,
+      onScanAsync,
       getPreferredCameraId,
       handleCameraError,
       saveSuccessCamera,
     ]
   );
 
-  // Dừng scan
   const stopScanning = useCallback(() => {
     if (scannerRef.current) {
-      scannerRef.current.stop();
-      setIsScanningActive(false);
+      scannerRef.current.destroy();
+      scannerRef.current = null;
     }
+    setIsScanningActive(false);
   }, []);
 
-  // Chuyển camera
-  const switchCamera = useCallback(() => {
+  const switchCamera = useCallback(async () => {
     if (scannerRef.current && cameras.length > 1) {
       const currentIndex = cameras.findIndex(
         (cam) => cam.id === selectedCameraId
       );
       const nextIndex = (currentIndex + 1) % cameras.length;
       const nextCamera = cameras[nextIndex];
-
-      // Khởi động lại với camera mới
-      startScanning(nextCamera.id);
+      await startScanning(nextCamera.id);
     }
   }, [cameras, selectedCameraId, startScanning]);
 
-  // Cần gọi stopScanning khi component unmount
+  // Hàm cho phép component bên ngoài kích hoạt quét lại
+  const resumeScanning = useCallback(() => {
+    if (scannerRef.current && scannerRef.current.getState() === "paused") {
+      scannerRef.current.start();
+      isPausedRef.current = false;
+    } else if (scannerRef.current) {
+      // Dành cho trường hợp scanner bị lỗi và stop
+      scannerRef.current.start();
+      isPausedRef.current = false;
+    }
+  }, []);
+
   useEffect(() => {
     return () => {
       if (scannerRef.current) {
         scannerRef.current.destroy();
-        scannerRef.current = null;
       }
     };
   }, []);
@@ -233,56 +193,42 @@ const useMachineQRScannerLogic = (videoRef, handleScanResult) => {
   return {
     isInitializing,
     isScanningActive,
-    error,
+    error: error,
     cameras,
-    selectedCameraId,
     startScanning,
     stopScanning,
     switchCamera,
-    scanner: scannerRef.current,
+    resumeScanning, // Trả về hàm resume
   };
 };
+// --- KẾT THÚC CUSTOM HOOK ---
 
 // ------------------------------------
-// --- COMPONENT CHÍNH ---
+// --- COMPONENT CHÍNH (Bản Đơn Giản) ---
+// ------------------------------------
 const MachineQRScanner = ({
   isOpen,
   onClose,
-  onMachineAdd,
-  selectedMachines,
+  onMachineAdd, // Hàm từ parent để thêm máy
+  selectedMachines, // Máy đã có trong phiếu (để check trùng)
+  apiParams = {},
+  ticketTypeLabel = "",
+  showNotification, // Hàm thông báo từ parent
 }) => {
   const videoRef = useRef(null);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
-  const [scanResult, setScanResult] = useState({
-    scannedSerial: "",
-    machine: null,
-    loading: false,
-    error: "",
+  // State thông báo lỗi/loading (hiển thị đè lên video)
+  const [overlayState, setOverlayState] = useState({
+    status: "idle", // idle, loading, error
+    message: "",
   });
 
-  // SỬ DỤNG HOOK TÁCH LOGIC (Di chuyển lên trước để tránh dependency issues)
-  const scannerRef = useRef(null);
-
-  // --- HÀM XỬ LÝ KẾT QUẢ VÀ GỌI API ---
-  const handleScanResult = useCallback(
-    async (result) => {
-      const scanner = scannerRef.current;
-      // Dừng scan ngay lập tức để xử lý
-      if (scanner) {
-        scanner.pause();
-      }
-
-      const resultData = result.data;
-      if (window.navigator.vibrate) {
-        window.navigator.vibrate(200);
-      }
-
-      setScanResult({
-        scannedSerial: resultData,
-        machine: null,
-        loading: true,
-        error: "",
-      });
+  // --- Hàm gọi API (được truyền vào hook) ---
+  const handleScanAPI = useCallback(
+    async (resultData) => {
+      setOverlayState({ status: "loading", message: "Đang xử lý..." });
 
       // 1. Phân tích mã QR
       const parts = resultData.split("-");
@@ -291,11 +237,15 @@ const MachineQRScanner = ({
         (parts[0].toUpperCase() !== "MAY" &&
           parts[0].toUpperCase() !== "PHUKIEN")
       ) {
-        setScanResult((prev) => ({
-          ...prev,
-          loading: false,
-          error: "Mã QR không hợp lệ (Format: [MAY/PHUKIEN]-[SERIAL]).",
-        }));
+        setOverlayState({
+          status: "error",
+          message: "Mã QR không hợp lệ (Format: [MAY/PHUKIEN]-[SERIAL]).",
+        });
+        // Tự động reset sau 2 giây để quét tiếp
+        setTimeout(() => {
+          setOverlayState({ status: "idle", message: "" });
+          logic.resumeScanning();
+        }, 2000);
         return;
       }
 
@@ -303,185 +253,160 @@ const MachineQRScanner = ({
 
       // 2. Gọi API lấy thông tin máy
       try {
-        const response = await api.machines.getBySerial(serial);
+        const response = await api.machines.getBySerial(serial, apiParams);
 
         if (response.success && response.data) {
           const machine = response.data;
 
-          // Kiểm tra trùng lặp
+          // 3. Kiểm tra trùng lặp
           const isDuplicate = selectedMachines.some(
             (m) => m.uuid_machine === machine.uuid_machine
           );
 
           if (isDuplicate) {
-            setScanResult((prev) => ({
-              ...prev,
-              loading: false,
-              error: `Máy ${machine.code_machine} (Serial: ${serial}) đã có trong phiếu! Vui lòng quét mã khác hoặc bấm "Quét tiếp".`,
-            }));
+            // Lỗi: Trùng lặp
+            setOverlayState({
+              status: "error",
+              message: `Máy ${machine.code_machine} đã có trong phiếu!`,
+            });
+            setTimeout(() => {
+              setOverlayState({ status: "idle", message: "" });
+              logic.resumeScanning();
+            }, 2000);
           } else {
-            setScanResult((prev) => ({
-              ...prev,
-              loading: false,
-              machine: machine,
-              error: "",
-            }));
+            // THÀNH CÔNG
+            onMachineAdd({ ...machine, note: "" }); // Thêm máy vào form
+            showNotification(
+              "success",
+              "Thành công",
+              `Đã thêm máy: ${machine.code_machine}`
+            );
+            onClose(); // Tự động đóng dialog
           }
         } else {
-          setScanResult((prev) => ({
-            ...prev,
-            loading: false,
-            error:
-              response.message ||
-              `Không tìm thấy máy móc có sẵn với Serial: ${serial}`,
-          }));
+          // Lỗi: API báo không tìm thấy (lỗi nghiệp vụ)
+          setOverlayState({
+            status: "error",
+            message:
+              response.message || `Không tìm thấy máy với Serial: ${serial}`,
+          });
+          setTimeout(() => {
+            setOverlayState({ status: "idle", message: "" });
+            logic.resumeScanning();
+          }, 2000);
         }
       } catch (error) {
+        // Lỗi: Lỗi API, mạng...
         const errorMessage =
-          error.response?.data?.message ||
-          "Lỗi kết nối hoặc tìm kiếm Serial. (Thử lại)";
-        setScanResult((prev) => ({
-          ...prev,
-          loading: false,
-          error: errorMessage,
-        }));
+          error.response?.data?.message || "Lỗi kết nối hoặc tìm kiếm Serial.";
+        setOverlayState({ status: "error", message: errorMessage });
+        setTimeout(() => {
+          setOverlayState({ status: "idle", message: "" });
+          logic.resumeScanning();
+        }, 2000);
       }
     },
-    [selectedMachines]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [apiParams, selectedMachines, onMachineAdd, onClose, showNotification]
   );
 
-  const logic = useMachineQRScannerLogic(videoRef, handleScanResult);
+  // --- Sử dụng Hook ---
+  const logic = useAppQRScanner(videoRef, handleScanAPI);
 
-  // Đồng bộ scannerRef với logic.scanner
-  useEffect(() => {
-    scannerRef.current = logic.scanner;
-  }, [logic.scanner]);
-
-  // --- EFFECT QUẢN LÝ VÒNG ĐỜI VÀ MỞ/ĐÓNG ---
+  // --- Effect quản lý mở/đóng ---
   useEffect(() => {
     if (isOpen) {
-      // Khởi động khi Dialog mở
       logic.startScanning();
     } else {
-      // Dọn dẹp khi Dialog đóng
       logic.stopScanning();
-      // Reset state kết quả
-      setScanResult({
-        scannedSerial: "",
-        machine: null,
-        loading: false,
-        error: "",
-      });
+      setOverlayState({ status: "idle", message: "" }); // Reset lỗi khi đóng
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  }, [isOpen, logic.startScanning, logic.stopScanning]);
 
-  // --- HÀM TIẾP TỤC QUÉT ---
-  const resumeScanning = () => {
-    // Reset state kết quả
-    setScanResult({
-      scannedSerial: "",
-      machine: null,
-      loading: false,
-      error: "",
-    });
-
-    // Bắt đầu lại scanner
-    if (logic.scanner) {
-      logic.scanner.start();
-      logic.setIsScanningActive(true); // Cập nhật state trong hook
-    } else {
-      // Nếu scanner bị hủy do lỗi, thử khởi tạo lại
-      logic.startScanning();
-    }
-  };
-
-  // --- HÀM THÊM MÁY VÀ ĐÓNG DIALOG ---
-  const handleAddScannedMachine = () => {
-    if (scanResult && scanResult.machine) {
-      // Đảm bảo chỉ gửi uuid_machine và các trường cần thiết lên parent component
-      onMachineAdd({
-        // KHÔNG GỬI id_machine
-        uuid_machine: scanResult.machine.uuid_machine,
-        code_machine: scanResult.machine.code_machine,
-        type_machine: scanResult.machine.type_machine,
-        model_machine: scanResult.machine.model_machine,
-        serial_machine: scanResult.machine.serial_machine,
-        name_location: scanResult.machine.name_location,
-        current_status: scanResult.machine.current_status,
-        note: "", // Luôn thêm trường note để tương thích với TicketManagementPage
-      });
-      // Reset state sau khi thêm
-      setScanResult(null);
-      resumeScanning();
-    }
-  };
-
-  // --- LOGIC HIỂN THỊ ---
-  const isAddButtonDisabled =
-    !scanResult.machine ||
-    scanResult.loading ||
-    scanResult.error ||
-    selectedMachines.some(
-      (m) => m.uuid_machine === scanResult.machine?.uuid_machine
-    );
-
+  // --- Text hiển thị trạng thái camera ---
   const cameraStatusText = logic.isInitializing
     ? "Đang khởi động camera..."
     : logic.error
-    ? "Camera bị lỗi"
+    ? logic.error // Hiển thị lỗi từ hook
     : logic.isScanningActive
-    ? "Đang chờ quét mã..."
-    : "Camera đã dừng hoặc chưa được khởi động.";
-
-  // Xác định nút "Quét tiếp" hay "Quét lại"
-  const isScannerBlocked = scanResult.scannedSerial && !logic.isScanningActive;
-
-  const isResumeDisabled = logic.isInitializing || scanResult.loading;
+    ? "Di chuyển camera đến mã QR..."
+    : "Camera đã dừng.";
 
   return (
     <Dialog
       open={isOpen}
       onClose={onClose}
-      maxWidth="md"
+      maxWidth="sm" // <<< SỬA: Dialog nhỏ hơn
       fullWidth
-      PaperProps={{ sx: { borderRadius: "20px" } }}
+      fullScreen={isMobile}
+      PaperProps={{
+        sx: {
+          borderRadius: isMobile ? 0 : "20px",
+          overflow: "hidden",
+          height: isMobile ? "100%" : "auto",
+        },
+      }}
     >
       <DialogTitle
-        sx={{ background: "#2e7d32", color: "white", fontWeight: 700 }}
+        sx={{
+          background: "#2e7d32",
+          color: "white",
+          fontWeight: 700,
+          py: { xs: 1.5, md: 2 },
+          px: { xs: 2, md: 3 },
+        }}
       >
-        Quét Mã QR Máy Móc
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <QrCodeScanner />
+          <Typography
+            variant="h6"
+            component="div"
+            sx={{
+              fontWeight: 700,
+              fontSize: { xs: "1.1rem", md: "1.25rem" },
+            }}
+          >
+            {ticketTypeLabel
+              ? `Quét máy vào phiếu ${ticketTypeLabel.toLowerCase()}`
+              : "Quét Mã QR Máy Móc"}
+          </Typography>
+        </Stack>
         <IconButton
           onClick={onClose}
-          sx={{ color: "white", position: "absolute", right: 8, top: 8 }}
+          sx={{
+            color: "white",
+            position: "absolute",
+            right: 8,
+            top: isMobile ? 4 : 8,
+          }}
         >
           <Close />
         </IconButton>
       </DialogTitle>
-      <DialogContent
-        dividers
-        sx={{
-          p: 0,
-          // THAY ĐỔI: Giới hạn chiều cao tối đa và cho phép cuộn nội dung
-          maxHeight: "80vh", // Chiều cao tối đa là 80% viewport height
-          overflowY: "hidden", // Bật cuộn dọc
-          overflowX: "hidden", // Ẩn cuộn ngang
-        }}
-      >
+
+      {/* BỐ CỤC ĐƠN GIẢN (CHỈ VIDEO) */}
+      <DialogContent sx={{ p: 0, overflow: "hidden" }}>
         <Box
           sx={{
             position: "relative",
+            // Chiều cao 4:3
             width: "100%",
-            aspectRatio: "16/9",
+            paddingTop: "75%", // Tỷ lệ 4:3 (height/width)
             bgcolor: "black",
+            overflow: "hidden",
           }}
         >
           <video
             ref={videoRef}
             style={{
+              // <<< SỬA LỖI ZOOM >>>
               width: "100%",
               height: "100%",
-              // Hiển thị video khi đang scan hoặc đang khởi tạo (đang chờ video stream)
+              objectFit: "contain", // Hiển thị vừa vặn, không zoom
+              position: "absolute",
+              top: 0,
+              left: 0,
               display:
                 logic.isScanningActive || logic.isInitializing
                   ? "block"
@@ -489,48 +414,71 @@ const MachineQRScanner = ({
             }}
             playsInline
           />
-          {/* Vùng hiển thị trạng thái khi không quét/đang khởi tạo */}
-          {!logic.isScanningActive && (
-            <Box
-              sx={{
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "center",
-                alignItems: "center",
-                height: "100%",
-                color: "white",
-                p: 2,
-              }}
-            >
-              {logic.isInitializing && (
-                <CircularProgress color="inherit" size={30} sx={{ mb: 1 }} />
-              )}
-              <Typography variant="body1" textAlign="center">
-                {cameraStatusText}
-              </Typography>
-              {(logic.error || logic.cameras.length === 0) && ( // Hiển thị nút thử lại khi có lỗi camera
-                <Button
-                  onClick={() => logic.startScanning(logic.selectedCameraId)}
-                  variant="contained"
-                  color="error"
-                  size="small"
-                  startIcon={<Refresh />}
-                  sx={{ mt: 2, borderRadius: "12px" }}
-                >
-                  Thử lại camera
-                </Button>
-              )}
-            </Box>
-          )}
 
-          {/* Nút chuyển camera (hiển thị khi đang quét và có nhiều camera) */}
+          {/* Lớp phủ trạng thái (Loading, Error, Idle) */}
+          <Box
+            sx={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+              alignItems: "center",
+              color: "white",
+              p: 2,
+              textAlign: "center",
+              // Chỉ hiển thị khi camera không active, hoặc có lỗi/loading
+              backgroundColor:
+                logic.isScanningActive && overlayState.status === "idle"
+                  ? "transparent" // Trong suốt khi đang quét
+                  : "rgba(0, 0, 0, 0.7)", // Mờ khi có thông báo
+              transition: "background-color 0.3s ease",
+            }}
+          >
+            {/* 1. Trạng thái Loading (từ API) */}
+            {overlayState.status === "loading" && (
+              <>
+                <CircularProgress color="inherit" size={30} sx={{ mb: 1 }} />
+                <Typography variant="h6" fontWeight="bold">
+                  {overlayState.message}
+                </Typography>
+              </>
+            )}
+
+            {/* 2. Trạng thái Error (từ API) */}
+            {overlayState.status === "error" && (
+              <Stack alignItems="center" spacing={1}>
+                <Error sx={{ fontSize: 40, color: "error.main" }} />
+                <Typography variant="h6" fontWeight="bold" color="error.light">
+                  {overlayState.message}
+                </Typography>
+                <Typography variant="body2">
+                  Đang sẵn sàng quét mã tiếp theo...
+                </Typography>
+              </Stack>
+            )}
+
+            {/* 3. Trạng thái Chờ/Lỗi Camera (từ Hook) */}
+            {overlayState.status === "idle" && !logic.isScanningActive && (
+              <>
+                {logic.isInitializing && (
+                  <CircularProgress color="inherit" size={30} sx={{ mb: 1 }} />
+                )}
+                <Typography variant="h6" fontWeight="bold">
+                  {cameraStatusText}
+                </Typography>
+              </>
+            )}
+          </Box>
+
+          {/* Nút chuyển camera (vẫn giữ lại) */}
           {logic.isScanningActive && logic.cameras.length > 1 && (
             <IconButton
               onClick={logic.switchCamera}
               sx={{
                 position: "absolute",
-                top: 10,
-                right: 10,
+                bottom: 16,
+                right: 16,
                 bgcolor: "rgba(0,0,0,0.5)",
                 color: "white",
                 "&:hover": { bgcolor: "rgba(0,0,0,0.7)" },
@@ -540,101 +488,8 @@ const MachineQRScanner = ({
             </IconButton>
           )}
         </Box>
-
-        <Box sx={{ p: 2 }}>
-          {scanResult.loading && (
-            <Stack
-              direction="row"
-              alignItems="center"
-              spacing={1}
-              sx={{ mb: 1 }}
-            >
-              <CircularProgress size={24} />
-              <Typography>Đang xử lý kết quả quét...</Typography>
-            </Stack>
-          )}
-
-          {/* Hiển thị lỗi từ quá trình quét/API */}
-          {scanResult.error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {scanResult.error}
-            </Alert>
-          )}
-
-          {/* Hiển thị kết quả API */}
-          {scanResult.scannedSerial && (
-            <Stack spacing={1}>
-              <Typography variant="subtitle1" fontWeight="bold">
-                Mã quét: {scanResult.scannedSerial}
-              </Typography>
-              {scanResult.machine && (
-                <Alert severity="success">
-                  <Typography variant="body2" fontWeight="bold">
-                    Máy tìm thấy: {scanResult.machine.code_machine} -{" "}
-                    {scanResult.machine.type_machine} -
-                    {scanResult.machine.model_machine}
-                  </Typography>
-                  <Typography variant="caption" component="div">
-                    Serial: {scanResult.machine.serial_machine} | Vị trí:{" "}
-                    {scanResult.machine.name_location || "Kho"} | Tình trạng:
-                    <Chip
-                      label={getMachineStatusLabel(
-                        scanResult.machine.current_status
-                      )}
-                      size="small"
-                      sx={{
-                        ml: 1,
-                        height: 20,
-                        fontSize: "0.75rem",
-                        background: getStatusInfo(
-                          scanResult.machine.current_status
-                        ).bg,
-                        color: getStatusInfo(scanResult.machine.current_status)
-                          .color,
-                        fontWeight: 600,
-                        borderRadius: "8px",
-                      }}
-                    />
-                  </Typography>
-                </Alert>
-              )}
-            </Stack>
-          )}
-        </Box>
       </DialogContent>
-      <DialogActions sx={{ p: 2, justifyContent: "space-between" }}>
-        <Button
-          onClick={resumeScanning}
-          variant="outlined"
-          disabled={isResumeDisabled}
-          color="info"
-          sx={{ borderRadius: "12px" }}
-        >
-          {isScannerBlocked ? "Quét tiếp" : "Quét lại"}
-        </Button>
-        <Stack direction="row" spacing={1}>
-          <Button
-            onClick={onClose}
-            variant="outlined"
-            color="inherit"
-            sx={{ borderRadius: "12px" }}
-          >
-            Hủy
-          </Button>
-          <Button
-            onClick={handleAddScannedMachine}
-            variant="contained"
-            startIcon={<Add />}
-            disabled={isAddButtonDisabled}
-            sx={{
-              borderRadius: "12px",
-              background: "linear-gradient(45deg, #2e7d32, #4caf50)",
-            }}
-          >
-            Thêm vào phiếu
-          </Button>
-        </Stack>
-      </DialogActions>
+      {/* KHÔNG CÓ DIALOG ACTIONS */}
     </Dialog>
   );
 };

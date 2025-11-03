@@ -121,7 +121,7 @@ create table if not exists tb_machine
     date_of_use date, -- ngày sử dụng
     lifespan int, -- tuổi thọ
     repair_cost decimal(15, 0), -- chi phí sửa chữa
-    current_status enum('available', 'in_use', 'maintenance', 'liquidation', 'disabled') default 'available',
+    current_status enum('available', 'in_use', 'maintenance', 'liquidation', 'disabled', 'broken') default 'available',
 	is_borrowed_or_rented_or_borrowed_out enum ('borrowed', 'rented', 'borrowed_out', 'borrowed_return', 'rented_return'),
     is_borrowed_or_rented_or_borrowed_out_name text,
 	is_borrowed_or_rented_or_borrowed_out_date date,

@@ -29,6 +29,7 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
+  CardContent,
 } from "@mui/material";
 import {
   LocationOn,
@@ -52,6 +53,20 @@ const LocationTrackPage = () => {
   const [machinesAtLocation, setMachinesAtLocation] = useState([]);
   const [loadingLocations, setLoadingLocations] = useState(false); // Đổi tên từ loadingLocations
   const [loadingMachines, setLoadingMachines] = useState(false);
+  const [locationStats, setLocationStats] = useState({
+    total: 0,
+    available: 0,
+    in_use: 0,
+    maintenance: 0,
+    broken: 0,
+    borrowed_out: 0,
+    liquidation: 0,
+    disabled: 0,
+    rented: 0,
+    borrowed: 0,
+    borrowed_return: 0,
+    rented_return: 0,
+  });
 
   // BỔ SUNG STATES CHO PHÂN TRANG
   const [page, setPage] = useState(1);
@@ -149,10 +164,25 @@ const LocationTrackPage = () => {
           params
         );
         setMachinesAtLocation(response.data);
-        setTotalPages(response.pagination.totalPages); // Cập nhật tổng số trang
+        setLocationStats(response.stats);
+        setTotalPages(response.pagination.totalPages);
       } catch (error) {
         console.error("Error fetching machines at location:", error);
         setMachinesAtLocation([]);
+        setLocationStats({
+          total: 0,
+          available: 0,
+          in_use: 0,
+          maintenance: 0,
+          broken: 0,
+          borrowed_out: 0,
+          liquidation: 0,
+          disabled: 0,
+          rented: 0,
+          borrowed: 0,
+          borrowed_return: 0,
+          rented_return: 0,
+        });
         setTotalPages(1);
       } finally {
         setLoadingMachines(false);
@@ -201,6 +231,20 @@ const LocationTrackPage = () => {
     } else {
       // Reset khi không có vị trí nào được chọn
       setMachinesAtLocation([]);
+      setLocationStats({
+        total: 0,
+        available: 0,
+        in_use: 0,
+        maintenance: 0,
+        broken: 0,
+        borrowed_out: 0,
+        liquidation: 0,
+        disabled: 0,
+        rented: 0,
+        borrowed: 0,
+        borrowed_return: 0,
+        rented_return: 0,
+      });
       setTotalPages(1);
       setPage(1);
     }
@@ -286,6 +330,194 @@ const LocationTrackPage = () => {
         </Alert>
       );
     }
+    const stats = locationStats;
+    const renderStatsCards = () => (
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        {/* Tổng số máy (Thẻ Lớn) */}
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <Card
+            elevation={0}
+            sx={{
+              borderRadius: "20px",
+              background:
+                "linear-gradient(135deg, #667eea22 0%, #764ba222 100%)",
+              border: "1px solid rgba(0, 0, 0, 0.05)",
+              height: "100%",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+            }}
+          >
+            <CardContent sx={{ textAlign: "center", p: 3 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Tổng số máy (tại vị trí)
+              </Typography>
+              <Typography variant="h3" fontWeight="bold" color="#667eea">
+                {stats.total || 0}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Các thẻ nhỏ */}
+        <Grid size={{ xs: 12, sm: 6, md: 9 }}>
+          <Grid container spacing={2}>
+            {/* Hàng 1 */}
+            <Grid size={{ xs: 4, md: 2.4 }}>
+              <Card
+                elevation={0}
+                sx={{ borderRadius: "20px", background: "#2e7d3211" }}
+              >
+                <CardContent sx={{ textAlign: "center", p: 2 }}>
+                  <Typography variant="h5" fontWeight="bold" color="#2e7d32">
+                    {stats.available || 0}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Sẵn sàng
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid size={{ xs: 4, md: 2.4 }}>
+              <Card
+                elevation={0}
+                sx={{ borderRadius: "20px", background: "#1976d211" }}
+              >
+                <CardContent sx={{ textAlign: "center", p: 2 }}>
+                  <Typography variant="h5" fontWeight="bold" color="#1976d2">
+                    {stats.in_use || 0}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Đang sử dụng
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid size={{ xs: 4, md: 2.4 }}>
+              <Card
+                elevation={0}
+                sx={{ borderRadius: "20px", background: "#ff980011" }}
+              >
+                <CardContent sx={{ textAlign: "center", p: 2 }}>
+                  <Typography variant="h5" fontWeight="bold" color="#ff9800">
+                    {stats.maintenance || 0}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Bảo trì
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid size={{ xs: 4, md: 2.4 }}>
+              <Card
+                elevation={0}
+                sx={{ borderRadius: "20px", background: "#f4433611" }}
+              >
+                <CardContent sx={{ textAlign: "center", p: 2 }}>
+                  <Typography variant="h5" fontWeight="bold" color="#f44336">
+                    {stats.liquidation || 0}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Thanh lý
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid size={{ xs: 4, md: 2.4 }}>
+              <Card
+                elevation={0}
+                sx={{ borderRadius: "20px", background: "#9e9e9e11" }}
+              >
+                <CardContent sx={{ textAlign: "center", p: 2 }}>
+                  <Typography variant="h5" fontWeight="bold" color="#9e9e9e">
+                    {stats.disabled || 0}/{stats.broken || 0}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Vô hiệu/Hư
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            {/* Hàng 2 */}
+            <Grid size={{ xs: 4, md: 2.4 }}>
+              <Card
+                elevation={0}
+                sx={{ borderRadius: "20px", background: "#673ab711" }}
+              >
+                <CardContent sx={{ textAlign: "center", p: 2 }}>
+                  <Typography variant="h5" fontWeight="bold" color="#673ab7">
+                    {stats.rented || 0}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Thuê
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid size={{ xs: 4, md: 2.4 }}>
+              <Card
+                elevation={0}
+                sx={{ borderRadius: "20px", background: "#673ab711" }}
+              >
+                <CardContent sx={{ textAlign: "center", p: 2 }}>
+                  <Typography variant="h5" fontWeight="bold" color="#673ab7">
+                    {stats.rented_return || 0}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Đã trả (Thuê)
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid size={{ xs: 4, md: 2.4 }}>
+              <Card
+                elevation={0}
+                sx={{ borderRadius: "20px", background: "#03a9f411" }}
+              >
+                <CardContent sx={{ textAlign: "center", p: 2 }}>
+                  <Typography variant="h5" fontWeight="bold" color="#03a9f4">
+                    {stats.borrowed || 0}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Mượn
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid size={{ xs: 4, md: 2.4 }}>
+              <Card
+                elevation={0}
+                sx={{ borderRadius: "20px", background: "#03a9f411" }}
+              >
+                <CardContent sx={{ textAlign: "center", p: 2 }}>
+                  <Typography variant="h5" fontWeight="bold" color="#03a9f4">
+                    {stats.borrowed_return || 0}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Đã trả (Mượn)
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid size={{ xs: 4, md: 2.4 }}>
+              <Card
+                elevation={0}
+                sx={{ borderRadius: "20px", background: "#00bcd411" }}
+              >
+                <CardContent sx={{ textAlign: "center", p: 2 }}>
+                  <Typography variant="h5" fontWeight="bold" color="#00bcd4">
+                    {stats.borrowed_out || 0}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Cho mượn
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+          </Grid>
+        </Grid>
+      </Grid>
+    );
 
     if (machinesAtLocation.length === 0 && !loadingMachines) {
       return (
@@ -302,6 +534,7 @@ const LocationTrackPage = () => {
 
     return (
       <>
+        {renderStatsCards()}
         <TableContainer
           component={Paper}
           elevation={1}
@@ -318,13 +551,23 @@ const LocationTrackPage = () => {
                 <TableCell sx={{ fontWeight: 600 }}>Loại máy</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Model</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Serial</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Loại</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Trạng thái</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>
+                  Trạng thái (chính)
+                </TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>
+                  Trạng thái (mượn/thuê)
+                </TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {machinesAtLocation.map((machine) => {
                 const statusInfo = getStatusInfo(machine.current_status);
+                const borrowStatusInfo =
+                  machine.is_borrowed_or_rented_or_borrowed_out
+                    ? getStatusInfo(
+                        machine.is_borrowed_or_rented_or_borrowed_out
+                      )
+                    : null;
                 return (
                   <TableRow
                     key={machine.uuid_machine}
@@ -338,7 +581,6 @@ const LocationTrackPage = () => {
                     <TableCell>{machine.type_machine || "-"}</TableCell>
                     <TableCell>{machine.model_machine || "-"}</TableCell>
                     <TableCell>{machine.serial_machine || "-"}</TableCell>
-                    <TableCell>{machine.name_category || "-"}</TableCell>
                     <TableCell>
                       <Chip
                         label={statusInfo.label}
@@ -350,6 +592,22 @@ const LocationTrackPage = () => {
                           borderRadius: "8px",
                         }}
                       />
+                    </TableCell>
+                    <TableCell>
+                      {borrowStatusInfo ? (
+                        <Chip
+                          label={borrowStatusInfo.label}
+                          size="small"
+                          sx={{
+                            background: borrowStatusInfo.bg,
+                            color: borrowStatusInfo.color,
+                            fontWeight: 600,
+                            borderRadius: "8px",
+                          }}
+                        />
+                      ) : (
+                        "-"
+                      )}
                     </TableCell>
                   </TableRow>
                 );
@@ -476,7 +734,7 @@ const LocationTrackPage = () => {
                           fontWeight: 600,
                         }}
                       >
-                        {dept.name_department}
+                        {dept.name_department} ({dept.machine_count || 0})
                       </Button>
                     ))
                   )}
@@ -559,7 +817,9 @@ const LocationTrackPage = () => {
                               <MeetingRoom fontSize="small" />
                             </ListItemIcon>
                             <ListItemText
-                              primary={loc.name_location}
+                              primary={`${loc.name_location} (${
+                                loc.machine_count || 0
+                              })`}
                               primaryTypographyProps={{
                                 fontWeight: isSelected ? 700 : 500,
                                 color: isSelected ? "primary.main" : "inherit",

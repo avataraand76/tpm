@@ -103,6 +103,7 @@ const TicketManagementPage = () => {
 
   // States for QR Scanner
   const [openScanDialog, setOpenScanDialog] = useState(false);
+  const [scannerApiParams, setScannerApiParams] = useState({});
 
   // Snackbar
   const [notification, setNotification] = useState({
@@ -117,8 +118,19 @@ const TicketManagementPage = () => {
     available: { bg: "#2e7d3222", color: "#2e7d32", label: "Sẵn sàng" },
     in_use: { bg: "#667eea22", color: "#667eea", label: "Đang sử dụng" },
     maintenance: { bg: "#ff980022", color: "#ff9800", label: "Bảo trì" },
+    broken: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Máy hư" },
     rented: { bg: "#673ab722", color: "#673ab7", label: "Đang thuê" },
+    rented_return: {
+      bg: "#673ab722",
+      color: "#673ab7",
+      label: "Đã trả (máy thuê)",
+    },
     borrowed: { bg: "#03a9f422", color: "#03a9f4", label: "Đang mượn" },
+    borrowed_return: {
+      bg: "#03a9f422",
+      color: "#03a9f4",
+      label: "Đã trả (máy mượn)",
+    },
     borrowed_out: { bg: "#00bcd422", color: "#00bcd4", label: "Cho mượn" },
     liquidation: { bg: "#f4433622", color: "#f44336", label: "Thanh lý" },
     disabled: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Vô hiệu hóa" },
@@ -223,7 +235,7 @@ const TicketManagementPage = () => {
   }, [activeTab, page, statusFilter, typeFilter, showNotification]);
 
   const searchMachines = useCallback(
-    async (searchTerm, pageNumber = 1) => {
+    async (searchTerm, pageNumber = 1, filters = {}) => {
       if (searchTerm.length < 2) {
         setSearchResults([]);
         setSearchTotalPages(1);
@@ -235,6 +247,7 @@ const TicketManagementPage = () => {
         const response = await api.machines.search(searchTerm, {
           page: pageNumber,
           limit: SEARCH_LIMIT,
+          ...filters,
         });
         setSearchResults(response.data);
         setSearchTotalPages(response.pagination.totalPages);
@@ -275,6 +288,10 @@ const TicketManagementPage = () => {
   useEffect(() => {
     fetchExternalLocations();
   }, [fetchExternalLocations]);
+  useEffect(() => {
+    setScannerApiParams(getMachineFiltersForDialog());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, openDialog, dialogType, formData.type]);
 
   // --- Handlers ---
   const handleTabChange = (event, newValue) => {
@@ -358,16 +375,50 @@ const TicketManagementPage = () => {
     }
   };
 
+  const getMachineFiltersForDialog = () => {
+    // Rule (l): Cập nhật vị trí (Tab 3)
+    if (activeTab === 3) {
+      return { ticket_type: "update_location" };
+    }
+
+    // Chỉ áp dụng filter khi dialog đang mở
+    if (!openDialog) return {};
+
+    // Rule (k): Điều chuyển nội bộ
+    if (dialogType === "internal") {
+      return { ticket_type: "internal" };
+    }
+
+    // Rules (a-j): Các loại phiếu Nhập/Xuất
+    const currentTicketType = formData.type;
+    if (currentTicketType) {
+      return { ticket_type: currentTicketType };
+    }
+
+    // Mặc định không có filter (sẽ được backend xử lý)
+    return {};
+  };
+
   // Handlers for Search
   const handleSearchTermChange = (e) => {
     const term = e.target.value;
     setSearchMachineTerm(term);
-    searchMachines(term, 1);
+
+    // <<< BẮT ĐẦU THAY ĐỔI: Sử dụng helper
+    const filters = getMachineFiltersForDialog();
+    // <<< KẾT THÚC THAY ĐỔI
+
+    searchMachines(term, 1, filters); // <<< SỬA: Truyền filters
   };
   const handleSearchPageChange = (event, value) => {
     setSearchPage(value);
+
+    // <<< BẮT ĐẦU THAY ĐỔI: Sử dụng helper
+    const filters = getMachineFiltersForDialog();
+    // <<< KẾT THÚC THAY ĐỔI
+
     if (searchMachineTerm && searchMachineTerm.length >= 2)
-      searchMachines(searchMachineTerm, value);
+      searchMachines(searchMachineTerm, value, filters); // <<< SỬA: Truyền filters
   };
 
   // Helper for filtering locations in dialog
@@ -522,7 +573,15 @@ const TicketManagementPage = () => {
         ...prev,
         [field]: value,
         to_location_uuid: "",
+        is_borrowed_or_rented_or_borrowed_out_name: "",
+        is_borrowed_or_rented_or_borrowed_out_date: "",
+        is_borrowed_or_rented_or_borrowed_out_return_date: "",
       }));
+
+      setSearchMachineTerm("");
+      setSearchResults([]);
+      setSearchPage(1);
+      setSearchTotalPages(1);
     } else {
       setFormData((prev) => ({ ...prev, [field]: value }));
     }
@@ -965,7 +1024,7 @@ const TicketManagementPage = () => {
                                 key="borrowed_out_return"
                                 value="borrowed_out_return"
                               >
-                                Nhập trả (từ cho mượn)
+                                Nhập trả (máy cho mượn)
                               </MenuItem>,
                             ]
                           : [
@@ -1008,7 +1067,9 @@ const TicketManagementPage = () => {
                       <TableRow
                         sx={{ backgroundColor: "rgba(102, 126, 234, 0.05)" }}
                       >
-                        <TableCell sx={{ fontWeight: 600 }}>Ngày</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>
+                          Ngày Tạo Phiếu
+                        </TableCell>
                         <TableCell sx={{ fontWeight: 600 }}>Loại</TableCell>
                         {activeTab === 2 ? (
                           <TableCell sx={{ fontWeight: 600 }} colSpan={2}>
@@ -1191,6 +1252,27 @@ const TicketManagementPage = () => {
                                               borderRadius: "8px",
                                             }}
                                           />
+                                          {machine.is_borrowed_or_rented_or_borrowed_out && (
+                                            <Chip
+                                              label={getMachineStatusLabel(
+                                                machine.is_borrowed_or_rented_or_borrowed_out
+                                              )}
+                                              size="small"
+                                              sx={{
+                                                ml: 0.5,
+                                                height: 20,
+                                                fontSize: "0.75rem",
+                                                background: getStatusInfo(
+                                                  machine.is_borrowed_or_rented_or_borrowed_out
+                                                ).bg,
+                                                color: getStatusInfo(
+                                                  machine.is_borrowed_or_rented_or_borrowed_out
+                                                ).color,
+                                                fontWeight: 600,
+                                                borderRadius: "8px",
+                                              }}
+                                            />
+                                          )}
                                         </Typography>
                                         <Typography
                                           variant="caption"
@@ -1280,6 +1362,27 @@ const TicketManagementPage = () => {
                                       borderRadius: "8px",
                                     }}
                                   />
+                                  {machine.is_borrowed_or_rented_or_borrowed_out && (
+                                    <Chip
+                                      label={getMachineStatusLabel(
+                                        machine.is_borrowed_or_rented_or_borrowed_out
+                                      )}
+                                      size="small"
+                                      sx={{
+                                        ml: 0.5,
+                                        height: 20,
+                                        fontSize: "0.75rem",
+                                        background: getStatusInfo(
+                                          machine.is_borrowed_or_rented_or_borrowed_out
+                                        ).bg,
+                                        color: getStatusInfo(
+                                          machine.is_borrowed_or_rented_or_borrowed_out
+                                        ).color,
+                                        fontWeight: 600,
+                                        borderRadius: "8px",
+                                      }}
+                                    />
+                                  )}
                                 </Typography>
                                 <Typography
                                   variant="caption"
@@ -1399,300 +1502,448 @@ const TicketManagementPage = () => {
               </Box>
             ) : (
               <Stack spacing={3}>
-                {dialogType !== "internal" && (
-                  <TextField
-                    fullWidth
-                    select
-                    label={`Loại ${dialogType === "import" ? "nhập" : "xuất"}`}
-                    value={formData.type}
-                    onChange={(e) => handleFormChange("type", e.target.value)}
-                    disabled={dialogMode === "view"}
-                    required
-                    sx={DISABLED_VIEW_SX}
-                  >
-                    {dialogType === "import"
-                      ? [
-                          <MenuItem key="purchased" value="purchased">
-                            Nhập mua mới
-                          </MenuItem>,
-                          <MenuItem
-                            key="maintenance_return"
-                            value="maintenance_return"
-                          >
-                            Nhập sau bảo trì
-                          </MenuItem>,
-                          <MenuItem key="rented" value="rented">
-                            Nhập thuê
-                          </MenuItem>,
-                          <MenuItem key="borrowed" value="borrowed">
-                            Nhập mượn
-                          </MenuItem>,
-                          <MenuItem
-                            key="borrowed_out_return"
-                            value="borrowed_out_return"
-                          >
-                            Nhập trả (từ cho mượn)
-                          </MenuItem>,
-                        ]
-                      : [
-                          <MenuItem key="liquidation" value="liquidation">
-                            Xuất thanh lý
-                          </MenuItem>,
-                          <MenuItem key="maintenance" value="maintenance">
-                            Xuất bảo trì
-                          </MenuItem>,
-                          <MenuItem key="borrowed_out" value="borrowed_out">
-                            Xuất cho mượn
-                          </MenuItem>,
-                          <MenuItem key="rented_return" value="rented_return">
-                            Xuất trả (máy thuê)
-                          </MenuItem>,
-                          <MenuItem
-                            key="borrowed_return"
-                            value="borrowed_return"
-                          >
-                            Xuất trả (máy mượn)
-                          </MenuItem>,
-                        ]}
-                  </TextField>
-                )}
-                {["borrowed", "rented", "borrowed_out"].includes(
-                  formData.type
-                ) && (
-                  <Card variant="outlined" sx={{ borderRadius: "12px" }}>
-                    <CardContent>
-                      <Typography variant="h6" gutterBottom>
-                        Thông tin bổ sung
-                      </Typography>
-                      <Stack spacing={2}>
-                        <Autocomplete
-                          fullWidth
-                          options={externalLocations}
-                          loading={externalLocationLoading}
-                          getOptionLabel={(option) =>
-                            option.name_location || ""
-                          }
-                          onChange={(event, newValue) =>
-                            handleFormChange(
-                              "is_borrowed_or_rented_or_borrowed_out_name",
-                              newValue ? newValue.name_location : ""
-                            )
-                          }
-                          value={
-                            externalLocations.find(
-                              (loc) =>
-                                loc.name_location ===
-                                formData.is_borrowed_or_rented_or_borrowed_out_name
-                            ) || null
-                          }
-                          disabled={dialogMode === "view"}
-                          renderInput={(params) => (
-                            <TextField
-                              {...params}
-                              label="Tên người/đơn vị (mượn/thuê/cho mượn)"
-                              required
-                              sx={DISABLED_VIEW_SX}
-                              InputProps={{
-                                ...params.InputProps,
-                                endAdornment: (
-                                  <>
-                                    {externalLocationLoading ? (
-                                      <CircularProgress
-                                        color="inherit"
-                                        size={20}
-                                      />
-                                    ) : null}
-                                    {params.InputProps.endAdornment}
-                                  </>
-                                ),
-                              }}
-                            />
-                          )}
-                          sx={DISABLED_VIEW_SX}
-                        />
+                {/* <<< THÊM BIẾN ĐIỀU KIỆN >>> */}
+                {(() => {
+                  const isFormDisabled =
+                    dialogType !== "internal" && !formData.type;
+
+                  return (
+                    <>
+                      {dialogType !== "internal" && (
                         <TextField
                           fullWidth
-                          type="date"
-                          label="Ngày (mượn/thuê/cho mượn)"
-                          value={
-                            formData.is_borrowed_or_rented_or_borrowed_out_date
-                          }
+                          select
+                          label={`Loại ${
+                            dialogType === "import" ? "nhập" : "xuất"
+                          }`}
+                          value={formData.type}
                           onChange={(e) =>
-                            handleFormChange(
-                              "is_borrowed_or_rented_or_borrowed_out_date",
-                              e.target.value
-                            )
+                            handleFormChange("type", e.target.value)
                           }
                           disabled={dialogMode === "view"}
                           required
-                          InputLabelProps={{ shrink: true }}
                           sx={DISABLED_VIEW_SX}
-                        />
-                        <TextField
-                          fullWidth
-                          type="date"
-                          label="Ngày dự kiến trả"
-                          value={
-                            formData.is_borrowed_or_rented_or_borrowed_out_return_date
-                          }
-                          onChange={(e) =>
-                            handleFormChange(
-                              "is_borrowed_or_rented_or_borrowed_out_return_date",
-                              e.target.value
-                            )
-                          }
-                          disabled={dialogMode === "view"}
-                          InputLabelProps={{ shrink: true }}
-                          sx={DISABLED_VIEW_SX}
-                        />
-                      </Stack>
-                    </CardContent>
-                  </Card>
-                )}
-                <TextField
-                  fullWidth
-                  type="date"
-                  label={
-                    dialogType === "internal" ? "Ngày điều chuyển" : "Ngày"
-                  }
-                  value={formData.date}
-                  onChange={(e) => handleFormChange("date", e.target.value)}
-                  disabled={dialogMode === "view"}
-                  required
-                  InputLabelProps={{ shrink: true }}
-                  sx={DISABLED_VIEW_SX}
-                />
-                <Autocomplete
-                  fullWidth
-                  options={filteredLocations}
-                  getOptionLabel={(option) => option.name_location || ""}
-                  onChange={(event, newValue) =>
-                    handleFormChange(
-                      "to_location_uuid",
-                      newValue ? newValue.uuid_location : ""
-                    )
-                  }
-                  value={
-                    filteredLocations.find(
-                      (loc) => loc.uuid_location === formData.to_location_uuid
-                    ) || null
-                  }
-                  disabled={dialogMode === "view" || locationLoading}
-                  loading={locationLoading}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label={
-                        dialogType === "import"
-                          ? "Nhập vào"
-                          : dialogType === "export"
-                          ? "Xuất đến"
-                          : "Đến vị trí"
-                      }
-                      required
-                      sx={{
-                        "& .MuiOutlinedInput-root": { borderRadius: "12px" },
-                      }}
-                      InputProps={{
-                        ...params.InputProps,
-                        endAdornment: (
-                          <>
-                            {locationLoading ? (
-                              <CircularProgress color="inherit" size={20} />
-                            ) : null}
-                            {params.InputProps.endAdornment}
-                          </>
-                        ),
-                      }}
-                    />
-                  )}
-                  sx={DISABLED_VIEW_SX}
-                />
-                {dialogMode === "create" && (
-                  <Card variant="outlined" sx={{ borderRadius: "12px" }}>
-                    <CardContent>
-                      <Typography variant="h6" gutterBottom>
-                        Chọn máy móc ({formData.machines.length})
-                      </Typography>
-                      <Button
-                        variant="outlined"
-                        startIcon={<QrCode2 />}
-                        onClick={() => setOpenScanDialog(true)}
-                        sx={{
-                          borderRadius: "12px",
-                          py: 1,
-                          borderColor: "#2e7d32",
-                          color: "#2e7d32",
-                          mb: 2,
-                          "&:hover": {
-                            borderColor: "#4caf50",
-                            bgcolor: "#2e7d3211",
-                          },
-                        }}
-                      >
-                        Quét Mã QR Máy Móc
-                      </Button>
+                        >
+                          {dialogType === "import"
+                            ? [
+                                <MenuItem key="purchased" value="purchased">
+                                  Nhập mua mới
+                                </MenuItem>,
+                                <MenuItem
+                                  key="maintenance_return"
+                                  value="maintenance_return"
+                                >
+                                  Nhập sau bảo trì
+                                </MenuItem>,
+                                <MenuItem key="rented" value="rented">
+                                  Nhập thuê
+                                </MenuItem>,
+                                <MenuItem key="borrowed" value="borrowed">
+                                  Nhập mượn
+                                </MenuItem>,
+                                <MenuItem
+                                  key="borrowed_out_return"
+                                  value="borrowed_out_return"
+                                >
+                                  Nhập trả (máy cho mượn)
+                                </MenuItem>,
+                              ]
+                            : [
+                                <MenuItem key="liquidation" value="liquidation">
+                                  Xuất thanh lý
+                                </MenuItem>,
+                                <MenuItem key="maintenance" value="maintenance">
+                                  Xuất bảo trì
+                                </MenuItem>,
+                                <MenuItem
+                                  key="borrowed_out"
+                                  value="borrowed_out"
+                                >
+                                  Xuất cho mượn
+                                </MenuItem>,
+                                <MenuItem
+                                  key="rented_return"
+                                  value="rented_return"
+                                >
+                                  Xuất trả (máy thuê)
+                                </MenuItem>,
+                                <MenuItem
+                                  key="borrowed_return"
+                                  value="borrowed_return"
+                                >
+                                  Xuất trả (máy mượn)
+                                </MenuItem>,
+                              ]}
+                        </TextField>
+                      )}
+                      {["borrowed", "rented", "borrowed_out"].includes(
+                        formData.type
+                      ) && (
+                        <Card variant="outlined" sx={{ borderRadius: "12px" }}>
+                          <CardContent>
+                            <Typography variant="h6" gutterBottom>
+                              Thông tin bổ sung
+                            </Typography>
+                            <Stack spacing={2}>
+                              <Autocomplete
+                                fullWidth
+                                options={externalLocations}
+                                loading={externalLocationLoading}
+                                getOptionLabel={(option) =>
+                                  option.name_location || ""
+                                }
+                                onChange={(event, newValue) =>
+                                  handleFormChange(
+                                    "is_borrowed_or_rented_or_borrowed_out_name",
+                                    newValue ? newValue.name_location : ""
+                                  )
+                                }
+                                value={
+                                  externalLocations.find(
+                                    (loc) =>
+                                      loc.name_location ===
+                                      formData.is_borrowed_or_rented_or_borrowed_out_name
+                                  ) || null
+                                }
+                                disabled={dialogMode === "view"}
+                                renderInput={(params) => (
+                                  <TextField
+                                    {...params}
+                                    label="Tên người/đơn vị (mượn/thuê/cho mượn)"
+                                    required
+                                    sx={DISABLED_VIEW_SX}
+                                    InputProps={{
+                                      ...params.InputProps,
+                                      endAdornment: (
+                                        <>
+                                          {externalLocationLoading ? (
+                                            <CircularProgress
+                                              color="inherit"
+                                              size={20}
+                                            />
+                                          ) : null}
+                                          {params.InputProps.endAdornment}
+                                        </>
+                                      ),
+                                    }}
+                                  />
+                                )}
+                                sx={DISABLED_VIEW_SX}
+                              />
+                              <TextField
+                                fullWidth
+                                type="date"
+                                label="Ngày (mượn/thuê/cho mượn)"
+                                value={
+                                  formData.is_borrowed_or_rented_or_borrowed_out_date
+                                }
+                                onChange={(e) =>
+                                  handleFormChange(
+                                    "is_borrowed_or_rented_or_borrowed_out_date",
+                                    e.target.value
+                                  )
+                                }
+                                disabled={dialogMode === "view"}
+                                required
+                                InputLabelProps={{ shrink: true }}
+                                sx={DISABLED_VIEW_SX}
+                              />
+                              <TextField
+                                fullWidth
+                                type="date"
+                                label="Ngày dự kiến trả"
+                                value={
+                                  formData.is_borrowed_or_rented_or_borrowed_out_return_date
+                                }
+                                onChange={(e) =>
+                                  handleFormChange(
+                                    "is_borrowed_or_rented_or_borrowed_out_return_date",
+                                    e.target.value
+                                  )
+                                }
+                                disabled={dialogMode === "view"}
+                                InputLabelProps={{ shrink: true }}
+                                sx={DISABLED_VIEW_SX}
+                              />
+                            </Stack>
+                          </CardContent>
+                        </Card>
+                      )}
                       <TextField
                         fullWidth
-                        label="Tìm kiếm máy"
-                        value={searchMachineTerm}
-                        onChange={handleSearchTermChange}
-                        InputProps={{
-                          startAdornment: (
-                            <InputAdornment position="start">
-                              <Search />
-                            </InputAdornment>
-                          ),
-                          endAdornment: searchLoading && (
-                            <InputAdornment position="end">
-                              <CircularProgress size={20} />
-                            </InputAdornment>
-                          ),
-                          sx: { borderRadius: "12px" },
-                        }}
-                        sx={{ mb: 2 }}
+                        type="date"
+                        label={
+                          dialogType === "internal"
+                            ? "Ngày điều chuyển"
+                            : "Ngày Tạo phiếu"
+                        }
+                        value={formData.date}
+                        onChange={(e) =>
+                          handleFormChange("date", e.target.value)
+                        }
+                        disabled={isFormDisabled || dialogMode === "view"}
+                        required
+                        InputLabelProps={{ shrink: true }}
+                        sx={DISABLED_VIEW_SX}
                       />
-                      {searchResults.length > 0 && (
-                        <>
-                          <Paper
-                            elevation={3}
-                            sx={{ maxHeight: 300, overflow: "auto" }}
-                          >
-                            <Table size="small">
-                              <TableBody>
-                                {searchResults.map((machine) => {
-                                  const isSelected = formData.machines.some(
-                                    (m) =>
-                                      m.uuid_machine === machine.uuid_machine
-                                  );
-                                  return (
-                                    <TableRow
+                      <Autocomplete
+                        fullWidth
+                        options={filteredLocations}
+                        getOptionLabel={(option) => option.name_location || ""}
+                        onChange={(event, newValue) =>
+                          handleFormChange(
+                            "to_location_uuid",
+                            newValue ? newValue.uuid_location : ""
+                          )
+                        }
+                        value={
+                          filteredLocations.find(
+                            (loc) =>
+                              loc.uuid_location === formData.to_location_uuid
+                          ) || null
+                        }
+                        disabled={
+                          isFormDisabled ||
+                          dialogMode === "view" ||
+                          locationLoading
+                        }
+                        loading={locationLoading}
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            label={
+                              dialogType === "import"
+                                ? "Nhập vào"
+                                : dialogType === "export"
+                                ? "Xuất đến"
+                                : "Đến vị trí"
+                            }
+                            required
+                            sx={{
+                              "& .MuiOutlinedInput-root": {
+                                borderRadius: "12px",
+                              },
+                            }}
+                            InputProps={{
+                              ...params.InputProps,
+                              endAdornment: (
+                                <>
+                                  {locationLoading ? (
+                                    <CircularProgress
+                                      color="inherit"
+                                      size={20}
+                                    />
+                                  ) : null}
+                                  {params.InputProps.endAdornment}
+                                </>
+                              ),
+                            }}
+                          />
+                        )}
+                        sx={DISABLED_VIEW_SX}
+                      />
+                      {dialogMode === "create" && (
+                        <Card variant="outlined" sx={{ borderRadius: "12px" }}>
+                          <CardContent>
+                            <Typography variant="h6" gutterBottom>
+                              Chọn máy móc ({formData.machines.length})
+                            </Typography>
+                            <Button
+                              variant="outlined"
+                              startIcon={<QrCode2 />}
+                              onClick={() => setOpenScanDialog(true)}
+                              disabled={isFormDisabled}
+                              sx={{
+                                borderRadius: "12px",
+                                py: 1,
+                                borderColor: "#2e7d32",
+                                color: "#2e7d32",
+                                mb: 2,
+                                "&:hover": {
+                                  borderColor: "#4caf50",
+                                  bgcolor: "#2e7d3211",
+                                },
+                              }}
+                            >
+                              Quét Mã QR Máy Móc
+                            </Button>
+                            <TextField
+                              fullWidth
+                              label="Tìm kiếm máy"
+                              value={searchMachineTerm}
+                              onChange={handleSearchTermChange}
+                              disabled={isFormDisabled}
+                              InputProps={{
+                                startAdornment: (
+                                  <InputAdornment position="start">
+                                    <Search />
+                                  </InputAdornment>
+                                ),
+                                endAdornment: searchLoading && (
+                                  <InputAdornment position="end">
+                                    <CircularProgress size={20} />
+                                  </InputAdornment>
+                                ),
+                                sx: { borderRadius: "12px" },
+                              }}
+                              sx={{ mb: 2 }}
+                            />
+                            {searchResults.length > 0 && (
+                              <>
+                                <Paper
+                                  elevation={3}
+                                  sx={{ maxHeight: 300, overflow: "auto" }}
+                                >
+                                  <Table size="small">
+                                    <TableBody>
+                                      {searchResults.map((machine) => {
+                                        const isSelected =
+                                          formData.machines.some(
+                                            (m) =>
+                                              m.uuid_machine ===
+                                              machine.uuid_machine
+                                          );
+                                        return (
+                                          <TableRow
+                                            key={machine.uuid_machine}
+                                            hover
+                                            onClick={() =>
+                                              handleSelectMachine(machine)
+                                            }
+                                            sx={{
+                                              cursor: "pointer",
+                                              backgroundColor: isSelected
+                                                ? "rgba(102, 126, 234, 0.1)"
+                                                : "inherit",
+                                            }}
+                                          >
+                                            <TableCell padding="checkbox">
+                                              <Tooltip
+                                                title={
+                                                  isSelected
+                                                    ? "Đã chọn"
+                                                    : "Chọn"
+                                                }
+                                              >
+                                                <Checkbox
+                                                  checked={isSelected}
+                                                  size="small"
+                                                />
+                                              </Tooltip>
+                                            </TableCell>
+                                            <TableCell>
+                                              <Stack>
+                                                <Typography
+                                                  variant="body2"
+                                                  sx={{ fontWeight: 600 }}
+                                                >
+                                                  {machine.code_machine} -{" "}
+                                                  {machine.type_machine} -{" "}
+                                                  {machine.model_machine}
+                                                  <Chip
+                                                    label={getMachineStatusLabel(
+                                                      machine.current_status
+                                                    )}
+                                                    size="small"
+                                                    sx={{
+                                                      ml: 1,
+                                                      height: 20,
+                                                      fontSize: "0.75rem",
+                                                      background: getStatusInfo(
+                                                        machine.current_status
+                                                      ).bg,
+                                                      color: getStatusInfo(
+                                                        machine.current_status
+                                                      ).color,
+                                                      fontWeight: 600,
+                                                      borderRadius: "8px",
+                                                    }}
+                                                  />
+                                                  {machine.is_borrowed_or_rented_or_borrowed_out && (
+                                                    <Chip
+                                                      label={getMachineStatusLabel(
+                                                        machine.is_borrowed_or_rented_or_borrowed_out
+                                                      )}
+                                                      size="small"
+                                                      sx={{
+                                                        ml: 0.5,
+                                                        height: 20,
+                                                        fontSize: "0.75rem",
+                                                        background:
+                                                          getStatusInfo(
+                                                            machine.is_borrowed_or_rented_or_borrowed_out
+                                                          ).bg,
+                                                        color: getStatusInfo(
+                                                          machine.is_borrowed_or_rented_or_borrowed_out
+                                                        ).color,
+                                                        fontWeight: 600,
+                                                        borderRadius: "8px",
+                                                      }}
+                                                    />
+                                                  )}
+                                                </Typography>
+                                                <Typography
+                                                  variant="caption"
+                                                  color="text.secondary"
+                                                >
+                                                  Serial:{" "}
+                                                  {machine.serial_machine ||
+                                                    "N/A"}{" "}
+                                                  | Vị trí:{" "}
+                                                  {machine.name_location ||
+                                                    "Chưa xác định"}
+                                                </Typography>
+                                              </Stack>
+                                            </TableCell>
+                                          </TableRow>
+                                        );
+                                      })}
+                                    </TableBody>
+                                  </Table>
+                                </Paper>
+                                {searchTotalPages > 1 && (
+                                  <Box
+                                    sx={{
+                                      display: "flex",
+                                      justifyContent: "center",
+                                      mt: 1,
+                                      mb: 2,
+                                    }}
+                                  >
+                                    <Pagination
+                                      count={searchTotalPages}
+                                      page={searchPage}
+                                      onChange={handleSearchPageChange}
+                                      size="small"
+                                      color="primary"
+                                      showFirstButton
+                                      showLastButton
+                                    />
+                                  </Box>
+                                )}
+                              </>
+                            )}
+                            {formData.machines.length > 0 && (
+                              <Box sx={{ mt: 2 }}>
+                                <Typography
+                                  variant="subtitle1"
+                                  sx={{ fontWeight: 600, mb: 1 }}
+                                >
+                                  Danh sách máy sẽ thêm:
+                                </Typography>
+                                <Stack spacing={2}>
+                                  {formData.machines.map((machine) => (
+                                    <Paper
                                       key={machine.uuid_machine}
-                                      hover
-                                      onClick={() =>
-                                        handleSelectMachine(machine)
-                                      }
-                                      sx={{
-                                        cursor: "pointer",
-                                        backgroundColor: isSelected
-                                          ? "rgba(102, 126, 234, 0.1)"
-                                          : "inherit",
-                                      }}
+                                      variant="outlined"
+                                      sx={{ p: 2, borderRadius: "12px" }}
                                     >
-                                      <TableCell padding="checkbox">
-                                        <Tooltip
-                                          title={
-                                            isSelected ? "Đã chọn" : "Chọn"
-                                          }
-                                        >
-                                          <Checkbox
-                                            checked={isSelected}
-                                            size="small"
-                                          />
-                                        </Tooltip>
-                                      </TableCell>
-                                      <TableCell>
-                                        <Stack>
+                                      <Stack
+                                        direction="row"
+                                        spacing={2}
+                                        alignItems="center"
+                                      >
+                                        <Box sx={{ flexGrow: 1 }}>
                                           <Typography
                                             variant="body2"
                                             sx={{ fontWeight: 600 }}
@@ -1719,247 +1970,200 @@ const TicketManagementPage = () => {
                                                 borderRadius: "8px",
                                               }}
                                             />
+                                            {machine.is_borrowed_or_rented_or_borrowed_out && (
+                                              <Chip
+                                                label={getMachineStatusLabel(
+                                                  machine.is_borrowed_or_rented_or_borrowed_out
+                                                )}
+                                                size="small"
+                                                sx={{
+                                                  ml: 0.5,
+                                                  height: 20,
+                                                  fontSize: "0.75rem",
+                                                  background: getStatusInfo(
+                                                    machine.is_borrowed_or_rented_or_borrowed_out
+                                                  ).bg,
+                                                  color: getStatusInfo(
+                                                    machine.is_borrowed_or_rented_or_borrowed_out
+                                                  ).color,
+                                                  fontWeight: 600,
+                                                  borderRadius: "8px",
+                                                }}
+                                              />
+                                            )}
                                           </Typography>
                                           <Typography
                                             variant="caption"
                                             color="text.secondary"
                                           >
                                             Serial:{" "}
-                                            {machine.serial_machine || "N/A"} |
-                                            Vị trí:{" "}
-                                            {machine.name_location ||
-                                              "Chưa xác định"}
+                                            {machine.serial_machine ||
+                                              "Máy mới"}{" "}
+                                            | Vị trí hiện tại:{" "}
+                                            {machine.name_location || "N/A"}
                                           </Typography>
-                                        </Stack>
+                                        </Box>
+                                        <IconButton
+                                          size="small"
+                                          color="error"
+                                          onClick={() =>
+                                            handleRemoveSelectedMachine(
+                                              machine.uuid_machine
+                                            )
+                                          }
+                                        >
+                                          <Delete fontSize="small" />
+                                        </IconButton>
+                                      </Stack>
+                                      <TextField
+                                        fullWidth
+                                        size="small"
+                                        label="Ghi chú riêng cho máy (Tùy chọn)"
+                                        value={machine.note || ""}
+                                        onChange={(e) =>
+                                          handleUpdateMachineNote(
+                                            machine.uuid_machine,
+                                            e.target.value
+                                          )
+                                        }
+                                        disabled={dialogMode === "view"}
+                                        sx={{ mt: 1 }}
+                                      />
+                                    </Paper>
+                                  ))}
+                                </Stack>
+                              </Box>
+                            )}
+                          </CardContent>
+                        </Card>
+                      )}
+                      <TextField
+                        fullWidth
+                        multiline
+                        rows={4}
+                        label="Ghi chú"
+                        value={formData.note}
+                        onChange={(e) =>
+                          handleFormChange("note", e.target.value)
+                        }
+                        disabled={isFormDisabled || dialogMode === "view"}
+                        sx={DISABLED_VIEW_SX}
+                      />
+                      {dialogMode === "view" &&
+                        formData.machines.length > 0 && (
+                          <Card
+                            variant="outlined"
+                            sx={{ borderRadius: "12px" }}
+                          >
+                            <CardContent>
+                              <Typography
+                                variant="h6"
+                                gutterBottom
+                                sx={{ fontWeight: 600 }}
+                              >
+                                Danh sách máy móc ({formData.machines.length})
+                              </Typography>
+                              <TableContainer>
+                                <Table size="small">
+                                  <TableHead>
+                                    <TableRow>
+                                      <TableCell sx={{ fontWeight: 600 }}>
+                                        Mã máy
+                                      </TableCell>
+                                      <TableCell sx={{ fontWeight: 600 }}>
+                                        Loại máy
+                                      </TableCell>
+                                      <TableCell sx={{ fontWeight: 600 }}>
+                                        Model
+                                      </TableCell>
+                                      <TableCell sx={{ fontWeight: 600 }}>
+                                        Serial
+                                      </TableCell>
+                                      <TableCell sx={{ fontWeight: 600 }}>
+                                        Vị trí hiện tại
+                                      </TableCell>
+                                      <TableCell sx={{ fontWeight: 600 }}>
+                                        Loại
+                                      </TableCell>
+                                      <TableCell sx={{ fontWeight: 600 }}>
+                                        Trạng thái
+                                      </TableCell>
+                                      <TableCell sx={{ fontWeight: 600 }}>
+                                        Ghi chú
                                       </TableCell>
                                     </TableRow>
-                                  );
-                                })}
-                              </TableBody>
-                            </Table>
-                          </Paper>
-                          {searchTotalPages > 1 && (
-                            <Box
-                              sx={{
-                                display: "flex",
-                                justifyContent: "center",
-                                mt: 1,
-                                mb: 2,
-                              }}
-                            >
-                              <Pagination
-                                count={searchTotalPages}
-                                page={searchPage}
-                                onChange={handleSearchPageChange}
-                                size="small"
-                                color="primary"
-                                showFirstButton
-                                showLastButton
-                              />
-                            </Box>
-                          )}
-                        </>
-                      )}
-                      {formData.machines.length > 0 && (
-                        <Box sx={{ mt: 2 }}>
-                          <Typography
-                            variant="subtitle1"
-                            sx={{ fontWeight: 600, mb: 1 }}
-                          >
-                            Danh sách máy sẽ thêm:
+                                  </TableHead>
+                                  <TableBody>
+                                    {formData.machines.map((machine, index) => (
+                                      <TableRow
+                                        key={machine.uuid_machine || index}
+                                      >
+                                        <TableCell>
+                                          {machine.code_machine}
+                                        </TableCell>
+                                        <TableCell>
+                                          {machine.type_machine}
+                                        </TableCell>
+                                        <TableCell>
+                                          {machine.model_machine}
+                                        </TableCell>
+                                        <TableCell>
+                                          {machine.serial_machine || "-"}
+                                        </TableCell>
+                                        <TableCell>
+                                          {machine.name_location || "-"}
+                                        </TableCell>
+                                        <TableCell>
+                                          {machine.name_category || "-"}
+                                        </TableCell>
+                                        <TableCell>
+                                          <Chip
+                                            label={getMachineStatusLabel(
+                                              machine.current_status
+                                            )}
+                                            size="small"
+                                            sx={{
+                                              background: getStatusInfo(
+                                                machine.current_status
+                                              ).bg,
+                                              color: getStatusInfo(
+                                                machine.current_status
+                                              ).color,
+                                              fontWeight: 600,
+                                              borderRadius: "8px",
+                                            }}
+                                          />
+                                        </TableCell>
+                                        <TableCell>
+                                          {machine.note || "-"}
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </TableContainer>
+                            </CardContent>
+                          </Card>
+                        )}
+                      {dialogMode === "view" && selectedTicket && (
+                        <Alert severity="info">
+                          <Typography variant="body2">
+                            <strong>Tạo lúc:</strong>{" "}
+                            {new Date(selectedTicket.created_at).toLocaleString(
+                              "vi-VN"
+                            )}
                           </Typography>
-                          <Stack spacing={2}>
-                            {formData.machines.map((machine) => (
-                              <Paper
-                                key={machine.uuid_machine}
-                                variant="outlined"
-                                sx={{ p: 2, borderRadius: "12px" }}
-                              >
-                                <Stack
-                                  direction="row"
-                                  spacing={2}
-                                  alignItems="center"
-                                >
-                                  <Box sx={{ flexGrow: 1 }}>
-                                    <Typography
-                                      variant="body2"
-                                      sx={{ fontWeight: 600 }}
-                                    >
-                                      {machine.code_machine} -{" "}
-                                      {machine.type_machine} -{" "}
-                                      {machine.model_machine}
-                                      <Chip
-                                        label={getMachineStatusLabel(
-                                          machine.current_status
-                                        )}
-                                        size="small"
-                                        sx={{
-                                          ml: 1,
-                                          height: 20,
-                                          fontSize: "0.75rem",
-                                          background: getStatusInfo(
-                                            machine.current_status
-                                          ).bg,
-                                          color: getStatusInfo(
-                                            machine.current_status
-                                          ).color,
-                                          fontWeight: 600,
-                                          borderRadius: "8px",
-                                        }}
-                                      />
-                                    </Typography>
-                                    <Typography
-                                      variant="caption"
-                                      color="text.secondary"
-                                    >
-                                      Serial:{" "}
-                                      {machine.serial_machine || "Máy mới"} | Vị
-                                      trí hiện tại:{" "}
-                                      {machine.name_location || "N/A"}
-                                    </Typography>
-                                  </Box>
-                                  <IconButton
-                                    size="small"
-                                    color="error"
-                                    onClick={() =>
-                                      handleRemoveSelectedMachine(
-                                        machine.uuid_machine
-                                      )
-                                    }
-                                  >
-                                    <Delete fontSize="small" />
-                                  </IconButton>
-                                </Stack>
-                                <TextField
-                                  fullWidth
-                                  size="small"
-                                  label="Ghi chú riêng cho máy (Tùy chọn)"
-                                  value={machine.note || ""}
-                                  onChange={(e) =>
-                                    handleUpdateMachineNote(
-                                      machine.uuid_machine,
-                                      e.target.value
-                                    )
-                                  }
-                                  disabled={dialogMode === "view"}
-                                  sx={{ mt: 1 }}
-                                />
-                              </Paper>
-                            ))}
-                          </Stack>
-                        </Box>
+                          <Typography variant="body2">
+                            <strong>Cập nhật lúc:</strong>{" "}
+                            {new Date(selectedTicket.updated_at).toLocaleString(
+                              "vi-VN"
+                            )}
+                          </Typography>
+                        </Alert>
                       )}
-                    </CardContent>
-                  </Card>
-                )}
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={4}
-                  label="Ghi chú"
-                  value={formData.note}
-                  onChange={(e) => handleFormChange("note", e.target.value)}
-                  disabled={dialogMode === "view"}
-                  sx={DISABLED_VIEW_SX}
-                />
-                {dialogMode === "view" && formData.machines.length > 0 && (
-                  <Card variant="outlined" sx={{ borderRadius: "12px" }}>
-                    <CardContent>
-                      <Typography
-                        variant="h6"
-                        gutterBottom
-                        sx={{ fontWeight: 600 }}
-                      >
-                        Danh sách máy móc ({formData.machines.length})
-                      </Typography>
-                      <TableContainer>
-                        <Table size="small">
-                          <TableHead>
-                            <TableRow>
-                              <TableCell sx={{ fontWeight: 600 }}>
-                                Mã máy
-                              </TableCell>
-                              <TableCell sx={{ fontWeight: 600 }}>
-                                Loại máy
-                              </TableCell>
-                              <TableCell sx={{ fontWeight: 600 }}>
-                                Model
-                              </TableCell>
-                              <TableCell sx={{ fontWeight: 600 }}>
-                                Serial
-                              </TableCell>
-                              <TableCell sx={{ fontWeight: 600 }}>
-                                Vị trí hiện tại
-                              </TableCell>
-                              <TableCell sx={{ fontWeight: 600 }}>
-                                Loại
-                              </TableCell>
-                              <TableCell sx={{ fontWeight: 600 }}>
-                                Trạng thái
-                              </TableCell>
-                              <TableCell sx={{ fontWeight: 600 }}>
-                                Ghi chú
-                              </TableCell>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {formData.machines.map((machine, index) => (
-                              <TableRow key={machine.uuid_machine || index}>
-                                <TableCell>{machine.code_machine}</TableCell>
-                                <TableCell>{machine.type_machine}</TableCell>
-                                <TableCell>{machine.model_machine}</TableCell>
-                                <TableCell>
-                                  {machine.serial_machine || "-"}
-                                </TableCell>
-                                <TableCell>
-                                  {machine.name_location || "-"}
-                                </TableCell>
-                                <TableCell>
-                                  {machine.name_category || "-"}
-                                </TableCell>
-                                <TableCell>
-                                  <Chip
-                                    label={getMachineStatusLabel(
-                                      machine.current_status
-                                    )}
-                                    size="small"
-                                    sx={{
-                                      background: getStatusInfo(
-                                        machine.current_status
-                                      ).bg,
-                                      color: getStatusInfo(
-                                        machine.current_status
-                                      ).color,
-                                      fontWeight: 600,
-                                      borderRadius: "8px",
-                                    }}
-                                  />
-                                </TableCell>
-                                <TableCell>{machine.note || "-"}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </TableContainer>
-                    </CardContent>
-                  </Card>
-                )}
-                {dialogMode === "view" && selectedTicket && (
-                  <Alert severity="info">
-                    <Typography variant="body2">
-                      <strong>Tạo lúc:</strong>{" "}
-                      {new Date(selectedTicket.created_at).toLocaleString(
-                        "vi-VN"
-                      )}
-                    </Typography>
-                    <Typography variant="body2">
-                      <strong>Cập nhật lúc:</strong>{" "}
-                      {new Date(selectedTicket.updated_at).toLocaleString(
-                        "vi-VN"
-                      )}
-                    </Typography>
-                  </Alert>
-                )}
+                    </>
+                  );
+                })()}
               </Stack>
             )}
           </DialogContent>
@@ -2033,18 +2237,34 @@ const TicketManagementPage = () => {
         </Dialog>
 
         {/* Machine QR Scanner Component */}
-        <MachineQRScanner
-          isOpen={openScanDialog}
-          onClose={() => setOpenScanDialog(false)}
-          onMachineAdd={
-            activeTab === 3
-              ? handleUpdateLocationSelectMachine
-              : handleAddMachineFromScanner
+        {(() => {
+          let scannerTicketLabel = "";
+          if (activeTab === 3) {
+            scannerTicketLabel = "Cập nhật vị trí";
+          } else if (dialogType === "internal") {
+            scannerTicketLabel = "Điều chuyển nội bộ";
+          } else if (formData.type) {
+            scannerTicketLabel = getTypeLabel(formData.type);
           }
-          selectedMachines={
-            activeTab === 3 ? updateLocationMachines : formData.machines
-          }
-        />
+
+          return (
+            <MachineQRScanner
+              isOpen={openScanDialog}
+              onClose={() => setOpenScanDialog(false)}
+              onMachineAdd={
+                activeTab === 3
+                  ? handleUpdateLocationSelectMachine
+                  : handleAddMachineFromScanner
+              }
+              selectedMachines={
+                activeTab === 3 ? updateLocationMachines : formData.machines
+              }
+              apiParams={scannerApiParams}
+              ticketTypeLabel={scannerTicketLabel}
+              showNotification={showNotification}
+            />
+          );
+        })()}
 
         {/* Snackbar Notification */}
         <Snackbar
