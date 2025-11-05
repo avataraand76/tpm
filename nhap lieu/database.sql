@@ -256,13 +256,15 @@ create table if not exists tb_machine_internal_transfer
 
     -- properties
     transfer_date date,
-    status enum('pending', 'completed', 'cancelled') default 'pending',
+    status enum('pending_confirmation', 'pending_approval', 'completed', 'cancelled') default 'pending_confirmation',
     note text,
 
     -- key
     primary key (id_machine_internal_transfer),
     
     -- timestamp
+    confirmed_at timestamp default current_timestamp,
+    confirmed_by bigint default '0',
     created_at timestamp default current_timestamp,
     created_by bigint default '0',
     updated_at timestamp default current_timestamp on update current_timestamp,

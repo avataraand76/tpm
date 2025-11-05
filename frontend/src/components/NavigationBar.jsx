@@ -145,7 +145,7 @@ const NavigationBar = () => {
             />
             <Tab
               icon={<Receipt />}
-              label="Phiếu xuất nhập"
+              label="Quản lý phiếu"
               iconPosition="start"
             />
             <Tab icon={<LocationOn />} label="Vị trí" iconPosition="start" />

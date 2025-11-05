@@ -69,6 +69,7 @@ import * as XLSX from "xlsx-js-style";
 import { QRCodeSVG } from "qrcode.react";
 import NavigationBar from "../components/NavigationBar";
 import { api } from "../api/api";
+import { useAuth } from "../hooks/useAuth"; // <<< 1. THÊM MỚI: IMPORT USEAUTH
 
 // Thêm style cho các trường bị disabled/filled để dễ nhận biết (từ yêu cầu trước)
 const DISABLED_VIEW_SX = {
@@ -144,6 +145,23 @@ const initialColumnVisibility = {
 };
 
 const MachineListPage = () => {
+  // <<< 2. THÊM MỚI: LẤY QUYỀN USER
+  const { user, permissions } = useAuth(); // Lấy cả user
+  const isAdmin = permissions.includes("admin");
+  const canEdit = permissions.includes("edit"); // (Giữ lại để dùng cho logic chung)
+
+  // Định nghĩa vai trò chi tiết
+  const phongCoDienId = 14;
+  // const coDienXuongIds = [10, 30, 24, 31];
+
+  const isPhongCoDien =
+    canEdit && !isAdmin && user?.phongban_id === phongCoDienId;
+  // const isCoDienXuong =
+  //   canEdit && !isAdmin && coDienXuongIds.includes(user?.phongban_id);
+
+  // Biến kiểm tra quyền TẠO/NHẬP
+  const canCreateOrImport = isAdmin || isPhongCoDien;
+
   const [machines, setMachines] = useState([]);
   const [stats, setStats] = useState({
     total: 0,
@@ -170,6 +188,8 @@ const MachineListPage = () => {
     hasNextPage: false,
     hasPrevPage: false,
   });
+  const [typeStats, setTypeStats] = useState([]);
+  const [isTypeStatsExpanded, setIsTypeStatsExpanded] = useState(false);
 
   // Dialog states
   const [openDialog, setOpenDialog] = useState(false);
@@ -239,9 +259,21 @@ const MachineListPage = () => {
     }
   };
 
+  const fetchTypeStats = async () => {
+    try {
+      const result = await api.machines.getStatsByType();
+      if (result.success) {
+        setTypeStats(result.data); // result.data là một mảng
+      }
+    } catch (err) {
+      console.error("Error fetching stats by type:", err);
+    }
+  };
+
   useEffect(() => {
     fetchMachines(searchTerm);
     fetchStats();
+    fetchTypeStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, rowsPerPage]);
 
@@ -1234,6 +1266,135 @@ const MachineListPage = () => {
               </Grid>
             </Grid>
           </Grid>
+          {typeStats.length > 0 && (
+            <Grid size={12} sx={{ mt: 3 }}>
+              {" "}
+              {/* Tăng mt để tách biệt khỏi hàng trên */}
+              <Card
+                elevation={0}
+                sx={{
+                  borderRadius: "20px",
+                  background: "#f5f5f5", // Màu xám nhạt
+                  border: "1px solid rgba(0, 0, 0, 0.05)",
+                }}
+              >
+                <CardContent>
+                  <Typography variant="h6" fontWeight="bold" gutterBottom>
+                    Thống kê theo loại máy
+                  </Typography>
+
+                  {/* Danh sách các loại máy */}
+                  <List dense sx={{ pt: 0, pb: 1, width: "100%" }}>
+                    {typeStats
+                      .slice(0, isTypeStatsExpanded ? typeStats.length : 4) // Chỉ hiển thị 4 mục đầu tiên khi thu gọn
+                      .map((typeStat) => (
+                        <ListItem
+                          key={typeStat.type_machine}
+                          disableGutters
+                          sx={{
+                            borderBottom: "1px dashed #e0e0e0",
+                            py: 0.5,
+                          }}
+                        >
+                          {/* >>> MARK: THAY ĐỔI TỪ ĐÂY */}
+                          <ListItemText
+                            primary={
+                              <Box
+                                sx={{ display: "flex", alignItems: "baseline" }}
+                              >
+                                <Typography
+                                  component="span"
+                                  variant="body1"
+                                  sx={{
+                                    whiteSpace: "nowrap",
+                                    textTransform: "uppercase",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    mr: 1, // Thêm khoảng cách
+                                  }}
+                                >
+                                  {/* Thêm dấu hai chấm (:) */}
+                                  {typeStat.type_machine}:
+                                </Typography>
+                                <Typography
+                                  component="span"
+                                  variant="body1"
+                                  fontWeight="bold"
+                                  color="#333"
+                                  sx={{ flexShrink: 0 }} // Đảm bảo số lượng không bị cắt
+                                >
+                                  {typeStat.count} máy
+                                </Typography>
+                              </Box>
+                            }
+                          />
+                          {/* <<< MARK: THAY ĐỔI ĐẾN ĐÂY */}
+                        </ListItem>
+                      ))}
+                  </List>
+
+                  {/* Nút Expand/Collapse */}
+                  {typeStats.length > 4 && ( // Chỉ hiển thị nút nếu có nhiều hơn 4 mục
+                    <Box sx={{ textAlign: "center", mt: 1 }}>
+                      <Button
+                        onClick={() =>
+                          setIsTypeStatsExpanded(!isTypeStatsExpanded)
+                        }
+                        size="small"
+                        sx={{ borderRadius: "12px" }}
+                      >
+                        {isTypeStatsExpanded ? "Thu gọn" : "Xem thêm"}
+                      </Button>
+                    </Box>
+                  )}
+                </CardContent>
+              </Card>
+            </Grid>
+          )}
+
+          {/* {typeStats.length > 0 && (
+            <Grid size={12} sx={{ mt: 1 }}>
+              <Divider>
+                <Chip label="Thống kê theo loại máy" />
+              </Divider>
+            </Grid>
+          )}
+
+          {typeStats.map((typeStat) => (
+            <Grid size={{ xs: 6, sm: 4, md: 3 }} key={typeStat.type_machine}>
+              <Card
+                elevation={0}
+                sx={{
+                  borderRadius: "20px",
+                  background: "#f5f5f5", // Màu xám nhạt
+                  border: "1px solid rgba(0, 0, 0, 0.05)",
+                  height: "100%", // Đảm bảo các thẻ cao bằng nhau
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "center",
+                }}
+              >
+                <CardContent sx={{ textAlign: "center", py: 3 }}>
+                  <Typography variant="h4" fontWeight="bold" color="#333">
+                    {typeStat.count}
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{
+                      // Style để tránh text quá dài
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      px: 1, // Thêm padding để không bị sát viền
+                    }}
+                  >
+                    {typeStat.type_machine}
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))} */}
         </Grid>
 
         {/* Search and Actions */}
@@ -1295,38 +1456,44 @@ const MachineListPage = () => {
                 </FormControl>
               </Stack>
               <Stack direction="row" spacing={2} flexWrap="wrap">
-                <Button
-                  variant="outlined"
-                  startIcon={<FileUpload />}
-                  onClick={handleOpenImportDialog}
-                  sx={{
-                    borderRadius: "12px",
-                    color: "#2e7d32",
-                    borderColor: "#2e7d32",
-                    px: 3,
-                    py: 1.5,
-                  }}
-                >
-                  Nhập Excel
-                </Button>
-                <Button
-                  variant="contained"
-                  startIcon={<Add />}
-                  onClick={handleOpenCreateDialog}
-                  sx={{
-                    borderRadius: "12px",
-                    background: "linear-gradient(45deg, #2e7d32, #4caf50)",
-                    px: 3,
-                    py: 1.5,
-                    "&:hover": {
-                      transform: "translateY(-2px)",
-                      boxShadow: "0 8px 25px rgba(46, 125, 50, 0.3)",
-                    },
-                    transition: "all 0.3s ease",
-                  }}
-                >
-                  Thêm máy
-                </Button>
+                {/* <<< 3. THAY ĐỔI: ẨN NÚT "NHẬP EXCEL" VÀ "THÊM MÁY" CHO VIEW ONLY >>> */}
+                {canCreateOrImport && (
+                  <Button
+                    variant="outlined"
+                    startIcon={<FileUpload />}
+                    onClick={handleOpenImportDialog}
+                    sx={{
+                      borderRadius: "12px",
+                      color: "#2e7d32",
+                      borderColor: "#2e7d32",
+                      px: 3,
+                      py: 1.5,
+                    }}
+                  >
+                    Nhập Excel
+                  </Button>
+                )}
+                {canCreateOrImport && (
+                  <Button
+                    variant="contained"
+                    startIcon={<Add />}
+                    onClick={handleOpenCreateDialog}
+                    sx={{
+                      borderRadius: "12px",
+                      background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                      px: 3,
+                      py: 1.5,
+                      "&:hover": {
+                        transform: "translateY(-2px)",
+                        boxShadow: "0 8px 25px rgba(46, 125, 50, 0.3)",
+                      },
+                      transition: "all 0.3s ease",
+                    }}
+                  >
+                    Thêm máy
+                  </Button>
+                )}
+                {/* <<< KẾT THÚC THAY ĐỔI >>> */}
 
                 {/* Column Visibility Button */}
                 <Button
@@ -1347,7 +1514,11 @@ const MachineListPage = () => {
                 <Button
                   variant="contained"
                   startIcon={<Refresh />}
-                  onClick={() => fetchMachines(searchTerm) && fetchStats()}
+                  onClick={() => {
+                    fetchMachines(searchTerm);
+                    fetchStats();
+                    fetchTypeStats();
+                  }}
                   sx={{
                     borderRadius: "12px",
                     background: "linear-gradient(45deg, #667eea, #764ba2)",
@@ -1964,7 +2135,7 @@ const MachineListPage = () => {
               justifyContent="space-between"
             >
               <Typography variant="h5" fontWeight="bold">
-                {isCreateMode ? "Thêm máy móc mới" : "Chỉnh sửa máy móc"}
+                {isCreateMode ? "Thêm máy móc mới" : "Chi tiết máy móc"}
               </Typography>
               <IconButton
                 onClick={handleCloseDialog}
@@ -2141,8 +2312,12 @@ const MachineListPage = () => {
                     onChange={(e) =>
                       handleInputChange("code_machine", e.target.value)
                     }
-                    disabled={!isCreateMode}
-                    sx={!isCreateMode ? DISABLED_VIEW_SX : {}} // Áp dụng style bị khóa
+                    disabled={!(isAdmin || canEdit) || !isCreateMode} // Bị khóa nếu là view-only HOẶC là chế độ xem chi tiết
+                    sx={
+                      !(isAdmin || canEdit) || !isCreateMode
+                        ? DISABLED_VIEW_SX
+                        : {}
+                    }
                   />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
@@ -2154,8 +2329,12 @@ const MachineListPage = () => {
                     onChange={(e) =>
                       handleInputChange("serial_machine", e.target.value)
                     }
-                    disabled={!isCreateMode}
-                    sx={!isCreateMode ? DISABLED_VIEW_SX : {}} // Áp dụng style bị khóa
+                    disabled={!(isAdmin || canEdit) || !isCreateMode} // Bị khóa nếu là view-only HOẶC là chế độ xem chi tiết
+                    sx={
+                      !(isAdmin || canEdit) || !isCreateMode
+                        ? DISABLED_VIEW_SX
+                        : {}
+                    }
                   />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
@@ -2166,11 +2345,12 @@ const MachineListPage = () => {
                     onChange={(e) =>
                       handleInputChange("RFID_machine", e.target.value)
                     }
+                    disabled={!(isAdmin || canEdit)} // Bị khóa nếu là view-only
                   />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
                   {isCreateMode ? (
-                    <FormControl fullWidth>
+                    <FormControl fullWidth disabled={!(isAdmin || canEdit)}>
                       <InputLabel>Loại</InputLabel>
                       <Select
                         value={editedData.id_category || 1}
@@ -2189,7 +2369,7 @@ const MachineListPage = () => {
                       label="Loại"
                       value={editedData.name_category || ""}
                       disabled={true}
-                      sx={DISABLED_VIEW_SX} // Áp dụng style bị khóa
+                      sx={DISABLED_VIEW_SX} // Luôn bị khóa
                     />
                   )}
                 </Grid>
@@ -2203,6 +2383,7 @@ const MachineListPage = () => {
                     onChange={(e) =>
                       handleInputChange("type_machine", e.target.value)
                     }
+                    disabled={!(isAdmin || canEdit)} // Bị khóa nếu là view-only
                   />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
@@ -2214,6 +2395,7 @@ const MachineListPage = () => {
                     onChange={(e) =>
                       handleInputChange("model_machine", e.target.value)
                     }
+                    disabled={!(isAdmin || canEdit)} // Bị khóa nếu là view-only
                   />
                 </Grid>
 
@@ -2225,10 +2407,11 @@ const MachineListPage = () => {
                     onChange={(e) =>
                       handleInputChange("manufacturer", e.target.value)
                     }
+                    disabled={!(isAdmin || canEdit)} // Bị khóa nếu là view-only
                   />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
-                  <FormControl fullWidth>
+                  <FormControl fullWidth disabled={!(isAdmin || canEdit)}>
                     <InputLabel>Trạng thái</InputLabel>
                     <Select
                       value={editedData.current_status}
@@ -2406,6 +2589,7 @@ const MachineListPage = () => {
                           )
                         }
                         InputLabelProps={{ shrink: true }}
+                        disabled={!(isAdmin || canEdit)} // Bị khóa nếu là view-only
                       />
                     </Grid>
                   </>
@@ -2428,6 +2612,7 @@ const MachineListPage = () => {
                         parsedValue ? parseFloat(parsedValue) : ""
                       );
                     }}
+                    disabled={!(isAdmin || canEdit)} // Bị khóa nếu là view-only
                   />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
@@ -2455,6 +2640,7 @@ const MachineListPage = () => {
                       inputMode: "numeric",
                       pattern: "[0-9]*",
                     }}
+                    disabled={!(isAdmin || canEdit)} // Bị khóa nếu là view-only
                   />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
@@ -2469,6 +2655,7 @@ const MachineListPage = () => {
                         parsedValue ? parseFloat(parsedValue) : ""
                       );
                     }}
+                    disabled={!(isAdmin || canEdit)} // Bị khóa nếu là view-only
                   />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
@@ -2482,6 +2669,7 @@ const MachineListPage = () => {
                       handleInputChange("date_of_use", e.target.value)
                     }
                     InputLabelProps={{ shrink: true }}
+                    disabled={!(isAdmin || canEdit)} // Bị khóa nếu là view-only
                   />
                 </Grid>
                 <Grid size={{ xs: 12 }}>
@@ -2492,6 +2680,7 @@ const MachineListPage = () => {
                     rows={3}
                     value={editedData.note || ""}
                     onChange={(e) => handleInputChange("note", e.target.value)}
+                    disabled={!(isAdmin || canEdit)} // Bị khóa nếu là view-only
                   />
                 </Grid>
                 {!isCreateMode && (
@@ -2527,19 +2716,24 @@ const MachineListPage = () => {
               color="inherit"
               sx={{ borderRadius: "12px" }}
             >
-              Hủy
+              {/* <<< 4. THAY ĐỔI: ĐỔI TÊN NÚT CHO VIEW-ONLY >>> */}
+              {isAdmin || canEdit ? "Hủy" : "Đóng"}
             </Button>
-            <Button
-              onClick={handleSave}
-              variant="contained"
-              startIcon={<Save />}
-              sx={{
-                borderRadius: "12px",
-                background: "linear-gradient(45deg, #667eea, #764ba2)",
-              }}
-            >
-              {isCreateMode ? "Thêm thiết bị mới" : "Lưu thay đổi"}
-            </Button>
+
+            {/* <<< 5. THAY ĐỔI: ẨN NÚT LƯU CHO VIEW-ONLY >>> */}
+            {(isAdmin || canEdit) && (
+              <Button
+                onClick={handleSave}
+                variant="contained"
+                startIcon={<Save />}
+                sx={{
+                  borderRadius: "12px",
+                  background: "linear-gradient(45deg, #667eea, #764ba2)",
+                }}
+              >
+                {isCreateMode ? "Thêm thiết bị mới" : "Lưu thay đổi"}
+              </Button>
+            )}
           </DialogActions>
         </Dialog>
 

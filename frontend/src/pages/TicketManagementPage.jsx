@@ -53,9 +53,24 @@ import {
 import NavigationBar from "../components/NavigationBar";
 import { api } from "../api/api";
 import MachineQRScanner from "../components/MachineQRScanner";
+import { useAuth } from "../hooks/useAuth";
 
 const TicketManagementPage = () => {
-  const [activeTab, setActiveTab] = useState(0); // 0: Import, 1: Export, 2: Internal, 3: Update Location
+  const { user, permissions } = useAuth();
+  const isAdmin = permissions.includes("admin");
+  const canEdit = permissions.includes("edit");
+
+  const phongCoDienId = 14;
+  const coDienXuongIds = [10, 30, 24, 31];
+
+  const isPhongCoDien =
+    canEdit && !isAdmin && user?.phongban_id === phongCoDienId;
+  const isCoDienXuong =
+    canEdit && !isAdmin && coDienXuongIds.includes(user?.phongban_id);
+  const isViewOnly = permissions.includes("view") && !isAdmin && !canEdit;
+  const hasImportExportTabs = isAdmin || isPhongCoDien || isViewOnly;
+
+  const [activeTab, setActiveTab] = useState(isCoDienXuong ? 2 : 0); // 0: Import, 1: Export, 2: Internal, 3: Update Location
   const [imports, setImports] = useState([]);
   const [exports, setExports] = useState([]);
   const [transfers, setTransfers] = useState([]);
@@ -178,10 +193,13 @@ const TicketManagementPage = () => {
 
   // --- Data Fetching ---
   const fetchLocations = useCallback(
-    async (filterType = null) => {
+    async (filterType = null, extraParams = {}) => {
       setLocationLoading(true);
       try {
-        const params = filterType ? { filter_type: filterType } : {};
+        const params = { ...extraParams };
+        if (filterType) {
+          params.filter_type = filterType;
+        }
         const response = await api.locations.getAll(params);
         setFilteredLocations(response.data);
       } catch (error) {
@@ -291,17 +309,37 @@ const TicketManagementPage = () => {
   useEffect(() => {
     setScannerApiParams(getMachineFiltersForDialog());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, openDialog, dialogType, formData.type]);
+  }, [activeTab, openDialog, dialogType, formData.type, isCoDienXuong]); // <<< THÊM isCoDienXuong VÀO DEPENDENCY
 
   // --- Handlers ---
   const handleTabChange = (event, newValue) => {
-    setActiveTab(newValue);
+    let logicalTabIndex;
+
+    if (hasImportExportTabs) {
+      // Admin hoặc Phòng Cơ Điện: Index hiển thị = Index logic
+      // 0 -> 0 (Nhập), 1 -> 1 (Xuất), 2 -> 2 (Điều chuyển), 3 -> 3 (Cập nhật)
+      logicalTabIndex = newValue;
+    } else {
+      // Cơ Điện Xưởng: Index hiển thị bị lệch 2
+      // 0 -> 2 (Điều chuyển)
+      // 1 -> 3 (Cập nhật)
+      logicalTabIndex = newValue + 2;
+    }
+
+    setActiveTab(logicalTabIndex); // Luôn set state về giá trị logic (0, 1, 2, 3)
     setPage(1);
     setStatusFilter("");
     setTypeFilter("");
-    if (newValue === 3) {
+
+    // Logic này giờ sẽ chạy đúng vì nó kiểm tra logicalTabIndex (luôn là 3)
+    if (logicalTabIndex === 3) {
       // Switched to Update Location tab
-      fetchLocations("internal_no_warehouse");
+      let params = {};
+      if (isCoDienXuong) {
+        params.filter_by_current_user_phongban = true;
+      }
+      fetchLocations("internal", params);
+
       setUpdateLocationTargetUuid("");
       setUpdateLocationMachines([]);
       setSearchMachineTerm("");
@@ -362,7 +400,14 @@ const TicketManagementPage = () => {
       setUpdateLocationMachines([]);
       setSearchMachineTerm("");
       setSearchResults([]);
-      fetchLocations("internal"); // Refresh locations list
+
+      // <<< SỬA LOGIC: Tải lại danh sách vị trí theo đúng quyền >>>
+      let params = {};
+      if (isCoDienXuong) {
+        params.filter_by_current_user_phongban = true;
+      }
+      fetchLocations("internal_no_warehouse", params);
+      // <<< KẾT THÚC SỬA LOGIC >>>
     } catch (error) {
       console.error("Error updating locations directly:", error);
       showNotification(
@@ -375,50 +420,53 @@ const TicketManagementPage = () => {
     }
   };
 
+  // <<< START: SỬA LOGIC (YÊU CẦU 3 & 5) >>>
   const getMachineFiltersForDialog = () => {
+    let filters = {};
+
     // Rule (l): Cập nhật vị trí (Tab 3)
     if (activeTab === 3) {
-      return { ticket_type: "update_location" };
+      filters.ticket_type = "update_location";
+      // Yêu cầu 5: Lọc máy cho cơ điện xưởng ở Tab 3
+      if (isCoDienXuong) {
+        filters.filter_by_phongban_id = user.phongban_id;
+      }
     }
-
     // Chỉ áp dụng filter khi dialog đang mở
-    if (!openDialog) return {};
-
-    // Rule (k): Điều chuyển nội bộ
-    if (dialogType === "internal") {
-      return { ticket_type: "internal" };
+    else if (openDialog) {
+      // Rule (k): Điều chuyển nội bộ
+      if (dialogType === "internal") {
+        filters.ticket_type = "internal";
+        // Yêu cầu 3: Lọc máy cho cơ điện xưởng ở Tab 2
+        if (isCoDienXuong && dialogMode === "create") {
+          filters.filter_by_phongban_id = user.phongban_id;
+        }
+      }
+      // Rules (a-j): Các loại phiếu Nhập/Xuất
+      else {
+        const currentTicketType = formData.type;
+        if (currentTicketType) {
+          filters.ticket_type = currentTicketType;
+        }
+      }
     }
 
-    // Rules (a-j): Các loại phiếu Nhập/Xuất
-    const currentTicketType = formData.type;
-    if (currentTicketType) {
-      return { ticket_type: currentTicketType };
-    }
-
-    // Mặc định không có filter (sẽ được backend xử lý)
-    return {};
+    return filters;
   };
+  // <<< END: SỬA LOGIC >>>
 
   // Handlers for Search
   const handleSearchTermChange = (e) => {
     const term = e.target.value;
     setSearchMachineTerm(term);
-
-    // <<< BẮT ĐẦU THAY ĐỔI: Sử dụng helper
     const filters = getMachineFiltersForDialog();
-    // <<< KẾT THÚC THAY ĐỔI
-
-    searchMachines(term, 1, filters); // <<< SỬA: Truyền filters
+    searchMachines(term, 1, filters);
   };
   const handleSearchPageChange = (event, value) => {
     setSearchPage(value);
-
-    // <<< BẮT ĐẦU THAY ĐỔI: Sử dụng helper
     const filters = getMachineFiltersForDialog();
-    // <<< KẾT THÚC THAY ĐỔI
-
     if (searchMachineTerm && searchMachineTerm.length >= 2)
-      searchMachines(searchMachineTerm, value, filters); // <<< SỬA: Truyền filters
+      searchMachines(searchMachineTerm, value, filters);
   };
 
   // Helper for filtering locations in dialog
@@ -469,8 +517,14 @@ const TicketManagementPage = () => {
         is_borrowed_or_rented_or_borrowed_out_date: "",
         is_borrowed_or_rented_or_borrowed_out_return_date: "",
       });
-      if (type === "internal") await fetchLocations("internal");
-      else await fetchLocations();
+      if (type === "internal") {
+        // Yêu cầu 2: Luôn lọc bỏ vị trí của phòng ban mình
+        await fetchLocations("internal", {
+          exclude_current_user_phongban: true,
+        });
+      } else {
+        await fetchLocations();
+      }
     } else if (mode === "view" && ticket) {
       setSelectedTicket(ticket);
       setDetailLoading(true);
@@ -488,7 +542,7 @@ const TicketManagementPage = () => {
         const uuid =
           ticket.uuid_machine_import ||
           ticket.uuid_machine_export ||
-          ticket.uuid_machine_internal_transfer; // Corrected UUID field name
+          ticket.uuid_machine_internal_transfer;
         let response, ticketDetails, ticketDate;
         if (type === "import") {
           response = await api.imports.getById(uuid);
@@ -510,6 +564,8 @@ const TicketManagementPage = () => {
           type === "internal"
             ? "internal"
             : getLocationFilterForType(ticketType);
+
+        // Khi xem, không lọc theo quyền, chỉ lọc theo loại phiếu
         await fetchLocations(filter);
 
         setFormData({
@@ -519,7 +575,7 @@ const TicketManagementPage = () => {
             ? new Date(ticketDate).toISOString().split("T")[0]
             : "",
           note: ticketDetails.note || "",
-          machines: response.data.details.map((d) => ({ ...d })), // Simplified mapping
+          machines: response.data.details.map((d) => ({ ...d })),
           is_borrowed_or_rented_or_borrowed_out_name:
             ticketDetails.is_borrowed_or_rented_or_borrowed_out_name || "",
           is_borrowed_or_rented_or_borrowed_out_date:
@@ -703,10 +759,19 @@ const TicketManagementPage = () => {
   // Handler for updating ticket status (Approve/Cancel)
   const handleUpdateStatus = async (uuid, status, type) => {
     try {
-      if (type === "import") await api.imports.updateStatus(uuid, status);
-      else if (type === "export") await api.exports.updateStatus(uuid, status);
-      else if (type === "internal")
-        await api.internal_transfers.updateStatus(uuid, status);
+      if (type === "import") {
+        await api.imports.updateStatus(uuid, status);
+      } else if (type === "export") {
+        await api.exports.updateStatus(uuid, status);
+      } else if (type === "internal") {
+        // Chỉ xử lý 'cancelled' ở đây
+        if (status === "cancelled") {
+          await api.internal_transfers.cancel(uuid);
+        } else {
+          console.warn("Chỉ có thể Hủy phiếu từ hàm này");
+          return;
+        }
+      }
       showNotification(
         "success",
         "Thành công",
@@ -720,6 +785,38 @@ const TicketManagementPage = () => {
     }
   };
 
+  const handleConfirmTicket = async (uuid) => {
+    try {
+      await api.internal_transfers.confirm(uuid);
+      showNotification("success", "Thành công", "Xác nhận phiếu thành công");
+      fetchData();
+      handleCloseDialog();
+    } catch (error) {
+      console.error("Error confirming ticket:", error);
+      showNotification(
+        "error",
+        "Thất bại",
+        error.response?.data?.message || "Lỗi khi xác nhận phiếu"
+      );
+    }
+  };
+
+  const handleApproveTicket = async (uuid) => {
+    try {
+      await api.internal_transfers.approve(uuid);
+      showNotification("success", "Thành công", "Duyệt phiếu thành công");
+      fetchData();
+      handleCloseDialog();
+    } catch (error) {
+      console.error("Error approving ticket:", error);
+      showNotification(
+        "error",
+        "Thất bại",
+        error.response?.data?.message || "Lỗi khi duyệt phiếu"
+      );
+    }
+  };
+
   // Handler for closing notification
   const handleCloseNotification = (event, reason) => {
     if (reason === "clickaway") return;
@@ -728,12 +825,21 @@ const TicketManagementPage = () => {
 
   // --- Render Helpers ---
   const getStatusColor = (status) =>
-    ({ pending: "warning", completed: "success", cancelled: "error" }[status] ||
-    "default");
+    ({
+      pending: "warning",
+      pending_confirmation: "warning",
+      pending_approval: "warning",
+      completed: "success",
+      cancelled: "error",
+    }[status] || "default");
   const getStatusLabel = (status) =>
-    ({ pending: "Chờ xử lý", completed: "Đã duyệt", cancelled: "Đã hủy" }[
-      status
-    ] || status);
+    ({
+      pending: "Chờ duyệt",
+      pending_confirmation: "Chờ xác nhận",
+      pending_approval: "Chờ duyệt",
+      completed: "Đã duyệt",
+      cancelled: "Đã hủy",
+    }[status] || status);
   const getMachineStatusLabel = (status) => getStatusInfo(status).label;
   const getTypeLabel = (type) =>
     ({
@@ -874,7 +980,8 @@ const TicketManagementPage = () => {
               }}
             >
               <Tabs
-                value={activeTab}
+                // Ánh xạ state logic (0,1,2,3) về state hiển thị (0,1,2,3 hoặc 0,1)
+                value={hasImportExportTabs ? activeTab : activeTab - 2}
                 onChange={handleTabChange}
                 sx={{
                   "& .MuiTab-root": {
@@ -892,61 +999,73 @@ const TicketManagementPage = () => {
                   "& .MuiTabs-indicator": { display: "none" },
                 }}
               >
-                <Tab
-                  icon={<FileDownload />}
-                  label="Phiếu nhập"
-                  iconPosition="start"
-                />
-                <Tab
-                  icon={<FileUpload />}
-                  label="Phiếu xuất"
-                  iconPosition="start"
-                />
+                {/* <<< START: SỬA LOGIC (YÊU CẦU 1) >>> */}
+                {hasImportExportTabs && (
+                  <Tab
+                    icon={<FileDownload />}
+                    label="Phiếu nhập"
+                    iconPosition="start"
+                  />
+                )}
+                {hasImportExportTabs && (
+                  <Tab
+                    icon={<FileUpload />}
+                    label="Phiếu xuất"
+                    iconPosition="start"
+                  />
+                )}
+                {/* <<< END: SỬA LOGIC >>> */}
+
                 <Tab
                   icon={<Autorenew />}
-                  label="Điều chuyển"
+                  label="Điều chuyển liên xưởng"
                   iconPosition="start"
                 />
-                <Tab
-                  icon={<LocationOn />}
-                  label="Cập nhật vị trí"
-                  iconPosition="start"
-                />
+                {(isAdmin || canEdit) && (
+                  <Tab
+                    icon={<LocationOn />}
+                    label="Cập nhật vị trí"
+                    iconPosition="start"
+                  />
+                )}
               </Tabs>
               {activeTab !== 3 && (
                 <Stack direction="row" spacing={2}>
-                  <Button
-                    variant="contained"
-                    startIcon={<Add />}
-                    onClick={() =>
-                      handleOpenDialog(
-                        "create",
-                        activeTab === 0
-                          ? "import"
-                          : activeTab === 1
-                          ? "export"
-                          : "internal"
-                      )
-                    }
-                    sx={{
-                      borderRadius: "12px",
-                      background: "linear-gradient(45deg, #2e7d32, #4caf50)",
-                      px: 4,
-                      py: 1.5,
-                      "&:hover": {
-                        transform: "translateY(-2px)",
-                        boxShadow: "0 8px 25px rgba(46, 125, 50, 0.3)",
-                      },
-                      transition: "all 0.3s ease",
-                    }}
-                  >
-                    Tạo phiếu{" "}
-                    {activeTab === 0
-                      ? "nhập"
-                      : activeTab === 1
-                      ? "xuất"
-                      : "điều chuyển"}
-                  </Button>
+                  {(isAdmin || canEdit) && (
+                    <Button
+                      variant="contained"
+                      startIcon={<Add />}
+                      onClick={() =>
+                        handleOpenDialog(
+                          "create",
+                          activeTab === 0
+                            ? "import"
+                            : activeTab === 1
+                            ? "export"
+                            : "internal"
+                        )
+                      }
+                      sx={{
+                        borderRadius: "12px",
+                        background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                        px: 4,
+                        py: 1.5,
+                        "&:hover": {
+                          transform: "translateY(-2px)",
+                          boxShadow: "0 8px 25px rgba(46, 125, 50, 0.3)",
+                        },
+                        transition: "all 0.3s ease",
+                      }}
+                    >
+                      Tạo phiếu{" "}
+                      {activeTab === 0
+                        ? "nhập"
+                        : activeTab === 1
+                        ? "xuất"
+                        : "điều chuyển"}
+                    </Button>
+                  )}
+
                   <Button
                     variant="contained"
                     startIcon={<Refresh />}
@@ -984,10 +1103,42 @@ const TicketManagementPage = () => {
                         "& .MuiOutlinedInput-root": { borderRadius: "12px" },
                       }}
                     >
-                      <MenuItem value="">Tất cả</MenuItem>{" "}
-                      <MenuItem value="pending">Chờ xử lý</MenuItem>{" "}
-                      <MenuItem value="completed">Đã duyệt</MenuItem>{" "}
-                      <MenuItem value="cancelled">Đã hủy</MenuItem>
+                      <MenuItem value="">Tất cả</MenuItem>
+
+                      {activeTab === 2
+                        ? // Tab Điều chuyển (Internal)
+                          [
+                            <MenuItem
+                              key="pending_confirmation"
+                              value="pending_confirmation"
+                            >
+                              Chờ xác nhận
+                            </MenuItem>,
+                            <MenuItem
+                              key="pending_approval"
+                              value="pending_approval"
+                            >
+                              Chờ duyệt
+                            </MenuItem>,
+                            <MenuItem key="completed" value="completed">
+                              Đã duyệt
+                            </MenuItem>,
+                            <MenuItem key="cancelled" value="cancelled">
+                              Đã hủy
+                            </MenuItem>,
+                          ]
+                        : // Tab Nhập (Import) hoặc Xuất (Export)
+                          [
+                            <MenuItem key="pending" value="pending">
+                              Chờ duyệt
+                            </MenuItem>,
+                            <MenuItem key="completed" value="completed">
+                              Đã duyệt
+                            </MenuItem>,
+                            <MenuItem key="cancelled" value="cancelled">
+                              Đã hủy
+                            </MenuItem>,
+                          ]}
                     </TextField>
                   </Grid>
                   {activeTab !== 2 && (
@@ -1475,7 +1626,7 @@ const TicketManagementPage = () => {
                         ? "nhập"
                         : dialogType === "export"
                         ? "xuất"
-                        : "điều chuyển"
+                        : "điều chuyển liên xưởng"
                     }`
                   : "Chi tiết phiếu"}
               </Typography>
@@ -1502,7 +1653,6 @@ const TicketManagementPage = () => {
               </Box>
             ) : (
               <Stack spacing={3}>
-                {/* <<< THÊM BIẾN ĐIỀU KIỆN >>> */}
                 {(() => {
                   const isFormDisabled =
                     dialogType !== "internal" && !formData.type;
@@ -2086,7 +2236,10 @@ const TicketManagementPage = () => {
                                         Loại
                                       </TableCell>
                                       <TableCell sx={{ fontWeight: 600 }}>
-                                        Trạng thái
+                                        Trạng thái (chính)
+                                      </TableCell>
+                                      <TableCell sx={{ fontWeight: 600 }}>
+                                        Trạng thái (mượn/thuê)
                                       </TableCell>
                                       <TableCell sx={{ fontWeight: 600 }}>
                                         Ghi chú
@@ -2135,6 +2288,28 @@ const TicketManagementPage = () => {
                                           />
                                         </TableCell>
                                         <TableCell>
+                                          {machine.is_borrowed_or_rented_or_borrowed_out ? (
+                                            <Chip
+                                              label={getMachineStatusLabel(
+                                                machine.is_borrowed_or_rented_or_borrowed_out
+                                              )}
+                                              size="small"
+                                              sx={{
+                                                background: getStatusInfo(
+                                                  machine.is_borrowed_or_rented_or_borrowed_out
+                                                ).bg,
+                                                color: getStatusInfo(
+                                                  machine.is_borrowed_or_rented_or_borrowed_out
+                                                ).color,
+                                                fontWeight: 600,
+                                                borderRadius: "8px",
+                                              }}
+                                            />
+                                          ) : (
+                                            "-"
+                                          )}
+                                        </TableCell>
+                                        <TableCell>
                                           {machine.note || "-"}
                                         </TableCell>
                                       </TableRow>
@@ -2169,45 +2344,180 @@ const TicketManagementPage = () => {
           </DialogContent>
           <DialogActions sx={{ p: 3, justifyContent: "space-between" }}>
             <Box sx={{ display: "flex", gap: 2 }}>
-              {dialogMode === "view" && selectedTicket?.status === "pending" ? (
+              {dialogMode === "view" &&
+              selectedTicket?.status &&
+              dialogType === "import" ? (
+                // --- LOGIC PHIẾU NHẬP ---
                 <>
-                  <Button
-                    variant="contained"
-                    color="success"
-                    onClick={() =>
-                      handleUpdateStatus(
-                        selectedTicket.uuid_machine_import ||
-                          selectedTicket.uuid_machine_export ||
-                          selectedTicket.uuid_machine_internal_transfer,
-                        "completed",
-                        dialogType
-                      )
-                    }
-                    disabled={loading}
-                    sx={{ borderRadius: "12px", px: 3 }}
-                  >
-                    {loading ? <CircularProgress size={24} /> : "Duyệt phiếu"}
-                  </Button>
-                  <Button
-                    variant="contained"
-                    color="error"
-                    onClick={() =>
-                      handleUpdateStatus(
-                        selectedTicket.uuid_machine_import ||
-                          selectedTicket.uuid_machine_export ||
-                          selectedTicket.uuid_machine_internal_transfer,
-                        "cancelled",
-                        dialogType
-                      )
-                    }
-                    disabled={loading}
-                    sx={{ borderRadius: "12px", px: 3 }}
-                  >
-                    {loading ? <CircularProgress size={24} /> : "Hủy phiếu"}
-                  </Button>
+                  {isAdmin && selectedTicket.status === "pending" && (
+                    <>
+                      <Button
+                        variant="contained"
+                        color="success"
+                        onClick={() =>
+                          handleUpdateStatus(
+                            selectedTicket.uuid_machine_import,
+                            "completed",
+                            "import"
+                          )
+                        }
+                        disabled={loading}
+                        sx={{ borderRadius: "12px", px: 3 }}
+                      >
+                        {loading ? (
+                          <CircularProgress size={24} />
+                        ) : (
+                          "Duyệt phiếu"
+                        )}
+                      </Button>
+                      <Button
+                        variant="contained"
+                        color="error"
+                        onClick={() =>
+                          handleUpdateStatus(
+                            selectedTicket.uuid_machine_import,
+                            "cancelled",
+                            "import"
+                          )
+                        }
+                        disabled={loading}
+                        sx={{ borderRadius: "12px", px: 3 }}
+                      >
+                        {loading ? <CircularProgress size={24} /> : "Hủy phiếu"}
+                      </Button>
+                    </>
+                  )}
+                </>
+              ) : dialogMode === "view" &&
+                selectedTicket?.status &&
+                dialogType === "export" ? (
+                // --- LOGIC PHIẾU XUẤT ---
+                <>
+                  {isAdmin && selectedTicket.status === "pending" && (
+                    <>
+                      <Button
+                        variant="contained"
+                        color="success"
+                        onClick={() =>
+                          handleUpdateStatus(
+                            selectedTicket.uuid_machine_export,
+                            "completed",
+                            "export"
+                          )
+                        }
+                        disabled={loading}
+                        sx={{ borderRadius: "12px", px: 3 }}
+                      >
+                        {loading ? (
+                          <CircularProgress size={24} />
+                        ) : (
+                          "Duyệt phiếu"
+                        )}
+                      </Button>
+                      <Button
+                        variant="contained"
+                        color="error"
+                        onClick={() =>
+                          handleUpdateStatus(
+                            selectedTicket.uuid_machine_export,
+                            "cancelled",
+                            "export"
+                          )
+                        }
+                        disabled={loading}
+                        sx={{ borderRadius: "12px", px: 3 }}
+                      >
+                        {loading ? <CircularProgress size={24} /> : "Hủy phiếu"}
+                      </Button>
+                    </>
+                  )}
+                </>
+              ) : dialogMode === "view" &&
+                selectedTicket?.status &&
+                dialogType === "internal" ? (
+                // --- LOGIC PHIẾU ĐIỀU CHUYỂN (MỚI) ---
+                <>
+                  {(() => {
+                    const ticket = selectedTicket;
+                    const uuid = ticket.uuid_machine_internal_transfer;
+
+                    // User 2 (Trưởng BP)
+                    const canConfirm =
+                      (isAdmin || canEdit) &&
+                      ticket.status === "pending_confirmation" &&
+                      user.phongban_id === ticket.to_location_phongban_id &&
+                      user.id !== ticket.created_by;
+
+                    // User 3 (Admin)
+                    const canApprove =
+                      ticket.status === "pending_approval" && isAdmin;
+
+                    // User 1 (Creator) hoặc Admin
+                    const canCancel =
+                      (ticket.status === "pending_confirmation" ||
+                        ticket.status === "pending_approval") &&
+                      (isAdmin || user.id === ticket.created_by);
+
+                    return (
+                      <>
+                        {/* Nút Xác nhận (User 2) */}
+                        {canConfirm && (
+                          <Button
+                            variant="contained"
+                            color="primary" // Màu khác
+                            onClick={() => handleConfirmTicket(uuid)}
+                            disabled={loading}
+                            sx={{ borderRadius: "12px", px: 3 }}
+                          >
+                            {loading ? (
+                              <CircularProgress size={24} />
+                            ) : (
+                              "Xác nhận"
+                            )}
+                          </Button>
+                        )}
+
+                        {/* Nút Duyệt (Admin) */}
+                        {canApprove && (
+                          <Button
+                            variant="contained"
+                            color="success"
+                            onClick={() => handleApproveTicket(uuid)}
+                            disabled={loading}
+                            sx={{ borderRadius: "12px", px: 3 }}
+                          >
+                            {loading ? (
+                              <CircularProgress size={24} />
+                            ) : (
+                              "Duyệt phiếu"
+                            )}
+                          </Button>
+                        )}
+
+                        {/* Nút Hủy (Admin hoặc Creator) */}
+                        {canCancel && (
+                          <Button
+                            variant="contained"
+                            color="error"
+                            onClick={() =>
+                              handleUpdateStatus(uuid, "cancelled", "internal")
+                            }
+                            disabled={loading}
+                            sx={{ borderRadius: "12px", px: 3 }}
+                          >
+                            {loading ? (
+                              <CircularProgress size={24} />
+                            ) : (
+                              "Hủy phiếu"
+                            )}
+                          </Button>
+                        )}
+                      </>
+                    );
+                  })()}
                 </>
               ) : (
-                <Box sx={{ width: "1px" }} />
+                <Box sx={{ width: "1px" }} /> // Placeholder
               )}
             </Box>
             <Box sx={{ display: "flex", gap: 2 }}>

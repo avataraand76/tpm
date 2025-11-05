@@ -126,6 +126,150 @@ app.post("/auth/login", async (req, res) => {
       });
     }
 
+    let virtualUser = null;
+    const testPassword = "123456"; // Mật khẩu chung cho tất cả tài khoản test
+
+    // 1. Check for 'admin' test account
+    if (ma_nv === "admin" && password === testPassword) {
+      virtualUser = {
+        id: 99999, // ID này PHẢI KHỚP với tb_user_permission
+        ma_nv: "99999",
+        ten_nv: "Quản Trị Viên (Test)",
+        cong_viec_phu_trach: "Quản trị hệ thống",
+        id_bo_phan: 93,
+        ten_bo_phan: "Phòng IT (Test)",
+        id_phong_ban: 15,
+        ten_phong_ban: "Phòng IT (Test)",
+        id_company: 1,
+        ten_cong_ty: "Việt Long Hưng (Test)",
+        id_department: "1-15",
+      };
+    }
+    // 2. Check for 'edit' test account
+    else if (ma_nv === "codien0" && password === testPassword) {
+      virtualUser = {
+        id: 99990, // ID này PHẢI KHỚP với tb_user_permission
+        ma_nv: "99990",
+        ten_nv: "Phòng Cơ Điện (Test)",
+        cong_viec_phu_trach: "Chỉnh sửa dữ liệu",
+        id_bo_phan: 117,
+        ten_bo_phan: "Bộ phận Cơ Điện (Test)",
+        id_phong_ban: 14,
+        ten_phong_ban: "Bộ phận Cơ Điện (Test)",
+        id_company: 1,
+        ten_cong_ty: "Việt Long Hưng (Test)",
+        id_department: "1-14",
+      };
+    } else if (ma_nv === "codien1" && password === testPassword) {
+      virtualUser = {
+        id: 99991, // ID này PHẢI KHỚP với tb_user_permission
+        ma_nv: "99991",
+        ten_nv: "Cơ Điện Xưởng 1 (Test)",
+        cong_viec_phu_trach: "Chỉnh sửa dữ liệu",
+        id_bo_phan: 50,
+        ten_bo_phan: "Cơ Điện Xưởng 1 (Test)",
+        id_phong_ban: 10,
+        ten_phong_ban: "Xưởng 1 (Test)",
+        id_company: 1,
+        ten_cong_ty: "Việt Long Hưng (Test)",
+        id_department: "1-10",
+      };
+    } else if (ma_nv === "codien2" && password === testPassword) {
+      virtualUser = {
+        id: 99992, // ID này PHẢI KHỚP với tb_user_permission
+        ma_nv: "99992",
+        ten_nv: "Cơ Điện Xưởng 2 (Test)",
+        cong_viec_phu_trach: "Chỉnh sửa dữ liệu",
+        id_bo_phan: 41,
+        ten_bo_phan: "Cơ Điện Xưởng 2 (Test)",
+        id_phong_ban: 30,
+        ten_phong_ban: "Xưởng 2 (Test)",
+        id_company: 1,
+        ten_cong_ty: "Việt Long Hưng (Test)",
+        id_department: "1-30",
+      };
+    } else if (ma_nv === "codien3" && password === testPassword) {
+      virtualUser = {
+        id: 99993, // ID này PHẢI KHỚP với tb_user_permission
+        ma_nv: "99993",
+        ten_nv: "Cơ Điện Xưởng 3 (Test)",
+        cong_viec_phu_trach: "Chỉnh sửa dữ liệu",
+        id_bo_phan: 22,
+        ten_bo_phan: "Cơ Điện Xưởng 3 (Test)",
+        id_phong_ban: 24,
+        ten_phong_ban: "Xưởng 3 (Test)",
+        id_company: 1,
+        ten_cong_ty: "Việt Long Hưng (Test)",
+        id_department: "1-24",
+      };
+    } else if (ma_nv === "codien4" && password === testPassword) {
+      virtualUser = {
+        id: 99994, // ID này PHẢI KHỚP với tb_user_permission
+        ma_nv: "99994",
+        ten_nv: "Cơ Điện Xưởng 4 (Test)",
+        cong_viec_phu_trach: "Chỉnh sửa dữ liệu",
+        id_bo_phan: 30,
+        ten_bo_phan: "Cơ Điện Xưởng 4 (Test)",
+        id_phong_ban: 31,
+        ten_phong_ban: "Xưởng 4 (Test)",
+        id_company: 1,
+        ten_cong_ty: "Việt Long Hưng (Test)",
+        id_department: "1-31",
+      };
+    }
+    // 3. Check for 'view' test account
+    else if (ma_nv === "view" && password === testPassword) {
+      virtualUser = {
+        id: 99995, // ID này PHẢI KHỚP với tb_user_permission
+        ma_nv: "99995",
+        ten_nv: "Viewer (Test)",
+        cong_viec_phu_trach: "Xem dữ liệu",
+        id_bo_phan: 117,
+        ten_bo_phan: "Bộ phận Cơ Điện (Test)",
+        id_phong_ban: 14,
+        ten_phong_ban: "Bộ phận Cơ Điện (Test)",
+        id_company: 1,
+        ten_cong_ty: "Việt Long Hưng (Test)",
+        id_department: "1-14",
+      };
+    }
+
+    // If a virtual user was found, generate token and return
+    if (virtualUser) {
+      // Generate JWT token
+      const token = jwt.sign(
+        {
+          id: virtualUser.id, // ID ảo
+          ma_nv: virtualUser.ma_nv,
+          phongban_id: virtualUser.id_phong_ban,
+        },
+        process.env.JWT_SECRET || "your-default-secret-key"
+        // { expiresIn: "8h" }
+      );
+
+      // Trả về cấu trúc y hệt như đăng nhập thật
+      return res.json({
+        success: true,
+        message: "Login successful (virtual user)",
+        data: {
+          token,
+          user: {
+            id: virtualUser.id,
+            ma_nv: virtualUser.ma_nv,
+            name: virtualUser.ten_nv,
+            job: virtualUser.cong_viec_phu_trach,
+            bophan_id: virtualUser.id_bo_phan,
+            bophan_name: virtualUser.ten_bo_phan,
+            phongban_id: virtualUser.id_phong_ban,
+            phongban_name: virtualUser.ten_phong_ban,
+            company_id: virtualUser.id_company,
+            company_name: virtualUser.ten_cong_ty,
+            id_department: virtualUser.id_department,
+          },
+        },
+      });
+    }
+
     // Query user from sync_nhan_vien table
     const [users] = await dataHiTimesheetConnection.execute(
       `
@@ -174,6 +318,7 @@ app.post("/auth/login", async (req, res) => {
       {
         id: user.id,
         ma_nv: user.ma_nv,
+        phongban_id: user.id_phong_ban,
       },
       process.env.JWT_SECRET || "your-default-secret-key"
       // { expiresIn: "8h" }
@@ -408,13 +553,43 @@ app.get("/api/machines/stats", authenticateToken, async (req, res) => {
   }
 });
 
+// GET /api/machines/stats-by-type - Get machine counts by type
+app.get("/api/machines/stats-by-type", authenticateToken, async (req, res) => {
+  try {
+    // Lấy 8 loại máy móc phổ biến nhất
+    const [stats] = await tpmConnection.execute(
+      `
+      SELECT 
+        type_machine,
+        COUNT(*) as count
+      FROM tb_machine
+      WHERE type_machine IS NOT NULL AND type_machine != ''
+      GROUP BY type_machine
+      `
+    );
+
+    res.json({
+      success: true,
+      message: "Statistics by type retrieved successfully",
+      data: stats, // Sẽ trả về mảng: [{ type_machine: 'Máy A', count: 10 }, { type_machine: 'Máy B', count: 5 }]
+    });
+  } catch (error) {
+    console.error("Error fetching statistics by type:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
 app.get("/api/machines/search", authenticateToken, async (req, res) => {
   try {
     const search = req.query.search || "";
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10; // Giới hạn số lượng kết quả trả về
     const offset = (page - 1) * limit;
-    const { ticket_type } = req.query;
+    const { ticket_type, filter_by_phongban_id } = req.query;
 
     if (!search || search.length < 2) {
       return res.json({
@@ -445,15 +620,30 @@ app.get("/api/machines/search", authenticateToken, async (req, res) => {
       if (conditions.where) {
         whereConditions.push(conditions.where);
       }
-      // Không cần thêm params vì logic mới không dùng placeholder
     }
 
+    let joins = [
+      `LEFT JOIN tb_category c ON c.id_category = m.id_category`,
+      `LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine`,
+      `LEFT JOIN tb_location tl ON tl.id_location = ml.id_location`,
+    ];
+
+    if (filter_by_phongban_id) {
+      joins.push(
+        `LEFT JOIN tb_department td ON td.id_department = tl.id_department`
+      );
+      whereConditions.push(`td.id_phong_ban = ?`);
+      searchParams.push(filter_by_phongban_id);
+    }
+
+    const joinClause = joins.join(" \n ");
     const whereClause = `WHERE ${whereConditions.join(" AND ")}`;
 
     // 1. Get total count
     const countQuery = `
       SELECT COUNT(*) as total
       FROM tb_machine m
+      ${joinClause}
       ${whereClause} 
     `;
 
@@ -477,9 +667,7 @@ app.get("/api/machines/search", authenticateToken, async (req, res) => {
         tl.uuid_location,
         tl.name_location
       FROM tb_machine m
-      LEFT JOIN tb_category c ON c.id_category = m.id_category
-      LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
-      LEFT JOIN tb_location tl ON tl.id_location = ml.id_location
+      ${joinClause}
       ${whereClause}
       LIMIT ? OFFSET ?
     `;
@@ -582,7 +770,7 @@ app.get(
   async (req, res) => {
     try {
       const { serial } = req.params;
-      const { ticket_type } = req.query;
+      const { ticket_type, filter_by_phongban_id } = req.query;
 
       if (!serial) {
         return res.status(400).json({
@@ -609,8 +797,28 @@ app.get(
       }
       // Nếu là 'update_location', không thêm 'where'
 
-      notFoundMessage = filterConditions.message;
+      let joins = [
+        `LEFT JOIN tb_category c ON c.id_category = m.id_category`,
+        `LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine`,
+        `LEFT JOIN tb_location tl ON tl.id_location = ml.id_location`,
+      ];
 
+      if (filter_by_phongban_id) {
+        joins.push(
+          `LEFT JOIN tb_department td ON td.id_department = tl.id_department`
+        );
+        whereConditions.push(`td.id_phong_ban = ?`);
+        queryParams.push(filter_by_phongban_id);
+        // Cập nhật thông báo lỗi
+        notFoundMessage =
+          "Không tìm thấy máy trong phòng ban của bạn, hoặc máy không hợp lệ cho phiếu này.";
+      }
+
+      if (!notFoundMessage) {
+        notFoundMessage = filterConditions.message;
+      }
+
+      const joinClause = joins.join(" \n ");
       const whereClause = `WHERE ${whereConditions.join(" AND ")}`;
 
       // Truy vấn máy móc, loại máy, và vị trí hiện tại của nó
@@ -630,9 +838,7 @@ app.get(
         tl.uuid_location,
         tl.name_location
       FROM tb_machine m
-      LEFT JOIN tb_category c ON c.id_category = m.id_category
-      LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
-      LEFT JOIN tb_location tl ON tl.id_location = ml.id_location
+      ${joinClause}
       ${whereClause}
       LIMIT 1
     `;
@@ -1309,13 +1515,20 @@ app.get("/api/departments", authenticateToken, async (req, res) => {
 // GET /api/locations - Get all locations for dropdowns
 app.get("/api/locations", authenticateToken, async (req, res) => {
   try {
-    const { filter_type, department_uuid } = req.query; // <<< CHANGED: Thêm department_uuid
+    const {
+      filter_type,
+      department_uuid,
+      exclude_current_user_phongban,
+      filter_by_current_user_phongban,
+    } = req.query;
+    const userPhongBanId = req.user.phongban_id;
 
     let query = `
       SELECT 
         tl.uuid_location, 
         tl.name_location,
         td.name_department,
+        td.id_phong_ban,
         COUNT(ml.id_machine) AS machine_count
       FROM tb_location tl
       LEFT JOIN tb_department td ON td.id_department = tl.id_department
@@ -1329,6 +1542,16 @@ app.get("/api/locations", authenticateToken, async (req, res) => {
       params.push(department_uuid);
     }
 
+    if (exclude_current_user_phongban === "true" && userPhongBanId) {
+      // Yêu cầu 1: Lọc bỏ phòng ban của user (dùng cho Tab 2)
+      whereConditions.push(`(td.id_phong_ban != ? OR td.id_phong_ban IS NULL)`);
+      params.push(userPhongBanId);
+    } else if (filter_by_current_user_phongban === "true" && userPhongBanId) {
+      // Yêu cầu 3: Chỉ lấy phòng ban của user (dùng cho Tab 3)
+      whereConditions.push(`td.id_phong_ban = ?`);
+      params.push(userPhongBanId);
+    }
+
     if (filter_type === "internal") {
       // Req 1.2: HIDE external
       whereConditions.push(
@@ -1340,20 +1563,22 @@ app.get("/api/locations", authenticateToken, async (req, res) => {
     } else if (filter_type === "external_only") {
       // Req 4.1, 5.1, 6.1: SHOW ONLY external
       whereConditions.push(`td.name_department LIKE '%Đơn vị bên ngoài%'`);
-    } else if (filter_type === "internal_no_warehouse") {
-      // Show internal locations, EXCLUDING warehouses
-      whereConditions.push(
-        `(td.name_department NOT LIKE '%Đơn vị bên ngoài%' OR td.name_department IS NULL)` // Internal
-      );
-      whereConditions.push(`tl.name_location NOT LIKE '%Kho%'`); // Exclude warehouse
     }
+    // else if (filter_type === "internal_no_warehouse") {
+    //   // Show internal locations, EXCLUDING warehouses
+    //   whereConditions.push(
+    //     `(td.name_department NOT LIKE '%Đơn vị bên ngoài%' OR td.name_department IS NULL)` // Internal
+    //   );
+    //   whereConditions.push(`tl.name_location NOT LIKE '%Kho%'`); // Exclude warehouse
+    // }
     // No filter_type: return all
 
     if (whereConditions.length > 0) {
       query += ` WHERE ${whereConditions.join(" AND ")}`;
     }
 
-    query += ` GROUP BY tl.id_location, tl.name_location, td.name_department`;
+    // <<< SỬA LỖI Ở DÒNG NÀY (THÊM id_phong_ban VÀO GROUP BY) >>>
+    query += ` GROUP BY tl.id_location, tl.name_location, td.name_department, td.id_phong_ban`;
 
     const [locations] = await tpmConnection.query(query, params);
 
@@ -1563,13 +1788,7 @@ app.post("/api/imports", authenticateToken, async (req, res) => {
             (id_machine_import, id_machine, note, created_by, updated_by)
           VALUES (?, ?, ?, ?, ?)
           `,
-          [
-            importId,
-            idMachine, // SỬ DỤNG ID NỘI BỘ ĐÃ TRA CỨU
-            machine.note || null,
-            userMANV,
-            userMANV,
-          ]
+          [importId, id_machine, machine.note || null, userMANV, userMANV]
         );
       }
     }
@@ -1805,6 +2024,7 @@ app.get("/api/imports/:uuid", authenticateToken, async (req, res) => {
         m.model_machine,
         m.serial_machine,
         m.current_status,
+        m.is_borrowed_or_rented_or_borrowed_out,
         c.uuid_category,
         c.name_category,
         tl.name_location
@@ -2137,7 +2357,7 @@ app.post("/api/exports", authenticateToken, async (req, res) => {
           `,
           [
             exportId,
-            idMachine, // SỬ DỤNG ID NỘI BỘ ĐÃ TRA CỨU
+            id_machine, // SỬ DỤNG ID NỘI BỘ ĐÃ TRA CỨU
             machine.note || null,
             userMANV,
             userMANV,
@@ -2377,6 +2597,7 @@ app.get("/api/exports/:uuid", authenticateToken, async (req, res) => {
         m.model_machine,
         m.serial_machine,
         m.current_status,
+        m.is_borrowed_or_rented_or_borrowed_out,
         c.uuid_category,
         c.name_category,
         tl.name_location
@@ -2773,13 +2994,16 @@ app.get("/api/internal-transfers", authenticateToken, async (req, res) => {
           t.note,
           t.created_at,
           t.updated_at,
+          t.created_by,
           loc_to.name_location as to_location_name,
+          td.id_phong_ban AS to_location_phongban_id,
           COUNT(d.id_machine) as machine_count
         FROM tb_machine_internal_transfer t
         LEFT JOIN tb_location loc_to ON loc_to.id_location = t.to_location_id
+        LEFT JOIN tb_department td ON td.id_department = loc_to.id_department
         LEFT JOIN tb_machine_internal_transfer_detail d ON d.id_machine_internal_transfer = t.id_machine_internal_transfer
         ${whereClause}
-        GROUP BY t.id_machine_internal_transfer
+        GROUP BY t.id_machine_internal_transfer, td.id_phong_ban
         ORDER BY t.transfer_date DESC, t.created_at DESC
         LIMIT ? OFFSET ?
         `,
@@ -2831,10 +3055,15 @@ app.get(
           t.note,
           t.created_at,
           t.updated_at,
+          t.created_by,
+          t.confirmed_by,
+          t.confirmed_at,
           loc_to.uuid_location as to_location_uuid,
-          loc_to.name_location as to_location_name
+          loc_to.name_location as to_location_name,
+          td.id_phong_ban AS to_location_phongban_id
         FROM tb_machine_internal_transfer t
         LEFT JOIN tb_location loc_to ON loc_to.id_location = t.to_location_id
+        LEFT JOIN tb_department td ON td.id_department = loc_to.id_department
         WHERE t.id_machine_internal_transfer = ?
         `,
         [transferId]
@@ -2851,6 +3080,7 @@ app.get(
           m.model_machine,
           m.serial_machine,
           m.current_status,
+          m.is_borrowed_or_rented_or_borrowed_out,
           c.name_category,
           tl.name_location
         FROM tb_machine_internal_transfer_detail d
@@ -2923,7 +3153,7 @@ app.post("/api/internal-transfers", authenticateToken, async (req, res) => {
       `
         INSERT INTO tb_machine_internal_transfer
           (to_location_id, transfer_date, status, note, created_by, updated_by)
-        VALUES (?, ?, 'pending', ?, ?, ?)
+        VALUES (?, ?, 'pending_confirmation', ?, ?, ?)
         `,
       [to_location_id, formattedDate, note || null, userMANV, userMANV]
     );
@@ -2971,6 +3201,22 @@ app.post("/api/internal-transfers", authenticateToken, async (req, res) => {
             }) không hợp lệ để điều chuyển nội bộ.`,
           });
         }
+
+        // 3. Chèn chi tiết phiếu điều chuyển
+        await connection.query(
+          `
+          INSERT INTO tb_machine_internal_transfer_detail 
+            (id_machine_internal_transfer, id_machine, note, created_by, updated_by)
+          VALUES (?, ?, ?, ?, ?)
+          `,
+          [
+            transferId, // ID của phiếu vừa tạo
+            id_machine, // ID của máy đã tra cứu
+            machine.note || null, // Ghi chú của máy
+            userMANV,
+            userMANV,
+          ]
+        );
       }
     }
 
@@ -2991,30 +3237,140 @@ app.post("/api/internal-transfers", authenticateToken, async (req, res) => {
   }
 });
 
-// PUT /api/internal-transfers/:uuid/status - Update internal transfer status
+// PUT /api/internal-transfers/:uuid/confirm - (USER 2) Confirm ticket
 app.put(
-  "/api/internal-transfers/:uuid/status",
+  "/api/internal-transfers/:uuid/confirm",
   authenticateToken,
   async (req, res) => {
     const connection = await tpmConnection.getConnection();
     try {
       await connection.beginTransaction();
-
       const { uuid } = req.params;
-      const { status } = req.body;
+      const userId = req.user.id; // ID của User 2 (người đang nhấn xác nhận)
+      const userPhongBanId = req.user.phongban_id; // <<< LẤY TỪ TOKEN
 
-      if (!status || !["pending", "completed", "cancelled"].includes(status)) {
-        await connection.rollback();
-        return res
-          .status(400)
-          .json({ success: false, message: "Invalid status" });
-      }
-
-      // Lấy thông tin phiếu
+      // 1. Lấy thông tin phiếu
       const [existing] = await connection.query(
         `
         SELECT 
           t.id_machine_internal_transfer, 
+          t.status,
+          t.created_by,
+          td.id_phong_ban AS to_location_phongban_id
+        FROM tb_machine_internal_transfer t
+        LEFT JOIN tb_location l_to ON l_to.id_location = t.to_location_id
+        LEFT JOIN tb_department td ON td.id_department = l_to.id_department
+        WHERE t.uuid_machine_internal_transfer = ?
+        `,
+        [uuid]
+      );
+
+      if (existing.length === 0) {
+        await connection.rollback();
+        return res
+          .status(404)
+          .json({ success: false, message: "Transfer not found" });
+      }
+
+      const ticket = existing[0];
+
+      // 2. Kiểm tra logic
+      if (ticket.status !== "pending_confirmation") {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Phiếu không ở trạng thái 'Chờ xác nhận'",
+        });
+      }
+
+      if (ticket.created_by === userId) {
+        await connection.rollback();
+        return res.status(403).json({
+          success: false,
+          message: "Bạn không thể tự xác nhận phiếu mình tạo",
+        });
+      }
+
+      // 3. Kiểm tra phòng ban của User 2 (lấy từ token)
+      if (!userPhongBanId) {
+        await connection.rollback();
+        return res.status(404).json({
+          success: false,
+          message: "Không tìm thấy phòng ban của người dùng trong token",
+        });
+      }
+
+      // 4. So sánh phòng ban
+      if (userPhongBanId !== ticket.to_location_phongban_id) {
+        await connection.rollback();
+        return res.status(403).json({
+          success: false,
+          message:
+            "Bạn không thuộc phòng ban của vị trí đến để xác nhận phiếu này",
+        });
+      }
+
+      // 5. Cập nhật phiếu
+      await connection.query(
+        `
+        UPDATE tb_machine_internal_transfer 
+        SET 
+          status = 'pending_approval', 
+          confirmed_by = ?,
+          confirmed_at = CURRENT_TIMESTAMP,
+          updated_by = ?, 
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id_machine_internal_transfer = ?
+        `,
+        [userId, userId, ticket.id_machine_internal_transfer]
+      );
+
+      await connection.commit();
+      res.json({ success: true, message: "Xác nhận phiếu thành công" });
+    } catch (error) {
+      await connection.rollback();
+      console.error("Error confirming transfer:", error);
+      res
+        .status(500)
+        .json({ success: false, message: "Lỗi máy chủ", error: error.message });
+    } finally {
+      connection.release();
+    }
+  }
+);
+
+// PUT /api/internal-transfers/:uuid/approve - (ADMIN) Approve ticket
+app.put(
+  "/api/internal-transfers/:uuid/approve",
+  authenticateToken,
+  async (req, res) => {
+    const connection = await tpmConnection.getConnection();
+    try {
+      await connection.beginTransaction();
+      const { uuid } = req.params;
+      const userId = req.user.id; // ID của Admin
+
+      // 1. Kiểm tra quyền Admin
+      const [perms] = await connection.query(
+        "SELECT p.name_permission FROM tb_user_permission up JOIN tb_permission p ON up.id_permission = p.id_permission WHERE up.id_nhan_vien = ?",
+        [userId]
+      );
+      const isAdmin = perms.map((p) => p.name_permission).includes("admin");
+
+      if (!isAdmin) {
+        await connection.rollback();
+        return res.status(403).json({
+          success: false,
+          message: "Bạn không có quyền Admin để duyệt phiếu",
+        });
+      }
+
+      // 2. Lấy thông tin phiếu
+      const [existing] = await connection.query(
+        `
+        SELECT 
+          t.id_machine_internal_transfer, 
+          t.status,
           t.to_location_id,
           l_to.name_location as to_location_name
         FROM tb_machine_internal_transfer t
@@ -3031,44 +3387,135 @@ app.put(
           .json({ success: false, message: "Transfer not found" });
       }
 
-      const { id_machine_internal_transfer, to_location_id, to_location_name } =
-        existing[0];
-      const userMANV = req.user.ma_nv;
+      const ticket = existing[0];
 
-      // 1. Cập nhật trạng thái phiếu
+      // 3. Kiểm tra logic
+      if (ticket.status !== "pending_approval") {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Phiếu không ở trạng thái 'Chờ duyệt'",
+        });
+      }
+
+      // 4. Cập nhật trạng thái phiếu
       await connection.query(
         `
         UPDATE tb_machine_internal_transfer 
-        SET status = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
+        SET 
+          status = 'completed', 
+          updated_by = ?, 
+          updated_at = CURRENT_TIMESTAMP
         WHERE id_machine_internal_transfer = ?
         `,
-        [status, userMANV, id_machine_internal_transfer]
+        [userId, ticket.id_machine_internal_transfer]
       );
 
-      // 2. Kích hoạt logic duyệt phiếu
-      if (status === "completed") {
-        await handleInternalTransferApproval(
-          connection,
-          id_machine_internal_transfer,
-          to_location_id,
-          to_location_name,
-          userMANV
-        );
+      // 5. Kích hoạt logic duyệt phiếu (cập nhật vị trí máy)
+      await handleInternalTransferApproval(
+        connection,
+        ticket.id_machine_internal_transfer,
+        ticket.to_location_id,
+        ticket.to_location_name,
+        userId
+      );
+
+      await connection.commit();
+      res.json({ success: true, message: "Duyệt phiếu thành công" });
+    } catch (error) {
+      await connection.rollback();
+      console.error("Error approving transfer:", error);
+      res
+        .status(500)
+        .json({ success: false, message: "Lỗi máy chủ", error: error.message });
+    } finally {
+      connection.release();
+    }
+  }
+);
+
+// PUT /api/internal-transfers/:uuid/cancel - (CANCEL)
+app.put(
+  "/api/internal-transfers/:uuid/cancel",
+  authenticateToken,
+  async (req, res) => {
+    const connection = await tpmConnection.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      const { uuid } = req.params;
+      const { status } = req.body;
+      const userId = req.user.id;
+
+      // Endpoint này BÂY GIỜ CHỈ DÙNG ĐỂ HỦY
+      if (status !== "cancelled") {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Hành động không hợp lệ. Chỉ được phép 'Hủy'",
+        });
       }
+
+      // 1. Kiểm tra quyền (Admin hoặc Người tạo)
+      const [perms] = await connection.query(
+        "SELECT p.name_permission FROM tb_user_permission up JOIN tb_permission p ON up.id_permission = p.id_permission WHERE up.id_nhan_vien = ?",
+        [userId]
+      );
+      const isAdmin = perms.map((p) => p.name_permission).includes("admin");
+
+      const [existing] = await connection.query(
+        "SELECT id_machine_internal_transfer, created_by, status FROM tb_machine_internal_transfer WHERE uuid_machine_internal_transfer = ?",
+        [uuid]
+      );
+
+      if (existing.length === 0) {
+        await connection.rollback();
+        return res
+          .status(404)
+          .json({ success: false, message: "Transfer not found" });
+      }
+
+      const ticket = existing[0];
+
+      if (!isAdmin && ticket.created_by !== userId) {
+        await connection.rollback();
+        return res.status(403).json({
+          success: false,
+          message: "Bạn không có quyền hủy phiếu này",
+        });
+      }
+
+      if (ticket.status === "completed" || ticket.status === "cancelled") {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Không thể hủy phiếu đã hoàn thành hoặc đã hủy",
+        });
+      }
+
+      // 2. Cập nhật trạng thái phiếu
+      await connection.query(
+        `
+        UPDATE tb_machine_internal_transfer 
+        SET status = 'cancelled', updated_by = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id_machine_internal_transfer = ?
+        `,
+        [userId, ticket.id_machine_internal_transfer]
+      );
+
+      // KHÔNG chạy logic handleInternalTransferApproval vì là Hủy
 
       await connection.commit();
       res.json({
         success: true,
-        message: "Transfer status updated successfully",
+        message: "Đã hủy phiếu thành công",
       });
     } catch (error) {
       await connection.rollback();
-      console.error("Error updating transfer status:", error);
-      res.status(500).json({
-        success: false,
-        message: "Internal server error",
-        error: error.message,
-      });
+      console.error("Error cancelling transfer:", error);
+      res
+        .status(500)
+        .json({ success: false, message: "Lỗi máy chủ", error: error.message });
     } finally {
       connection.release();
     }
@@ -3335,6 +3782,222 @@ app.get("/api/machines/:uuid/history", authenticateToken, async (req, res) => {
     });
   }
 });
+
+// GET /api/locations/:uuid/stats-by-type - Get machine counts by type FOR A SPECIFIC LOCATION
+app.get(
+  "/api/locations/:uuid/stats-by-type",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { uuid } = req.params;
+
+      // 1. Lấy ID nội bộ của vị trí
+      const [locResult] = await tpmConnection.query(
+        "SELECT id_location FROM tb_location WHERE uuid_location = ?",
+        [uuid]
+      );
+
+      if (locResult.length === 0) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Location not found" });
+      }
+      const idLocation = locResult[0].id_location;
+
+      // 2. Lấy thống kê theo loại máy cho vị trí đó
+      const [stats] = await tpmConnection.query(
+        `
+        SELECT 
+          m.type_machine,
+          COUNT(*) as count
+        FROM tb_machine m
+        JOIN tb_machine_location ml ON m.id_machine = ml.id_machine
+        WHERE ml.id_location = ? 
+          AND m.type_machine IS NOT NULL 
+          AND m.type_machine != ''
+        GROUP BY m.type_machine
+        ORDER BY count DESC
+        LIMIT 8
+        `,
+        [idLocation]
+      );
+
+      res.json({
+        success: true,
+        message: "Stats by type for location retrieved successfully",
+        data: stats, // Trả về mảng: [{ type_machine: 'Bàn hút', count: 51 }, ...]
+      });
+    } catch (error) {
+      console.error("Error fetching stats by type for location:", error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// GET /api/departments/:uuid/machines - Get all machines & stats FOR A SPECIFIC DEPARTMENT
+app.get(
+  "/api/departments/:uuid/machines",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { uuid } = req.params;
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 20;
+      const offset = (page - 1) * limit;
+
+      // 1. Lấy ID nội bộ của đơn vị
+      const [deptResult] = await tpmConnection.query(
+        "SELECT id_department FROM tb_department WHERE uuid_department = ?",
+        [uuid]
+      );
+
+      if (deptResult.length === 0) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Department not found" });
+      }
+      const idDepartment = deptResult[0].id_department;
+
+      // 2. Lấy thống kê trạng thái (giống hệt /api/locations/:uuid/machines nhưng JOIN qua tb_location)
+      const statsQuery = `
+        SELECT
+          COUNT(*) as total,
+          SUM(CASE WHEN m.current_status = 'available' THEN 1 ELSE 0 END) as available,
+          SUM(CASE WHEN m.current_status = 'in_use' THEN 1 ELSE 0 END) as in_use,
+          SUM(CASE WHEN m.current_status = 'maintenance' THEN 1 ELSE 0 END) as maintenance,
+          SUM(CASE WHEN m.current_status = 'liquidation' THEN 1 ELSE 0 END) as liquidation,
+          SUM(CASE WHEN m.current_status = 'disabled' THEN 1 ELSE 0 END) as disabled,
+          SUM(CASE WHEN m.current_status = 'broken' THEN 1 ELSE 0 END) as broken,
+          SUM(CASE WHEN m.is_borrowed_or_rented_or_borrowed_out = 'borrowed' THEN 1 ELSE 0 END) as borrowed,
+          SUM(CASE WHEN m.is_borrowed_or_rented_or_borrowed_out = 'rented' THEN 1 ELSE 0 END) as rented,
+          SUM(CASE WHEN m.is_borrowed_or_rented_or_borrowed_out = 'borrowed_out' THEN 1 ELSE 0 END) as borrowed_out,
+          SUM(CASE WHEN m.is_borrowed_or_rented_or_borrowed_out = 'borrowed_return' THEN 1 ELSE 0 END) as borrowed_return,
+          SUM(CASE WHEN m.is_borrowed_or_rented_or_borrowed_out = 'rented_return' THEN 1 ELSE 0 END) as rented_return
+        FROM tb_machine m
+        JOIN tb_machine_location ml ON m.id_machine = ml.id_machine
+        JOIN tb_location tl ON ml.id_location = tl.id_location
+        WHERE tl.id_department = ?
+      `;
+      const [statsResult] = await tpmConnection.query(statsQuery, [
+        idDepartment,
+      ]);
+      const stats = statsResult[0];
+
+      // 3. Lấy tổng số máy và phân trang
+      const total = stats.total;
+      const totalPages = Math.ceil(total / limit);
+
+      // 4. Lấy danh sách máy phân trang
+      const dataQuery = `
+        SELECT 
+          m.uuid_machine,
+          m.code_machine,
+          m.type_machine,
+          m.model_machine,
+          m.serial_machine,
+          m.current_status,
+          m.is_borrowed_or_rented_or_borrowed_out,
+          c.name_category,
+          m.manufacturer,
+          tl.name_location -- Thêm tên vị trí của máy
+        FROM tb_machine m
+        JOIN tb_machine_location ml ON m.id_machine = ml.id_machine
+        JOIN tb_location tl ON ml.id_location = tl.id_location
+        LEFT JOIN tb_category c ON c.id_category = m.id_category
+        WHERE tl.id_department = ?
+        ORDER BY tl.name_location ASC, m.code_machine ASC
+        LIMIT ? OFFSET ?
+      `;
+      const [machines] = await tpmConnection.query(dataQuery, [
+        idDepartment,
+        limit,
+        offset,
+      ]);
+
+      res.json({
+        success: true,
+        message: "Machines at department retrieved successfully",
+        data: machines,
+        stats: stats,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching machines by department:", error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// GET /api/departments/:uuid/stats-by-type - Get machine counts by type FOR A SPECIFIC DEPARTMENT
+app.get(
+  "/api/departments/:uuid/stats-by-type",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { uuid } = req.params;
+
+      // 1. Lấy ID nội bộ của đơn vị
+      const [deptResult] = await tpmConnection.query(
+        "SELECT id_department FROM tb_department WHERE uuid_department = ?",
+        [uuid]
+      );
+
+      if (deptResult.length === 0) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Department not found" });
+      }
+      const idDepartment = deptResult[0].id_department;
+
+      // 2. Lấy thống kê theo loại máy
+      const [stats] = await tpmConnection.query(
+        `
+        SELECT 
+          m.type_machine,
+          COUNT(*) as count
+        FROM tb_machine m
+        JOIN tb_machine_location ml ON m.id_machine = ml.id_machine
+        JOIN tb_location tl ON ml.id_location = tl.id_location
+        WHERE tl.id_department = ?
+          AND m.type_machine IS NOT NULL 
+          AND m.type_machine != ''
+        GROUP BY m.type_machine
+        ORDER BY count DESC
+        LIMIT 8
+        `,
+        [idDepartment]
+      );
+
+      res.json({
+        success: true,
+        message: "Stats by type for department retrieved successfully",
+        data: stats,
+      });
+    } catch (error) {
+      console.error("Error fetching stats by type for department:", error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    }
+  }
+);
 
 // POST /api/locations/update-machines - Update locations for multiple machines directly
 app.post(

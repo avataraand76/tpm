@@ -26,6 +26,7 @@ import {
   Alert,
   Pagination,
   List,
+  ListItem,
   ListItemButton,
   ListItemIcon,
   ListItemText,
@@ -72,6 +73,9 @@ const LocationTrackPage = () => {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const limit = 10;
+  const [typeStats, setTypeStats] = useState([]);
+  const [isMachineTypeStatsExpanded, setIsMachineTypeStatsExpanded] =
+    useState(false);
 
   // History Dialog States
   const [openHistoryDialog, setOpenHistoryDialog] = useState(false);
@@ -207,6 +211,68 @@ const LocationTrackPage = () => {
     }
   }, []);
 
+  const fetchMachineTypeStats = useCallback(async (locationUuid) => {
+    // Không cần kiểm tra locationUuid vì nó sẽ được gọi trong useEffect
+    try {
+      const response = await api.tracking.getMachineStatsByTypeAtLocation(
+        locationUuid
+      );
+      if (response.success) {
+        setTypeStats(response.data);
+      } else {
+        setTypeStats([]);
+      }
+    } catch (error) {
+      console.error("Error fetching machine type stats:", error);
+      setTypeStats([]);
+    }
+  }, []);
+
+  const fetchMachinesAtDepartment = useCallback(
+    async (departmentUuid, pageNumber = 1, limitNumber = limit) => {
+      setLoadingMachines(true);
+      setMachinesAtLocation([]);
+      setPage(pageNumber);
+
+      try {
+        const params = { page: pageNumber, limit: limitNumber };
+        const response = await api.tracking.getMachinesByDepartment(
+          departmentUuid,
+          params
+        );
+        setMachinesAtLocation(response.data);
+        setLocationStats(response.stats);
+        setTotalPages(response.pagination.totalPages);
+      } catch (error) {
+        console.error("Error fetching machines at department:", error);
+        setMachinesAtLocation([]);
+        setLocationStats({
+          /* ... (reset stats) ... */
+        });
+        setTotalPages(1);
+      } finally {
+        setLoadingMachines(false);
+      }
+    },
+    [limit]
+  );
+
+  const fetchDepartmentTypeStats = useCallback(async (departmentUuid) => {
+    try {
+      const response = await api.tracking.getMachineStatsByTypeAtDepartment(
+        departmentUuid
+      );
+      if (response.success) {
+        setTypeStats(response.data);
+      } else {
+        setTypeStats([]);
+      }
+    } catch (error) {
+      console.error("Error fetching machine type stats for department:", error);
+      setTypeStats([]);
+    }
+  }, []);
+
   // <<< BẮT ĐẦU SỬA ĐỔI useEffect >>>
   useEffect(() => {
     // fetchLocations(); // <-- XÓA DÒNG NÀY
@@ -226,10 +292,19 @@ const LocationTrackPage = () => {
   // useEffect để tự động tải lại máy móc khi `selectedLocation` hoặc `page` thay đổi
   useEffect(() => {
     if (selectedLocation) {
-      // Chỉ gọi API khi selectedLocation có giá trị (tránh gọi API lúc khởi tạo)
+      // ƯU TIÊN 1: Tải theo VỊ TRÍ
       fetchMachinesAtLocation(selectedLocation.uuid_location, page, limit);
+      fetchMachineTypeStats(selectedLocation.uuid_location);
+    } else if (selectedDepartment) {
+      // ƯU TIÊN 2: Tải theo ĐƠN VỊ
+      fetchMachinesAtDepartment(
+        selectedDepartment.uuid_department,
+        page,
+        limit
+      );
+      fetchDepartmentTypeStats(selectedDepartment.uuid_department);
     } else {
-      // Reset khi không có vị trí nào được chọn
+      // ƯU TIÊN 3: Reset mọi thứ
       setMachinesAtLocation([]);
       setLocationStats({
         total: 0,
@@ -247,9 +322,10 @@ const LocationTrackPage = () => {
       });
       setTotalPages(1);
       setPage(1);
+      setTypeStats([]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedLocation, page, limit]); // Bỏ fetchMachinesAtLocation khỏi dependency
+  }, [selectedDepartment, selectedLocation, page, limit]);
 
   // --- Handlers ---
 
@@ -290,16 +366,23 @@ const LocationTrackPage = () => {
   const handleRefresh = () => {
     // 1. Tải lại danh sách Đơn vị
     fetchDepartments();
+    fetchLocations(selectedDepartment.uuid_department);
 
-    // 2. Nếu đang chọn 1 vị trí, tải lại danh sách máy của vị trí đó
+    // 2. Tải lại dữ liệu máy móc dựa trên lựa chọn hiện tại
     if (selectedLocation) {
       setPage(1); // Quay về trang 1
       fetchMachinesAtLocation(selectedLocation.uuid_location, 1, limit);
+      fetchMachineTypeStats(selectedLocation.uuid_location);
+    } else if (selectedDepartment) {
+      setPage(1); // Quay về trang 1
+      fetchMachinesAtDepartment(selectedDepartment.uuid_department, 1, limit);
+      fetchDepartmentTypeStats(selectedDepartment.uuid_department);
     } else {
-      // Nếu không, chỉ cần reset danh sách máy
+      // Nếu không, chỉ cần reset
       setMachinesAtLocation([]);
       setTotalPages(1);
       setPage(1);
+      setTypeStats([]);
     }
   };
 
@@ -320,12 +403,12 @@ const LocationTrackPage = () => {
       );
     }
 
-    if (!selectedLocation) {
+    if (!selectedDepartment) {
       // Sửa điều kiện
       return (
         <Alert severity="info" sx={{ borderRadius: "12px", mt: 1 }}>
           <Typography variant="body1" sx={{ fontWeight: 500 }}>
-            Vui lòng chọn một vị trí để xem danh sách máy móc.
+            Vui lòng chọn một Đơn vị ở bước 1.
           </Typography>
         </Alert>
       );
@@ -350,7 +433,7 @@ const LocationTrackPage = () => {
           >
             <CardContent sx={{ textAlign: "center", p: 3 }}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                Tổng số máy (tại vị trí)
+                Tổng số máy
               </Typography>
               <Typography variant="h3" fontWeight="bold" color="#667eea">
                 {stats.total || 0}
@@ -433,7 +516,7 @@ const LocationTrackPage = () => {
                     {stats.disabled || 0}/{stats.broken || 0}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    Vô hiệu/Hư
+                    Vô hiệu hóa/Hư
                   </Typography>
                 </CardContent>
               </Card>
@@ -521,20 +604,112 @@ const LocationTrackPage = () => {
 
     if (machinesAtLocation.length === 0 && !loadingMachines) {
       return (
-        <Typography
-          variant="body1"
-          color="text.secondary"
-          align="center"
-          sx={{ mt: 3 }}
-        >
-          Không có máy móc nào tại vị trí này.
-        </Typography>
+        <>
+          {renderStatsCards()}
+          {/* Vẫn hiển thị stats dù không có máy */}
+          <Typography
+            variant="body1"
+            color="text.secondary"
+            align="center"
+            sx={{ mt: 3 }}
+          >
+            {/* Thêm thông báo động */}
+            {selectedLocation
+              ? "Không có máy móc nào tại vị trí này."
+              : "Không có máy móc nào tại đơn vị này."}
+          </Typography>
+        </>
       );
     }
 
     return (
       <>
         {renderStatsCards()}
+        {typeStats.length > 0 && (
+          <Grid size={12} sx={{ mt: 3, mb: 3 }}>
+            {" "}
+            {/* Tăng mt để tách biệt khỏi hàng trên */}
+            <Card
+              elevation={0}
+              sx={{
+                borderRadius: "20px",
+                background: "#f5f5f5", // Màu xám nhạt
+                border: "1px solid rgba(0, 0, 0, 0.05)",
+              }}
+            >
+              <CardContent>
+                <Typography variant="h6" fontWeight="bold" gutterBottom>
+                  Thống kê theo loại máy
+                </Typography>
+
+                {/* Danh sách các loại máy */}
+                <List dense sx={{ pt: 0, pb: 1, width: "100%" }}>
+                  {typeStats
+                    .slice(0, isMachineTypeStatsExpanded ? typeStats.length : 4) // SỬ DỤNG STATE MỚI
+                    .map((typeStat) => (
+                      <ListItem
+                        key={typeStat.type_machine}
+                        disableGutters
+                        sx={{
+                          borderBottom: "1px dashed #e0e0e0",
+                          py: 0.5,
+                        }}
+                      >
+                        <ListItemText
+                          primary={
+                            <Box
+                              sx={{ display: "flex", alignItems: "baseline" }}
+                            >
+                              <Typography
+                                component="span"
+                                variant="body1"
+                                sx={{
+                                  whiteSpace: "nowrap",
+                                  textTransform: "uppercase",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  mr: 1, // Thêm khoảng cách
+                                }}
+                              >
+                                {typeStat.type_machine}:
+                              </Typography>
+                              <Typography
+                                component="span"
+                                variant="body1"
+                                fontWeight="bold"
+                                color="#333"
+                                sx={{ flexShrink: 0 }} // Đảm bảo số lượng không bị cắt
+                              >
+                                {typeStat.count} máy
+                              </Typography>
+                            </Box>
+                          }
+                        />
+                      </ListItem>
+                    ))}
+                </List>
+
+                {/* Nút Expand/Collapse */}
+                {typeStats.length > 4 && ( // Chỉ hiển thị nút nếu có nhiều hơn 4 mục
+                  <Box sx={{ textAlign: "center", mt: 1 }}>
+                    <Button
+                      onClick={
+                        () =>
+                          setIsMachineTypeStatsExpanded(
+                            !isMachineTypeStatsExpanded
+                          ) // SỬ DỤNG STATE MỚI
+                      }
+                      size="small"
+                      sx={{ borderRadius: "12px" }}
+                    >
+                      {isMachineTypeStatsExpanded ? "Thu gọn" : "Xem thêm"}
+                    </Button>
+                  </Box>
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
+        )}
         <TableContainer
           component={Paper}
           elevation={1}
@@ -551,6 +726,9 @@ const LocationTrackPage = () => {
                 <TableCell sx={{ fontWeight: 600 }}>Loại máy</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Model</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Serial</TableCell>
+                {!selectedLocation && (
+                  <TableCell sx={{ fontWeight: 600 }}>Vị trí</TableCell>
+                )}
                 <TableCell sx={{ fontWeight: 600 }}>
                   Trạng thái (chính)
                 </TableCell>
@@ -581,6 +759,9 @@ const LocationTrackPage = () => {
                     <TableCell>{machine.type_machine || "-"}</TableCell>
                     <TableCell>{machine.model_machine || "-"}</TableCell>
                     <TableCell>{machine.serial_machine || "-"}</TableCell>
+                    {!selectedLocation && (
+                      <TableCell>{machine.name_location || "-"}</TableCell>
+                    )}
                     <TableCell>
                       <Chip
                         label={statusInfo.label}
@@ -848,7 +1029,11 @@ const LocationTrackPage = () => {
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
                   <Typography variant="h5" sx={{ fontWeight: 600 }}>
                     3. Máy móc thiết bị tại{" "}
-                    {selectedLocation ? selectedLocation.name_location : "..."}
+                    {selectedLocation
+                      ? selectedLocation.name_location
+                      : selectedDepartment
+                      ? selectedDepartment.name_department
+                      : "..."}
                   </Typography>
                 </Box>
 
@@ -857,7 +1042,6 @@ const LocationTrackPage = () => {
                   variant="contained"
                   startIcon={<Refresh />}
                   onClick={handleRefresh}
-                  disabled={!selectedLocation} // Chỉ cho phép làm mới khi đã chọn vị trí
                   sx={{
                     borderRadius: "12px",
                     background: "linear-gradient(45deg, #667eea, #764ba2)",

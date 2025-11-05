@@ -51,6 +51,10 @@ export const api = {
       const response = await httpConnect.get("/api/machines/stats");
       return response.data;
     },
+    getStatsByType: async () => {
+      const response = await httpConnect.get("/api/machines/stats-by-type");
+      return response.data;
+    },
     getById: async (uuid) => {
       const response = await httpConnect.get(`/api/machines/${uuid}`);
       return response.data;
@@ -162,11 +166,23 @@ export const api = {
       const response = await httpConnect.post("/api/internal-transfers", data);
       return response.data;
     },
-    updateStatus: async (uuid, status) => {
+    confirm: async (uuid) => {
       const response = await httpConnect.put(
-        `/api/internal-transfers/${uuid}/status`,
+        `/api/internal-transfers/${uuid}/confirm`
+      );
+      return response.data;
+    },
+    approve: async (uuid) => {
+      const response = await httpConnect.put(
+        `/api/internal-transfers/${uuid}/approve`
+      );
+      return response.data;
+    },
+    cancel: async (uuid) => {
+      const response = await httpConnect.put(
+        `/api/internal-transfers/${uuid}/cancel`,
         {
-          status,
+          status: "cancelled",
         }
       );
       return response.data;
@@ -179,6 +195,25 @@ export const api = {
       const response = await httpConnect.get(
         `/api/locations/${locationUuid}/machines`,
         { params }
+      );
+      return response.data;
+    },
+    getMachinesByDepartment: async (departmentUuid, params = {}) => {
+      const response = await httpConnect.get(
+        `/api/departments/${departmentUuid}/machines`,
+        { params }
+      );
+      return response.data;
+    },
+    getMachineStatsByTypeAtLocation: async (locationUuid) => {
+      const response = await httpConnect.get(
+        `/api/locations/${locationUuid}/stats-by-type`
+      );
+      return response.data;
+    },
+    getMachineStatsByTypeAtDepartment: async (departmentUuid) => {
+      const response = await httpConnect.get(
+        `/api/departments/${departmentUuid}/stats-by-type`
       );
       return response.data;
     },
