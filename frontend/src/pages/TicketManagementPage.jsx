@@ -37,6 +37,8 @@ import {
   AlertTitle,
   Checkbox,
   Autocomplete,
+  useTheme,
+  useMediaQuery,
 } from "@mui/material";
 import {
   Add,
@@ -56,6 +58,8 @@ import MachineQRScanner from "../components/MachineQRScanner";
 import { useAuth } from "../hooks/useAuth";
 
 const TicketManagementPage = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const { user, permissions } = useAuth();
   const isAdmin = permissions.includes("admin");
   const canEdit = permissions.includes("edit");
@@ -944,7 +948,7 @@ const TicketManagementPage = () => {
             </Avatar>
             <Box>
               <Typography
-                variant="h3"
+                variant={isMobile ? "h4" : "h3"}
                 component="h1"
                 sx={{
                   fontWeight: 700,
@@ -957,7 +961,10 @@ const TicketManagementPage = () => {
               >
                 Quản lý phiếu
               </Typography>
-              <Typography variant="h6" color="text.secondary">
+              <Typography
+                variant={isMobile ? "body1" : "h6"}
+                color="text.secondary"
+              >
                 Tạo và quản lý phiếu nhập xuất, điều chuyển máy móc
               </Typography>
             </Box>
@@ -975,19 +982,24 @@ const TicketManagementPage = () => {
               sx={{
                 display: "flex",
                 justifyContent: "space-between",
-                alignItems: "center",
+                alignItems: { xs: "stretch", md: "center" },
+                flexDirection: { xs: "column", md: "row" },
                 mb: 3,
+                gap: 2,
               }}
             >
               <Tabs
                 // Ánh xạ state logic (0,1,2,3) về state hiển thị (0,1,2,3 hoặc 0,1)
                 value={hasImportExportTabs ? activeTab : activeTab - 2}
                 onChange={handleTabChange}
+                variant={isMobile ? "scrollable" : "standard"}
+                allowScrollButtonsMobile
                 sx={{
+                  width: { xs: "100%", md: "auto" },
                   "& .MuiTab-root": {
                     fontWeight: 600,
-                    fontSize: "1rem",
-                    minWidth: 140,
+                    fontSize: isMobile ? "0.8rem" : "1rem",
+                    minWidth: { xs: 100, md: 140 },
                     borderRadius: "12px",
                     margin: "0 4px",
                     transition: "all 0.3s ease",
@@ -1030,7 +1042,11 @@ const TicketManagementPage = () => {
                 )}
               </Tabs>
               {activeTab !== 3 && (
-                <Stack direction="row" spacing={2}>
+                <Stack
+                  direction={{ xs: "column", sm: "row" }}
+                  spacing={2}
+                  sx={{ width: { xs: "100%", md: "auto" } }}
+                >
                   {(isAdmin || canEdit) && (
                     <Button
                       variant="contained"
@@ -1055,6 +1071,7 @@ const TicketManagementPage = () => {
                           boxShadow: "0 8px 25px rgba(46, 125, 50, 0.3)",
                         },
                         transition: "all 0.3s ease",
+                        width: { xs: "100%", sm: "auto" },
                       }}
                     >
                       Tạo phiếu{" "}
@@ -1080,6 +1097,7 @@ const TicketManagementPage = () => {
                         boxShadow: "0 8px 25px rgba(102, 126, 234, 0.3)",
                       },
                       transition: "all 0.3s ease",
+                      width: { xs: "100%", sm: "auto" },
                     }}
                   >
                     Làm mới
@@ -1218,26 +1236,47 @@ const TicketManagementPage = () => {
                       <TableRow
                         sx={{ backgroundColor: "rgba(102, 126, 234, 0.05)" }}
                       >
-                        <TableCell sx={{ fontWeight: 600 }}>
+                        <TableCell
+                          sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
+                        >
                           Ngày Tạo Phiếu
                         </TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Loại</TableCell>
+                        <TableCell
+                          sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
+                        >
+                          Loại
+                        </TableCell>
                         {activeTab === 2 ? (
-                          <TableCell sx={{ fontWeight: 600 }} colSpan={2}>
+                          <TableCell
+                            sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
+                            colSpan={2}
+                          >
                             Đến vị trí
                           </TableCell>
                         ) : (
-                          <TableCell sx={{ fontWeight: 600 }} colSpan={2}>
+                          <TableCell
+                            sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
+                            colSpan={2}
+                          >
                             {activeTab === 0 ? "Nhập vào" : "Xuất đến"}
                           </TableCell>
                         )}
-                        <TableCell sx={{ fontWeight: 600 }} align="center">
+                        <TableCell
+                          sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
+                          align="center"
+                        >
                           Số lượng máy
                         </TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>
+                        <TableCell
+                          sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
+                        >
                           Trạng thái
                         </TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Ghi chú</TableCell>
+                        <TableCell
+                          sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
+                        >
+                          Ghi chú
+                        </TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>{renderTableContent()}</TableBody>
@@ -1585,7 +1624,8 @@ const TicketManagementPage = () => {
                     px: 4,
                     py: 1.5,
                     mt: 2,
-                    alignSelf: "flex-end",
+                    alignSelf: { xs: "stretch", md: "flex-end" },
+                    width: { xs: "100%", md: "auto" },
                     "&:hover": {
                       transform: "translateY(-2px)",
                       boxShadow: "0 8px 25px rgba(46, 125, 50, 0.3)",
@@ -1619,7 +1659,10 @@ const TicketManagementPage = () => {
             }}
           >
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <Typography variant="h5" sx={{ fontWeight: 700 }}>
+              <Typography
+                variant={isMobile ? "h6" : "h5"}
+                sx={{ fontWeight: 700 }}
+              >
                 {dialogMode === "create"
                   ? `Tạo phiếu ${
                       dialogType === "import"
@@ -2217,31 +2260,76 @@ const TicketManagementPage = () => {
                                 <Table size="small">
                                   <TableHead>
                                     <TableRow>
-                                      <TableCell sx={{ fontWeight: 600 }}>
+                                      <TableCell
+                                        sx={{
+                                          fontWeight: 600,
+                                          whiteSpace: "nowrap",
+                                        }}
+                                      >
                                         Mã máy
                                       </TableCell>
-                                      <TableCell sx={{ fontWeight: 600 }}>
+                                      <TableCell
+                                        sx={{
+                                          fontWeight: 600,
+                                          whiteSpace: "nowrap",
+                                        }}
+                                      >
                                         Loại máy
                                       </TableCell>
-                                      <TableCell sx={{ fontWeight: 600 }}>
+                                      <TableCell
+                                        sx={{
+                                          fontWeight: 600,
+                                          whiteSpace: "nowrap",
+                                        }}
+                                      >
                                         Model
                                       </TableCell>
-                                      <TableCell sx={{ fontWeight: 600 }}>
+                                      <TableCell
+                                        sx={{
+                                          fontWeight: 600,
+                                          whiteSpace: "nowrap",
+                                        }}
+                                      >
                                         Serial
                                       </TableCell>
-                                      <TableCell sx={{ fontWeight: 600 }}>
+                                      {/* <TableCell
+                                        sx={{
+                                          fontWeight: 600,
+                                          whiteSpace: "nowrap",
+                                        }}
+                                      >
                                         Vị trí hiện tại
                                       </TableCell>
-                                      <TableCell sx={{ fontWeight: 600 }}>
+                                      <TableCell
+                                        sx={{
+                                          fontWeight: 600,
+                                          whiteSpace: "nowrap",
+                                        }}
+                                      >
                                         Loại
                                       </TableCell>
-                                      <TableCell sx={{ fontWeight: 600 }}>
+                                      <TableCell
+                                        sx={{
+                                          fontWeight: 600,
+                                          whiteSpace: "nowrap",
+                                        }}
+                                      >
                                         Trạng thái (chính)
                                       </TableCell>
-                                      <TableCell sx={{ fontWeight: 600 }}>
+                                      <TableCell
+                                        sx={{
+                                          fontWeight: 600,
+                                          whiteSpace: "nowrap",
+                                        }}
+                                      >
                                         Trạng thái (mượn/thuê)
-                                      </TableCell>
-                                      <TableCell sx={{ fontWeight: 600 }}>
+                                      </TableCell> */}
+                                      <TableCell
+                                        sx={{
+                                          fontWeight: 600,
+                                          whiteSpace: "nowrap",
+                                        }}
+                                      >
                                         Ghi chú
                                       </TableCell>
                                     </TableRow>
@@ -2263,7 +2351,7 @@ const TicketManagementPage = () => {
                                         <TableCell>
                                           {machine.serial_machine || "-"}
                                         </TableCell>
-                                        <TableCell>
+                                        {/* <TableCell>
                                           {machine.name_location || "-"}
                                         </TableCell>
                                         <TableCell>
@@ -2308,7 +2396,7 @@ const TicketManagementPage = () => {
                                           ) : (
                                             "-"
                                           )}
-                                        </TableCell>
+                                        </TableCell> */}
                                         <TableCell>
                                           {machine.note || "-"}
                                         </TableCell>
@@ -2342,8 +2430,22 @@ const TicketManagementPage = () => {
               </Stack>
             )}
           </DialogContent>
-          <DialogActions sx={{ p: 3, justifyContent: "space-between" }}>
-            <Box sx={{ display: "flex", gap: 2 }}>
+          <DialogActions
+            sx={{
+              p: { xs: 2, sm: 3 },
+              justifyContent: "space-between",
+              flexDirection: { xs: "column-reverse", sm: "row" },
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                gap: 2,
+                width: { xs: "100%", sm: "auto" },
+                justifyContent: { xs: "stretch", sm: "flex-start" },
+              }}
+            >
               {dialogMode === "view" &&
               selectedTicket?.status &&
               dialogType === "import" ? (
@@ -2362,7 +2464,11 @@ const TicketManagementPage = () => {
                           )
                         }
                         disabled={loading}
-                        sx={{ borderRadius: "12px", px: 3 }}
+                        sx={{
+                          borderRadius: "12px",
+                          px: 3,
+                          flexGrow: { xs: 1, sm: 0 },
+                        }}
                       >
                         {loading ? (
                           <CircularProgress size={24} />
@@ -2381,7 +2487,11 @@ const TicketManagementPage = () => {
                           )
                         }
                         disabled={loading}
-                        sx={{ borderRadius: "12px", px: 3 }}
+                        sx={{
+                          borderRadius: "12px",
+                          px: 3,
+                          flexGrow: { xs: 1, sm: 0 },
+                        }}
                       >
                         {loading ? <CircularProgress size={24} /> : "Hủy phiếu"}
                       </Button>
@@ -2520,11 +2630,18 @@ const TicketManagementPage = () => {
                 <Box sx={{ width: "1px" }} /> // Placeholder
               )}
             </Box>
-            <Box sx={{ display: "flex", gap: 2 }}>
+            <Box
+              sx={{
+                display: "flex",
+                gap: 2,
+                width: { xs: "100%", sm: "auto" },
+                justifyContent: { xs: "stretch", sm: "flex-end" },
+              }}
+            >
               <Button
                 variant="outlined"
                 onClick={handleCloseDialog}
-                sx={{ borderRadius: "12px", px: 3 }}
+                sx={{ borderRadius: "12px", px: 3, flexGrow: { xs: 1, sm: 0 } }}
               >
                 {dialogMode === "view" ? "Đóng" : "Hủy"}
               </Button>
@@ -2537,6 +2654,7 @@ const TicketManagementPage = () => {
                     borderRadius: "12px",
                     background: "linear-gradient(45deg, #667eea, #764ba2)",
                     px: 3,
+                    flexGrow: { xs: 1, sm: 0 },
                   }}
                 >
                   {loading ? <CircularProgress size={24} /> : "Tạo phiếu"}
@@ -2581,7 +2699,11 @@ const TicketManagementPage = () => {
           open={notification.open}
           autoHideDuration={2000}
           onClose={handleCloseNotification}
-          anchorOrigin={{ vertical: "top", horizontal: "right" }}
+          anchorOrigin={
+            isMobile
+              ? { vertical: "bottom", horizontal: "center" }
+              : { vertical: "top", horizontal: "right" }
+          }
         >
           <Alert
             onClose={handleCloseNotification}
@@ -2589,7 +2711,7 @@ const TicketManagementPage = () => {
             variant="filled"
             sx={{
               width: "100%",
-              minWidth: "350px",
+              minWidth: { xs: "auto", sm: "350px" },
               boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
               borderRadius: "12px",
             }}

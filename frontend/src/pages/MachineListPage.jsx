@@ -44,6 +44,8 @@ import {
   ListItem,
   ListItemIcon,
   Link,
+  useTheme,
+  useMediaQuery,
 } from "@mui/material";
 import {
   PrecisionManufacturing,
@@ -145,6 +147,8 @@ const initialColumnVisibility = {
 };
 
 const MachineListPage = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   // <<< 2. THÊM MỚI: LẤY QUYỀN USER
   const { user, permissions } = useAuth(); // Lấy cả user
   const isAdmin = permissions.includes("admin");
@@ -1006,7 +1010,7 @@ const MachineListPage = () => {
             </Avatar>
             <Box>
               <Typography
-                variant="h3"
+                variant={isMobile ? "h4" : "h3"}
                 component="h1"
                 sx={{
                   fontWeight: 700,
@@ -1019,7 +1023,10 @@ const MachineListPage = () => {
               >
                 Danh sách Máy móc thiết bị
               </Typography>
-              <Typography variant="h6" color="text.secondary">
+              <Typography
+                variant={isMobile ? "body1" : "h6"}
+                color="text.secondary"
+              >
                 Quản lý thông tin máy móc thiết bị
               </Typography>
             </Box>
@@ -1051,7 +1058,11 @@ const MachineListPage = () => {
                 >
                   Tổng số máy
                 </Typography>
-                <Typography variant="h1" fontWeight="bold" color="#667eea">
+                <Typography
+                  variant={isMobile ? "h2" : "h1"}
+                  fontWeight="bold"
+                  color="#667eea"
+                >
                   {stats.total}
                 </Typography>
               </CardContent>
@@ -1073,7 +1084,11 @@ const MachineListPage = () => {
                   }}
                 >
                   <CardContent sx={{ textAlign: "center", py: 3 }}>
-                    <Typography variant="h4" fontWeight="bold" color="#2e7d32">
+                    <Typography
+                      variant={isMobile ? "h5" : "h4"}
+                      fontWeight="bold"
+                      color="#2e7d32"
+                    >
                       {stats.available || 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
@@ -1093,7 +1108,11 @@ const MachineListPage = () => {
                   }}
                 >
                   <CardContent sx={{ textAlign: "center", py: 3 }}>
-                    <Typography variant="h4" fontWeight="bold" color="#1976d2">
+                    <Typography
+                      variant={isMobile ? "h5" : "h4"}
+                      fontWeight="bold"
+                      color="#1976d2"
+                    >
                       {stats.in_use || 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
@@ -1113,7 +1132,11 @@ const MachineListPage = () => {
                   }}
                 >
                   <CardContent sx={{ textAlign: "center", py: 3 }}>
-                    <Typography variant="h4" fontWeight="bold" color="#ff9800">
+                    <Typography
+                      variant={isMobile ? "h5" : "h4"}
+                      fontWeight="bold"
+                      color="#ff9800"
+                    >
                       {stats.maintenance || 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
@@ -1133,7 +1156,11 @@ const MachineListPage = () => {
                   }}
                 >
                   <CardContent sx={{ textAlign: "center", py: 3 }}>
-                    <Typography variant="h4" fontWeight="bold" color="#f44336">
+                    <Typography
+                      variant={isMobile ? "h5" : "h4"}
+                      fontWeight="bold"
+                      color="#f44336"
+                    >
                       {stats.liquidation || 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
@@ -1153,7 +1180,11 @@ const MachineListPage = () => {
                   }}
                 >
                   <CardContent sx={{ textAlign: "center", py: 3 }}>
-                    <Typography variant="h4" fontWeight="bold" color="#9e9e9e">
+                    <Typography
+                      variant={isMobile ? "h5" : "h4"}
+                      fontWeight="bold"
+                      color="#9e9e9e"
+                    >
                       {(stats.disabled || 0) + "/" + (stats.broken || 0)}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
@@ -1175,7 +1206,11 @@ const MachineListPage = () => {
                   }}
                 >
                   <CardContent sx={{ textAlign: "center", py: 3 }}>
-                    <Typography variant="h4" fontWeight="bold" color="#673ab7">
+                    <Typography
+                      variant={isMobile ? "h5" : "h4"}
+                      fontWeight="bold"
+                      color="#673ab7"
+                    >
                       {stats.rented || 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
@@ -1195,7 +1230,11 @@ const MachineListPage = () => {
                   }}
                 >
                   <CardContent sx={{ textAlign: "center", py: 3 }}>
-                    <Typography variant="h4" fontWeight="bold" color="#673ab7">
+                    <Typography
+                      variant={isMobile ? "h5" : "h4"}
+                      fontWeight="bold"
+                      color="#673ab7"
+                    >
                       {stats.rented_return || 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
@@ -1215,7 +1254,11 @@ const MachineListPage = () => {
                   }}
                 >
                   <CardContent sx={{ textAlign: "center", py: 3 }}>
-                    <Typography variant="h4" fontWeight="bold" color="#03a9f4">
+                    <Typography
+                      variant={isMobile ? "h5" : "h4"}
+                      fontWeight="bold"
+                      color="#03a9f4"
+                    >
                       {stats.borrowed || 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
@@ -1235,7 +1278,11 @@ const MachineListPage = () => {
                   }}
                 >
                   <CardContent sx={{ textAlign: "center", py: 3 }}>
-                    <Typography variant="h4" fontWeight="bold" color="#03a9f4">
+                    <Typography
+                      variant={isMobile ? "h5" : "h4"}
+                      fontWeight="bold"
+                      color="#03a9f4"
+                    >
                       {stats.borrowed_return || 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
@@ -1255,7 +1302,11 @@ const MachineListPage = () => {
                   }}
                 >
                   <CardContent sx={{ textAlign: "center", py: 3 }}>
-                    <Typography variant="h4" fontWeight="bold" color="#00bcd4">
+                    <Typography
+                      variant={isMobile ? "h5" : "h4"}
+                      fontWeight="bold"
+                      color="#00bcd4"
+                    >
                       {stats.borrowed_out || 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
@@ -1413,7 +1464,11 @@ const MachineListPage = () => {
               alignItems="center"
               justifyContent="space-between"
             >
-              <Stack direction="row" spacing={2} sx={{ flexGrow: 1 }}>
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                spacing={2}
+                sx={{ flexGrow: 1, width: { xs: "100%", sm: "auto" } }}
+              >
                 <TextField
                   placeholder="Tìm kiếm máy móc..."
                   variant="outlined"
@@ -1421,8 +1476,8 @@ const MachineListPage = () => {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   sx={{
-                    flexGrow: 1,
-                    maxWidth: { xs: "100%", sm: 400 },
+                    width: "100%",
+                    maxWidth: { sm: 400 },
                     "& .MuiOutlinedInput-root": {
                       borderRadius: "12px",
                     },
@@ -1435,7 +1490,9 @@ const MachineListPage = () => {
                     ),
                   }}
                 />
-                <FormControl sx={{ minWidth: 120 }}>
+                <FormControl
+                  sx={{ minWidth: 120, width: { xs: "100%", sm: 120 } }}
+                >
                   <InputLabel>Số dòng</InputLabel>
                   <Select
                     value={rowsPerPage}
@@ -1455,7 +1512,12 @@ const MachineListPage = () => {
                   </Select>
                 </FormControl>
               </Stack>
-              <Stack direction="row" spacing={2} flexWrap="wrap">
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                spacing={2}
+                flexWrap="wrap"
+                sx={{ width: { xs: "100%", sm: "auto" } }}
+              >
                 {/* <<< 3. THAY ĐỔI: ẨN NÚT "NHẬP EXCEL" VÀ "THÊM MÁY" CHO VIEW ONLY >>> */}
                 {canCreateOrImport && (
                   <Button
@@ -1468,6 +1530,7 @@ const MachineListPage = () => {
                       borderColor: "#2e7d32",
                       px: 3,
                       py: 1.5,
+                      width: { xs: "100%", sm: "auto" },
                     }}
                   >
                     Nhập Excel
@@ -1488,6 +1551,7 @@ const MachineListPage = () => {
                         boxShadow: "0 8px 25px rgba(46, 125, 50, 0.3)",
                       },
                       transition: "all 0.3s ease",
+                      width: { xs: "100%", sm: "auto" },
                     }}
                   >
                     Thêm máy
@@ -1506,6 +1570,7 @@ const MachineListPage = () => {
                     py: 1.5,
                     color: "#667eea",
                     borderColor: "#667eea",
+                    width: { xs: "100%", sm: "auto" },
                   }}
                 >
                   Cột
@@ -1529,6 +1594,7 @@ const MachineListPage = () => {
                       boxShadow: "0 8px 25px rgba(102, 126, 234, 0.3)",
                     },
                     transition: "all 0.3s ease",
+                    width: { xs: "100%", sm: "auto" },
                   }}
                 >
                   Làm mới
@@ -1575,7 +1641,13 @@ const MachineListPage = () => {
                   <TableRow
                     sx={{ backgroundColor: "rgba(102, 126, 234, 0.05)" }}
                   >
-                    <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                    <TableCell
+                      sx={{
+                        fontWeight: 600,
+                        fontSize: "0.95rem",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
                       STT
                     </TableCell>
 
@@ -1585,6 +1657,7 @@ const MachineListPage = () => {
                         sx={{
                           fontWeight: 600,
                           fontSize: "0.95rem",
+                          whiteSpace: "nowrap",
                         }}
                       >
                         <TableSortLabel
@@ -1606,6 +1679,7 @@ const MachineListPage = () => {
                           fontWeight: 600,
                           fontSize: "0.95rem",
                           minWidth: "150px",
+                          whiteSpace: "nowrap",
                         }}
                       >
                         <TableSortLabel
@@ -1627,6 +1701,7 @@ const MachineListPage = () => {
                           fontWeight: 600,
                           fontSize: "0.95rem",
                           minWidth: "200px",
+                          whiteSpace: "nowrap",
                         }}
                       >
                         <TableSortLabel
@@ -1643,7 +1718,13 @@ const MachineListPage = () => {
                       </TableCell>
                     )}
                     {columnVisibility.manufacturer && (
-                      <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                      <TableCell
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: "0.95rem",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         <TableSortLabel
                           active={sortConfig.key === "manufacturer"}
                           direction={
@@ -1658,7 +1739,13 @@ const MachineListPage = () => {
                       </TableCell>
                     )}
                     {columnVisibility.serial_machine && (
-                      <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                      <TableCell
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: "0.95rem",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         <TableSortLabel
                           active={sortConfig.key === "serial_machine"}
                           direction={
@@ -1673,7 +1760,13 @@ const MachineListPage = () => {
                       </TableCell>
                     )}
                     {columnVisibility.RFID_machine && (
-                      <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                      <TableCell
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: "0.95rem",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         <TableSortLabel
                           active={sortConfig.key === "RFID_machine"}
                           direction={
@@ -1688,7 +1781,13 @@ const MachineListPage = () => {
                       </TableCell>
                     )}
                     {columnVisibility.name_category && (
-                      <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                      <TableCell
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: "0.95rem",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         <TableSortLabel
                           active={sortConfig.key === "name_category"}
                           direction={
@@ -1708,6 +1807,7 @@ const MachineListPage = () => {
                           fontWeight: 600,
                           fontSize: "0.95rem",
                           minWidth: "150px",
+                          whiteSpace: "nowrap",
                         }}
                       >
                         <TableSortLabel
@@ -1724,7 +1824,13 @@ const MachineListPage = () => {
                       </TableCell>
                     )}
                     {columnVisibility.current_status && (
-                      <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                      <TableCell
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: "0.95rem",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         <TableSortLabel
                           active={sortConfig.key === "current_status"}
                           direction={
@@ -1739,7 +1845,13 @@ const MachineListPage = () => {
                       </TableCell>
                     )}
                     {columnVisibility.is_borrowed_or_rented_or_borrowed_out && (
-                      <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                      <TableCell
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: "0.95rem",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         <TableSortLabel
                           active={
                             sortConfig.key ===
@@ -1762,7 +1874,13 @@ const MachineListPage = () => {
                       </TableCell>
                     )}
                     {columnVisibility.is_borrowed_or_rented_or_borrowed_out_name && (
-                      <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                      <TableCell
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: "0.95rem",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         <TableSortLabel
                           active={
                             sortConfig.key ===
@@ -1785,7 +1903,13 @@ const MachineListPage = () => {
                       </TableCell>
                     )}
                     {columnVisibility.is_borrowed_or_rented_or_borrowed_out_date && (
-                      <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                      <TableCell
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: "0.95rem",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         <TableSortLabel
                           active={
                             sortConfig.key ===
@@ -1808,7 +1932,13 @@ const MachineListPage = () => {
                       </TableCell>
                     )}
                     {columnVisibility.is_borrowed_or_rented_or_borrowed_out_return_date && (
-                      <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                      <TableCell
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: "0.95rem",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         <TableSortLabel
                           active={
                             sortConfig.key ===
@@ -1831,7 +1961,13 @@ const MachineListPage = () => {
                       </TableCell>
                     )}
                     {columnVisibility.price && (
-                      <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                      <TableCell
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: "0.95rem",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         <TableSortLabel
                           active={sortConfig.key === "price"}
                           direction={
@@ -1846,7 +1982,13 @@ const MachineListPage = () => {
                       </TableCell>
                     )}
                     {columnVisibility.lifespan && (
-                      <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                      <TableCell
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: "0.95rem",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         <TableSortLabel
                           active={sortConfig.key === "lifespan"}
                           direction={
@@ -1861,7 +2003,13 @@ const MachineListPage = () => {
                       </TableCell>
                     )}
                     {columnVisibility.repair_cost && (
-                      <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                      <TableCell
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: "0.95rem",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         <TableSortLabel
                           active={sortConfig.key === "repair_cost"}
                           direction={
@@ -1876,7 +2024,13 @@ const MachineListPage = () => {
                       </TableCell>
                     )}
                     {columnVisibility.date_of_use && (
-                      <TableCell sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                      <TableCell
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: "0.95rem",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         <TableSortLabel
                           active={sortConfig.key === "date_of_use"}
                           direction={
@@ -1932,28 +2086,38 @@ const MachineListPage = () => {
 
                           {/* Added visibility checks */}
                           {columnVisibility.code_machine && (
-                            <TableCell sx={{ fontWeight: 500 }}>
+                            <TableCell
+                              sx={{ fontWeight: 500, whiteSpace: "nowrap" }}
+                            >
                               {machine.code_machine || "-"}
                             </TableCell>
                           )}
                           {columnVisibility.type_machine && (
-                            <TableCell>{machine.type_machine || "-"}</TableCell>
+                            <TableCell sx={{ whiteSpace: "nowrap" }}>
+                              {machine.type_machine || "-"}
+                            </TableCell>
                           )}
                           {columnVisibility.model_machine && (
-                            <TableCell sx={{ fontWeight: 500 }}>
+                            <TableCell
+                              sx={{ fontWeight: 500, whiteSpace: "nowrap" }}
+                            >
                               {machine.model_machine || "-"}
                             </TableCell>
                           )}
                           {columnVisibility.manufacturer && (
-                            <TableCell>{machine.manufacturer || "-"}</TableCell>
+                            <TableCell sx={{ whiteSpace: "nowrap" }}>
+                              {machine.manufacturer || "-"}
+                            </TableCell>
                           )}
                           {columnVisibility.serial_machine && (
-                            <TableCell>
+                            <TableCell sx={{ whiteSpace: "nowrap" }}>
                               {machine.serial_machine || "-"}
                             </TableCell>
                           )}
                           {columnVisibility.RFID_machine && (
-                            <TableCell>{machine.RFID_machine || "-"}</TableCell>
+                            <TableCell sx={{ whiteSpace: "nowrap" }}>
+                              {machine.RFID_machine || "-"}
+                            </TableCell>
                           )}
                           {columnVisibility.name_category && (
                             <TableCell>
@@ -1972,7 +2136,9 @@ const MachineListPage = () => {
                             </TableCell>
                           )}
                           {columnVisibility.name_location && (
-                            <TableCell sx={{ fontWeight: 500 }}>
+                            <TableCell
+                              sx={{ fontWeight: 500, whiteSpace: "nowrap" }}
+                            >
                               {machine.name_location || "-"}
                             </TableCell>
                           )}
@@ -2020,44 +2186,45 @@ const MachineListPage = () => {
                             </TableCell>
                           )}
                           {columnVisibility.is_borrowed_or_rented_or_borrowed_out_name && (
-                            <TableCell>
+                            <TableCell sx={{ whiteSpace: "nowrap" }}>
                               {machine.is_borrowed_or_rented_or_borrowed_out_name ||
                                 "-"}
                             </TableCell>
                           )}
                           {columnVisibility.is_borrowed_or_rented_or_borrowed_out_date && (
-                            <TableCell>
+                            <TableCell sx={{ whiteSpace: "nowrap" }}>
                               {formatDate(
                                 machine.is_borrowed_or_rented_or_borrowed_out_date
                               )}
                             </TableCell>
                           )}
                           {columnVisibility.is_borrowed_or_rented_or_borrowed_out_return_date && (
-                            <TableCell>
+                            <TableCell sx={{ whiteSpace: "nowrap" }}>
                               {formatDate(
                                 machine.is_borrowed_or_rented_or_borrowed_out_return_date
                               )}
                             </TableCell>
                           )}
                           {columnVisibility.price && (
-                            <TableCell>
+                            <TableCell sx={{ whiteSpace: "nowrap" }}>
                               {formatCurrency(machine.price)}
                             </TableCell>
                           )}
                           {columnVisibility.lifespan && (
-                            <TableCell>{machine.lifespan || "-"}</TableCell>
+                            <TableCell sx={{ whiteSpace: "nowrap" }}>
+                              {machine.lifespan || "-"}
+                            </TableCell>
                           )}
                           {columnVisibility.repair_cost && (
-                            <TableCell>
+                            <TableCell sx={{ whiteSpace: "nowrap" }}>
                               {formatCurrency(machine.repair_cost)}
                             </TableCell>
                           )}
                           {columnVisibility.date_of_use && (
-                            <TableCell>
+                            <TableCell sx={{ whiteSpace: "nowrap" }}>
                               {formatDate(machine.date_of_use)}
                             </TableCell>
                           )}
-                          {/* <<< CHANGED: Removed Action cell >>> */}
                         </TableRow>
                       );
                     })
@@ -2075,6 +2242,8 @@ const MachineListPage = () => {
                   alignItems: "center",
                   p: 3,
                   borderTop: "1px solid rgba(0, 0, 0, 0.05)",
+                  flexDirection: { xs: "column", sm: "row" },
+                  gap: 2,
                 }}
               >
                 <Typography variant="body2" color="text.secondary">
@@ -2087,7 +2256,7 @@ const MachineListPage = () => {
                   page={page}
                   onChange={handlePageChange}
                   color="primary"
-                  size="large"
+                  size={isMobile ? "small" : "large"}
                   showFirstButton
                   showLastButton
                   sx={{
@@ -2111,10 +2280,11 @@ const MachineListPage = () => {
           open={openDialog}
           onClose={handleCloseDialog}
           maxWidth="md"
+          fullScreen={isMobile}
           fullWidth
           PaperProps={{
             sx: {
-              borderRadius: "20px",
+              borderRadius: isMobile ? 0 : "20px",
             },
           }}
         >
@@ -2134,7 +2304,7 @@ const MachineListPage = () => {
               alignItems="center"
               justifyContent="space-between"
             >
-              <Typography variant="h5" fontWeight="bold">
+              <Typography variant={isMobile ? "h6" : "h5"} fontWeight="bold">
                 {isCreateMode ? "Thêm máy móc mới" : "Chi tiết máy móc"}
               </Typography>
               <IconButton
@@ -2163,7 +2333,11 @@ const MachineListPage = () => {
                       }}
                     >
                       <CardContent>
-                        <Stack direction="row" spacing={3} alignItems="center">
+                        <Stack
+                          direction={{ xs: "column", sm: "row" }}
+                          spacing={3}
+                          alignItems="center"
+                        >
                           {/* QR Code Display */}
                           <Box
                             sx={{
@@ -2214,7 +2388,7 @@ const MachineListPage = () => {
                               </Typography>
                             </Box> */}
                             <Typography
-                              variant="h6"
+                              variant={isMobile ? "subtitle1" : "h6"}
                               fontWeight="bold"
                               gutterBottom
                             >
@@ -2230,7 +2404,7 @@ const MachineListPage = () => {
                               móc.
                             </Typography>
                             <Stack
-                              direction="row"
+                              direction={{ xs: "column", sm: "row" }}
                               spacing={2}
                               sx={{ mt: 2 }}
                               flexWrap="wrap"
@@ -2243,6 +2417,7 @@ const MachineListPage = () => {
                                   borderRadius: "12px",
                                   background:
                                     "linear-gradient(45deg, #667eea, #764ba2)",
+                                  width: { xs: "100%", sm: "auto" },
                                 }}
                               >
                                 In mã QR
@@ -2255,6 +2430,7 @@ const MachineListPage = () => {
                                   borderRadius: "12px",
                                   background:
                                     "linear-gradient(45deg, #2e7d32, #4caf50)",
+                                  width: { xs: "100%", sm: "auto" },
                                 }}
                               >
                                 Tải xuống
@@ -2262,7 +2438,10 @@ const MachineListPage = () => {
                               <Button
                                 variant="outlined"
                                 onClick={() => setShowQRCode(false)}
-                                sx={{ borderRadius: "12px" }}
+                                sx={{
+                                  borderRadius: "12px",
+                                  width: { xs: "100%", sm: "auto" },
+                                }}
                               >
                                 Ẩn mã QR
                               </Button>
@@ -2709,12 +2888,19 @@ const MachineListPage = () => {
             )}
           </DialogContent>
           <Divider />
-          <DialogActions sx={{ p: 3 }}>
+          <DialogActions
+            sx={{
+              p: 3,
+              flexDirection: { xs: "column-reverse", sm: "row" },
+              gap: 1,
+              justifyContent: "flex-end", // Căn phải
+            }}
+          >
             <Button
               onClick={handleCloseDialog}
               variant="outlined"
               color="inherit"
-              sx={{ borderRadius: "12px" }}
+              sx={{ borderRadius: "12px", width: { xs: "100%", sm: "auto" } }}
             >
               {/* <<< 4. THAY ĐỔI: ĐỔI TÊN NÚT CHO VIEW-ONLY >>> */}
               {isAdmin || canEdit ? "Hủy" : "Đóng"}
@@ -2729,6 +2915,7 @@ const MachineListPage = () => {
                 sx={{
                   borderRadius: "12px",
                   background: "linear-gradient(45deg, #667eea, #764ba2)",
+                  width: { xs: "100%", sm: "auto" },
                 }}
               >
                 {isCreateMode ? "Thêm thiết bị mới" : "Lưu thay đổi"}
@@ -2741,10 +2928,11 @@ const MachineListPage = () => {
           open={importDialogOpen}
           onClose={handleCloseImportDialog}
           maxWidth="md"
+          fullScreen={isMobile}
           fullWidth
           PaperProps={{
             sx: {
-              borderRadius: "20px",
+              borderRadius: isMobile ? 0 : "20px",
             },
           }}
         >
@@ -2763,14 +2951,20 @@ const MachineListPage = () => {
               alignItems="center"
               justifyContent="space-between"
             >
-              <Typography variant="h5" fontWeight="bold">
+              <Typography variant={isMobile ? "h6" : "h5"} fontWeight="bold">
                 Nhập máy móc từ file Excel
               </Typography>
             </Stack>
           </DialogTitle>
           <Divider />
           <DialogContent
-            sx={{ pt: 3, display: "flex", flexDirection: "column", gap: 3 }}
+            sx={{
+              pt: 3,
+              display: "flex",
+              flexDirection: "column",
+              gap: 3,
+              pb: 1, // Giảm padding bottom
+            }}
           >
             {/* Hướng dẫn */}
             <Alert severity="info" sx={{ borderRadius: "12px" }}>
@@ -2947,12 +3141,18 @@ const MachineListPage = () => {
             )}
           </DialogContent>
           <Divider />
-          <DialogActions sx={{ p: 3 }}>
+          <DialogActions
+            sx={{
+              p: 3,
+              flexDirection: { xs: "column-reverse", sm: "row" },
+              gap: 1,
+            }}
+          >
             <Button
               onClick={handleCloseImportDialog}
               variant="outlined"
               color="inherit"
-              sx={{ borderRadius: "12px" }}
+              sx={{ borderRadius: "12px", width: { xs: "100%", sm: "auto" } }}
               disabled={isImporting}
             >
               Đóng
@@ -2964,6 +3164,7 @@ const MachineListPage = () => {
               sx={{
                 borderRadius: "12px",
                 background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                width: { xs: "100%", sm: "auto" },
               }}
               disabled={!importFile || isImporting}
             >
@@ -2977,7 +3178,11 @@ const MachineListPage = () => {
           open={notification.open}
           autoHideDuration={2000}
           onClose={handleCloseNotification}
-          anchorOrigin={{ vertical: "top", horizontal: "right" }}
+          anchorOrigin={
+            isMobile
+              ? { vertical: "bottom", horizontal: "center" }
+              : { vertical: "top", horizontal: "right" }
+          }
         >
           <Alert
             onClose={handleCloseNotification}
@@ -2985,7 +3190,7 @@ const MachineListPage = () => {
             variant="filled"
             sx={{
               width: "100%",
-              minWidth: "350px",
+              minWidth: { xs: "auto", sm: "350px" },
               boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
               borderRadius: "12px",
             }}

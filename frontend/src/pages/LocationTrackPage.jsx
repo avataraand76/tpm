@@ -31,6 +31,8 @@ import {
   ListItemIcon,
   ListItemText,
   CardContent,
+  useTheme,
+  useMediaQuery,
 } from "@mui/material";
 import {
   LocationOn,
@@ -43,6 +45,8 @@ import NavigationBar from "../components/NavigationBar";
 import { api } from "../api/api";
 
 const LocationTrackPage = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   // <<< BẮT ĐẦU THÊM MỚI STATE CHO ĐƠN VỊ >>>
   const [departments, setDepartments] = useState([]);
   const [selectedDepartment, setSelectedDepartment] = useState(null);
@@ -435,7 +439,11 @@ const LocationTrackPage = () => {
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                 Tổng số máy
               </Typography>
-              <Typography variant="h3" fontWeight="bold" color="#667eea">
+              <Typography
+                variant={isMobile ? "h4" : "h3"}
+                fontWeight="bold"
+                color="#667eea"
+              >
                 {stats.total || 0}
               </Typography>
             </CardContent>
@@ -446,13 +454,17 @@ const LocationTrackPage = () => {
         <Grid size={{ xs: 12, sm: 6, md: 9 }}>
           <Grid container spacing={2}>
             {/* Hàng 1 */}
-            <Grid size={{ xs: 4, md: 2.4 }}>
+            <Grid size={{ xs: 6, md: 2.4 }}>
               <Card
                 elevation={0}
                 sx={{ borderRadius: "20px", background: "#2e7d3211" }}
               >
                 <CardContent sx={{ textAlign: "center", p: 2 }}>
-                  <Typography variant="h5" fontWeight="bold" color="#2e7d32">
+                  <Typography
+                    variant={isMobile ? "h6" : "h5"}
+                    fontWeight="bold"
+                    color="#2e7d32"
+                  >
                     {stats.available || 0}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
@@ -461,13 +473,17 @@ const LocationTrackPage = () => {
                 </CardContent>
               </Card>
             </Grid>
-            <Grid size={{ xs: 4, md: 2.4 }}>
+            <Grid size={{ xs: 6, md: 2.4 }}>
               <Card
                 elevation={0}
                 sx={{ borderRadius: "20px", background: "#1976d211" }}
               >
                 <CardContent sx={{ textAlign: "center", p: 2 }}>
-                  <Typography variant="h5" fontWeight="bold" color="#1976d2">
+                  <Typography
+                    variant={isMobile ? "h6" : "h5"}
+                    fontWeight="bold"
+                    color="#1976d2"
+                  >
                     {stats.in_use || 0}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
@@ -476,13 +492,17 @@ const LocationTrackPage = () => {
                 </CardContent>
               </Card>
             </Grid>
-            <Grid size={{ xs: 4, md: 2.4 }}>
+            <Grid size={{ xs: 6, md: 2.4 }}>
               <Card
                 elevation={0}
                 sx={{ borderRadius: "20px", background: "#ff980011" }}
               >
                 <CardContent sx={{ textAlign: "center", p: 2 }}>
-                  <Typography variant="h5" fontWeight="bold" color="#ff9800">
+                  <Typography
+                    variant={isMobile ? "h6" : "h5"}
+                    fontWeight="bold"
+                    color="#ff9800"
+                  >
                     {stats.maintenance || 0}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
@@ -491,13 +511,17 @@ const LocationTrackPage = () => {
                 </CardContent>
               </Card>
             </Grid>
-            <Grid size={{ xs: 4, md: 2.4 }}>
+            <Grid size={{ xs: 6, md: 2.4 }}>
               <Card
                 elevation={0}
                 sx={{ borderRadius: "20px", background: "#f4433611" }}
               >
                 <CardContent sx={{ textAlign: "center", p: 2 }}>
-                  <Typography variant="h5" fontWeight="bold" color="#f44336">
+                  <Typography
+                    variant={isMobile ? "h6" : "h5"}
+                    fontWeight="bold"
+                    color="#f44336"
+                  >
                     {stats.liquidation || 0}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
@@ -506,13 +530,17 @@ const LocationTrackPage = () => {
                 </CardContent>
               </Card>
             </Grid>
-            <Grid size={{ xs: 4, md: 2.4 }}>
+            <Grid size={{ xs: 6, md: 2.4 }}>
               <Card
                 elevation={0}
                 sx={{ borderRadius: "20px", background: "#9e9e9e11" }}
               >
                 <CardContent sx={{ textAlign: "center", p: 2 }}>
-                  <Typography variant="h5" fontWeight="bold" color="#9e9e9e">
+                  <Typography
+                    variant={isMobile ? "h6" : "h5"}
+                    fontWeight="bold"
+                    color="#9e9e9e"
+                  >
                     {stats.disabled || 0}/{stats.broken || 0}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
@@ -522,13 +550,17 @@ const LocationTrackPage = () => {
               </Card>
             </Grid>
             {/* Hàng 2 */}
-            <Grid size={{ xs: 4, md: 2.4 }}>
+            <Grid size={{ xs: 6, md: 2.4 }}>
               <Card
                 elevation={0}
                 sx={{ borderRadius: "20px", background: "#673ab711" }}
               >
                 <CardContent sx={{ textAlign: "center", p: 2 }}>
-                  <Typography variant="h5" fontWeight="bold" color="#673ab7">
+                  <Typography
+                    variant={isMobile ? "h6" : "h5"}
+                    fontWeight="bold"
+                    color="#673ab7"
+                  >
                     {stats.rented || 0}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
@@ -537,13 +569,17 @@ const LocationTrackPage = () => {
                 </CardContent>
               </Card>
             </Grid>
-            <Grid size={{ xs: 4, md: 2.4 }}>
+            <Grid size={{ xs: 6, md: 2.4 }}>
               <Card
                 elevation={0}
                 sx={{ borderRadius: "20px", background: "#673ab711" }}
               >
                 <CardContent sx={{ textAlign: "center", p: 2 }}>
-                  <Typography variant="h5" fontWeight="bold" color="#673ab7">
+                  <Typography
+                    variant={isMobile ? "h6" : "h5"}
+                    fontWeight="bold"
+                    color="#673ab7"
+                  >
                     {stats.rented_return || 0}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
@@ -552,13 +588,17 @@ const LocationTrackPage = () => {
                 </CardContent>
               </Card>
             </Grid>
-            <Grid size={{ xs: 4, md: 2.4 }}>
+            <Grid size={{ xs: 6, md: 2.4 }}>
               <Card
                 elevation={0}
                 sx={{ borderRadius: "20px", background: "#03a9f411" }}
               >
                 <CardContent sx={{ textAlign: "center", p: 2 }}>
-                  <Typography variant="h5" fontWeight="bold" color="#03a9f4">
+                  <Typography
+                    variant={isMobile ? "h6" : "h5"}
+                    fontWeight="bold"
+                    color="#03a9f4"
+                  >
                     {stats.borrowed || 0}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
@@ -567,13 +607,17 @@ const LocationTrackPage = () => {
                 </CardContent>
               </Card>
             </Grid>
-            <Grid size={{ xs: 4, md: 2.4 }}>
+            <Grid size={{ xs: 6, md: 2.4 }}>
               <Card
                 elevation={0}
                 sx={{ borderRadius: "20px", background: "#03a9f411" }}
               >
                 <CardContent sx={{ textAlign: "center", p: 2 }}>
-                  <Typography variant="h5" fontWeight="bold" color="#03a9f4">
+                  <Typography
+                    variant={isMobile ? "h6" : "h5"}
+                    fontWeight="bold"
+                    color="#03a9f4"
+                  >
                     {stats.borrowed_return || 0}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
@@ -582,13 +626,17 @@ const LocationTrackPage = () => {
                 </CardContent>
               </Card>
             </Grid>
-            <Grid size={{ xs: 4, md: 2.4 }}>
+            <Grid size={{ xs: 6, md: 2.4 }}>
               <Card
                 elevation={0}
                 sx={{ borderRadius: "20px", background: "#00bcd411" }}
               >
                 <CardContent sx={{ textAlign: "center", p: 2 }}>
-                  <Typography variant="h5" fontWeight="bold" color="#00bcd4">
+                  <Typography
+                    variant={isMobile ? "h6" : "h5"}
+                    fontWeight="bold"
+                    color="#00bcd4"
+                  >
                     {stats.borrowed_out || 0}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
@@ -722,17 +770,27 @@ const LocationTrackPage = () => {
           <Table size="small">
             <TableHead>
               <TableRow sx={{ backgroundColor: "rgba(102, 126, 234, 0.05)" }}>
-                <TableCell sx={{ fontWeight: 600 }}>Mã máy</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Loại máy</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Model</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Serial</TableCell>
+                <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                  Mã máy
+                </TableCell>
+                <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                  Loại máy
+                </TableCell>
+                <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                  Model
+                </TableCell>
+                <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                  Serial
+                </TableCell>
                 {!selectedLocation && (
-                  <TableCell sx={{ fontWeight: 600 }}>Vị trí</TableCell>
+                  <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                    Vị trí
+                  </TableCell>
                 )}
-                <TableCell sx={{ fontWeight: 600 }}>
+                <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
                   Trạng thái (chính)
                 </TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>
+                <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
                   Trạng thái (mượn/thuê)
                 </TableCell>
               </TableRow>
@@ -756,11 +814,19 @@ const LocationTrackPage = () => {
                     <TableCell sx={{ fontWeight: 600 }}>
                       {machine.code_machine}
                     </TableCell>
-                    <TableCell>{machine.type_machine || "-"}</TableCell>
-                    <TableCell>{machine.model_machine || "-"}</TableCell>
-                    <TableCell>{machine.serial_machine || "-"}</TableCell>
+                    <TableCell sx={{ whiteSpace: "nowrap" }}>
+                      {machine.type_machine || "-"}
+                    </TableCell>
+                    <TableCell sx={{ whiteSpace: "nowrap" }}>
+                      {machine.model_machine || "-"}
+                    </TableCell>
+                    <TableCell sx={{ whiteSpace: "nowrap" }}>
+                      {machine.serial_machine || "-"}
+                    </TableCell>
                     {!selectedLocation && (
-                      <TableCell>{machine.name_location || "-"}</TableCell>
+                      <TableCell sx={{ whiteSpace: "nowrap" }}>
+                        {machine.name_location || "-"}
+                      </TableCell>
                     )}
                     <TableCell>
                       <Chip
@@ -835,7 +901,7 @@ const LocationTrackPage = () => {
             </Avatar>
             <Box>
               <Typography
-                variant="h3"
+                variant={isMobile ? "h4" : "h3"}
                 component="h1"
                 sx={{
                   fontWeight: 700,
@@ -848,7 +914,10 @@ const LocationTrackPage = () => {
               >
                 Theo dõi vị trí
               </Typography>
-              <Typography variant="h6" color="text.secondary">
+              <Typography
+                variant={isMobile ? "body1" : "h6"}
+                color="text.secondary"
+              >
                 Kiểm tra máy móc tại một vị trí và xem lịch sử điều chuyển
               </Typography>
             </Box>
@@ -861,10 +930,10 @@ const LocationTrackPage = () => {
           sx={{
             borderRadius: "20px",
             border: "1px solid rgba(0, 0, 0, 0.05)",
-            p: 4,
+            p: { xs: 2, sm: 4 },
           }}
         >
-          <Grid container spacing={4}>
+          <Grid container spacing={isMobile ? 2 : 4}>
             {/* HÀNG 1: CHỌN ĐƠN VỊ (NÚT) */}
             <Grid size={{ xs: 12 }}>
               <Box>
@@ -1020,9 +1089,11 @@ const LocationTrackPage = () => {
               <Box
                 sx={{
                   display: "flex",
-                  alignItems: "center",
+                  alignItems: { xs: "flex-start", sm: "center" },
                   justifyContent: "space-between",
+                  flexDirection: { xs: "column", sm: "row" },
                   mb: 2,
+                  gap: 2,
                 }}
               >
                 {/* Tiêu đề và Chip */}
@@ -1043,6 +1114,7 @@ const LocationTrackPage = () => {
                   startIcon={<Refresh />}
                   onClick={handleRefresh}
                   sx={{
+                    width: { xs: "100%", sm: "auto" },
                     borderRadius: "12px",
                     background: "linear-gradient(45deg, #667eea, #764ba2)",
                     px: 3,
@@ -1068,10 +1140,11 @@ const LocationTrackPage = () => {
           open={openHistoryDialog}
           onClose={handleCloseHistoryDialog}
           maxWidth="md"
+          fullScreen={isMobile}
           fullWidth
           PaperProps={{
             sx: {
-              borderRadius: "20px",
+              borderRadius: isMobile ? 0 : "20px",
             },
           }}
         >
@@ -1082,8 +1155,13 @@ const LocationTrackPage = () => {
               fontWeight: 700,
             }}
           >
-            Lịch sử di chuyển - {selectedMachine?.code_machine} -{" "}
-            {selectedMachine?.type_machine} - {selectedMachine?.model_machine}
+            <Typography
+              variant={isMobile ? "h6" : "h5"}
+              sx={{ fontWeight: 700 }}
+            >
+              Lịch sử di chuyển - {selectedMachine?.code_machine} -{" "}
+              {selectedMachine?.type_machine} - {selectedMachine?.model_machine}
+            </Typography>
           </DialogTitle>
           <DialogContent sx={{ mt: 3 }}>
             {loadingHistory ? (
@@ -1105,15 +1183,25 @@ const LocationTrackPage = () => {
                       <TableRow
                         sx={{ backgroundColor: "rgba(102, 126, 234, 0.05)" }}
                       >
-                        <TableCell sx={{ fontWeight: 600 }}>Ngày</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>
+                        <TableCell
+                          sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
+                        >
+                          Ngày
+                        </TableCell>
+                        <TableCell
+                          sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
+                        >
                           Từ vị trí
                         </TableCell>
                         <TableCell sx={{ fontWeight: 600 }}></TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>
+                        <TableCell
+                          sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
+                        >
                           Đến vị trí
                         </TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>
+                        <TableCell
+                          sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
+                        >
                           Người tạo
                         </TableCell>
                       </TableRow>
@@ -1122,7 +1210,9 @@ const LocationTrackPage = () => {
                       {historyData.length > 0 ? (
                         historyData.map((item, index) => (
                           <TableRow key={index}>
-                            <TableCell>{formatDate(item.move_date)}</TableCell>
+                            <TableCell sx={{ whiteSpace: "nowrap" }}>
+                              {formatDate(item.move_date)}
+                            </TableCell>
                             <TableCell>
                               {item.from_location_name || "-"}
                             </TableCell>
@@ -1132,7 +1222,9 @@ const LocationTrackPage = () => {
                             <TableCell>
                               {item.to_location_name || "-"}
                             </TableCell>
-                            <TableCell>{item.created_by || "System"}</TableCell>
+                            <TableCell sx={{ whiteSpace: "nowrap" }}>
+                              {item.created_by || "--"}
+                            </TableCell>
                           </TableRow>
                         ))
                       ) : (

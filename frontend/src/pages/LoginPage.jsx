@@ -15,6 +15,8 @@ import {
   Stack,
   IconButton,
   InputAdornment,
+  useTheme,
+  useMediaQuery,
 } from "@mui/material";
 import { Visibility, VisibilityOff, Warning } from "@mui/icons-material";
 import { useAuth } from "../hooks/useAuth";
@@ -28,6 +30,8 @@ const LoginPage = () => {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [capsLockOn, setCapsLockOn] = useState(false);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -110,7 +114,7 @@ const LoginPage = () => {
         <Paper
           elevation={0}
           sx={{
-            padding: 6,
+            padding: { xs: 3, sm: 6 },
             borderRadius: "24px",
             background: "rgba(255, 255, 255, 0.95)",
             backdropFilter: "blur(20px)",
@@ -133,7 +137,7 @@ const LoginPage = () => {
             <Box>
               <Typography
                 component="h1"
-                variant="h3"
+                variant={isMobile ? "h4" : "h3"}
                 sx={{
                   fontWeight: 700,
                   background: "linear-gradient(45deg, #667eea, #764ba2)",
@@ -145,7 +149,10 @@ const LoginPage = () => {
               >
                 TPM System
               </Typography>
-              <Typography variant="h6" color="text.secondary">
+              <Typography
+                variant={isMobile ? "body1" : "h6"}
+                color="text.secondary"
+              >
                 Đăng nhập để truy cập hệ thống
               </Typography>
             </Box>

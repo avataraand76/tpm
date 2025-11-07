@@ -15,6 +15,8 @@ import {
   CardActions,
   Stack,
   Avatar,
+  useTheme,
+  useMediaQuery,
 } from "@mui/material";
 import {
   Science,
@@ -30,6 +32,8 @@ import NavigationBar from "../components/NavigationBar";
 
 const HomePage = () => {
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   // const { permissions } = useAuth();
   // const canEdit = permissions.includes("edit");
   // const isAdmin = permissions.includes("admin");
@@ -55,7 +59,7 @@ const HomePage = () => {
             </Avatar>
             <Box>
               <Typography
-                variant="h3"
+                variant={isMobile ? "h4" : "h3"}
                 component="h1"
                 sx={{
                   fontWeight: 700,
@@ -67,7 +71,10 @@ const HomePage = () => {
               >
                 TPM
               </Typography>
-              <Typography variant="h6" color="text.secondary">
+              <Typography
+                variant={isMobile ? "body1" : "h6"}
+                color="text.secondary"
+              >
                 Hệ thống quản lý máy móc thiết bị TPM
               </Typography>
             </Box>
@@ -78,7 +85,7 @@ const HomePage = () => {
         <Card
           elevation={0}
           sx={{
-            p: 6,
+            p: { xs: 3, sm: 6 },
             mt: 6,
             mb: 6,
             textAlign: "center",
@@ -100,7 +107,7 @@ const HomePage = () => {
             <Dashboard sx={{ fontSize: 40 }} />
           </Avatar>
           <Typography
-            variant="h3"
+            variant={isMobile ? "h4" : "h3"}
             fontWeight="bold"
             gutterBottom
             sx={{
@@ -112,7 +119,11 @@ const HomePage = () => {
           >
             🎉 Chào mừng đến với TPM System!
           </Typography>
-          <Typography variant="h6" color="text.secondary" sx={{ mb: 4 }}>
+          <Typography
+            variant={isMobile ? "body1" : "h6"}
+            color="text.secondary"
+            sx={{ mb: 4 }}
+          >
             Hệ thống quản lý, bảo trì máy móc thiết bị sản xuất
           </Typography>
           <Stack
@@ -158,7 +169,7 @@ const HomePage = () => {
         {/* Quick Navigation Cards */}
         <Box sx={{ mb: 6 }}>
           <Typography
-            variant="h4"
+            variant={isMobile ? "h5" : "h4"}
             gutterBottom
             sx={{
               mb: 4,
