@@ -759,11 +759,65 @@ app.get("/api/machines/:uuid", authenticateToken, async (req, res) => {
         c.name_category,
         c.uuid_category,
         tl.name_location,
-        tl.uuid_location
+        tl.uuid_location,
+
+        -- Thêm thông tin người tạo (creator)
+        CASE
+          WHEN m.created_by = 99999 THEN '99999'
+          WHEN m.created_by = 99990 THEN '99990'
+          WHEN m.created_by = 99900 THEN '99900'
+          WHEN m.created_by = 99991 THEN '99991'
+          WHEN m.created_by = 99992 THEN '99992'
+          WHEN m.created_by = 99993 THEN '99993'
+          WHEN m.created_by = 99994 THEN '99994'
+          WHEN m.created_by = 99995 THEN '99995'
+          ELSE creator.ma_nv
+        END AS creator_ma_nv,
+        CASE
+          WHEN m.created_by = 99999 THEN 'Quản Trị Viên (Test)'
+          WHEN m.created_by = 99990 THEN 'Phòng Cơ Điện (Test)'
+          WHEN m.created_by = 99900 THEN 'Phòng Cơ Điện (Test)'
+          WHEN m.created_by = 99991 THEN 'Cơ Điện Xưởng 1 (Test)'
+          WHEN m.created_by = 99992 THEN 'Cơ Điện Xưởng 2 (Test)'
+          WHEN m.created_by = 99993 THEN 'Cơ Điện Xưởng 3 (Test)'
+          WHEN m.created_by = 99994 THEN 'Cơ Điện Xưởng 4 (Test)'
+          WHEN m.created_by = 99995 THEN 'Viewer (Test)'
+          ELSE creator.ten_nv
+        END AS creator_ten_nv,
+
+        -- Thêm thông tin người cập nhật (updater)
+        CASE
+          WHEN m.updated_by = 99999 THEN '99999'
+          WHEN m.updated_by = 99990 THEN '99990'
+          WHEN m.updated_by = 99900 THEN '99900'
+          WHEN m.updated_by = 99991 THEN '99991'
+          WHEN m.updated_by = 99992 THEN '99992'
+          WHEN m.updated_by = 99993 THEN '99993'
+          WHEN m.updated_by = 99994 THEN '99994'
+          WHEN m.updated_by = 99995 THEN '99995'
+          ELSE updater.ma_nv
+        END AS updater_ma_nv,
+        CASE
+          WHEN m.updated_by = 99999 THEN 'Quản Trị Viên (Test)'
+          WHEN m.updated_by = 99990 THEN 'Phòng Cơ Điện (Test)'
+          WHEN m.updated_by = 99900 THEN 'Phòng Cơ Điện (Test)'
+          WHEN m.updated_by = 99991 THEN 'Cơ Điện Xưởng 1 (Test)'
+          WHEN m.updated_by = 99992 THEN 'Cơ Điện Xưởng 2 (Test)'
+          WHEN m.updated_by = 99993 THEN 'Cơ Điện Xưởng 3 (Test)'
+          WHEN m.updated_by = 99994 THEN 'Cơ Điện Xưởng 4 (Test)'
+          WHEN m.updated_by = 99995 THEN 'Viewer (Test)'
+          ELSE updater.ten_nv
+        END AS updater_ten_nv
+
       FROM tb_machine m
       LEFT JOIN tb_category c ON c.id_category = m.id_category
       LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
       LEFT JOIN tb_location tl ON tl.id_location = ml.id_location
+      
+      -- JOIN sang CSDL HiTimesheet 2 LẦN (cho người tạo và người cập nhật)
+      LEFT JOIN ${process.env.DATA_HITIMESHEET_DATABASE}.sync_nhan_vien creator ON creator.id = m.created_by
+      LEFT JOIN ${process.env.DATA_HITIMESHEET_DATABASE}.sync_nhan_vien updater ON updater.id = m.updated_by
+      
       WHERE m.uuid_machine = ?
       `,
       [uuid]
@@ -1111,8 +1165,8 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
         m.serial_machine,
         m.RFID_machine,
         m.code_machine,
-        m.type_machine,  -- <<< CHANGED
-        m.model_machine, -- <<< CHANGED
+        m.type_machine,
+        m.model_machine,
         m.manufacturer,
         m.price,
         m.date_of_use,
@@ -1122,12 +1176,61 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
         m.current_status,
         m.created_at,
         m.updated_at,
-        m.created_by,
-        m.updated_by,
         c.name_category,
-        c.id_category
+        c.id_category,
+
+        -- Thêm thông tin người tạo (creator)
+        CASE
+          WHEN m.created_by = 99999 THEN '99999'
+          WHEN m.created_by = 99990 THEN '99990'
+          WHEN m.created_by = 99900 THEN '99900'
+          WHEN m.created_by = 99991 THEN '99991'
+          WHEN m.created_by = 99992 THEN '99992'
+          WHEN m.created_by = 99993 THEN '99993'
+          WHEN m.created_by = 99994 THEN '99994'
+          WHEN m.created_by = 99995 THEN '99995'
+          ELSE creator.ma_nv
+        END AS creator_ma_nv,
+        CASE
+          WHEN m.created_by = 99999 THEN 'Quản Trị Viên (Test)'
+          WHEN m.created_by = 99990 THEN 'Phòng Cơ Điện (Test)'
+          WHEN m.created_by = 99900 THEN 'Phòng Cơ Điện (Test)'
+          WHEN m.created_by = 99991 THEN 'Cơ Điện Xưởng 1 (Test)'
+          WHEN m.created_by = 99992 THEN 'Cơ Điện Xưởng 2 (Test)'
+          WHEN m.created_by = 99993 THEN 'Cơ Điện Xưởng 3 (Test)'
+          WHEN m.created_by = 99994 THEN 'Cơ Điện Xưởng 4 (Test)'
+          WHEN m.created_by = 99995 THEN 'Viewer (Test)'
+          ELSE creator.ten_nv
+        END AS creator_ten_nv,
+
+        -- Thêm thông tin người cập nhật (updater)
+        CASE
+          WHEN m.updated_by = 99999 THEN '99999'
+          WHEN m.updated_by = 99990 THEN '99990'
+          WHEN m.updated_by = 99900 THEN '99900'
+          WHEN m.updated_by = 99991 THEN '99991'
+          WHEN m.updated_by = 99992 THEN '99992'
+          WHEN m.updated_by = 99993 THEN '99993'
+          WHEN m.updated_by = 99994 THEN '99994'
+          WHEN m.updated_by = 99995 THEN '99995'
+          ELSE updater.ma_nv
+        END AS updater_ma_nv,
+        CASE
+          WHEN m.updated_by = 99999 THEN 'Quản Trị Viên (Test)'
+          WHEN m.updated_by = 99990 THEN 'Phòng Cơ Điện (Test)'
+          WHEN m.updated_by = 99900 THEN 'Phòng Cơ Điện (Test)'
+          WHEN m.updated_by = 99991 THEN 'Cơ Điện Xưởng 1 (Test)'
+          WHEN m.updated_by = 99992 THEN 'Cơ Điện Xưởng 2 (Test)'
+          WHEN m.updated_by = 99993 THEN 'Cơ Điện Xưởng 3 (Test)'
+          WHEN m.updated_by = 99994 THEN 'Cơ Điện Xưởng 4 (Test)'
+          WHEN m.updated_by = 99995 THEN 'Viewer (Test)'
+          ELSE updater.ten_nv
+        END AS updater_ten_nv
+
       FROM tb_machine m
       LEFT JOIN tb_category c ON c.id_category = m.id_category
+      LEFT JOIN ${process.env.DATA_HITIMESHEET_DATABASE}.sync_nhan_vien creator ON creator.id = m.created_by
+      LEFT JOIN ${process.env.DATA_HITIMESHEET_DATABASE}.sync_nhan_vien updater ON updater.id = m.updated_by
       WHERE m.id_machine = ?
       `,
       [result.insertId]
@@ -1259,8 +1362,8 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         m.serial_machine,
         m.RFID_machine,
         m.code_machine,
-        m.type_machine,  -- <<< CHANGED
-        m.model_machine, -- <<< CHANGED
+        m.type_machine,
+        m.model_machine,
         m.manufacturer,
         m.price,
         m.date_of_use,
@@ -1270,11 +1373,60 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         m.current_status,
         m.created_at,
         m.updated_at,
-        m.created_by,
-        m.updated_by,
-        c.name_category
+        c.name_category,
+
+        -- Thêm thông tin người tạo (creator)
+        CASE
+          WHEN m.created_by = 99999 THEN '99999'
+          WHEN m.created_by = 99990 THEN '99990'
+          WHEN m.created_by = 99900 THEN '99900'
+          WHEN m.created_by = 99991 THEN '99991'
+          WHEN m.created_by = 99992 THEN '99992'
+          WHEN m.created_by = 99993 THEN '99993'
+          WHEN m.created_by = 99994 THEN '99994'
+          WHEN m.created_by = 99995 THEN '99995'
+          ELSE creator.ma_nv
+        END AS creator_ma_nv,
+        CASE
+          WHEN m.created_by = 99999 THEN 'Quản Trị Viên (Test)'
+          WHEN m.created_by = 99990 THEN 'Phòng Cơ Điện (Test)'
+          WHEN m.created_by = 99900 THEN 'Phòng Cơ Điện (Test)'
+          WHEN m.created_by = 99991 THEN 'Cơ Điện Xưởng 1 (Test)'
+          WHEN m.created_by = 99992 THEN 'Cơ Điện Xưởng 2 (Test)'
+          WHEN m.created_by = 99993 THEN 'Cơ Điện Xưởng 3 (Test)'
+          WHEN m.created_by = 99994 THEN 'Cơ Điện Xưởng 4 (Test)'
+          WHEN m.created_by = 99995 THEN 'Viewer (Test)'
+          ELSE creator.ten_nv
+        END AS creator_ten_nv,
+
+        -- Thêm thông tin người cập nhật (updater)
+        CASE
+          WHEN m.updated_by = 99999 THEN '99999'
+          WHEN m.updated_by = 99990 THEN '99990'
+          WHEN m.updated_by = 99900 THEN '99900'
+          WHEN m.updated_by = 99991 THEN '99991'
+          WHEN m.updated_by = 99992 THEN '99992'
+          WHEN m.updated_by = 99993 THEN '99993'
+          WHEN m.updated_by = 99994 THEN '99994'
+          WHEN m.updated_by = 99995 THEN '99995'
+          ELSE updater.ma_nv
+        END AS updater_ma_nv,
+        CASE
+          WHEN m.updated_by = 99999 THEN 'Quản Trị Viên (Test)'
+          WHEN m.updated_by = 99990 THEN 'Phòng Cơ Điện (Test)'
+          WHEN m.updated_by = 99900 THEN 'Phòng Cơ Điện (Test)'
+          WHEN m.updated_by = 99991 THEN 'Cơ Điện Xưởng 1 (Test)'
+          WHEN m.updated_by = 99992 THEN 'Cơ Điện Xưởng 2 (Test)'
+          WHEN m.updated_by = 99993 THEN 'Cơ Điện Xưởng 3 (Test)'
+          WHEN m.updated_by = 99994 THEN 'Cơ Điện Xưởng 4 (Test)'
+          WHEN m.updated_by = 99995 THEN 'Viewer (Test)'
+          ELSE updater.ten_nv
+        END AS updater_ten_nv
+
       FROM tb_machine m
       LEFT JOIN tb_category c ON c.id_category = m.id_category
+      LEFT JOIN ${process.env.DATA_HITIMESHEET_DATABASE}.sync_nhan_vien creator ON creator.id = m.created_by
+      LEFT JOIN ${process.env.DATA_HITIMESHEET_DATABASE}.sync_nhan_vien updater ON updater.id = m.updated_by
       WHERE m.uuid_machine = ?
       `,
       [uuid]

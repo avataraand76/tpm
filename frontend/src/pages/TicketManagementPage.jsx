@@ -1990,7 +1990,7 @@ const TicketManagementPage = () => {
                             )}
                           </Typography>
                           <Typography variant="body2">
-                            <strong>Cập nhật lúc:</strong>{" "}
+                            <strong>Cập nhật lần cuối:</strong>{" "}
                             {new Date(selectedTicket.updated_at).toLocaleString(
                               "vi-VN"
                             )}

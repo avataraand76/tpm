@@ -2868,27 +2868,40 @@ const MachineListPage = () => {
                     disabled={!(isAdmin || canEdit)} // Bị khóa nếu là view-only
                   />
                 </Grid>
-                {!isCreateMode && (
-                  <>
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                      <TextField
-                        fullWidth
-                        label="Ngày tạo"
-                        value={formatDate(selectedMachine.created_at)}
-                        disabled={true}
-                        sx={DISABLED_VIEW_SX} // Áp dụng style bị khóa
-                      />
-                    </Grid>
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                      <TextField
-                        fullWidth
-                        label="Ngày cập nhật"
-                        value={formatDate(selectedMachine.updated_at)}
-                        disabled={true}
-                        sx={DISABLED_VIEW_SX} // Áp dụng style bị khóa
-                      />
-                    </Grid>
-                  </>
+
+                {!isCreateMode && selectedMachine && (
+                  <Grid size={{ xs: 12 }}>
+                    <Alert severity="info" sx={{ borderRadius: "12px" }}>
+                      <Typography variant="body2">
+                        <strong>Người tạo:</strong>{" "}
+                        {editedData.creator_ma_nv
+                          ? `${editedData.creator_ma_nv}: ${
+                              editedData.creator_ten_nv || "--"
+                            }`
+                          : selectedMachine.created_by || "--"}
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Tạo lúc:</strong>{" "}
+                        {new Date(selectedMachine.created_at).toLocaleString(
+                          "vi-VN"
+                        )}
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Người cập nhật:</strong>{" "}
+                        {editedData.updater_ma_nv
+                          ? `${editedData.updater_ma_nv}: ${
+                              editedData.updater_ten_nv || "--"
+                            }`
+                          : selectedMachine.updated_by || "--"}
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Cập nhật lần cuối:</strong>{" "}
+                        {new Date(selectedMachine.updated_at).toLocaleString(
+                          "vi-VN"
+                        )}
+                      </Typography>
+                    </Alert>
+                  </Grid>
                 )}
               </Grid>
             )}

@@ -26,6 +26,44 @@ httpConnect.interceptors.request.use(
   }
 );
 
+httpConnect.interceptors.response.use(
+  (response) => {
+    // Bất kỳ status code nào trong 2xx đều đi vào đây
+    return response;
+  },
+  (error) => {
+    // Bất kỳ status code nào ngoài 2xx đều đi vào đây
+    if (
+      error.response &&
+      (error.response.status === 401 || error.response.status === 403)
+    ) {
+      // 1. Lấy thông báo lỗi (nếu có)
+      const message =
+        error.response.data?.message || "Phiên đăng nhập hết hạn.";
+
+      // 2. Chỉ thực hiện logout nếu không phải là lỗi từ trang Login
+      // (tránh vòng lặp vô tận nếu gõ sai mật khẩu)
+      if (!error.config.url.includes("/auth/login")) {
+        console.error("Authentication Error:", message);
+
+        // 3. Xóa token và user
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+
+        // 4. Tải lại trang để về trang Login
+        // Dùng window.location.href để reset toàn bộ state của React (trong AuthContext)
+        window.location.href = "/login";
+
+        // (Tùy chọn: Hiển thị thông báo trước khi reload)
+        // alert("Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.");
+      }
+    }
+
+    // Trả về lỗi để các hàm (ví dụ: .catch() trong handleSubmit) có thể xử lý tiếp
+    return Promise.reject(error);
+  }
+);
+
 // API functions for all endpoints
 export const api = {
   // MARK: LOGIN
