@@ -270,7 +270,7 @@ app.post("/auth/login", async (req, res) => {
       });
     }
 
-    // Query user from sync_nhan_vien table
+    // 1. Query user from dataHiTimesheetConnection
     const [users] = await dataHiTimesheetConnection.execute(
       `
       SELECT 
@@ -298,22 +298,50 @@ app.post("/auth/login", async (req, res) => {
     if (users.length === 0) {
       return res.status(401).json({
         success: false,
-        message: "Invalid credentials",
+        message: "Sai Mã số thẻ hoặc Mật khẩu", // Thông báo chung
       });
     }
 
     const user = users[0];
 
-    // Compare password with bcrypt
+    // 2. Compare password with bcrypt
     const isPasswordValid = await bcrypt.compare(password, user.mat_khau);
     if (!isPasswordValid) {
       return res.status(401).json({
         success: false,
-        message: "Sai mật khẩu",
+        message: "Sai Mã số thẻ hoặc Mật khẩu", // Thông báo chung
       });
     }
 
-    // Generate JWT token
+    // 3. Check if user has permissions in tb_user_permission (TPM database)
+    try {
+      const [permissionCheck] = await tpmConnection.query(
+        `
+    SELECT COUNT(*) as count 
+    FROM tb_user_permission 
+    WHERE id_nhan_vien = ?
+    `,
+        [user.id] // user.id lấy từ dataHiTimesheetConnection
+      );
+
+      // Nếu không tìm thấy quyền (count = 0), user không được phép vào
+      if (permissionCheck[0].count === 0) {
+        return res.status(403).json({
+          // 403 Forbidden
+          success: false,
+          message: "Tài khoản này không có quyền truy cập hệ thống TPM.",
+        });
+      }
+    } catch (permError) {
+      console.error("Error checking user permissions:", permError);
+      return res.status(500).json({
+        success: false,
+        message: "Lỗi khi kiểm tra quyền truy cập",
+        error: permError.message,
+      });
+    }
+
+    // 4. Generate JWT token (User is valid AND has permissions)
     const token = jwt.sign(
       {
         id: user.id,
@@ -614,8 +642,8 @@ app.get("/api/machines/search", authenticateToken, async (req, res) => {
     ];
 
     // <<< BẮT ĐẦU THAY THẾ LOGIC LỌC
-    // Rule (l): Cập nhật vị trí không cần lọc gì thêm
-    if (ticket_type && ticket_type !== "update_location") {
+    // Áp dụng bộ lọc trạng thái máy dựa trên loại phiếu
+    if (ticket_type) {
       const conditions = getMachineFilterConditions(ticket_type);
       if (conditions.where) {
         whereConditions.push(conditions.where);
@@ -785,8 +813,7 @@ app.get(
 
       const filterConditions = getMachineFilterConditions(ticket_type);
 
-      // Rule (l): Cập nhật vị trí không cần lọc gì thêm
-      if (ticket_type && ticket_type !== "update_location") {
+      if (ticket_type) {
         if (filterConditions.where) {
           whereConditions.push(filterConditions.where);
         }
@@ -795,7 +822,6 @@ app.get(
         const defaultConditions = getMachineFilterConditions("purchased");
         whereConditions.push(defaultConditions.where);
       }
-      // Nếu là 'update_location', không thêm 'where'
 
       let joins = [
         `LEFT JOIN tb_category c ON c.id_category = m.id_category`,
@@ -970,12 +996,6 @@ const getMachineFilterConditions = (ticket_type) => {
         "Chỉ nhận những máy có trạng thái 'Sẵn sàng', 'Đang sử dụng', 'Máy hư' (bao gồm cả máy đang mượn/thuê).";
       break;
 
-    // l. cập nhật vị trí (ko quan tâm status và is_borrowed_or_rented_or_borrowed_out)
-    case "update_location":
-      where = null; // Không có điều kiện lọc
-      message = "Không tìm thấy máy."; // (Vẫn cần thông báo lỗi chung)
-      break;
-
     // Mặc định (nếu ticket_type không xác định, ví dụ: scanner mở trước khi chọn loại phiếu)
     default:
       where = `(m.current_status = 'available' AND m.is_borrowed_or_rented_or_borrowed_out IS NULL)`;
@@ -1053,7 +1073,7 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
     }
 
     // Get user ID from token
-    const userMANV = req.user.ma_nv;
+    const userId = req.user.id;
 
     // Insert new machine
     const [result] = await tpmConnection.query(
@@ -1078,8 +1098,8 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
         note || null,
         current_status || "available",
         id_category || 1, // Default to category 1 if not provided
-        userMANV, // created_by
-        userMANV, // updated_by
+        userId, // created_by
+        userId, // updated_by
       ]
     );
 
@@ -1188,7 +1208,7 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
     }
 
     // Get user ID from token
-    const userMANV = req.user.ma_nv;
+    const userId = req.user.id;
 
     // Update machine
     await tpmConnection.query(
@@ -1226,7 +1246,7 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         note,
         current_status,
         is_borrowed_or_rented_or_borrowed_out_return_date,
-        userMANV, // updated_by
+        userId, // updated_by
         uuid,
       ]
     );
@@ -1280,7 +1300,7 @@ app.post("/api/machines/batch-import", authenticateToken, async (req, res) => {
   const connection = await tpmConnection.getConnection();
   try {
     const { machines } = req.body; // Expect an array of machine objects
-    const userMANV = req.user.ma_nv;
+    const userId = req.user.id;
 
     if (!machines || !Array.isArray(machines) || machines.length === 0) {
       return res.status(400).json({
@@ -1436,8 +1456,8 @@ app.post("/api/machines/batch-import", authenticateToken, async (req, res) => {
             machine.note || null,
             machine.current_status || "available",
             machine.id_category || 1,
-            userMANV, // created_by
-            userMANV, // updated_by
+            userId, // created_by
+            userId, // updated_by
           ]
         );
         successes.push({
@@ -1515,13 +1535,7 @@ app.get("/api/departments", authenticateToken, async (req, res) => {
 // GET /api/locations - Get all locations for dropdowns
 app.get("/api/locations", authenticateToken, async (req, res) => {
   try {
-    const {
-      filter_type,
-      department_uuid,
-      exclude_current_user_phongban,
-      filter_by_current_user_phongban,
-    } = req.query;
-    const userPhongBanId = req.user.phongban_id;
+    const { filter_type, department_uuid } = req.query;
 
     let query = `
       SELECT 
@@ -1542,42 +1556,20 @@ app.get("/api/locations", authenticateToken, async (req, res) => {
       params.push(department_uuid);
     }
 
-    if (exclude_current_user_phongban === "true" && userPhongBanId) {
-      // Yêu cầu 1: Lọc bỏ phòng ban của user (dùng cho Tab 2)
-      whereConditions.push(`(td.id_phong_ban != ? OR td.id_phong_ban IS NULL)`);
-      params.push(userPhongBanId);
-    } else if (filter_by_current_user_phongban === "true" && userPhongBanId) {
-      // Yêu cầu 3: Chỉ lấy phòng ban của user (dùng cho Tab 3)
-      whereConditions.push(`td.id_phong_ban = ?`);
-      params.push(userPhongBanId);
-    }
-
     if (filter_type === "internal") {
-      // Req 1.2: HIDE external
       whereConditions.push(
         `(td.name_department NOT LIKE '%Đơn vị bên ngoài%' OR td.name_department IS NULL)`
       );
     } else if (filter_type === "warehouse_only") {
-      // Req 2.1, 3.1: SHOW ONLY warehouse
       whereConditions.push(`tl.name_location LIKE '%Kho%'`);
     } else if (filter_type === "external_only") {
-      // Req 4.1, 5.1, 6.1: SHOW ONLY external
       whereConditions.push(`td.name_department LIKE '%Đơn vị bên ngoài%'`);
     }
-    // else if (filter_type === "internal_no_warehouse") {
-    //   // Show internal locations, EXCLUDING warehouses
-    //   whereConditions.push(
-    //     `(td.name_department NOT LIKE '%Đơn vị bên ngoài%' OR td.name_department IS NULL)` // Internal
-    //   );
-    //   whereConditions.push(`tl.name_location NOT LIKE '%Kho%'`); // Exclude warehouse
-    // }
-    // No filter_type: return all
 
     if (whereConditions.length > 0) {
       query += ` WHERE ${whereConditions.join(" AND ")}`;
     }
 
-    // <<< SỬA LỖI Ở DÒNG NÀY (THÊM id_phong_ban VÀO GROUP BY) >>>
     query += ` GROUP BY tl.id_location, tl.name_location, td.name_department, td.id_phong_ban`;
 
     const [locations] = await tpmConnection.query(query, params);
@@ -1659,7 +1651,7 @@ app.post("/api/imports", authenticateToken, async (req, res) => {
       dateObj.getMonth() + 1
     ).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")}`;
 
-    const userMANV = req.user.ma_nv;
+    const userId = req.user.id;
 
     // Insert import slip
     const [importResult] = await connection.query(
@@ -1676,8 +1668,8 @@ app.post("/api/imports", authenticateToken, async (req, res) => {
         import_type,
         formattedDate,
         note || null,
-        userMANV,
-        userMANV,
+        userId,
+        userId,
         isBorrowOrRent ? is_borrowed_or_rented_or_borrowed_out_name : null,
         isBorrowOrRent ? is_borrowed_or_rented_or_borrowed_out_date : null,
         isBorrowOrRent
@@ -1788,7 +1780,7 @@ app.post("/api/imports", authenticateToken, async (req, res) => {
             (id_machine_import, id_machine, note, created_by, updated_by)
           VALUES (?, ?, ?, ?, ?)
           `,
-          [importId, id_machine, machine.note || null, userMANV, userMANV]
+          [importId, id_machine, machine.note || null, userId, userId]
         );
       }
     }
@@ -1915,6 +1907,7 @@ app.get("/api/imports", authenticateToken, async (req, res) => {
         i.note,
         i.created_at,
         i.updated_at,
+        i.created_by,
         i.is_borrowed_or_rented_or_borrowed_out_name,
         i.is_borrowed_or_rented_or_borrowed_out_date,
         i.is_borrowed_or_rented_or_borrowed_out_return_date,
@@ -1989,16 +1982,47 @@ app.get("/api/imports/:uuid", authenticateToken, async (req, res) => {
         i.note,
         i.created_at,
         i.updated_at,
+        i.created_by,
         i.is_borrowed_or_rented_or_borrowed_out_name,
         i.is_borrowed_or_rented_or_borrowed_out_date,
         i.is_borrowed_or_rented_or_borrowed_out_return_date,
         tl.uuid_location as to_location_uuid,
         tl.name_location as to_location_name,
         td.uuid_department as to_department_uuid,
-        td.name_department as to_department_name
+        td.name_department as to_department_name,
+        
+        -- Dùng CASE để điền thông tin user ảo (test users)
+        CASE
+          WHEN i.created_by = 99999 THEN '99999'
+          WHEN i.created_by = 99990 THEN '99990'
+          WHEN i.created_by = 99900 THEN '99900'
+          WHEN i.created_by = 99991 THEN '99991'
+          WHEN i.created_by = 99992 THEN '99992'
+          WHEN i.created_by = 99993 THEN '99993'
+          WHEN i.created_by = 99994 THEN '99994'
+          WHEN i.created_by = 99995 THEN '99995'
+          ELSE nv.ma_nv
+        END AS creator_ma_nv, -- Đặt tên mới
+
+        CASE
+          WHEN i.created_by = 99999 THEN 'Quản Trị Viên (Test)'
+          WHEN i.created_by = 99990 THEN 'Phòng Cơ Điện (Test)'
+          WHEN i.created_by = 99900 THEN 'Phòng Cơ Điện (Test)'
+          WHEN i.created_by = 99991 THEN 'Cơ Điện Xưởng 1 (Test)'
+          WHEN i.created_by = 99992 THEN 'Cơ Điện Xưởng 2 (Test)'
+          WHEN i.created_by = 99993 THEN 'Cơ Điện Xưởng 3 (Test)'
+          WHEN i.created_by = 99994 THEN 'Cơ Điện Xưởng 4 (Test)'
+          WHEN i.created_by = 99995 THEN 'Viewer (Test)'
+          ELSE nv.ten_nv
+        END AS creator_ten_nv -- Đặt tên mới
+
       FROM tb_machine_import i
       LEFT JOIN tb_location tl ON tl.id_location = i.to_location_id
       LEFT JOIN tb_department td ON td.id_department = tl.id_department
+      
+      -- JOIN sang CSDL thứ 2 (dataHiTimesheet_database)
+      LEFT JOIN ${process.env.DATA_HITIMESHEET_DATABASE}.sync_nhan_vien nv ON nv.id = i.created_by
+      
       WHERE i.uuid_machine_import = ?
       `,
       [uuid]
@@ -2073,6 +2097,8 @@ app.put("/api/imports/:uuid/status", authenticateToken, async (req, res) => {
       });
     }
 
+    const userId = req.user.id;
+
     // MODIFIED: Fetch more data from ticket
     const [existing] = await connection.query(
       `
@@ -2080,6 +2106,7 @@ app.put("/api/imports/:uuid/status", authenticateToken, async (req, res) => {
         i.id_machine_import, 
         i.to_location_id, 
         i.import_type,
+        i.created_by,
         i.is_borrowed_or_rented_or_borrowed_out_name,
         i.is_borrowed_or_rented_or_borrowed_out_date,
         i.is_borrowed_or_rented_or_borrowed_out_return_date,
@@ -2103,12 +2130,44 @@ app.put("/api/imports/:uuid/status", authenticateToken, async (req, res) => {
       id_machine_import,
       to_location_id,
       import_type,
+      created_by,
       name_location, // NEW
       is_borrowed_or_rented_or_borrowed_out_name, // NEW
       is_borrowed_or_rented_or_borrowed_out_date, // NEW
       is_borrowed_or_rented_or_borrowed_out_return_date, // NEW
     } = existing[0];
-    const userMANV = req.user.ma_nv;
+
+    if (status === "cancelled") {
+      // Kiểm tra quyền (Admin hoặc Người tạo)
+      const [perms] = await connection.query(
+        "SELECT p.name_permission FROM tb_user_permission up JOIN tb_permission p ON up.id_permission = p.id_permission WHERE up.id_nhan_vien = ?",
+        [userId]
+      );
+      const isAdmin = perms.map((p) => p.name_permission).includes("admin");
+
+      if (!isAdmin && created_by !== userId) {
+        await connection.rollback();
+        return res.status(403).json({
+          success: false,
+          message: "Bạn không có quyền hủy phiếu này",
+        });
+      }
+    } else if (status === "completed") {
+      // Chỉ Admin mới được DUYỆT
+      const [perms] = await connection.query(
+        "SELECT p.name_permission FROM tb_user_permission up JOIN tb_permission p ON up.id_permission = p.id_permission WHERE up.id_nhan_vien = ?",
+        [userId]
+      );
+      const isAdmin = perms.map((p) => p.name_permission).includes("admin");
+
+      if (!isAdmin) {
+        await connection.rollback();
+        return res.status(403).json({
+          success: false,
+          message: "Bạn không có quyền duyệt phiếu này",
+        });
+      }
+    }
 
     // 1. Update ticket status
     await connection.query(
@@ -2117,7 +2176,7 @@ app.put("/api/imports/:uuid/status", authenticateToken, async (req, res) => {
       SET status = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
       WHERE uuid_machine_import = ?
       `,
-      [status, userMANV, uuid]
+      [status, userId, uuid]
     );
 
     // 2. UNCOMMENTED AND UPDATED
@@ -2137,7 +2196,7 @@ app.put("/api/imports/:uuid/status", authenticateToken, async (req, res) => {
         status,
         import_type,
         ticketBorrowInfo, // NEW
-        userMANV
+        userId
       );
     }
 
@@ -2222,7 +2281,7 @@ app.post("/api/exports", authenticateToken, async (req, res) => {
       dateObj.getMonth() + 1
     ).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")}`;
 
-    const userMANV = req.user.ma_nv;
+    const userId = req.user.id;
 
     // Insert export slip
     const [exportResult] = await connection.query(
@@ -2239,8 +2298,8 @@ app.post("/api/exports", authenticateToken, async (req, res) => {
         export_type,
         formattedDate,
         note || null,
-        userMANV,
-        userMANV,
+        userId,
+        userId,
         isBorrowOut ? is_borrowed_or_rented_or_borrowed_out_name : null,
         isBorrowOut ? is_borrowed_or_rented_or_borrowed_out_date : null,
         isBorrowOut
@@ -2359,8 +2418,8 @@ app.post("/api/exports", authenticateToken, async (req, res) => {
             exportId,
             id_machine, // SỬ DỤNG ID NỘI BỘ ĐÃ TRA CỨU
             machine.note || null,
-            userMANV,
-            userMANV,
+            userId,
+            userId,
           ]
         );
       }
@@ -2488,6 +2547,7 @@ app.get("/api/exports", authenticateToken, async (req, res) => {
         e.note,
         e.created_at,
         e.updated_at,
+        e.created_by,
         e.is_borrowed_or_rented_or_borrowed_out_name,
         e.is_borrowed_or_rented_or_borrowed_out_date,
         e.is_borrowed_or_rented_or_borrowed_out_return_date,
@@ -2562,16 +2622,47 @@ app.get("/api/exports/:uuid", authenticateToken, async (req, res) => {
         e.note,
         e.created_at,
         e.updated_at,
+        e.created_by,
         e.is_borrowed_or_rented_or_borrowed_out_name,
         e.is_borrowed_or_rented_or_borrowed_out_date,
         e.is_borrowed_or_rented_or_borrowed_out_return_date,
         tl.uuid_location as to_location_uuid,
         tl.name_location as to_location_name,
         td.uuid_department as to_department_uuid,
-        td.name_department as to_department_name
+        td.name_department as to_department_name,
+        
+        -- Dùng CASE để điền thông tin user ảo (test users)
+        CASE
+          WHEN e.created_by = 99999 THEN '99999'
+          WHEN e.created_by = 99990 THEN '99990'
+          WHEN e.created_by = 99900 THEN '99900'
+          WHEN e.created_by = 99991 THEN '99991'
+          WHEN e.created_by = 99992 THEN '99992'
+          WHEN e.created_by = 99993 THEN '99993'
+          WHEN e.created_by = 99994 THEN '99994'
+          WHEN e.created_by = 99995 THEN '99995'
+          ELSE nv.ma_nv
+        END AS creator_ma_nv, -- Đặt tên mới
+
+        CASE
+          WHEN e.created_by = 99999 THEN 'Quản Trị Viên (Test)'
+          WHEN e.created_by = 99990 THEN 'Phòng Cơ Điện (Test)'
+          WHEN e.created_by = 99900 THEN 'Phòng Cơ Điện (Test)'
+          WHEN e.created_by = 99991 THEN 'Cơ Điện Xưởng 1 (Test)'
+          WHEN e.created_by = 99992 THEN 'Cơ Điện Xưởng 2 (Test)'
+          WHEN e.created_by = 99993 THEN 'Cơ Điện Xưởng 3 (Test)'
+          WHEN e.created_by = 99994 THEN 'Cơ Điện Xưởng 4 (Test)'
+          WHEN e.created_by = 99995 THEN 'Viewer (Test)'
+          ELSE nv.ten_nv
+        END AS creator_ten_nv -- Đặt tên mới
+
       FROM tb_machine_export e
       LEFT JOIN tb_location tl ON tl.id_location = e.to_location_id
       LEFT JOIN tb_department td ON td.id_department = tl.id_department
+      
+      -- JOIN sang CSDL thứ 2 (dataHiTimesheet_database)
+      LEFT JOIN ${process.env.DATA_HITIMESHEET_DATABASE}.sync_nhan_vien nv ON nv.id = e.created_by
+      
       WHERE e.uuid_machine_export = ?
       `,
       [uuid]
@@ -2646,6 +2737,8 @@ app.put("/api/exports/:uuid/status", authenticateToken, async (req, res) => {
       });
     }
 
+    const userId = req.user.id;
+
     // MODIFIED: Fetch more data from ticket
     const [existing] = await connection.query(
       `
@@ -2653,6 +2746,7 @@ app.put("/api/exports/:uuid/status", authenticateToken, async (req, res) => {
         e.id_machine_export, 
         e.to_location_id, 
         e.export_type,
+        e.created_by,
         e.is_borrowed_or_rented_or_borrowed_out_name,
         e.is_borrowed_or_rented_or_borrowed_out_date,
         e.is_borrowed_or_rented_or_borrowed_out_return_date,
@@ -2676,12 +2770,44 @@ app.put("/api/exports/:uuid/status", authenticateToken, async (req, res) => {
       id_machine_export,
       to_location_id,
       export_type,
+      created_by,
       name_location, // NEW
       is_borrowed_or_rented_or_borrowed_out_name, // NEW
       is_borrowed_or_rented_or_borrowed_out_date, // NEW
       is_borrowed_or_rented_or_borrowed_out_return_date, // NEW
     } = existing[0];
-    const userMANV = req.user.ma_nv;
+
+    if (status === "cancelled") {
+      // Kiểm tra quyền (Admin hoặc Người tạo)
+      const [perms] = await connection.query(
+        "SELECT p.name_permission FROM tb_user_permission up JOIN tb_permission p ON up.id_permission = p.id_permission WHERE up.id_nhan_vien = ?",
+        [userId]
+      );
+      const isAdmin = perms.map((p) => p.name_permission).includes("admin");
+
+      if (!isAdmin && created_by !== userId) {
+        await connection.rollback();
+        return res.status(403).json({
+          success: false,
+          message: "Bạn không có quyền hủy phiếu này",
+        });
+      }
+    } else if (status === "completed") {
+      // Chỉ Admin mới được DUYỆT
+      const [perms] = await connection.query(
+        "SELECT p.name_permission FROM tb_user_permission up JOIN tb_permission p ON up.id_permission = p.id_permission WHERE up.id_nhan_vien = ?",
+        [userId]
+      );
+      const isAdmin = perms.map((p) => p.name_permission).includes("admin");
+
+      if (!isAdmin) {
+        await connection.rollback();
+        return res.status(403).json({
+          success: false,
+          message: "Bạn không có quyền duyệt phiếu này",
+        });
+      }
+    }
 
     // 1. Update ticket status
     await connection.query(
@@ -2690,7 +2816,7 @@ app.put("/api/exports/:uuid/status", authenticateToken, async (req, res) => {
       SET status = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
       WHERE uuid_machine_export = ?
       `,
-      [status, userMANV, uuid]
+      [status, userId, uuid]
     );
 
     // 2. UNCOMMENTED AND UPDATED
@@ -2710,7 +2836,7 @@ app.put("/api/exports/:uuid/status", authenticateToken, async (req, res) => {
         status,
         export_type,
         ticketBorrowInfo, // NEW
-        userMANV
+        userId
       );
     }
 
@@ -2744,7 +2870,7 @@ const updateMachineLocationAndStatus = async (
   ticketStatus,
   ticketTypeDetail, // import_type or export_type
   ticketBorrowInfo, // NEW: Object { name, date, return_date }
-  userMANV
+  userId
 ) => {
   if (ticketStatus !== "completed") {
     return; // Chỉ xử lý khi phiếu được duyệt
@@ -2881,7 +3007,7 @@ const updateMachineLocationAndStatus = async (
           (id_machine, id_from_location, id_to_location, move_date, created_by, updated_by)
         VALUES (?, ?, ?, CURDATE(), ?, ?)
         `,
-        [idMachine, idFromLocation, toLocationId, userMANV, userMANV]
+        [idMachine, idFromLocation, toLocationId, userId, userId]
       );
     }
 
@@ -2894,7 +3020,7 @@ const updateMachineLocationAndStatus = async (
           (id_machine, id_location, created_by, updated_by)
         VALUES (?, ?, ?, ?)
         `,
-        [idMachine, toLocationId, userMANV, userMANV]
+        [idMachine, toLocationId, userId, userId]
       );
     } else if (idFromLocation !== toLocationId) {
       // Update
@@ -2904,7 +3030,7 @@ const updateMachineLocationAndStatus = async (
         SET id_location = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id_machine = ?
         `,
-        [toLocationId, userMANV, idMachine]
+        [toLocationId, userId, idMachine]
       );
     } else {
       // No change, just touch updated_at
@@ -2914,7 +3040,7 @@ const updateMachineLocationAndStatus = async (
         SET updated_by = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id_machine = ?
         `,
-        [userMANV, idMachine]
+        [userId, idMachine]
       );
     }
 
@@ -2922,7 +3048,7 @@ const updateMachineLocationAndStatus = async (
     let updateQuery = `
       UPDATE tb_machine
       SET current_status = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP`;
-    let updateParams = [newMachineStatus, userMANV];
+    let updateParams = [newMachineStatus, userId];
 
     if (
       ticketTypeDetail === "borrowed_return" ||
@@ -3060,10 +3186,40 @@ app.get(
           t.confirmed_at,
           loc_to.uuid_location as to_location_uuid,
           loc_to.name_location as to_location_name,
-          td.id_phong_ban AS to_location_phongban_id
+          td.id_phong_ban AS to_location_phongban_id,
+          
+          -- Dùng CASE để điền thông tin user ảo (test users)
+          CASE
+            WHEN t.created_by = 99999 THEN '99999'
+            WHEN t.created_by = 99990 THEN '99990'
+            WHEN t.created_by = 99900 THEN '99900'
+            WHEN t.created_by = 99991 THEN '99991'
+            WHEN t.created_by = 99992 THEN '99992'
+            WHEN t.created_by = 99993 THEN '99993'
+            WHEN t.created_by = 99994 THEN '99994'
+            WHEN t.created_by = 99995 THEN '99995'
+            ELSE nv.ma_nv
+          END AS creator_ma_nv, -- Đặt tên mới
+
+          CASE
+            WHEN t.created_by = 99999 THEN 'Quản Trị Viên (Test)'
+            WHEN t.created_by = 99990 THEN 'Phòng Cơ Điện (Test)'
+            WHEN t.created_by = 99900 THEN 'Phòng Cơ Điện (Test)'
+            WHEN t.created_by = 99991 THEN 'Cơ Điện Xưởng 1 (Test)'
+            WHEN t.created_by = 99992 THEN 'Cơ Điện Xưởng 2 (Test)'
+            WHEN t.created_by = 99993 THEN 'Cơ Điện Xưởng 3 (Test)'
+            WHEN t.created_by = 99994 THEN 'Cơ Điện Xưởng 4 (Test)'
+            WHEN t.created_by = 99995 THEN 'Viewer (Test)'
+            ELSE nv.ten_nv
+          END AS creator_ten_nv -- Đặt tên mới
+          
         FROM tb_machine_internal_transfer t
         LEFT JOIN tb_location loc_to ON loc_to.id_location = t.to_location_id
         LEFT JOIN tb_department td ON td.id_department = loc_to.id_department
+        
+        -- JOIN sang CSDL thứ 2 (dataHiTimesheet_database)
+        LEFT JOIN ${process.env.DATA_HITIMESHEET_DATABASE}.sync_nhan_vien nv ON nv.id = t.created_by
+        
         WHERE t.id_machine_internal_transfer = ?
         `,
         [transferId]
@@ -3119,6 +3275,8 @@ app.post("/api/internal-transfers", authenticateToken, async (req, res) => {
     await connection.beginTransaction();
 
     const { to_location_uuid, transfer_date, note, machines } = req.body;
+    const userPhongBanId = req.user.phongban_id; // Lấy phòng ban của User 1
+    const userId = req.user.id;
 
     if (!to_location_uuid || !transfer_date) {
       await connection.rollback();
@@ -3128,9 +3286,16 @@ app.post("/api/internal-transfers", authenticateToken, async (req, res) => {
       });
     }
 
-    // Lấy ID nội bộ của vị trí
+    // Lấy ID nội bộ VÀ id_phong_ban của vị trí đến
     const [toLoc] = await connection.query(
-      "SELECT id_location FROM tb_location WHERE uuid_location = ?",
+      `
+      SELECT 
+        tl.id_location,
+        td.id_phong_ban
+      FROM tb_location tl
+      LEFT JOIN tb_department td ON td.id_department = tl.id_department
+      WHERE tl.uuid_location = ?
+      `,
       [to_location_uuid]
     );
 
@@ -3141,25 +3306,45 @@ app.post("/api/internal-transfers", authenticateToken, async (req, res) => {
         .json({ success: false, message: "Không tìm thấy vị trí đến." });
     }
     const to_location_id = toLoc[0].id_location;
+    const to_location_phongban_id = toLoc[0].id_phong_ban;
+
+    // <<< START: LOGIC YÊU CẦU 2 (Luồng duyệt động) >>>
+    let initialStatus;
+    if (userPhongBanId === to_location_phongban_id) {
+      // Kịch bản A: Cập nhật vị trí (Cùng phòng ban)
+      // User 1 -> Admin
+      initialStatus = "pending_approval";
+    } else {
+      // Kịch bản B: Điều chuyển nội bộ (Khác phòng ban)
+      // User 1 -> User 2 (Confirm) -> Admin (Approve)
+      initialStatus = "pending_confirmation";
+    }
+    // <<< END: LOGIC YÊU CẦU 2 >>>
 
     const dateObj = new Date(transfer_date);
     const formattedDate = `${dateObj.getFullYear()}-${String(
       dateObj.getMonth() + 1
     ).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")}`;
-    const userMANV = req.user.ma_nv;
 
-    // 1. Insert phiếu
+    // 1. Insert phiếu với trạng thái (status) đã được quyết định
     const [transferResult] = await connection.query(
       `
         INSERT INTO tb_machine_internal_transfer
           (to_location_id, transfer_date, status, note, created_by, updated_by)
-        VALUES (?, ?, 'pending_confirmation', ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?)
         `,
-      [to_location_id, formattedDate, note || null, userMANV, userMANV]
+      [
+        to_location_id,
+        formattedDate,
+        initialStatus,
+        note || null,
+        userId,
+        userId,
+      ]
     );
     const transferId = transferResult.insertId;
 
-    // 2. Insert chi tiết máy
+    // 2. Insert chi tiết máy (Giữ nguyên logic này)
     if (machines && Array.isArray(machines) && machines.length > 0) {
       for (const machine of machines) {
         const [machineResult] = await connection.query(
@@ -3180,7 +3365,6 @@ app.post("/api/internal-transfers", authenticateToken, async (req, res) => {
           is_borrowed_or_rented_or_borrowed_out,
         } = machineResult[0];
 
-        // Quy tắc (k): (case 1,2,5,7,8,9,10,11,12)
         const isStatusValid = ["available", "in_use", "broken"].includes(
           current_status
         );
@@ -3202,20 +3386,13 @@ app.post("/api/internal-transfers", authenticateToken, async (req, res) => {
           });
         }
 
-        // 3. Chèn chi tiết phiếu điều chuyển
         await connection.query(
           `
           INSERT INTO tb_machine_internal_transfer_detail 
             (id_machine_internal_transfer, id_machine, note, created_by, updated_by)
           VALUES (?, ?, ?, ?, ?)
           `,
-          [
-            transferId, // ID của phiếu vừa tạo
-            id_machine, // ID của máy đã tra cứu
-            machine.note || null, // Ghi chú của máy
-            userMANV,
-            userMANV,
-          ]
+          [transferId, id_machine, machine.note || null, userId, userId]
         );
       }
     }
@@ -3444,17 +3621,7 @@ app.put(
       await connection.beginTransaction();
 
       const { uuid } = req.params;
-      const { status } = req.body;
       const userId = req.user.id;
-
-      // Endpoint này BÂY GIỜ CHỈ DÙNG ĐỂ HỦY
-      if (status !== "cancelled") {
-        await connection.rollback();
-        return res.status(400).json({
-          success: false,
-          message: "Hành động không hợp lệ. Chỉ được phép 'Hủy'",
-        });
-      }
 
       // 1. Kiểm tra quyền (Admin hoặc Người tạo)
       const [perms] = await connection.query(
@@ -3527,7 +3694,7 @@ const handleInternalTransferApproval = async (
   ticketId,
   toLocationId,
   toLocationName, // Cần tên vị trí đến
-  userMANV
+  userId
 ) => {
   // 1. Lấy tất cả máy móc trong phiếu
   const [details] = await connection.query(
@@ -3567,7 +3734,7 @@ const handleInternalTransferApproval = async (
           (id_machine, id_from_location, id_to_location, move_date, created_by, updated_by)
         VALUES (?, ?, ?, CURDATE(), ?, ?)
         `,
-        [idMachine, idFromLocation, idToLocation, userMANV, userMANV]
+        [idMachine, idFromLocation, idToLocation, userId, userId]
       );
     }
 
@@ -3581,7 +3748,7 @@ const handleInternalTransferApproval = async (
           (id_machine, id_location, created_by, updated_by)
         VALUES (?, ?, ?, ?)
         `,
-        [idMachine, idToLocation, userMANV, userMANV]
+        [idMachine, idToLocation, userId, userId]
       );
     } else if (idFromLocation !== idToLocation) {
       // UPDATE nếu vị trí thay đổi
@@ -3591,7 +3758,7 @@ const handleInternalTransferApproval = async (
         SET id_location = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id_machine = ?
         `,
-        [idToLocation, userMANV, idMachine]
+        [idToLocation, userId, idMachine]
       );
     } else {
       // Vị trí không thay đổi, chỉ cập nhật (touch)
@@ -3601,7 +3768,7 @@ const handleInternalTransferApproval = async (
         SET updated_by = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id_machine = ?
         `,
-        [userMANV, idMachine]
+        [userId, idMachine]
       );
     }
     // <<< END: SỬA LỖI LOGIC >>>
@@ -3616,7 +3783,7 @@ const handleInternalTransferApproval = async (
         updated_at = CURRENT_TIMESTAMP
       WHERE id_machine = ?
       `,
-      [newMachineStatus, userMANV, idMachine]
+      [newMachineStatus, userId, idMachine]
     );
   }
 };
@@ -3730,7 +3897,7 @@ app.get("/api/machines/:uuid/history", authenticateToken, async (req, res) => {
 
     // 1. Get internal machine ID
     const [machineResult] = await tpmConnection.query(
-      "SELECT id_machine, code_machine, type_machine, model_machine FROM tb_machine WHERE uuid_machine = ?", // <<< CHANGED
+      "SELECT id_machine, code_machine, type_machine, model_machine FROM tb_machine WHERE uuid_machine = ?",
       [uuid]
     );
 
@@ -3742,7 +3909,7 @@ app.get("/api/machines/:uuid/history", authenticateToken, async (req, res) => {
     }
     const idMachine = machineResult[0].id_machine;
 
-    // 2. Get history
+    // 2. Get history (MODIFIED QUERY)
     const [history] = await tpmConnection.query(
       `
       SELECT 
@@ -3750,10 +3917,42 @@ app.get("/api/machines/:uuid/history", authenticateToken, async (req, res) => {
         l_from.name_location as from_location_name,
         l_to.name_location as to_location_name,
         h.created_at,
-        h.created_by
+        h.created_by,
+        
+        -- Lấy thông tin user thật từ DB HiTimesheet
+        nv.ma_nv AS real_ma_nv,
+        nv.ten_nv AS real_ten_nv,
+
+        -- Dùng CASE để điền thông tin user ảo (test users)
+        CASE
+          WHEN h.created_by = 99999 THEN '99999'
+          WHEN h.created_by = 99990 THEN '99990'
+          WHEN h.created_by = 99991 THEN '99991'
+          WHEN h.created_by = 99992 THEN '99992'
+          WHEN h.created_by = 99993 THEN '99993'
+          WHEN h.created_by = 99994 THEN '99994'
+          WHEN h.created_by = 99995 THEN '99995'
+          ELSE nv.ma_nv
+        END AS ma_nv,
+
+        CASE
+          WHEN h.created_by = 99999 THEN 'Quản Trị Viên (Test)'
+          WHEN h.created_by = 99990 THEN 'Phòng Cơ Điện (Test)'
+          WHEN h.created_by = 99991 THEN 'Cơ Điện Xưởng 1 (Test)'
+          WHEN h.created_by = 99992 THEN 'Cơ Điện Xưởng 2 (Test)'
+          WHEN h.created_by = 99993 THEN 'Cơ Điện Xưởng 3 (Test)'
+          WHEN h.created_by = 99994 THEN 'Cơ Điện Xưởng 4 (Test)'
+          WHEN h.created_by = 99995 THEN 'Viewer (Test)'
+          ELSE nv.ten_nv
+        END AS ten_nv
+
       FROM tb_machine_location_history h
       LEFT JOIN tb_location l_from ON l_from.id_location = h.id_from_location
       LEFT JOIN tb_location l_to ON l_to.id_location = h.id_to_location
+      
+      -- JOIN sang CSDL thứ 2 (dataHiTimesheet_database)
+      LEFT JOIN ${process.env.DATA_HITIMESHEET_DATABASE}.sync_nhan_vien nv ON nv.id = h.created_by
+      
       WHERE h.id_machine = ?
       ORDER BY h.move_date DESC, h.created_at DESC
       `,
@@ -3767,10 +3966,10 @@ app.get("/api/machines/:uuid/history", authenticateToken, async (req, res) => {
         machine: {
           uuid_machine: uuid,
           code_machine: machineResult[0].code_machine,
-          type_machine: machineResult[0].type_machine, // <<< CHANGED
-          model_machine: machineResult[0].model_machine, // <<< CHANGED
+          type_machine: machineResult[0].type_machine,
+          model_machine: machineResult[0].model_machine,
         },
-        history: history,
+        history: history, // history giờ đã chứa ma_nv và ten_nv
       },
     });
   } catch (error) {
@@ -4009,7 +4208,7 @@ app.post(
       await connection.beginTransaction();
 
       const { to_location_uuid, machines } = req.body; // machines: [{ uuid_machine }]
-      const userMANV = req.user.ma_nv;
+      const userId = req.user.id;
 
       if (!to_location_uuid || !machines || machines.length === 0) {
         await connection.rollback();
@@ -4075,7 +4274,7 @@ app.post(
               (id_machine, id_from_location, id_to_location, move_date, created_by, updated_by)
             VALUES (?, ?, ?, CURDATE(), ?, ?)
             `,
-            [idMachine, idFromLocation, toLocationId, userMANV, userMANV]
+            [idMachine, idFromLocation, toLocationId, userId, userId]
           );
 
           // d. Cập nhật/Thêm vào tb_machine_location
@@ -4087,7 +4286,7 @@ app.post(
                 (id_machine, id_location, created_by, updated_by)
               VALUES (?, ?, ?, ?)
               `,
-              [idMachine, toLocationId, userMANV, userMANV]
+              [idMachine, toLocationId, userId, userId]
             );
           } else {
             // UPDATE
@@ -4097,7 +4296,7 @@ app.post(
               SET id_location = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
               WHERE id_machine = ?
               `,
-              [toLocationId, userMANV, idMachine]
+              [toLocationId, userId, idMachine]
             );
           }
 
@@ -4111,7 +4310,7 @@ app.post(
               updated_at = CURRENT_TIMESTAMP
             WHERE id_machine = ?
             `,
-            [newMachineStatus, userMANV, idMachine]
+            [newMachineStatus, userId, idMachine]
           );
         } else {
           // Nếu vị trí không đổi, chỉ cập nhật updated_at và updated_by
@@ -4121,7 +4320,7 @@ app.post(
              SET updated_by = ?, updated_at = CURRENT_TIMESTAMP
              WHERE id_machine = ?
              `,
-            [userMANV, idMachine]
+            [userId, idMachine]
           );
           // Cũng cập nhật updated_at trên tb_machine
           await connection.query(
@@ -4130,7 +4329,7 @@ app.post(
               SET updated_by = ?, updated_at = CURRENT_TIMESTAMP
               WHERE id_machine = ?
               `,
-            [userMANV, idMachine]
+            [userId, idMachine]
           );
         }
       } // End for loop

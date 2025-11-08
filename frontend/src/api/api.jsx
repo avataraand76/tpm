@@ -180,10 +180,7 @@ export const api = {
     },
     cancel: async (uuid) => {
       const response = await httpConnect.put(
-        `/api/internal-transfers/${uuid}/cancel`,
-        {
-          status: "cancelled",
-        }
+        `/api/internal-transfers/${uuid}/cancel`
       );
       return response.data;
     },

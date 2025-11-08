@@ -1202,7 +1202,7 @@ const LocationTrackPage = () => {
                         <TableCell
                           sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
                         >
-                          Người tạo
+                          Người thực hiện
                         </TableCell>
                       </TableRow>
                     </TableHead>
@@ -1223,7 +1223,9 @@ const LocationTrackPage = () => {
                               {item.to_location_name || "-"}
                             </TableCell>
                             <TableCell sx={{ whiteSpace: "nowrap" }}>
-                              {item.created_by || "--"}
+                              {item.ma_nv
+                                ? `${item.ma_nv}: ${item.ten_nv || "--"}`
+                                : item.created_by || "--"}
                             </TableCell>
                           </TableRow>
                         ))

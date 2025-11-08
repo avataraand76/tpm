@@ -2681,7 +2681,13 @@ const MachineListPage = () => {
                                   <TableCell>
                                     {entry.to_location_name || "-"}
                                   </TableCell>
-                                  <TableCell>{entry.created_by}</TableCell>
+                                  <TableCell sx={{ whiteSpace: "nowrap" }}>
+                                    {entry.ma_nv
+                                      ? `${entry.ma_nv}: ${
+                                          entry.ten_nv || "--"
+                                        }`
+                                      : entry.created_by || "--"}
+                                  </TableCell>
                                 </TableRow>
                               ))}
                             </TableBody>

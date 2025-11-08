@@ -50,7 +50,6 @@ import {
   Delete,
   QrCode2,
   Refresh,
-  LocationOn,
 } from "@mui/icons-material";
 import NavigationBar from "../components/NavigationBar";
 import { api } from "../api/api";
@@ -87,11 +86,6 @@ const TicketManagementPage = () => {
   const [locationLoading, setLocationLoading] = useState(false);
   const [externalLocations, setExternalLocations] = useState([]);
   const [externalLocationLoading, setExternalLocationLoading] = useState(false);
-
-  // States for Update Location Tab
-  const [updateLocationTargetUuid, setUpdateLocationTargetUuid] = useState("");
-  const [updateLocationMachines, setUpdateLocationMachines] = useState([]);
-  const [updateLocationLoading, setUpdateLocationLoading] = useState(false);
 
   // Dialog states
   const [openDialog, setOpenDialog] = useState(false);
@@ -239,13 +233,6 @@ const TicketManagementPage = () => {
         delete params.export_type;
         response = await api.internal_transfers.getAll(params);
         setTransfers(response.data);
-      } else if (activeTab === 3) {
-        setImports([]);
-        setExports([]);
-        setTransfers([]);
-        setTotalPages(1);
-        setLoading(false);
-        return; // No initial data needed
       }
       setTotalPages(response.pagination.totalPages);
     } catch (error) {
@@ -313,7 +300,7 @@ const TicketManagementPage = () => {
   useEffect(() => {
     setScannerApiParams(getMachineFiltersForDialog());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, openDialog, dialogType, formData.type, isCoDienXuong]); // <<< THÊM isCoDienXuong VÀO DEPENDENCY
+  }, [openDialog, dialogType, formData.type, isCoDienXuong]); // <<< THÊM isCoDienXuong VÀO DEPENDENCY
 
   // --- Handlers ---
   const handleTabChange = (event, newValue) => {
@@ -334,115 +321,19 @@ const TicketManagementPage = () => {
     setPage(1);
     setStatusFilter("");
     setTypeFilter("");
-
-    // Logic này giờ sẽ chạy đúng vì nó kiểm tra logicalTabIndex (luôn là 3)
-    if (logicalTabIndex === 3) {
-      // Switched to Update Location tab
-      let params = {};
-      if (isCoDienXuong) {
-        params.filter_by_current_user_phongban = true;
-      }
-      fetchLocations("internal", params);
-
-      setUpdateLocationTargetUuid("");
-      setUpdateLocationMachines([]);
-      setSearchMachineTerm("");
-      setSearchResults([]);
-    }
   };
 
-  // Handlers for Update Location Tab
-  const handleUpdateLocationTargetChange = (event, newValue) =>
-    setUpdateLocationTargetUuid(newValue ? newValue.uuid_location : "");
-
-  const handleUpdateLocationSelectMachine = (machine) => {
-    setUpdateLocationMachines(
-      (prev) =>
-        prev.some((m) => m.uuid_machine === machine.uuid_machine)
-          ? prev.filter((m) => m.uuid_machine !== machine.uuid_machine)
-          : [...prev, { ...machine, note: "" }] // Add machine, ensure note exists
-    );
-  };
-
-  const handleUpdateLocationRemoveMachine = (uuid_machine) =>
-    setUpdateLocationMachines((prev) =>
-      prev.filter((m) => m.uuid_machine !== uuid_machine)
-    );
-
-  const handleDirectUpdateSubmit = async () => {
-    if (!updateLocationTargetUuid) {
-      showNotification(
-        "error",
-        "Thiếu thông tin",
-        "Vui lòng chọn vị trí đích."
-      );
-      return;
-    }
-    if (updateLocationMachines.length === 0) {
-      showNotification(
-        "error",
-        "Thiếu thông tin",
-        "Vui lòng chọn ít nhất một máy."
-      );
-      return;
-    }
-    setUpdateLocationLoading(true);
-    try {
-      const dataToSend = {
-        to_location_uuid: updateLocationTargetUuid,
-        machines: updateLocationMachines.map((m) => ({
-          uuid_machine: m.uuid_machine,
-        })),
-      };
-      await api.tracking.updateMachineLocationsDirectly(dataToSend);
-      showNotification(
-        "success",
-        "Thành công",
-        "Đã cập nhật vị trí cho các máy đã chọn."
-      );
-      setUpdateLocationTargetUuid("");
-      setUpdateLocationMachines([]);
-      setSearchMachineTerm("");
-      setSearchResults([]);
-
-      // <<< SỬA LOGIC: Tải lại danh sách vị trí theo đúng quyền >>>
-      let params = {};
-      if (isCoDienXuong) {
-        params.filter_by_current_user_phongban = true;
-      }
-      fetchLocations("internal_no_warehouse", params);
-      // <<< KẾT THÚC SỬA LOGIC >>>
-    } catch (error) {
-      console.error("Error updating locations directly:", error);
-      showNotification(
-        "error",
-        "Cập nhật thất bại",
-        error.response?.data?.message || "Lỗi khi cập nhật vị trí máy."
-      );
-    } finally {
-      setUpdateLocationLoading(false);
-    }
-  };
-
-  // <<< START: SỬA LOGIC (YÊU CẦU 3 & 5) >>>
   const getMachineFiltersForDialog = () => {
     let filters = {};
 
-    // Rule (l): Cập nhật vị trí (Tab 3)
-    if (activeTab === 3) {
-      filters.ticket_type = "update_location";
-      // Yêu cầu 5: Lọc máy cho cơ điện xưởng ở Tab 3
-      if (isCoDienXuong) {
-        filters.filter_by_phongban_id = user.phongban_id;
-      }
-    }
     // Chỉ áp dụng filter khi dialog đang mở
-    else if (openDialog) {
+    if (openDialog) {
       // Rule (k): Điều chuyển nội bộ
       if (dialogType === "internal") {
         filters.ticket_type = "internal";
-        // Yêu cầu 3: Lọc máy cho cơ điện xưởng ở Tab 2
-        if (isCoDienXuong && dialogMode === "create") {
+
+        // Yêu cầu 4: Lọc máy cho Cơ Điện Xưởng
+        if (isCoDienXuong) {
           filters.filter_by_phongban_id = user.phongban_id;
         }
       }
@@ -457,7 +348,6 @@ const TicketManagementPage = () => {
 
     return filters;
   };
-  // <<< END: SỬA LOGIC >>>
 
   // Handlers for Search
   const handleSearchTermChange = (e) => {
@@ -523,9 +413,7 @@ const TicketManagementPage = () => {
       });
       if (type === "internal") {
         // Yêu cầu 2: Luôn lọc bỏ vị trí của phòng ban mình
-        await fetchLocations("internal", {
-          exclude_current_user_phongban: true,
-        });
+        await fetchLocations("internal");
       } else {
         await fetchLocations();
       }
@@ -580,6 +468,8 @@ const TicketManagementPage = () => {
             : "",
           note: ticketDetails.note || "",
           machines: response.data.details.map((d) => ({ ...d })),
+          creator_ma_nv: ticketDetails.creator_ma_nv,
+          creator_ten_nv: ticketDetails.creator_ten_nv,
           is_borrowed_or_rented_or_borrowed_out_name:
             ticketDetails.is_borrowed_or_rented_or_borrowed_out_name || "",
           is_borrowed_or_rented_or_borrowed_out_date:
@@ -847,7 +737,7 @@ const TicketManagementPage = () => {
   const getMachineStatusLabel = (status) => getStatusInfo(status).label;
   const getTypeLabel = (type) =>
     ({
-      internal: "Điều chuyển nội bộ",
+      internal: "Điều chuyển",
       borrowed: "Nhập mượn",
       rented: "Nhập thuê",
       purchased: "Nhập mua mới",
@@ -911,9 +801,7 @@ const TicketManagementPage = () => {
           {activeTab === 2 ? (
             <TableCell colSpan={2}>{item.to_location_name || "-"}</TableCell>
           ) : (
-            <TableCell colSpan={2}>
-              {item.to_location_name || "Bên ngoài (Xuất/Nhập)"}
-            </TableCell>
+            <TableCell colSpan={2}>{item.to_location_name || "-"}</TableCell>
           )}
           <TableCell align="center">{item.machine_count || 0}</TableCell>
           <TableCell>
@@ -1011,7 +899,6 @@ const TicketManagementPage = () => {
                   "& .MuiTabs-indicator": { display: "none" },
                 }}
               >
-                {/* <<< START: SỬA LOGIC (YÊU CẦU 1) >>> */}
                 {hasImportExportTabs && (
                   <Tab
                     icon={<FileDownload />}
@@ -1026,22 +913,14 @@ const TicketManagementPage = () => {
                     iconPosition="start"
                   />
                 )}
-                {/* <<< END: SỬA LOGIC >>> */}
 
                 <Tab
                   icon={<Autorenew />}
-                  label="Điều chuyển liên xưởng"
+                  label="Điều chuyển / Cập nhật vị trí"
                   iconPosition="start"
                 />
-                {(isAdmin || canEdit) && (
-                  <Tab
-                    icon={<LocationOn />}
-                    label="Cập nhật vị trí"
-                    iconPosition="start"
-                  />
-                )}
               </Tabs>
-              {activeTab !== 3 && (
+              {activeTab === 2 ? (
                 <Stack
                   direction={{ xs: "column", sm: "row" }}
                   spacing={2}
@@ -1051,16 +930,7 @@ const TicketManagementPage = () => {
                     <Button
                       variant="contained"
                       startIcon={<Add />}
-                      onClick={() =>
-                        handleOpenDialog(
-                          "create",
-                          activeTab === 0
-                            ? "import"
-                            : activeTab === 1
-                            ? "export"
-                            : "internal"
-                        )
-                      }
+                      onClick={() => handleOpenDialog("create", "internal")}
                       sx={{
                         borderRadius: "12px",
                         background: "linear-gradient(45deg, #2e7d32, #4caf50)",
@@ -1074,12 +944,7 @@ const TicketManagementPage = () => {
                         width: { xs: "100%", sm: "auto" },
                       }}
                     >
-                      Tạo phiếu{" "}
-                      {activeTab === 0
-                        ? "nhập"
-                        : activeTab === 1
-                        ? "xuất"
-                        : "điều chuyển"}
+                      Tạo phiếu điều chuyển
                     </Button>
                   )}
 
@@ -1103,539 +968,235 @@ const TicketManagementPage = () => {
                     Làm mới
                   </Button>
                 </Stack>
+              ) : (
+                // Nếu là tab Nhập / Xuất
+                <Stack
+                  direction={{ xs: "column", sm: "row" }}
+                  spacing={2}
+                  sx={{ width: { xs: "100%", md: "auto" } }}
+                >
+                  {(isAdmin || isPhongCoDien) && ( // Chỉ Admin/PCD mới thấy nút tạo
+                    <Button
+                      variant="contained"
+                      startIcon={<Add />}
+                      onClick={() =>
+                        handleOpenDialog(
+                          "create",
+                          activeTab === 0 ? "import" : "export"
+                        )
+                      }
+                      sx={{
+                        borderRadius: "12px",
+                        background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                        px: 4,
+                        py: 1.5,
+                        "&:hover": {
+                          transform: "translateY(-2px)",
+                          boxShadow: "0 8px 25px rgba(46, 125, 50, 0.3)",
+                        },
+                        transition: "all 0.3s ease",
+                        width: { xs: "100%", sm: "auto" },
+                      }}
+                    >
+                      Tạo phiếu {activeTab === 0 ? "nhập" : "xuất"}
+                    </Button>
+                  )}
+                  <Button
+                    variant="contained"
+                    startIcon={<Refresh />}
+                    onClick={fetchData}
+                    sx={{
+                      borderRadius: "12px",
+                      background: "linear-gradient(45deg, #667eea, #764ba2)",
+                      px: 3,
+                      py: 1.5,
+                      "&:hover": {
+                        /* ... */
+                      },
+                      width: { xs: "100%", sm: "auto" },
+                    }}
+                  >
+                    Làm mới
+                  </Button>
+                </Stack>
               )}
             </Box>
 
             {/* Content for Tabs 0, 1, 2 (Filters, Table, Pagination) */}
-            {activeTab !== 3 && (
-              <>
-                <Grid container spacing={2} sx={{ mb: 3 }}>
-                  <Grid size={{ xs: 12, md: activeTab === 2 ? 12 : 6 }}>
-                    <TextField
-                      fullWidth
-                      select
-                      label="Trạng thái"
-                      value={statusFilter}
-                      onChange={(e) => setStatusFilter(e.target.value)}
-                      sx={{
-                        "& .MuiOutlinedInput-root": { borderRadius: "12px" },
-                      }}
-                    >
-                      <MenuItem value="">Tất cả</MenuItem>
 
-                      {activeTab === 2
-                        ? // Tab Điều chuyển (Internal)
-                          [
-                            <MenuItem
-                              key="pending_confirmation"
-                              value="pending_confirmation"
-                            >
-                              Chờ xác nhận
-                            </MenuItem>,
-                            <MenuItem
-                              key="pending_approval"
-                              value="pending_approval"
-                            >
-                              Chờ duyệt
-                            </MenuItem>,
-                            <MenuItem key="completed" value="completed">
-                              Đã duyệt
-                            </MenuItem>,
-                            <MenuItem key="cancelled" value="cancelled">
-                              Đã hủy
-                            </MenuItem>,
-                          ]
-                        : // Tab Nhập (Import) hoặc Xuất (Export)
-                          [
-                            <MenuItem key="pending" value="pending">
-                              Chờ duyệt
-                            </MenuItem>,
-                            <MenuItem key="completed" value="completed">
-                              Đã duyệt
-                            </MenuItem>,
-                            <MenuItem key="cancelled" value="cancelled">
-                              Đã hủy
-                            </MenuItem>,
-                          ]}
-                    </TextField>
-                  </Grid>
-                  {activeTab !== 2 && (
-                    <Grid size={{ xs: 12, md: 6 }}>
-                      <TextField
-                        fullWidth
-                        select
-                        label="Loại phiếu"
-                        value={typeFilter}
-                        onChange={(e) => setTypeFilter(e.target.value)}
-                        sx={{
-                          "& .MuiOutlinedInput-root": { borderRadius: "12px" },
-                        }}
-                      >
-                        <MenuItem value="">Tất cả</MenuItem>
-                        {activeTab === 0
-                          ? [
-                              <MenuItem key="purchased" value="purchased">
-                                Nhập mua mới
-                              </MenuItem>,
-                              <MenuItem
-                                key="maintenance_return"
-                                value="maintenance_return"
-                              >
-                                Nhập sau bảo trì
-                              </MenuItem>,
-                              <MenuItem key="rented" value="rented">
-                                Nhập thuê
-                              </MenuItem>,
-                              <MenuItem key="borrowed" value="borrowed">
-                                Nhập mượn
-                              </MenuItem>,
-                              <MenuItem
-                                key="borrowed_out_return"
-                                value="borrowed_out_return"
-                              >
-                                Nhập trả (máy cho mượn)
-                              </MenuItem>,
-                            ]
-                          : [
-                              <MenuItem key="liquidation" value="liquidation">
-                                Xuất thanh lý
-                              </MenuItem>,
-                              <MenuItem key="maintenance" value="maintenance">
-                                Xuất bảo trì
-                              </MenuItem>,
-                              <MenuItem key="borrowed_out" value="borrowed_out">
-                                Xuất cho mượn
-                              </MenuItem>,
-                              <MenuItem
-                                key="rented_return"
-                                value="rented_return"
-                              >
-                                Xuất trả (máy thuê)
-                              </MenuItem>,
-                              <MenuItem
-                                key="borrowed_return"
-                                value="borrowed_return"
-                              >
-                                Xuất trả (máy mượn)
-                              </MenuItem>,
-                            ]}
-                      </TextField>
-                    </Grid>
-                  )}
-                </Grid>
-                <TableContainer
-                  component={Paper}
-                  elevation={0}
-                  sx={{
-                    borderRadius: "20px",
-                    border: "1px solid rgba(0, 0, 0, 0.05)",
-                  }}
-                >
-                  <Table>
-                    <TableHead>
-                      <TableRow
-                        sx={{ backgroundColor: "rgba(102, 126, 234, 0.05)" }}
-                      >
-                        <TableCell
-                          sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
-                        >
-                          Ngày Tạo Phiếu
-                        </TableCell>
-                        <TableCell
-                          sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
-                        >
-                          Loại
-                        </TableCell>
-                        {activeTab === 2 ? (
-                          <TableCell
-                            sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
-                            colSpan={2}
-                          >
-                            Đến vị trí
-                          </TableCell>
-                        ) : (
-                          <TableCell
-                            sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
-                            colSpan={2}
-                          >
-                            {activeTab === 0 ? "Nhập vào" : "Xuất đến"}
-                          </TableCell>
-                        )}
-                        <TableCell
-                          sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
-                          align="center"
-                        >
-                          Số lượng máy
-                        </TableCell>
-                        <TableCell
-                          sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
-                        >
-                          Trạng thái
-                        </TableCell>
-                        <TableCell
-                          sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
-                        >
-                          Ghi chú
-                        </TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>{renderTableContent()}</TableBody>
-                  </Table>
-                </TableContainer>
-                <Box sx={{ display: "flex", justifyContent: "center", mt: 3 }}>
-                  <Pagination
-                    count={totalPages}
-                    page={page}
-                    onChange={(e, value) => setPage(value)}
-                    color="primary"
-                    sx={{
-                      "& .MuiPaginationItem-root": { borderRadius: "8px" },
-                    }}
-                  />
-                </Box>
-              </>
-            )}
-
-            {/* Content for Tab 3 (Update Location) */}
-            {activeTab === 3 && (
-              <Stack spacing={3}>
-                <Autocomplete
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+              <Grid size={{ xs: 12, md: activeTab === 2 ? 12 : 6 }}>
+                <TextField
                   fullWidth
-                  options={filteredLocations}
-                  getOptionLabel={(option) => option.name_location || ""}
-                  value={
-                    filteredLocations.find(
-                      (loc) => loc.uuid_location === updateLocationTargetUuid
-                    ) || null
-                  }
-                  onChange={handleUpdateLocationTargetChange}
-                  loading={locationLoading}
-                  disabled={updateLocationLoading}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Chọn vị trí đích để cập nhật"
-                      required
-                      InputProps={{
-                        ...params.InputProps,
-                        endAdornment: (
-                          <>
-                            {locationLoading ? (
-                              <CircularProgress color="inherit" size={20} />
-                            ) : null}
-                            {params.InputProps.endAdornment}
-                          </>
-                        ),
-                      }}
-                      sx={{
-                        "& .MuiOutlinedInput-root": { borderRadius: "12px" },
-                      }}
-                    />
-                  )}
-                />
-                <Card variant="outlined" sx={{ borderRadius: "12px" }}>
-                  <CardContent>
-                    <Typography variant="h6" gutterBottom>
-                      Chọn máy móc ({updateLocationMachines.length})
-                    </Typography>
-                    <Button
-                      variant="outlined"
-                      startIcon={<QrCode2 />}
-                      onClick={() => setOpenScanDialog(true)}
-                      sx={{
-                        borderRadius: "12px",
-                        py: 1,
-                        borderColor: "#2e7d32",
-                        color: "#2e7d32",
-                        mb: 2,
-                        "&:hover": {
-                          borderColor: "#4caf50",
-                          bgcolor: "#2e7d3211",
-                        },
-                      }}
-                      disabled={updateLocationLoading}
-                    >
-                      Quét Mã QR Máy Móc
-                    </Button>
-                    <TextField
-                      fullWidth
-                      label="Tìm kiếm máy (Mã, Serial, Loại, Model)"
-                      value={searchMachineTerm}
-                      onChange={handleSearchTermChange}
-                      disabled={updateLocationLoading}
-                      InputProps={{
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <Search />
-                          </InputAdornment>
-                        ),
-                        endAdornment: searchLoading && (
-                          <InputAdornment position="end">
-                            <CircularProgress size={20} />
-                          </InputAdornment>
-                        ),
-                        sx: { borderRadius: "12px" },
-                      }}
-                      sx={{ mb: 2 }}
-                    />
-                    {searchResults.length > 0 && (
-                      <>
-                        <Paper
-                          elevation={3}
-                          sx={{ maxHeight: 300, overflow: "auto" }}
-                        >
-                          <Table size="small">
-                            <TableBody>
-                              {searchResults.map((machine) => {
-                                const isSelected = updateLocationMachines.some(
-                                  (m) => m.uuid_machine === machine.uuid_machine
-                                );
-                                return (
-                                  <TableRow
-                                    key={machine.uuid_machine}
-                                    hover
-                                    onClick={() =>
-                                      handleUpdateLocationSelectMachine(machine)
-                                    }
-                                    sx={{
-                                      cursor: "pointer",
-                                      backgroundColor: isSelected
-                                        ? "rgba(102, 126, 234, 0.1)"
-                                        : "inherit",
-                                    }}
-                                  >
-                                    <TableCell padding="checkbox">
-                                      <Tooltip
-                                        title={isSelected ? "Đã chọn" : "Chọn"}
-                                      >
-                                        <Checkbox
-                                          checked={isSelected}
-                                          size="small"
-                                        />
-                                      </Tooltip>
-                                    </TableCell>
-                                    <TableCell>
-                                      <Stack>
-                                        <Typography
-                                          variant="body2"
-                                          sx={{ fontWeight: 600 }}
-                                        >
-                                          {machine.code_machine} -{" "}
-                                          {machine.type_machine} -{" "}
-                                          {machine.model_machine}
-                                          <Chip
-                                            label={getMachineStatusLabel(
-                                              machine.current_status
-                                            )}
-                                            size="small"
-                                            sx={{
-                                              ml: 1,
-                                              height: 20,
-                                              fontSize: "0.75rem",
-                                              background: getStatusInfo(
-                                                machine.current_status
-                                              ).bg,
-                                              color: getStatusInfo(
-                                                machine.current_status
-                                              ).color,
-                                              fontWeight: 600,
-                                              borderRadius: "8px",
-                                            }}
-                                          />
-                                          {machine.is_borrowed_or_rented_or_borrowed_out && (
-                                            <Chip
-                                              label={getMachineStatusLabel(
-                                                machine.is_borrowed_or_rented_or_borrowed_out
-                                              )}
-                                              size="small"
-                                              sx={{
-                                                ml: 0.5,
-                                                height: 20,
-                                                fontSize: "0.75rem",
-                                                background: getStatusInfo(
-                                                  machine.is_borrowed_or_rented_or_borrowed_out
-                                                ).bg,
-                                                color: getStatusInfo(
-                                                  machine.is_borrowed_or_rented_or_borrowed_out
-                                                ).color,
-                                                fontWeight: 600,
-                                                borderRadius: "8px",
-                                              }}
-                                            />
-                                          )}
-                                        </Typography>
-                                        <Typography
-                                          variant="caption"
-                                          color="text.secondary"
-                                        >
-                                          Serial:{" "}
-                                          {machine.serial_machine || "N/A"} | Vị
-                                          trí:{" "}
-                                          {machine.name_location ||
-                                            "Chưa xác định"}
-                                        </Typography>
-                                      </Stack>
-                                    </TableCell>
-                                  </TableRow>
-                                );
-                              })}
-                            </TableBody>
-                          </Table>
-                        </Paper>
-                        {searchTotalPages > 1 && (
-                          <Box
-                            sx={{
-                              display: "flex",
-                              justifyContent: "center",
-                              mt: 1,
-                              mb: 2,
-                            }}
-                          >
-                            <Pagination
-                              count={searchTotalPages}
-                              page={searchPage}
-                              onChange={handleSearchPageChange}
-                              size="small"
-                              color="primary"
-                              showFirstButton
-                              showLastButton
-                            />
-                          </Box>
-                        )}
-                      </>
-                    )}
-                    {updateLocationMachines.length > 0 && (
-                      <Box sx={{ mt: 2 }}>
-                        <Typography
-                          variant="subtitle1"
-                          sx={{ fontWeight: 600, mb: 1 }}
-                        >
-                          Danh sách máy sẽ cập nhật vị trí:
-                        </Typography>
-                        <Stack spacing={1}>
-                          {updateLocationMachines.map((machine) => (
-                            <Paper
-                              key={machine.uuid_machine}
-                              variant="outlined"
-                              sx={{
-                                p: 1.5,
-                                borderRadius: "12px",
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                              }}
-                            >
-                              <Box>
-                                <Typography
-                                  variant="body2"
-                                  sx={{ fontWeight: 600 }}
-                                >
-                                  {machine.code_machine} -{" "}
-                                  {machine.type_machine} -{" "}
-                                  {machine.model_machine}
-                                  <Chip
-                                    label={getMachineStatusLabel(
-                                      machine.current_status
-                                    )}
-                                    size="small"
-                                    sx={{
-                                      ml: 1,
-                                      height: 20,
-                                      fontSize: "0.75rem",
-                                      background: getStatusInfo(
-                                        machine.current_status
-                                      ).bg,
-                                      color: getStatusInfo(
-                                        machine.current_status
-                                      ).color,
-                                      fontWeight: 600,
-                                      borderRadius: "8px",
-                                    }}
-                                  />
-                                  {machine.is_borrowed_or_rented_or_borrowed_out && (
-                                    <Chip
-                                      label={getMachineStatusLabel(
-                                        machine.is_borrowed_or_rented_or_borrowed_out
-                                      )}
-                                      size="small"
-                                      sx={{
-                                        ml: 0.5,
-                                        height: 20,
-                                        fontSize: "0.75rem",
-                                        background: getStatusInfo(
-                                          machine.is_borrowed_or_rented_or_borrowed_out
-                                        ).bg,
-                                        color: getStatusInfo(
-                                          machine.is_borrowed_or_rented_or_borrowed_out
-                                        ).color,
-                                        fontWeight: 600,
-                                        borderRadius: "8px",
-                                      }}
-                                    />
-                                  )}
-                                </Typography>
-                                <Typography
-                                  variant="caption"
-                                  color="text.secondary"
-                                >
-                                  Serial: {machine.serial_machine || "Máy mới"}{" "}
-                                  | Vị trí hiện tại:{" "}
-                                  {machine.name_location || "N/A"}
-                                </Typography>
-                              </Box>
-                              <IconButton
-                                size="small"
-                                color="error"
-                                onClick={() =>
-                                  handleUpdateLocationRemoveMachine(
-                                    machine.uuid_machine
-                                  )
-                                }
-                                disabled={updateLocationLoading}
-                              >
-                                <Delete fontSize="small" />
-                              </IconButton>
-                            </Paper>
-                          ))}
-                        </Stack>
-                      </Box>
-                    )}
-                  </CardContent>
-                </Card>
-                <Button
-                  variant="contained"
-                  size="large"
-                  onClick={handleDirectUpdateSubmit}
-                  disabled={
-                    updateLocationLoading ||
-                    !updateLocationTargetUuid ||
-                    updateLocationMachines.length === 0
-                  }
-                  startIcon={
-                    updateLocationLoading ? (
-                      <CircularProgress size={20} color="inherit" />
-                    ) : (
-                      <LocationOn />
-                    )
-                  }
+                  select
+                  label="Trạng thái"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
                   sx={{
-                    borderRadius: "12px",
-                    background: "linear-gradient(45deg, #2e7d32, #4caf50)",
-                    px: 4,
-                    py: 1.5,
-                    mt: 2,
-                    alignSelf: { xs: "stretch", md: "flex-end" },
-                    width: { xs: "100%", md: "auto" },
-                    "&:hover": {
-                      transform: "translateY(-2px)",
-                      boxShadow: "0 8px 25px rgba(46, 125, 50, 0.3)",
-                    },
+                    "& .MuiOutlinedInput-root": { borderRadius: "12px" },
                   }}
                 >
-                  Cập nhật vị trí
-                </Button>
-              </Stack>
-            )}
+                  <MenuItem value="">Tất cả</MenuItem>
+
+                  {activeTab === 2
+                    ? // Tab Điều chuyển (Internal)
+                      [
+                        <MenuItem
+                          key="pending_confirmation"
+                          value="pending_confirmation"
+                        >
+                          Chờ xác nhận
+                        </MenuItem>,
+                        <MenuItem
+                          key="pending_approval"
+                          value="pending_approval"
+                        >
+                          Chờ duyệt
+                        </MenuItem>,
+                        <MenuItem key="completed" value="completed">
+                          Đã duyệt
+                        </MenuItem>,
+                        <MenuItem key="cancelled" value="cancelled">
+                          Đã hủy
+                        </MenuItem>,
+                      ]
+                    : // Tab Nhập (Import) hoặc Xuất (Export)
+                      [
+                        <MenuItem key="pending" value="pending">
+                          Chờ duyệt
+                        </MenuItem>,
+                        <MenuItem key="completed" value="completed">
+                          Đã duyệt
+                        </MenuItem>,
+                        <MenuItem key="cancelled" value="cancelled">
+                          Đã hủy
+                        </MenuItem>,
+                      ]}
+                </TextField>
+              </Grid>
+              {activeTab !== 2 && (
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <TextField
+                    fullWidth
+                    select
+                    label="Loại phiếu"
+                    value={typeFilter}
+                    onChange={(e) => setTypeFilter(e.target.value)}
+                    sx={{
+                      "& .MuiOutlinedInput-root": { borderRadius: "12px" },
+                    }}
+                  >
+                    <MenuItem value="">Tất cả</MenuItem>
+                    {activeTab === 0
+                      ? [
+                          <MenuItem key="purchased" value="purchased">
+                            Nhập mua mới
+                          </MenuItem>,
+                          <MenuItem
+                            key="maintenance_return"
+                            value="maintenance_return"
+                          >
+                            Nhập sau bảo trì
+                          </MenuItem>,
+                          <MenuItem key="rented" value="rented">
+                            Nhập thuê
+                          </MenuItem>,
+                          <MenuItem key="borrowed" value="borrowed">
+                            Nhập mượn
+                          </MenuItem>,
+                          <MenuItem
+                            key="borrowed_out_return"
+                            value="borrowed_out_return"
+                          >
+                            Nhập trả (máy cho mượn)
+                          </MenuItem>,
+                        ]
+                      : [
+                          <MenuItem key="liquidation" value="liquidation">
+                            Xuất thanh lý
+                          </MenuItem>,
+                          <MenuItem key="maintenance" value="maintenance">
+                            Xuất bảo trì
+                          </MenuItem>,
+                          <MenuItem key="borrowed_out" value="borrowed_out">
+                            Xuất cho mượn
+                          </MenuItem>,
+                          <MenuItem key="rented_return" value="rented_return">
+                            Xuất trả (máy thuê)
+                          </MenuItem>,
+                          <MenuItem
+                            key="borrowed_return"
+                            value="borrowed_return"
+                          >
+                            Xuất trả (máy mượn)
+                          </MenuItem>,
+                        ]}
+                  </TextField>
+                </Grid>
+              )}
+            </Grid>
+            <TableContainer
+              component={Paper}
+              elevation={0}
+              sx={{
+                borderRadius: "20px",
+                border: "1px solid rgba(0, 0, 0, 0.05)",
+              }}
+            >
+              <Table>
+                <TableHead>
+                  <TableRow
+                    sx={{ backgroundColor: "rgba(102, 126, 234, 0.05)" }}
+                  >
+                    <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                      Ngày Tạo Phiếu
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                      Loại
+                    </TableCell>
+                    {activeTab === 2 ? (
+                      <TableCell
+                        sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
+                        colSpan={2}
+                      >
+                        Đến vị trí
+                      </TableCell>
+                    ) : (
+                      <TableCell
+                        sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
+                        colSpan={2}
+                      >
+                        {activeTab === 0 ? "Nhập vào" : "Xuất đến"}
+                      </TableCell>
+                    )}
+                    <TableCell
+                      sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
+                      align="center"
+                    >
+                      Số lượng máy
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                      Trạng thái
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                      Ghi chú
+                    </TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>{renderTableContent()}</TableBody>
+              </Table>
+            </TableContainer>
+            <Box sx={{ display: "flex", justifyContent: "center", mt: 3 }}>
+              <Pagination
+                count={totalPages}
+                page={page}
+                onChange={(e, value) => setPage(value)}
+                color="primary"
+                sx={{
+                  "& .MuiPaginationItem-root": { borderRadius: "8px" },
+                }}
+              />
+            </Box>
           </CardContent>
         </Card>
 
@@ -1669,7 +1230,7 @@ const TicketManagementPage = () => {
                         ? "nhập"
                         : dialogType === "export"
                         ? "xuất"
-                        : "điều chuyển liên xưởng"
+                        : "điều chuyển"
                     }`
                   : "Chi tiết phiếu"}
               </Typography>
@@ -2409,7 +1970,19 @@ const TicketManagementPage = () => {
                           </Card>
                         )}
                       {dialogMode === "view" && selectedTicket && (
-                        <Alert severity="info">
+                        <Alert severity="info" sx={{ borderRadius: "12px" }}>
+                          <Typography variant="body2">
+                            <strong>Người tạo:</strong>{" "}
+                            {/* - 'formData.machines' chỉ là một mẹo để kiểm tra xem API getById đã chạy xong chưa.
+                              - 'ticketDetails' được lưu trong 'formData' (xem hàm handleOpenDialog).
+                            */}
+                            {formData.machines.length > 0 &&
+                            formData.creator_ma_nv
+                              ? `${formData.creator_ma_nv}: ${
+                                  formData.creator_ten_nv || "(Không có tên)"
+                                }`
+                              : selectedTicket.created_by || "Không rõ"}
+                          </Typography>
                           <Typography variant="body2">
                             <strong>Tạo lúc:</strong>{" "}
                             {new Date(selectedTicket.created_at).toLocaleString(
@@ -2451,31 +2024,31 @@ const TicketManagementPage = () => {
               dialogType === "import" ? (
                 // --- LOGIC PHIẾU NHẬP ---
                 <>
+                  {/* Nút Duyệt (Chỉ Admin) */}
                   {isAdmin && selectedTicket.status === "pending" && (
-                    <>
-                      <Button
-                        variant="contained"
-                        color="success"
-                        onClick={() =>
-                          handleUpdateStatus(
-                            selectedTicket.uuid_machine_import,
-                            "completed",
-                            "import"
-                          )
-                        }
-                        disabled={loading}
-                        sx={{
-                          borderRadius: "12px",
-                          px: 3,
-                          flexGrow: { xs: 1, sm: 0 },
-                        }}
-                      >
-                        {loading ? (
-                          <CircularProgress size={24} />
-                        ) : (
-                          "Duyệt phiếu"
-                        )}
-                      </Button>
+                    <Button
+                      variant="contained"
+                      color="success"
+                      onClick={() =>
+                        handleUpdateStatus(
+                          selectedTicket.uuid_machine_import,
+                          "completed",
+                          "import"
+                        )
+                      }
+                      disabled={loading}
+                      sx={{
+                        borderRadius: "12px",
+                        px: 3,
+                        flexGrow: { xs: 1, sm: 0 },
+                      }}
+                    >
+                      {loading ? <CircularProgress size={24} /> : "Duyệt phiếu"}
+                    </Button>
+                  )}
+                  {/* Nút Hủy (Admin hoặc Người tạo) <<< SỬA Ở ĐÂY */}
+                  {(isAdmin || user.id === selectedTicket.created_by) &&
+                    selectedTicket.status === "pending" && (
                       <Button
                         variant="contained"
                         color="error"
@@ -2495,35 +2068,34 @@ const TicketManagementPage = () => {
                       >
                         {loading ? <CircularProgress size={24} /> : "Hủy phiếu"}
                       </Button>
-                    </>
-                  )}
+                    )}
                 </>
               ) : dialogMode === "view" &&
                 selectedTicket?.status &&
                 dialogType === "export" ? (
                 // --- LOGIC PHIẾU XUẤT ---
                 <>
+                  {/* Nút Duyệt (Chỉ Admin) */}
                   {isAdmin && selectedTicket.status === "pending" && (
-                    <>
-                      <Button
-                        variant="contained"
-                        color="success"
-                        onClick={() =>
-                          handleUpdateStatus(
-                            selectedTicket.uuid_machine_export,
-                            "completed",
-                            "export"
-                          )
-                        }
-                        disabled={loading}
-                        sx={{ borderRadius: "12px", px: 3 }}
-                      >
-                        {loading ? (
-                          <CircularProgress size={24} />
-                        ) : (
-                          "Duyệt phiếu"
-                        )}
-                      </Button>
+                    <Button
+                      variant="contained"
+                      color="success"
+                      onClick={() =>
+                        handleUpdateStatus(
+                          selectedTicket.uuid_machine_export,
+                          "completed",
+                          "export"
+                        )
+                      }
+                      disabled={loading}
+                      sx={{ borderRadius: "12px", px: 3 }}
+                    >
+                      {loading ? <CircularProgress size={24} /> : "Duyệt phiếu"}
+                    </Button>
+                  )}
+                  {/* Nút Hủy (Admin hoặc Người tạo) <<< SỬA Ở ĐÂY */}
+                  {(isAdmin || user.id === selectedTicket.created_by) &&
+                    selectedTicket.status === "pending" && (
                       <Button
                         variant="contained"
                         color="error"
@@ -2539,8 +2111,7 @@ const TicketManagementPage = () => {
                       >
                         {loading ? <CircularProgress size={24} /> : "Hủy phiếu"}
                       </Button>
-                    </>
-                  )}
+                    )}
                 </>
               ) : dialogMode === "view" &&
                 selectedTicket?.status &&
@@ -2667,10 +2238,8 @@ const TicketManagementPage = () => {
         {/* Machine QR Scanner Component */}
         {(() => {
           let scannerTicketLabel = "";
-          if (activeTab === 3) {
-            scannerTicketLabel = "Cập nhật vị trí";
-          } else if (dialogType === "internal") {
-            scannerTicketLabel = "Điều chuyển nội bộ";
+          if (dialogType === "internal") {
+            scannerTicketLabel = "Điều chuyển / Cập nhật vị trí";
           } else if (formData.type) {
             scannerTicketLabel = getTypeLabel(formData.type);
           }
@@ -2679,14 +2248,8 @@ const TicketManagementPage = () => {
             <MachineQRScanner
               isOpen={openScanDialog}
               onClose={() => setOpenScanDialog(false)}
-              onMachineAdd={
-                activeTab === 3
-                  ? handleUpdateLocationSelectMachine
-                  : handleAddMachineFromScanner
-              }
-              selectedMachines={
-                activeTab === 3 ? updateLocationMachines : formData.machines
-              }
+              onMachineAdd={handleAddMachineFromScanner}
+              selectedMachines={formData.machines}
               apiParams={scannerApiParams}
               ticketTypeLabel={scannerTicketLabel}
               showNotification={showNotification}
