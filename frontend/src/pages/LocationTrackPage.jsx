@@ -1156,10 +1156,11 @@ const LocationTrackPage = () => {
             }}
           >
             <Typography
+              component="span"
               variant={isMobile ? "h6" : "h5"}
               sx={{ fontWeight: 700 }}
             >
-              Lịch sử di chuyển - {selectedMachine?.code_machine} -{" "}
+              Lịch sử di chuyển: {selectedMachine?.code_machine} -{" "}
               {selectedMachine?.type_machine} - {selectedMachine?.model_machine}
             </Typography>
           </DialogTitle>

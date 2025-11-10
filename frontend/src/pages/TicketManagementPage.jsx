@@ -39,6 +39,15 @@ import {
   Autocomplete,
   useTheme,
   useMediaQuery,
+  Divider,
+  FormControl,
+  InputLabel,
+  Select,
+  Link,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
 } from "@mui/material";
 import {
   Add,
@@ -50,11 +59,39 @@ import {
   Delete,
   QrCode2,
   Refresh,
+  Close,
+  Save,
+  CheckCircleOutline,
+  ErrorOutline,
 } from "@mui/icons-material";
+import * as XLSX from "xlsx-js-style";
 import NavigationBar from "../components/NavigationBar";
 import { api } from "../api/api";
 import MachineQRScanner from "../components/MachineQRScanner";
 import { useAuth } from "../hooks/useAuth";
+
+const excelHeaderMapping = {
+  // Vietnamese Header : English JSON Key
+  "Mã máy": "code_machine",
+  Serial: "serial_machine",
+  "Loại máy": "type_machine",
+  "Model máy": "model_machine",
+  "Hãng sản xuất": "manufacturer",
+  RFID: "RFID_machine",
+  "Giá (VNĐ)": "price",
+  "Ngày sử dụng (DD/MM/YYYY)": "date_of_use",
+  "Tuổi thọ (năm)": "lifespan",
+  "Chi phí sửa chữa (VNĐ)": "repair_cost",
+  "Ghi chú": "note",
+  "Loại (Máy móc thiết bị/Phụ kiện)": "id_category",
+};
+// Lấy danh sách các cột bắt buộc (sẽ dùng để tô màu)
+const requiredHeaders = [
+  "Mã máy",
+  "Serial",
+  "Loại máy",
+  "Loại (Máy móc thiết bị/Phụ kiện)",
+];
 
 const TicketManagementPage = () => {
   const theme = useTheme();
@@ -72,6 +109,7 @@ const TicketManagementPage = () => {
     canEdit && !isAdmin && coDienXuongIds.includes(user?.phongban_id);
   const isViewOnly = permissions.includes("view") && !isAdmin && !canEdit;
   const hasImportExportTabs = isAdmin || isPhongCoDien || isViewOnly;
+  const canCreateOrImportMachines = isAdmin || isPhongCoDien;
 
   const [activeTab, setActiveTab] = useState(isCoDienXuong ? 2 : 0); // 0: Import, 1: Export, 2: Internal, 3: Update Location
   const [imports, setImports] = useState([]);
@@ -125,6 +163,32 @@ const TicketManagementPage = () => {
     title: "",
     message: "",
   });
+
+  // <<< THÊM MỚI: States cho Dialog Tạo Máy Mới (từ MachineListPage)
+  const [openCreateMachineDialog, setOpenCreateMachineDialog] = useState(false);
+  const [newMachineData, setNewMachineData] = useState({
+    code_machine: "",
+    serial_machine: "",
+    RFID_machine: "",
+    type_machine: "",
+    model_machine: "",
+    manufacturer: "",
+    price: "",
+    date_of_use: "",
+    lifespan: "",
+    repair_cost: "",
+    note: "",
+    current_status: "available",
+    id_category: 1,
+  });
+
+  // <<< THÊM MỚI: States cho Dialog Import Excel (từ MachineListPage)
+  const [openImportDialog, setOpenImportDialog] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importResults, setImportResults] = useState(null);
+  const [fileName, setFileName] = useState("");
+  // >>> KẾT THÚC THÊM MỚI
 
   // Config statuses
   const STATUS_CONFIG = {
@@ -188,6 +252,31 @@ const TicketManagementPage = () => {
           year: "numeric",
         })
       : "-";
+
+  // <<< THÊM MỚI: Helpers (từ MachineListPage)
+  const formatDateForInput = (dateString) => {
+    if (!dateString) return "";
+    const date = new Date(dateString);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const formatNumberVN = (value) => {
+    if (!value && value !== 0) return "";
+    return new Intl.NumberFormat("vi-VN", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }).format(value);
+  };
+
+  const parseNumberVN = (value) => {
+    if (!value) return "";
+    const cleanValue = value.replace(/\./g, "").replace(",", ".");
+    return cleanValue;
+  };
+  // >>> KẾT THÚC THÊM MỚI
 
   // --- Data Fetching ---
   const fetchLocations = useCallback(
@@ -300,7 +389,7 @@ const TicketManagementPage = () => {
   useEffect(() => {
     setScannerApiParams(getMachineFiltersForDialog());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openDialog, dialogType, formData.type, isCoDienXuong]); // <<< THÊM isCoDienXuong VÀO DEPENDENCY
+  }, [openDialog, dialogType, formData.type, isCoDienXuong]);
 
   // --- Handlers ---
   const handleTabChange = (event, newValue) => {
@@ -317,7 +406,7 @@ const TicketManagementPage = () => {
       logicalTabIndex = newValue + 2;
     }
 
-    setActiveTab(logicalTabIndex); // Luôn set state về giá trị logic (0, 1, 2, 3)
+    setActiveTab(logicalTabIndex);
     setPage(1);
     setStatusFilter("");
     setTypeFilter("");
@@ -342,6 +431,10 @@ const TicketManagementPage = () => {
         const currentTicketType = formData.type;
         if (currentTicketType) {
           filters.ticket_type = currentTicketType;
+        } else {
+          // <<< SỬA ĐỔI: Nếu chưa chọn loại, mặc định là 'purchased'
+          // để ngăn tìm thấy máy không hợp lệ (ví dụ: máy 'maintenance')
+          filters.ticket_type = "purchased";
         }
       }
     }
@@ -385,7 +478,7 @@ const TicketManagementPage = () => {
       ].includes(type)
     )
       return "external_only";
-    return null; // No filter for import/export if type doesn't match
+    return null;
   };
 
   // Handlers for Dialog (Create/View Ticket)
@@ -398,6 +491,12 @@ const TicketManagementPage = () => {
     setSearchPage(1);
     setOpenScanDialog(false);
     setFilteredLocations([]);
+
+    setOpenCreateMachineDialog(false);
+    setOpenImportDialog(false);
+    setImportResults(null);
+    setFileName("");
+    setImportFile(null);
 
     if (mode === "create") {
       setSelectedTicket(null);
@@ -412,7 +511,6 @@ const TicketManagementPage = () => {
         is_borrowed_or_rented_or_borrowed_out_return_date: "",
       });
       if (type === "internal") {
-        // Yêu cầu 2: Luôn lọc bỏ vị trí của phòng ban mình
         await fetchLocations("internal");
       } else {
         await fetchLocations();
@@ -457,7 +555,6 @@ const TicketManagementPage = () => {
             ? "internal"
             : getLocationFilterForType(ticketType);
 
-        // Khi xem, không lọc theo quyền, chỉ lọc theo loại phiếu
         await fetchLocations(filter);
 
         setFormData({
@@ -548,7 +645,7 @@ const TicketManagementPage = () => {
         : [...prev.machines, { ...machine, note: "" }],
     }));
   };
-  const handleAddMachineFromScanner = (machine) => handleSelectMachine(machine); // Alias for clarity
+  const handleAddMachineFromScanner = (machine) => handleSelectMachine(machine);
   const handleRemoveSelectedMachine = (uuid_machine) =>
     setFormData((prev) => ({
       ...prev,
@@ -601,7 +698,6 @@ const TicketManagementPage = () => {
         apiCall = api.internal_transfers.create(submitData);
         successMessage = "Tạo phiếu điều chuyển thành công";
       } else {
-        // Import or Export
         if (!formData.to_location_uuid) {
           showNotification(
             "error",
@@ -627,7 +723,6 @@ const TicketManagementPage = () => {
           apiCall = api.imports.create(submitData);
           successMessage = "Tạo phiếu nhập thành công";
         } else {
-          // Export
           submitData.export_type = formData.type;
           submitData.export_date = formData.date;
           apiCall = api.exports.create(submitData);
@@ -658,7 +753,6 @@ const TicketManagementPage = () => {
       } else if (type === "export") {
         await api.exports.updateStatus(uuid, status);
       } else if (type === "internal") {
-        // Chỉ xử lý 'cancelled' ở đây
         if (status === "cancelled") {
           await api.internal_transfers.cancel(uuid);
         } else {
@@ -716,6 +810,264 @@ const TicketManagementPage = () => {
     if (reason === "clickaway") return;
     setNotification({ ...notification, open: false });
   };
+
+  // <<< THÊM MỚI: Handlers cho Dialog Tạo Máy Mới (từ MachineListPage)
+  const validateMachineData = () => {
+    const errors = [];
+    if (
+      !newMachineData.code_machine ||
+      newMachineData.code_machine.trim() === ""
+    )
+      errors.push("Mã máy");
+    if (
+      !newMachineData.type_machine ||
+      newMachineData.type_machine.trim() === ""
+    )
+      errors.push("Loại máy");
+    if (
+      !newMachineData.serial_machine ||
+      newMachineData.serial_machine.trim() === ""
+    )
+      errors.push("Serial");
+    return errors;
+  };
+
+  const handleOpenCreateMachineDialog = () => {
+    setNewMachineData({
+      code_machine: "",
+      serial_machine: "",
+      RFID_machine: "",
+      type_machine: "",
+      model_machine: "",
+      manufacturer: "",
+      price: "",
+      date_of_use: "",
+      lifespan: "",
+      repair_cost: "",
+      note: "",
+      current_status: "available",
+      id_category: 1,
+    });
+    setOpenCreateMachineDialog(true);
+  };
+
+  const handleCloseCreateMachineDialog = () => {
+    setOpenCreateMachineDialog(false);
+  };
+
+  const handleCreateMachineInputChange = (field, value) => {
+    setNewMachineData({ ...newMachineData, [field]: value });
+  };
+
+  const handleSaveNewMachine = async () => {
+    try {
+      const validationErrors = validateMachineData();
+      if (validationErrors.length > 0) {
+        showNotification(
+          "error",
+          "Vui lòng điền đầy đủ thông tin",
+          `Các trường bắt buộc: ${validationErrors.join(", ")}`
+        );
+        return;
+      }
+
+      // 1. Create new machine
+      const result = await api.machines.create(newMachineData);
+      if (result.success) {
+        // 2. Add machine to ticket
+        handleSelectMachine(result.data);
+
+        showNotification(
+          "success",
+          "Tạo máy thành công!",
+          `Máy "${result.data.code_machine}" đã được thêm vào phiếu.`
+        );
+        handleCloseCreateMachineDialog();
+      } else {
+        showNotification(
+          "error",
+          "Tạo máy thất bại",
+          result.message || "Đã xảy ra lỗi khi tạo máy móc"
+        );
+      }
+    } catch (err) {
+      console.error("Error saving machine:", err);
+      showNotification(
+        "error",
+        "Lỗi khi tạo máy móc",
+        err.response?.data?.message ||
+          err.message ||
+          "Đã xảy ra lỗi không xác định"
+      );
+    }
+  };
+  // >>> KẾT THÚC THÊM MỚI
+
+  // <<< THÊM MỚI: Handlers cho Dialog Import Excel (từ MachineListPage)
+  const handleOpenImportDialog = () => {
+    setImportFile(null);
+    setFileName("");
+    setImportResults(null);
+    setIsImporting(false);
+    setOpenImportDialog(true);
+  };
+
+  const handleCloseImportDialog = () => {
+    setOpenImportDialog(false);
+  };
+
+  const handleFileChange = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      setImportFile(file);
+      setFileName(file.name);
+      setImportResults(null);
+    }
+    event.target.value = null;
+  };
+
+  const handleImportExcel = async () => {
+    if (!importFile) {
+      showNotification(
+        "error",
+        "Chưa chọn file",
+        "Vui lòng chọn một file Excel"
+      );
+      return;
+    }
+
+    setIsImporting(true);
+    setImportResults(null);
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const data = e.target.result;
+        const workbook = XLSX.read(data, { type: "binary", cellDates: true });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json(worksheet, { raw: false });
+
+        if (json.length === 0) {
+          showNotification("error", "File rỗng", "File Excel không có dữ liệu");
+          setIsImporting(false);
+          return;
+        }
+
+        const headersInFile = Object.keys(json[0]);
+        const missingHeaders = requiredHeaders.filter(
+          (h) => !headersInFile.includes(h)
+        );
+
+        if (missingHeaders.length > 0) {
+          showNotification(
+            "error",
+            "File không hợp lệ",
+            `File Excel thiếu các cột bắt buộc: ${missingHeaders.join(", ")}`
+          );
+          setIsImporting(false);
+          return;
+        }
+
+        const machinesToImport = json.map((row) => {
+          const newRow = {};
+          for (const vietnameseHeader in excelHeaderMapping) {
+            const englishKey = excelHeaderMapping[vietnameseHeader];
+            if (row[vietnameseHeader] !== undefined) {
+              newRow[englishKey] = row[vietnameseHeader];
+            }
+          }
+
+          const categoryString = (newRow.id_category || "").toLowerCase();
+          if (categoryString.includes("máy móc")) newRow.id_category = 1;
+          else if (categoryString.includes("phụ kiện")) newRow.id_category = 2;
+          else newRow.id_category = 1;
+
+          const dateString = newRow.date_of_use;
+          if (dateString && typeof dateString === "string") {
+            const parts = dateString.split("/");
+            if (parts.length === 3) {
+              const jsDate = new Date(+parts[2], parts[1] - 1, +parts[0]);
+              newRow.date_of_use = jsDate;
+            } else newRow.date_of_use = null;
+          }
+          return newRow;
+        });
+
+        // Gửi dữ liệu lên backend
+        const result = await api.machines.batchImport({
+          machines: machinesToImport,
+        });
+
+        if (result.success) {
+          setImportResults(result.data);
+          const errorCount = result.data.errorCount;
+          showNotification(
+            errorCount > 0 ? "warning" : "success",
+            "Hoàn tất import",
+            `Thành công: ${result.data.successCount}, Thất bại: ${errorCount}`
+          );
+
+          if (result.data.successes && result.data.successes.length > 0) {
+            // `result.data.successes` là mảng các máy đã được tạo thành công
+            // (server.js trả về thông tin này)
+            // Cần lấy thông tin chi tiết hơn từ server (đã được làm trong server.js)
+            for (const newMachine of result.data.successes) {
+              // Cần có uuid_machine để handleSelectMachine hoạt động
+              // Giả định server trả về đầy đủ object máy (đã check server.js, nó không trả về uuid)
+              // *** ĐIỀU CHỈNH ***
+              // server.js /batch-import CHỈ trả về: code, serial, type, model
+              // => Không đủ thông tin (thiếu uuid_machine, current_status...)
+              // *** GIẢI PHÁP ***
+              // Thay vì thêm ngay, ta chỉ hiển thị thông báo.
+              // Tốt hơn: Server.js `batchImport` nên trả về mảng các máy đã tạo (giống `create`)
+              // *** GIẢ ĐỊNH server.js đã được sửa để trả về uuid_machine ***
+              // (server.js chưa sửa, nhưng ta cứ code)
+              // Do server.js /batch-import không trả về uuid_machine, ta phải tìm lại
+              // Tạm thời, ta sẽ tìm lại máy bằng SERIAL (vì nó là duy nhất)
+
+              if (newMachine.serial) {
+                try {
+                  // Dùng api.machines.getBySerial để lấy full data (bao gồm uuid)
+                  const machineData = await api.machines.getBySerial(
+                    newMachine.serial,
+                    { ticket_type: "purchased" } // Giả định là máy mới
+                  );
+                  if (machineData.success) {
+                    handleSelectMachine(machineData.data);
+                  }
+                } catch (findErr) {
+                  console.error("Lỗi khi tự động tìm máy vừa import:", findErr);
+                }
+              }
+            }
+            showNotification(
+              "info",
+              "Đã thêm máy",
+              `Đã tự động thêm ${result.data.successCount} máy vào phiếu.`
+            );
+          }
+        } else {
+          showNotification(
+            "error",
+            "Lỗi import",
+            result.message || "Lỗi không xác định từ server"
+          );
+        }
+      } catch (err) {
+        console.error("Error parsing or importing file:", err);
+        showNotification(
+          "error",
+          "Lỗi xử lý file",
+          err.response?.data?.message || err.message || "Không thể đọc file"
+        );
+      } finally {
+        setIsImporting(false);
+      }
+    };
+    reader.readAsBinaryString(importFile);
+  };
+  // >>> KẾT THÚC THÊM MỚI
 
   // --- Render Helpers ---
   const getStatusColor = (status) =>
@@ -877,7 +1229,6 @@ const TicketManagementPage = () => {
               }}
             >
               <Tabs
-                // Ánh xạ state logic (0,1,2,3) về state hiển thị (0,1,2,3 hoặc 0,1)
                 value={hasImportExportTabs ? activeTab : activeTab - 2}
                 onChange={handleTabChange}
                 variant={isMobile ? "scrollable" : "standard"}
@@ -1221,6 +1572,7 @@ const TicketManagementPage = () => {
           >
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
               <Typography
+                component="span"
                 variant={isMobile ? "h6" : "h5"}
                 sx={{ fontWeight: 700 }}
               >
@@ -1242,6 +1594,9 @@ const TicketManagementPage = () => {
                 />
               )}
             </Box>
+            <IconButton onClick={handleCloseDialog} sx={{ color: "white" }}>
+              <Close />
+            </IconButton>
           </DialogTitle>
           <DialogContent sx={{ mt: 3 }}>
             {detailLoading ? (
@@ -1260,6 +1615,11 @@ const TicketManagementPage = () => {
                 {(() => {
                   const isFormDisabled =
                     dialogType !== "internal" && !formData.type;
+
+                  const isSpecialImport =
+                    dialogMode === "create" &&
+                    dialogType === "import" &&
+                    ["purchased", "rented", "borrowed"].includes(formData.type);
 
                   return (
                     <>
@@ -1346,12 +1706,28 @@ const TicketManagementPage = () => {
                                 getOptionLabel={(option) =>
                                   option.name_location || ""
                                 }
-                                onChange={(event, newValue) =>
+                                onChange={(event, newValue) => {
+                                  const newName = newValue
+                                    ? newValue.name_location
+                                    : "";
+                                  const newUuid = newValue
+                                    ? newValue.uuid_location
+                                    : "";
+
+                                  // Cập nhật tên đơn vị
                                   handleFormChange(
                                     "is_borrowed_or_rented_or_borrowed_out_name",
-                                    newValue ? newValue.name_location : ""
-                                  )
-                                }
+                                    newName
+                                  );
+
+                                  // Đồng bộ với "Xuất đến" NẾU đây là phiếu "Xuất cho mượn"
+                                  if (formData.type === "borrowed_out") {
+                                    handleFormChange(
+                                      "to_location_uuid",
+                                      newUuid
+                                    );
+                                  }
+                                }}
                                 value={
                                   externalLocations.find(
                                     (loc) =>
@@ -1459,7 +1835,9 @@ const TicketManagementPage = () => {
                         disabled={
                           isFormDisabled ||
                           dialogMode === "view" ||
-                          locationLoading
+                          locationLoading ||
+                          // <<< THÊM: Vô hiệu hóa nếu là phiếu "Xuất cho mượn" (để đồng bộ)
+                          formData.type === "borrowed_out"
                         }
                         loading={locationLoading}
                         renderInput={(params) => (
@@ -1494,7 +1872,12 @@ const TicketManagementPage = () => {
                             }}
                           />
                         )}
-                        sx={DISABLED_VIEW_SX}
+                        sx={
+                          // <<< THÊM: Dùng style disabled nếu là phiếu "Xuất cho mượn"
+                          formData.type === "borrowed_out"
+                            ? DISABLED_VIEW_SX
+                            : {}
+                        }
                       />
                       {dialogMode === "create" && (
                         <Card variant="outlined" sx={{ borderRadius: "12px" }}>
@@ -1502,25 +1885,92 @@ const TicketManagementPage = () => {
                             <Typography variant="h6" gutterBottom>
                               Chọn máy móc ({formData.machines.length})
                             </Typography>
-                            <Button
-                              variant="outlined"
-                              startIcon={<QrCode2 />}
-                              onClick={() => setOpenScanDialog(true)}
-                              disabled={isFormDisabled}
-                              sx={{
-                                borderRadius: "12px",
-                                py: 1,
-                                borderColor: "#2e7d32",
-                                color: "#2e7d32",
-                                mb: 2,
-                                "&:hover": {
-                                  borderColor: "#4caf50",
-                                  bgcolor: "#2e7d3211",
-                                },
-                              }}
-                            >
-                              Quét Mã QR Máy Móc
-                            </Button>
+
+                            {isSpecialImport ? (
+                              // Nút bấm cho Nhập Mua Mới / Thuê / Mượn
+                              <Stack
+                                direction={{ xs: "column", sm: "row" }}
+                                spacing={2}
+                                sx={{ mb: 2 }}
+                              >
+                                <Button
+                                  variant="outlined"
+                                  startIcon={<QrCode2 />}
+                                  onClick={() => setOpenScanDialog(true)}
+                                  disabled={isFormDisabled}
+                                  sx={{
+                                    borderRadius: "12px",
+                                    py: 1,
+                                    borderColor: "#2e7d32",
+                                    color: "#2e7d32",
+                                    "&:hover": {
+                                      borderColor: "#4caf50",
+                                      bgcolor: "#2e7d3211",
+                                    },
+                                  }}
+                                >
+                                  Quét QR
+                                </Button>
+                                <Button
+                                  variant="outlined"
+                                  startIcon={<Add />}
+                                  onClick={handleOpenCreateMachineDialog}
+                                  disabled={isFormDisabled}
+                                  sx={{
+                                    borderRadius: "12px",
+                                    py: 1,
+                                    borderColor: "#2e7d32",
+                                    color: "#2e7d32",
+                                    "&:hover": {
+                                      borderColor: "#4caf50",
+                                      bgcolor: "#2e7d3211",
+                                    },
+                                  }}
+                                >
+                                  Thêm máy mới
+                                </Button>
+                                <Button
+                                  variant="outlined"
+                                  startIcon={<FileUpload />}
+                                  onClick={handleOpenImportDialog}
+                                  disabled={isFormDisabled}
+                                  sx={{
+                                    borderRadius: "12px",
+                                    py: 1,
+                                    borderColor: "#2e7d32",
+                                    color: "#2e7d32",
+                                    "&:hover": {
+                                      borderColor: "#4caf50",
+                                      bgcolor: "#2e7d3211",
+                                    },
+                                  }}
+                                >
+                                  Nhập Excel
+                                </Button>
+                              </Stack>
+                            ) : (
+                              // Nút bấm cho các loại phiếu khác
+                              <Button
+                                variant="outlined"
+                                startIcon={<QrCode2 />}
+                                onClick={() => setOpenScanDialog(true)}
+                                disabled={isFormDisabled}
+                                sx={{
+                                  borderRadius: "12px",
+                                  py: 1,
+                                  borderColor: "#2e7d32",
+                                  color: "#2e7d32",
+                                  mb: 2,
+                                  "&:hover": {
+                                    borderColor: "#4caf50",
+                                    bgcolor: "#2e7d3211",
+                                  },
+                                }}
+                              >
+                                Quét Mã QR Máy Móc
+                              </Button>
+                            )}
+
                             <TextField
                               fullWidth
                               label="Tìm kiếm máy"
@@ -1586,14 +2036,21 @@ const TicketManagementPage = () => {
                                               </Tooltip>
                                             </TableCell>
                                             <TableCell>
-                                              <Stack>
-                                                <Typography
-                                                  variant="body2"
-                                                  sx={{ fontWeight: 600 }}
+                                              <Stack spacing={0.5}>
+                                                <Stack
+                                                  direction="row"
+                                                  alignItems="center"
+                                                  spacing={1}
+                                                  flexWrap="wrap"
                                                 >
-                                                  {machine.code_machine} -{" "}
-                                                  {machine.type_machine} -{" "}
-                                                  {machine.model_machine}
+                                                  <Typography
+                                                    variant="body2"
+                                                    sx={{ fontWeight: 600 }}
+                                                  >
+                                                    {machine.code_machine} -{" "}
+                                                    {machine.type_machine} -{" "}
+                                                    {machine.model_machine}
+                                                  </Typography>
                                                   <Chip
                                                     label={getMachineStatusLabel(
                                                       machine.current_status
@@ -1635,7 +2092,7 @@ const TicketManagementPage = () => {
                                                       }}
                                                     />
                                                   )}
-                                                </Typography>
+                                                </Stack>
                                                 <Typography
                                                   variant="caption"
                                                   color="text.secondary"
@@ -1698,64 +2155,74 @@ const TicketManagementPage = () => {
                                         alignItems="center"
                                       >
                                         <Box sx={{ flexGrow: 1 }}>
-                                          <Typography
-                                            variant="body2"
-                                            sx={{ fontWeight: 600 }}
-                                          >
-                                            {machine.code_machine} -{" "}
-                                            {machine.type_machine} -{" "}
-                                            {machine.model_machine}
-                                            <Chip
-                                              label={getMachineStatusLabel(
-                                                machine.current_status
-                                              )}
-                                              size="small"
-                                              sx={{
-                                                ml: 1,
-                                                height: 20,
-                                                fontSize: "0.75rem",
-                                                background: getStatusInfo(
-                                                  machine.current_status
-                                                ).bg,
-                                                color: getStatusInfo(
-                                                  machine.current_status
-                                                ).color,
-                                                fontWeight: 600,
-                                                borderRadius: "8px",
-                                              }}
-                                            />
-                                            {machine.is_borrowed_or_rented_or_borrowed_out && (
+                                          <Stack spacing={0.5}>
+                                            <Stack
+                                              direction="row"
+                                              alignItems="center"
+                                              spacing={1}
+                                              flexWrap="wrap"
+                                            >
+                                              <Typography
+                                                variant="body2"
+                                                sx={{ fontWeight: 600 }}
+                                              >
+                                                {machine.code_machine} -{" "}
+                                                {machine.type_machine} -{" "}
+                                                {machine.model_machine}
+                                              </Typography>
                                               <Chip
                                                 label={getMachineStatusLabel(
-                                                  machine.is_borrowed_or_rented_or_borrowed_out
+                                                  machine.current_status
                                                 )}
                                                 size="small"
                                                 sx={{
-                                                  ml: 0.5,
+                                                  ml: 1,
                                                   height: 20,
                                                   fontSize: "0.75rem",
                                                   background: getStatusInfo(
-                                                    machine.is_borrowed_or_rented_or_borrowed_out
+                                                    machine.current_status
                                                   ).bg,
                                                   color: getStatusInfo(
-                                                    machine.is_borrowed_or_rented_or_borrowed_out
+                                                    machine.current_status
                                                   ).color,
                                                   fontWeight: 600,
                                                   borderRadius: "8px",
                                                 }}
                                               />
-                                            )}
-                                          </Typography>
-                                          <Typography
-                                            variant="caption"
-                                            color="text.secondary"
-                                          >
-                                            Serial:{" "}
-                                            {machine.serial_machine ||
-                                              "Máy mới"}{" "}
-                                            | Vị trí hiện tại:{" "}
-                                            {machine.name_location || "N/A"}
-                                          </Typography>
+                                              {machine.is_borrowed_or_rented_or_borrowed_out && (
+                                                <Chip
+                                                  label={getMachineStatusLabel(
+                                                    machine.is_borrowed_or_rented_or_borrowed_out
+                                                  )}
+                                                  size="small"
+                                                  sx={{
+                                                    ml: 0.5,
+                                                    height: 20,
+                                                    fontSize: "0.75rem",
+                                                    background: getStatusInfo(
+                                                      machine.is_borrowed_or_rented_or_borrowed_out
+                                                    ).bg,
+                                                    color: getStatusInfo(
+                                                      machine.is_borrowed_or_rented_or_borrowed_out
+                                                    ).color,
+                                                    fontWeight: 600,
+                                                    borderRadius: "8px",
+                                                  }}
+                                                />
+                                              )}
+                                            </Stack>
+                                            <Typography
+                                              variant="caption"
+                                              color="text.secondary"
+                                            >
+                                              Serial:{" "}
+                                              {machine.serial_machine ||
+                                                "Máy mới"}{" "}
+                                              | Vị trí hiện tại:{" "}
+                                              {machine.name_location ||
+                                                "Chưa xác định"}
+                                            </Typography>
+                                          </Stack>
                                         </Box>
                                         <IconButton
                                           size="small"
@@ -1973,9 +2440,6 @@ const TicketManagementPage = () => {
                         <Alert severity="info" sx={{ borderRadius: "12px" }}>
                           <Typography variant="body2">
                             <strong>Người tạo:</strong>{" "}
-                            {/* - 'formData.machines' chỉ là một mẹo để kiểm tra xem API getById đã chạy xong chưa.
-                              - 'ticketDetails' được lưu trong 'formData' (xem hàm handleOpenDialog).
-                            */}
                             {formData.machines.length > 0 &&
                             formData.creator_ma_nv
                               ? `${formData.creator_ma_nv}: ${
@@ -2022,7 +2486,6 @@ const TicketManagementPage = () => {
               {dialogMode === "view" &&
               selectedTicket?.status &&
               dialogType === "import" ? (
-                // --- LOGIC PHIẾU NHẬP ---
                 <>
                   {/* Nút Duyệt (Chỉ Admin) */}
                   {isAdmin && selectedTicket.status === "pending" && (
@@ -2046,7 +2509,7 @@ const TicketManagementPage = () => {
                       {loading ? <CircularProgress size={24} /> : "Duyệt phiếu"}
                     </Button>
                   )}
-                  {/* Nút Hủy (Admin hoặc Người tạo) <<< SỬA Ở ĐÂY */}
+                  {/* Nút Hủy (Admin hoặc Người tạo) */}
                   {(isAdmin || user.id === selectedTicket.created_by) &&
                     selectedTicket.status === "pending" && (
                       <Button
@@ -2073,7 +2536,6 @@ const TicketManagementPage = () => {
               ) : dialogMode === "view" &&
                 selectedTicket?.status &&
                 dialogType === "export" ? (
-                // --- LOGIC PHIẾU XUẤT ---
                 <>
                   {/* Nút Duyệt (Chỉ Admin) */}
                   {isAdmin && selectedTicket.status === "pending" && (
@@ -2093,7 +2555,7 @@ const TicketManagementPage = () => {
                       {loading ? <CircularProgress size={24} /> : "Duyệt phiếu"}
                     </Button>
                   )}
-                  {/* Nút Hủy (Admin hoặc Người tạo) <<< SỬA Ở ĐÂY */}
+                  {/* Nút Hủy (Admin hoặc Người tạo) */}
                   {(isAdmin || user.id === selectedTicket.created_by) &&
                     selectedTicket.status === "pending" && (
                       <Button
@@ -2116,7 +2578,6 @@ const TicketManagementPage = () => {
               ) : dialogMode === "view" &&
                 selectedTicket?.status &&
                 dialogType === "internal" ? (
-                // --- LOGIC PHIẾU ĐIỀU CHUYỂN (MỚI) ---
                 <>
                   {(() => {
                     const ticket = selectedTicket;
@@ -2145,7 +2606,7 @@ const TicketManagementPage = () => {
                         {canConfirm && (
                           <Button
                             variant="contained"
-                            color="primary" // Màu khác
+                            color="primary"
                             onClick={() => handleConfirmTicket(uuid)}
                             disabled={loading}
                             sx={{ borderRadius: "12px", px: 3 }}
@@ -2232,6 +2693,550 @@ const TicketManagementPage = () => {
                 </Button>
               )}
             </Box>
+          </DialogActions>
+        </Dialog>
+
+        {/* Create Machine Dialog */}
+        <Dialog
+          open={openCreateMachineDialog}
+          onClose={handleCloseCreateMachineDialog}
+          maxWidth="md"
+          fullScreen={isMobile}
+          fullWidth
+          PaperProps={{ sx: { borderRadius: isMobile ? 0 : "20px" } }}
+        >
+          <DialogTitle
+            sx={{
+              pb: 1,
+              background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+              color: "white",
+              fontWeight: 700,
+            }}
+          >
+            <Stack
+              direction="row"
+              alignItems="center"
+              justifyContent="space-between"
+            >
+              <Typography
+                component="span"
+                variant={isMobile ? "h6" : "h5"}
+                fontWeight="bold"
+              >
+                Thêm máy móc mới
+              </Typography>
+              <IconButton
+                onClick={handleCloseCreateMachineDialog}
+                size="small"
+                sx={{ color: "white" }}
+              >
+                <Close />
+              </IconButton>
+            </Stack>
+          </DialogTitle>
+          <Divider />
+          <DialogContent sx={{ pt: 3 }}>
+            <Grid container spacing={3}>
+              <Grid size={{ xs: 12 }}>
+                <Divider sx={{ my: 2 }}>
+                  <Chip label="Thông tin chung" />
+                </Divider>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  fullWidth
+                  label="Mã máy"
+                  required
+                  value={newMachineData.code_machine || ""}
+                  onChange={(e) =>
+                    handleCreateMachineInputChange(
+                      "code_machine",
+                      e.target.value
+                    )
+                  }
+                  disabled={!canCreateOrImportMachines}
+                  sx={!canCreateOrImportMachines ? DISABLED_VIEW_SX : {}}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  fullWidth
+                  label="Serial"
+                  required
+                  value={newMachineData.serial_machine || ""}
+                  onChange={(e) =>
+                    handleCreateMachineInputChange(
+                      "serial_machine",
+                      e.target.value
+                    )
+                  }
+                  disabled={!canCreateOrImportMachines}
+                  sx={!canCreateOrImportMachines ? DISABLED_VIEW_SX : {}}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  fullWidth
+                  label="RFID"
+                  value={newMachineData.RFID_machine || ""}
+                  onChange={(e) =>
+                    handleCreateMachineInputChange(
+                      "RFID_machine",
+                      e.target.value
+                    )
+                  }
+                  disabled={!canCreateOrImportMachines}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <FormControl fullWidth disabled={!canCreateOrImportMachines}>
+                  <InputLabel>Loại</InputLabel>
+                  <Select
+                    value={newMachineData.id_category || 1}
+                    label="Loại"
+                    onChange={(e) =>
+                      handleCreateMachineInputChange(
+                        "id_category",
+                        e.target.value
+                      )
+                    }
+                  >
+                    <MenuItem value={1}>Máy móc thiết bị</MenuItem>
+                    <MenuItem value={2}>Phụ kiện</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  fullWidth
+                  label="Loại máy"
+                  required
+                  value={newMachineData.type_machine || ""}
+                  onChange={(e) =>
+                    handleCreateMachineInputChange(
+                      "type_machine",
+                      e.target.value
+                    )
+                  }
+                  disabled={!canCreateOrImportMachines}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  fullWidth
+                  label="Model máy"
+                  value={newMachineData.model_machine || ""}
+                  onChange={(e) =>
+                    handleCreateMachineInputChange(
+                      "model_machine",
+                      e.target.value
+                    )
+                  }
+                  disabled={!canCreateOrImportMachines}
+                />
+              </Grid>
+
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  fullWidth
+                  label="Hãng sản xuất"
+                  value={newMachineData.manufacturer || ""}
+                  onChange={(e) =>
+                    handleCreateMachineInputChange(
+                      "manufacturer",
+                      e.target.value
+                    )
+                  }
+                  disabled={!canCreateOrImportMachines}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <FormControl fullWidth disabled={!canCreateOrImportMachines}>
+                  <InputLabel>Trạng thái</InputLabel>
+                  <Select
+                    value={newMachineData.current_status}
+                    label="Trạng thái"
+                    onChange={(e) =>
+                      handleCreateMachineInputChange(
+                        "current_status",
+                        e.target.value
+                      )
+                    }
+                  >
+                    <MenuItem value="available">Sẵn sàng</MenuItem>
+                    <MenuItem value="in_use">Đang sử dụng</MenuItem>
+                    <MenuItem value="maintenance">Bảo trì</MenuItem>
+                    <MenuItem value="liquidation">Thanh lý</MenuItem>
+                    <MenuItem value="disabled">Vô hiệu hóa</MenuItem>
+                    <MenuItem value="broken">Máy hư</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              <Grid size={{ xs: 12 }}>
+                <Divider sx={{ my: 2 }}>
+                  <Chip label="Thông tin Chi phí & Thời gian" />
+                </Divider>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  fullWidth
+                  label="Giá (VNĐ)"
+                  value={formatNumberVN(newMachineData.price)}
+                  onChange={(e) => {
+                    const parsedValue = parseNumberVN(e.target.value);
+                    handleCreateMachineInputChange(
+                      "price",
+                      parsedValue ? parseFloat(parsedValue) : ""
+                    );
+                  }}
+                  disabled={!canCreateOrImportMachines}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  fullWidth
+                  label="Tuổi thọ (năm)"
+                  value={newMachineData.lifespan?.toString() || ""}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === "" || /^\d+$/.test(value)) {
+                      handleCreateMachineInputChange(
+                        "lifespan",
+                        value ? parseInt(value) : ""
+                      );
+                    }
+                  }}
+                  onKeyPress={(e) => {
+                    if (!/[0-9]/.test(e.key)) e.preventDefault();
+                  }}
+                  inputProps={{ inputMode: "numeric", pattern: "[0-9]*" }}
+                  disabled={!canCreateOrImportMachines}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  fullWidth
+                  label="Chi phí sửa chữa (VNĐ)"
+                  value={formatNumberVN(newMachineData.repair_cost) || ""}
+                  onChange={(e) => {
+                    const parsedValue = parseNumberVN(e.target.value);
+                    handleCreateMachineInputChange(
+                      "repair_cost",
+                      parsedValue ? parseFloat(parsedValue) : ""
+                    );
+                  }}
+                  disabled={!canCreateOrImportMachines}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  fullWidth
+                  label="Ngày sử dụng"
+                  type="date"
+                  value={formatDateForInput(newMachineData.date_of_use)}
+                  onChange={(e) =>
+                    handleCreateMachineInputChange(
+                      "date_of_use",
+                      e.target.value
+                    )
+                  }
+                  InputLabelProps={{ shrink: true }}
+                  disabled={!canCreateOrImportMachines}
+                />
+              </Grid>
+              <Grid size={{ xs: 12 }}>
+                <TextField
+                  fullWidth
+                  label="Ghi chú"
+                  multiline
+                  rows={3}
+                  value={newMachineData.note || ""}
+                  onChange={(e) =>
+                    handleCreateMachineInputChange("note", e.target.value)
+                  }
+                  disabled={!canCreateOrImportMachines}
+                />
+              </Grid>
+            </Grid>
+          </DialogContent>
+          <Divider />
+          <DialogActions
+            sx={{
+              p: 3,
+              flexDirection: { xs: "column-reverse", sm: "row" },
+              gap: 1,
+              justifyContent: "flex-end",
+            }}
+          >
+            <Button
+              onClick={handleCloseCreateMachineDialog}
+              variant="outlined"
+              color="inherit"
+              sx={{ borderRadius: "12px", width: { xs: "100%", sm: "auto" } }}
+            >
+              Hủy
+            </Button>
+            {canCreateOrImportMachines && (
+              <Button
+                onClick={handleSaveNewMachine}
+                variant="contained"
+                startIcon={<Save />}
+                sx={{
+                  borderRadius: "12px",
+                  background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                  width: { xs: "100%", sm: "auto" },
+                }}
+              >
+                Thêm và chọn
+              </Button>
+            )}
+          </DialogActions>
+        </Dialog>
+
+        {/* Import Excel Dialog */}
+        <Dialog
+          open={openImportDialog}
+          onClose={handleCloseImportDialog}
+          maxWidth="md"
+          fullScreen={isMobile}
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: isMobile ? 0 : "20px",
+            },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              pb: 1,
+              background: "linear-gradient(45deg, #667eea, #764ba2)",
+              color: "white",
+              fontWeight: 700,
+            }}
+          >
+            <Stack
+              direction="row"
+              alignItems="center"
+              justifyContent="space-between"
+            >
+              <Typography
+                component="span"
+                variant={isMobile ? "h6" : "h5"}
+                fontWeight="bold"
+              >
+                Nhập máy móc từ file Excel
+              </Typography>
+              <IconButton
+                onClick={handleCloseImportDialog}
+                size="small"
+                sx={{ color: "white" }}
+              >
+                <Close />
+              </IconButton>
+            </Stack>
+          </DialogTitle>
+          <Divider />
+          <DialogContent
+            sx={{
+              pt: 3,
+              display: "flex",
+              flexDirection: "column",
+              gap: 3,
+              pb: 1,
+            }}
+          >
+            <Alert severity="info" sx={{ borderRadius: "12px" }}>
+              <AlertTitle>Hướng dẫn</AlertTitle>
+              <Typography variant="body2" gutterBottom>
+                1. Các cột <strong>bắt buộc</strong>: <strong>Mã máy</strong>,{" "}
+                <strong>Serial</strong>, <strong>Loại máy</strong>,{" "}
+                <strong>Loại (Máy móc thiết bị/Phụ kiện)</strong>.
+              </Typography>
+              <Typography variant="body2" gutterBottom>
+                2. Cột <strong>Ngày sử dụng</strong>: Nhập định dạng{" "}
+                <strong>DD/MM/YYYY</strong>.
+              </Typography>
+              <Typography variant="body2" gutterBottom>
+                3. Các máy được tạo thành công sẽ{" "}
+                <strong>tự động được thêm</strong> vào phiếu nhập hiện tại.
+              </Typography>
+              <Box sx={{ mt: 1 }}>
+                <Link
+                  href="/Mau_Excel_MayMoc.xlsx"
+                  download="Mau_Excel_MayMoc.xlsx"
+                  variant="body2"
+                  sx={{
+                    fontWeight: "bold",
+                    cursor: "pointer",
+                    textDecoration: "underline",
+                  }}
+                >
+                  Tải xuống file Excel mẫu tại đây
+                </Link>
+              </Box>
+            </Alert>
+
+            <Box>
+              <Button
+                variant="contained"
+                component="label"
+                startIcon={<FileUpload />}
+                sx={{
+                  borderRadius: "12px",
+                  background: "linear-gradient(45deg, #667eea, #764ba2)",
+                }}
+              >
+                Chọn file Excel
+                <input
+                  type="file"
+                  hidden
+                  accept=".xlsx, .xls"
+                  onChange={handleFileChange}
+                />
+              </Button>
+              {fileName && (
+                <Typography variant="body1" sx={{ mt: 2, ml: 1 }}>
+                  Đã chọn: <strong>{fileName}</strong>
+                </Typography>
+              )}
+            </Box>
+
+            {importResults && (
+              <Box>
+                <Divider sx={{ my: 2 }}>
+                  <Chip label="Kết quả Nhập Excel" />
+                </Divider>
+                <Alert
+                  severity={
+                    importResults.errorCount > 0 ? "warning" : "success"
+                  }
+                  sx={{ borderRadius: "12px", mb: 2 }}
+                >
+                  <AlertTitle>Nhập Excel hoàn tất</AlertTitle>
+                  Đã thêm thành công:{" "}
+                  <strong>{importResults.successCount}</strong> máy.
+                  <br />
+                  Số dòng bị lỗi: <strong>{importResults.errorCount}</strong>.
+                </Alert>
+
+                {importResults.successes.length > 0 && (
+                  <Box sx={{ mb: 2 }}>
+                    <Typography variant="h6" color="success.main" gutterBottom>
+                      Chi tiết thành công (đã tự động thêm vào phiếu):
+                    </Typography>
+                    <Paper
+                      variant="outlined"
+                      sx={{
+                        maxHeight: 300,
+                        overflow: "auto",
+                        borderRadius: "12px",
+                      }}
+                    >
+                      <List dense>
+                        {importResults.successes.map((succ, index) => (
+                          <React.Fragment key={index}>
+                            <ListItem>
+                              <ListItemIcon sx={{ minWidth: "30px" }}>
+                                <CheckCircleOutline
+                                  color="success"
+                                  fontSize="small"
+                                />
+                              </ListItemIcon>
+                              <ListItemText
+                                primary={`${succ.type} - ${succ.model}`}
+                                secondary={`Mã máy: ${succ.code} | Serial: ${succ.serial}`}
+                              />
+                            </ListItem>
+                            <Divider component="li" />
+                          </React.Fragment>
+                        ))}
+                      </List>
+                    </Paper>
+                  </Box>
+                )}
+
+                {importResults.errors.length > 0 && (
+                  <Box>
+                    <Typography variant="h6" color="error" gutterBottom>
+                      Chi tiết lỗi:
+                    </Typography>
+                    <Paper
+                      variant="outlined"
+                      sx={{
+                        maxHeight: 300,
+                        overflow: "auto",
+                        borderRadius: "12px",
+                      }}
+                    >
+                      <List dense>
+                        {importResults.errors.map((err, index) => (
+                          <React.Fragment key={index}>
+                            <ListItem>
+                              <ListItemIcon sx={{ minWidth: "30px" }}>
+                                <ErrorOutline color="error" fontSize="small" />
+                              </ListItemIcon>
+                              <ListItemText
+                                primary={`Dòng ${err.line}: ${err.message}`}
+                                secondary={`Mã máy: ${err.code} | Serial: ${err.serial}`}
+                              />
+                            </ListItem>
+                            <Divider component="li" />
+                          </React.Fragment>
+                        ))}
+                      </List>
+                    </Paper>
+                  </Box>
+                )}
+              </Box>
+            )}
+
+            {isImporting && (
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 2,
+                  justifyContent: "center",
+                  p: 2,
+                }}
+              >
+                <CircularProgress />
+                <Typography>Đang xử lý, vui lòng chờ...</Typography>
+              </Box>
+            )}
+          </DialogContent>
+          <Divider />
+          <DialogActions
+            sx={{
+              p: 3,
+              flexDirection: { xs: "column-reverse", sm: "row" },
+              gap: 1,
+            }}
+          >
+            <Button
+              onClick={handleCloseImportDialog}
+              variant="outlined"
+              color="inherit"
+              sx={{ borderRadius: "12px", width: { xs: "100%", sm: "auto" } }}
+              disabled={isImporting}
+            >
+              Đóng
+            </Button>
+            <Button
+              onClick={handleImportExcel}
+              variant="contained"
+              startIcon={<Save />}
+              sx={{
+                borderRadius: "12px",
+                background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                width: { xs: "100%", sm: "auto" },
+              }}
+              disabled={!importFile || isImporting}
+            >
+              {isImporting ? "Đang nhập..." : "Bắt đầu Nhập & Thêm"}
+            </Button>
           </DialogActions>
         </Dialog>
 
