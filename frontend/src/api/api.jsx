@@ -82,7 +82,26 @@ export const api = {
   // MARK: MACHINES
   machines: {
     getAll: async (params = {}) => {
-      const response = await httpConnect.get("/api/machines", { params });
+      const response = await httpConnect.get("/api/machines", {
+        params,
+        paramsSerializer: (params) => {
+          // Serializer tùy chỉnh để xử lý mảng đúng cách cho Express
+          const searchParams = new URLSearchParams();
+          for (const key in params) {
+            const value = params[key];
+
+            if (Array.isArray(value)) {
+              // Nếu là mảng, lặp qua và append từng giá trị
+              // Kết quả: &type_machines=A&type_machines=B
+              value.forEach((v) => searchParams.append(key, v));
+            } else if (value !== undefined && value !== null) {
+              // Nếu không phải mảng, append bình thường
+              searchParams.append(key, value);
+            }
+          }
+          return searchParams.toString();
+        },
+      });
       return response.data;
     },
     getStats: async () => {
@@ -91,6 +110,13 @@ export const api = {
     },
     getStatsByType: async () => {
       const response = await httpConnect.get("/api/machines/stats-by-type");
+      return response.data;
+    },
+    getDistinctValues: async (params = {}) => {
+      const response = await httpConnect.get(
+        "/api/machines/distinct-values",
+        { params } // Gửi tất cả params (field, location_uuid, department_uuid)
+      );
       return response.data;
     },
     getById: async (uuid) => {
@@ -229,14 +255,42 @@ export const api = {
     getMachinesByLocation: async (locationUuid, params = {}) => {
       const response = await httpConnect.get(
         `/api/locations/${locationUuid}/machines`,
-        { params }
+        {
+          params,
+          paramsSerializer: (params) => {
+            const searchParams = new URLSearchParams();
+            for (const key in params) {
+              const value = params[key];
+              if (Array.isArray(value)) {
+                value.forEach((v) => searchParams.append(key, v));
+              } else if (value !== undefined && value !== null) {
+                searchParams.append(key, value);
+              }
+            }
+            return searchParams.toString();
+          },
+        }
       );
       return response.data;
     },
     getMachinesByDepartment: async (departmentUuid, params = {}) => {
       const response = await httpConnect.get(
         `/api/departments/${departmentUuid}/machines`,
-        { params }
+        {
+          params,
+          paramsSerializer: (params) => {
+            const searchParams = new URLSearchParams();
+            for (const key in params) {
+              const value = params[key];
+              if (Array.isArray(value)) {
+                value.forEach((v) => searchParams.append(key, v));
+              } else if (value !== undefined && value !== null) {
+                searchParams.append(key, value);
+              }
+            }
+            return searchParams.toString();
+          },
+        }
       );
       return response.data;
     },

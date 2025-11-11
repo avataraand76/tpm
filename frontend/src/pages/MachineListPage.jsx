@@ -146,6 +146,21 @@ const initialColumnVisibility = {
   date_of_use: true,
 };
 
+const renderMultiSelectValue = (selected) => (
+  <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+    {selected.slice(0, 3).map(
+      (
+        value // Chỉ hiện 3 cái đầu
+      ) => (
+        <Chip key={value} label={value} size="small" />
+      )
+    )}
+    {selected.length > 3 && (
+      <Chip label={`+${selected.length - 3}`} size="small" />
+    )}
+  </Box>
+);
+
 const MachineListPage = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -226,17 +241,47 @@ const MachineListPage = () => {
   const [isImporting, setIsImporting] = useState(false);
   const [importResults, setImportResults] = useState(null);
   const [fileName, setFileName] = useState("");
+  const tableCardRef = React.useRef(null);
+
+  // State for filter dropdown data
+  const [typeOptions, setTypeOptions] = useState([]);
+  const [modelOptions, setModelOptions] = useState([]);
+  const [manufacturerOptions, setManufacturerOptions] = useState([]);
+  const [locationOptions, setLocationOptions] = useState([]);
+
+  // State for selected filter values
+  const [filters, setFilters] = useState({
+    type_machines: [],
+    model_machines: [],
+    manufacturers: [],
+    name_locations: [],
+    current_status: [],
+    borrow_status: [],
+  });
 
   const fetchMachines = async (searchQuery = "") => {
     try {
       setLoading(true);
       setError(null);
 
-      const result = await api.machines.getAll({
+      const apiParams = {
         page: page,
         limit: rowsPerPage,
         search: searchQuery,
+      };
+
+      // Thêm các bộ lọc vào params NẾU chúng có giá trị
+      Object.keys(filters).forEach((key) => {
+        if (filters[key] && filters[key].length > 0) {
+          if (key === "borrow_status") {
+            apiParams["is_borrowed_or_rented_or_borrowed_out"] = filters[key];
+          } else {
+            apiParams[key] = filters[key];
+          }
+        }
       });
+
+      const result = await api.machines.getAll(apiParams);
 
       if (result.success) {
         setMachines(result.data);
@@ -274,10 +319,41 @@ const MachineListPage = () => {
     }
   };
 
+  const fetchFilterOptions = async () => {
+    try {
+      const [typeRes, modelRes, manuRes, locRes] = await Promise.all([
+        api.machines.getDistinctValues({ field: "type_machine" }),
+        api.machines.getDistinctValues({ field: "model_machine" }),
+        api.machines.getDistinctValues({ field: "manufacturer" }),
+        api.machines.getDistinctValues({ field: "name_location" }),
+      ]);
+      if (typeRes.success) setTypeOptions(typeRes.data);
+      if (modelRes.success) setModelOptions(modelRes.data);
+      if (manuRes.success) setManufacturerOptions(manuRes.data);
+      if (locRes.success) setLocationOptions(locRes.data);
+    } catch (err) {
+      console.error("Error fetching filter options:", err);
+      // Hiển thị thông báo lỗi cho người dùng (tùy chọn)
+      showNotification(
+        "error",
+        "Lỗi tải bộ lọc",
+        "Không thể tải danh sách cho bộ lọc chi tiết."
+      );
+    }
+  };
+
   useEffect(() => {
+    // Tải danh sách máy và các thống kê
     fetchMachines(searchTerm);
     fetchStats();
     fetchTypeStats();
+
+    fetchFilterOptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    fetchMachines(searchTerm);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, rowsPerPage]);
 
@@ -290,11 +366,25 @@ const MachineListPage = () => {
 
     return () => clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchTerm]);
+  }, [searchTerm, filters]);
+
+  const handleFilterChange = (event) => {
+    const { name, value } = event.target;
+    setFilters((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+    // useEffect [searchTerm, filters] sẽ tự động kích hoạt refetch
+  };
 
   const handlePageChange = (event, newPage) => {
     setPage(newPage);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    if (tableCardRef.current) {
+      tableCardRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
   };
 
   const handleRowsPerPageChange = (event) => {
@@ -992,6 +1082,69 @@ const MachineListPage = () => {
   const visibleColumnCount =
     1 + Object.values(columnVisibility).filter((v) => v).length;
 
+  /**
+   * Hàm mới: Xử lý khi nhấp vào thẻ thống kê
+   * @param {string[]} [currentStatus=[]] - Mảng các trạng thái chính (ví dụ: ['available'])
+   * @param {string[]} [borrowStatus=[]] - Mảng các trạng thái mượn/thuê (ví dụ: ['borrowed'])
+   */
+  const handleStatusFilterClick = (currentStatus = [], borrowStatus = []) => {
+    setFilters((prev) => ({
+      ...prev,
+      // Giữ nguyên các bộ lọc dropdown
+      type_machines: prev.type_machines,
+      model_machines: prev.model_machines,
+      manufacturers: prev.manufacturers,
+      name_locations: prev.name_locations,
+      // Cập nhật bộ lọc trạng thái
+      current_status: currentStatus,
+      borrow_status: borrowStatus,
+    }));
+    setPage(1); // Quay về trang 1 khi lọc
+    // useEffect [searchTerm, filters] sẽ tự động gọi fetchMachines
+
+    if (tableCardRef.current) {
+      tableCardRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "start", // Cuộn lên đầu của element
+      });
+    }
+  };
+
+  /**
+   * Hàm mới: Kiểm tra xem thẻ có đang được chọn (active) hay không
+   */
+  const isStatusFilterActive = (current = [], borrow = []) => {
+    // Helper để so sánh 2 mảng (không quan tâm thứ tự)
+    const arraysEqual = (a, b) => {
+      if (a.length !== b.length) return false;
+      const sortedA = [...a].sort();
+      const sortedB = [...b].sort();
+      return sortedA.every((val, index) => val === sortedB[index]);
+    };
+
+    return (
+      arraysEqual(filters.current_status, current) &&
+      arraysEqual(filters.borrow_status, borrow)
+    );
+  };
+
+  // Định nghĩa style cho thẻ active/inactive
+  const activeCardSx = {
+    cursor: "pointer",
+    border: `3px solid ${theme.palette.primary.main}`, // Viền màu tím
+    boxShadow: "0 8px 25px rgba(102, 126, 234, 0.3)", // Đổ bóng
+    transform: "translateY(-4px)", // Nâng lên
+    transition: "all 0.2s ease",
+  };
+  const inactiveCardSx = {
+    cursor: "pointer",
+    border: "1px solid rgba(0, 0, 0, 0.05)",
+    transition: "all 0.2s ease",
+    "&:hover": {
+      transform: "translateY(-2px)",
+      boxShadow: "0 4px 12px rgba(0,0,0,0.05)", // Bóng mờ khi hover
+    },
+  };
   return (
     <>
       <NavigationBar />
@@ -1039,6 +1192,7 @@ const MachineListPage = () => {
           <Grid size={{ xs: 12, md: 5, lg: 4 }}>
             <Card
               elevation={0}
+              onClick={() => handleStatusFilterClick([], [])}
               sx={{
                 borderRadius: "20px",
                 background:
@@ -1048,6 +1202,9 @@ const MachineListPage = () => {
                 display: "flex",
                 flexDirection: "column",
                 justifyContent: "center",
+                ...(isStatusFilterActive([], [])
+                  ? activeCardSx
+                  : inactiveCardSx),
               }}
             >
               <CardContent sx={{ textAlign: "center", p: 4 }}>
@@ -1077,10 +1234,14 @@ const MachineListPage = () => {
               <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
                 <Card
                   elevation={0}
+                  onClick={() => handleStatusFilterClick(["available"], [])}
                   sx={{
                     borderRadius: "20px",
                     background: "#2e7d3211",
                     border: "1px solid rgba(0, 0, 0, 0.05)",
+                    ...(isStatusFilterActive(["available"], [])
+                      ? activeCardSx
+                      : inactiveCardSx),
                   }}
                 >
                   <CardContent sx={{ textAlign: "center", py: 3 }}>
@@ -1101,10 +1262,14 @@ const MachineListPage = () => {
               <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
                 <Card
                   elevation={0}
+                  onClick={() => handleStatusFilterClick(["in_use"], [])}
                   sx={{
                     borderRadius: "20px",
                     background: "#1976d211",
                     border: "1px solid rgba(0, 0, 0, 0.05)",
+                    ...(isStatusFilterActive(["in_use"], [])
+                      ? activeCardSx
+                      : inactiveCardSx),
                   }}
                 >
                   <CardContent sx={{ textAlign: "center", py: 3 }}>
@@ -1125,10 +1290,14 @@ const MachineListPage = () => {
               <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
                 <Card
                   elevation={0}
+                  onClick={() => handleStatusFilterClick(["maintenance"], [])}
                   sx={{
                     borderRadius: "20px",
                     background: "#ff980011",
                     border: "1px solid rgba(0, 0, 0, 0.05)",
+                    ...(isStatusFilterActive(["maintenance"], [])
+                      ? activeCardSx
+                      : inactiveCardSx),
                   }}
                 >
                   <CardContent sx={{ textAlign: "center", py: 3 }}>
@@ -1149,10 +1318,14 @@ const MachineListPage = () => {
               <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
                 <Card
                   elevation={0}
+                  onClick={() => handleStatusFilterClick(["liquidation"], [])}
                   sx={{
                     borderRadius: "20px",
                     background: "#f4433611",
                     border: "1px solid rgba(0, 0, 0, 0.05)",
+                    ...(isStatusFilterActive(["liquidation"], [])
+                      ? activeCardSx
+                      : inactiveCardSx),
                   }}
                 >
                   <CardContent sx={{ textAlign: "center", py: 3 }}>
@@ -1173,10 +1346,28 @@ const MachineListPage = () => {
               <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
                 <Card
                   elevation={0}
+                  onClick={() =>
+                    handleStatusFilterClick(
+                      [
+                        // "disabled",
+                        "broken",
+                      ],
+                      []
+                    )
+                  }
                   sx={{
                     borderRadius: "20px",
                     background: "#9e9e9e11",
                     border: "1px solid rgba(0, 0, 0, 0.05)",
+                    ...(isStatusFilterActive(
+                      [
+                        // "disabled",
+                        "broken",
+                      ],
+                      []
+                    )
+                      ? activeCardSx
+                      : inactiveCardSx),
                   }}
                 >
                   <CardContent sx={{ textAlign: "center", py: 3 }}>
@@ -1185,10 +1376,12 @@ const MachineListPage = () => {
                       fontWeight="bold"
                       color="#9e9e9e"
                     >
-                      {(stats.disabled || 0) + "/" + (stats.broken || 0)}
+                      {/* {stats.disabled || 0}/ */}
+                      {stats.broken || 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      Vô hiệu hóa/Máy hư
+                      {/* Vô hiệu hóa/ */}
+                      Máy hư
                     </Typography>
                   </CardContent>
                 </Card>
@@ -1199,10 +1392,14 @@ const MachineListPage = () => {
               <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
                 <Card
                   elevation={0}
+                  onClick={() => handleStatusFilterClick([], ["rented"])}
                   sx={{
                     borderRadius: "20px",
                     background: "#673ab711",
                     border: "1px solid rgba(0, 0, 0, 0.05)",
+                    ...(isStatusFilterActive([], ["rented"])
+                      ? activeCardSx
+                      : inactiveCardSx),
                   }}
                 >
                   <CardContent sx={{ textAlign: "center", py: 3 }}>
@@ -1223,10 +1420,16 @@ const MachineListPage = () => {
               <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
                 <Card
                   elevation={0}
+                  onClick={() =>
+                    handleStatusFilterClick(["disabled"], ["rented_return"])
+                  }
                   sx={{
                     borderRadius: "20px",
                     background: "#673ab711", // Màu tím thuê
                     border: "1px solid rgba(0, 0, 0, 0.05)",
+                    ...(isStatusFilterActive(["disabled"], ["rented_return"])
+                      ? activeCardSx
+                      : inactiveCardSx),
                   }}
                 >
                   <CardContent sx={{ textAlign: "center", py: 3 }}>
@@ -1247,10 +1450,14 @@ const MachineListPage = () => {
               <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
                 <Card
                   elevation={0}
+                  onClick={() => handleStatusFilterClick([], ["borrowed"])}
                   sx={{
                     borderRadius: "20px",
                     background: "#03a9f411",
                     border: "1px solid rgba(0, 0, 0, 0.05)",
+                    ...(isStatusFilterActive([], ["borrowed"])
+                      ? activeCardSx
+                      : inactiveCardSx),
                   }}
                 >
                   <CardContent sx={{ textAlign: "center", py: 3 }}>
@@ -1271,10 +1478,16 @@ const MachineListPage = () => {
               <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
                 <Card
                   elevation={0}
+                  onClick={() =>
+                    handleStatusFilterClick(["disabled"], ["borrowed_return"])
+                  }
                   sx={{
                     borderRadius: "20px",
                     background: "#03a9f411", // Màu xanh mượn
                     border: "1px solid rgba(0, 0, 0, 0.05)",
+                    ...(isStatusFilterActive(["disabled"], ["borrowed_return"])
+                      ? activeCardSx
+                      : inactiveCardSx),
                   }}
                 >
                   <CardContent sx={{ textAlign: "center", py: 3 }}>
@@ -1295,10 +1508,16 @@ const MachineListPage = () => {
               <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
                 <Card
                   elevation={0}
+                  onClick={() =>
+                    handleStatusFilterClick(["disabled"], ["borrowed_out"])
+                  }
                   sx={{
                     borderRadius: "20px",
                     background: "#00bcd411",
                     border: "1px solid rgba(0, 0, 0, 0.05)",
+                    ...(isStatusFilterActive(["disabled"], ["borrowed_out"])
+                      ? activeCardSx
+                      : inactiveCardSx),
                   }}
                 >
                   <CardContent sx={{ textAlign: "center", py: 3 }}>
@@ -1347,7 +1566,6 @@ const MachineListPage = () => {
                             py: 0.5,
                           }}
                         >
-                          {/* >>> MARK: THAY ĐỔI TỪ ĐÂY */}
                           <ListItemText
                             primary={
                               <Box
@@ -1379,7 +1597,6 @@ const MachineListPage = () => {
                               </Box>
                             }
                           />
-                          {/* <<< MARK: THAY ĐỔI ĐẾN ĐÂY */}
                         </ListItem>
                       ))}
                   </List>
@@ -1583,6 +1800,7 @@ const MachineListPage = () => {
                     fetchMachines(searchTerm);
                     fetchStats();
                     fetchTypeStats();
+                    fetchFilterOptions();
                   }}
                   sx={{
                     borderRadius: "12px",
@@ -1601,6 +1819,123 @@ const MachineListPage = () => {
                 </Button>
               </Stack>
             </Stack>
+          </CardContent>
+        </Card>
+
+        <Card
+          elevation={0}
+          sx={{
+            mb: 3,
+            borderRadius: "20px",
+            border: "1px solid rgba(0, 0, 0, 0.05)",
+          }}
+        >
+          <CardContent sx={{ p: 3, "&:last-child": { pb: 3 } }}>
+            <Typography
+              variant="h6"
+              gutterBottom
+              sx={{ fontWeight: 600, mb: 2 }}
+            >
+              Bộ lọc chi tiết
+            </Typography>
+            <Grid container spacing={2}>
+              {/* Filter: Loại máy */}
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Loại máy</InputLabel>
+                  <Select
+                    multiple
+                    name="type_machines"
+                    value={filters.type_machines}
+                    onChange={handleFilterChange}
+                    label="Loại máy"
+                    renderValue={renderMultiSelectValue}
+                    sx={{ borderRadius: "12px" }}
+                  >
+                    {typeOptions.map((name) => (
+                      <MenuItem key={name} value={name}>
+                        <Checkbox
+                          checked={filters.type_machines.indexOf(name) > -1}
+                        />
+                        <ListItemText primary={name} />
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              {/* Filter: Model */}
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Model</InputLabel>
+                  <Select
+                    multiple
+                    name="model_machines"
+                    value={filters.model_machines}
+                    onChange={handleFilterChange}
+                    label="Model"
+                    renderValue={renderMultiSelectValue}
+                    sx={{ borderRadius: "12px" }}
+                  >
+                    {modelOptions.map((name) => (
+                      <MenuItem key={name} value={name}>
+                        <Checkbox
+                          checked={filters.model_machines.indexOf(name) > -1}
+                        />
+                        <ListItemText primary={name} />
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              {/* Filter: Hãng SX */}
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Hãng SX</InputLabel>
+                  <Select
+                    multiple
+                    name="manufacturers"
+                    value={filters.manufacturers}
+                    onChange={handleFilterChange}
+                    label="Hãng SX"
+                    renderValue={renderMultiSelectValue}
+                    sx={{ borderRadius: "12px" }}
+                  >
+                    {manufacturerOptions.map((name) => (
+                      <MenuItem key={name} value={name}>
+                        <Checkbox
+                          checked={filters.manufacturers.indexOf(name) > -1}
+                        />
+                        <ListItemText primary={name} />
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              {/* Filter: Vị trí */}
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Vị trí hiện tại</InputLabel>
+                  <Select
+                    multiple
+                    name="name_locations"
+                    value={filters.name_locations}
+                    onChange={handleFilterChange}
+                    label="Vị trí hiện tại"
+                    renderValue={renderMultiSelectValue}
+                    sx={{ borderRadius: "12px" }}
+                  >
+                    {locationOptions.map((name) => (
+                      <MenuItem key={name} value={name}>
+                        <Checkbox
+                          checked={filters.name_locations.indexOf(name) > -1}
+                        />
+                        <ListItemText primary={name} />
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+            </Grid>
           </CardContent>
         </Card>
 
@@ -1629,6 +1964,7 @@ const MachineListPage = () => {
           </Alert>
         ) : (
           <Card
+            ref={tableCardRef}
             elevation={0}
             sx={{
               borderRadius: "20px",
@@ -2601,9 +2937,9 @@ const MachineListPage = () => {
                     >
                       <MenuItem value="available">Sẵn sàng</MenuItem>
                       <MenuItem value="in_use">Đang sử dụng</MenuItem>
-                      <MenuItem value="maintenance">Bảo trì</MenuItem>
+                      {/* <MenuItem value="maintenance">Bảo trì</MenuItem>
                       <MenuItem value="liquidation">Thanh lý</MenuItem>
-                      <MenuItem value="disabled">Vô hiệu hóa</MenuItem>
+                      <MenuItem value="disabled">Vô hiệu hóa</MenuItem> */}
                       <MenuItem value="broken">Máy hư</MenuItem>
                     </Select>
                   </FormControl>

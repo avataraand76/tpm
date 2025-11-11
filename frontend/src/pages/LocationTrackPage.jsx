@@ -1,6 +1,6 @@
 // frontend/src/pages/LocationTrackPage.jsx
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Container,
   Typography,
@@ -33,6 +33,11 @@ import {
   CardContent,
   useTheme,
   useMediaQuery,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Checkbox,
 } from "@mui/material";
 import {
   LocationOn,
@@ -44,14 +49,23 @@ import {
 import NavigationBar from "../components/NavigationBar";
 import { api } from "../api/api";
 
+const renderMultiSelectValue = (selected) => (
+  <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+    {selected.slice(0, 3).map((value) => (
+      <Chip key={value} label={value} size="small" />
+    ))}
+    {selected.length > 3 && (
+      <Chip label={`+${selected.length - 3}`} size="small" />
+    )}
+  </Box>
+);
+
 const LocationTrackPage = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  // <<< BẮT ĐẦU THÊM MỚI STATE CHO ĐƠN VỊ >>>
   const [departments, setDepartments] = useState([]);
   const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [loadingDepartments, setLoadingDepartments] = useState(false);
-  // <<< KẾT THÚC THÊM MỚI STATE CHO ĐƠN VỊ >>>
 
   const [locations, setLocations] = useState([]);
   const [selectedLocation, setSelectedLocation] = useState(null);
@@ -86,6 +100,22 @@ const LocationTrackPage = () => {
   const [selectedMachine, setSelectedMachine] = useState(null);
   const [historyData, setHistoryData] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+
+  const filterCardRef = useRef(null);
+  // State for filter dropdown data
+  const [typeOptions, setTypeOptions] = useState([]);
+  const [modelOptions, setModelOptions] = useState([]);
+  const [manufacturerOptions, setManufacturerOptions] = useState([]);
+
+  // State for selected filter values
+  const [filters, setFilters] = useState({
+    type_machines: [],
+    model_machines: [],
+    manufacturers: [],
+    name_locations: [], // Dùng khi xem theo Đơn vị
+    current_status: [], // Dùng cho cả 2
+    borrow_status: [], // Dùng cho cả 2
+  });
 
   // ĐỊNH NGHĨA CONFIG TRẠNG THÁI (ĐỒNG BỘ VỚI TicketManagementPage.jsx)
   const STATUS_CONFIG = {
@@ -165,7 +195,18 @@ const LocationTrackPage = () => {
       setPage(pageNumber);
 
       try {
-        const params = { page: pageNumber, limit: limitNumber };
+        const { borrow_status, ...filtersForLocation } = filters; // Bỏ qua 'name_locations' khi đã chọn vị trí
+
+        const params = {
+          page: pageNumber,
+          limit: limitNumber,
+          ...filtersForLocation,
+        };
+
+        // Map borrow_status sang tên param của backend
+        if (borrow_status && borrow_status.length > 0) {
+          params.is_borrowed_or_rented_or_borrowed_out = borrow_status;
+        }
         // Giả định api.tracking.getMachinesByLocation đã được cập nhật để chấp nhận params
         const response = await api.tracking.getMachinesByLocation(
           locationUuid,
@@ -196,7 +237,7 @@ const LocationTrackPage = () => {
         setLoadingMachines(false);
       }
     },
-    [limit]
+    [limit, filters]
   );
 
   const fetchMachineHistory = useCallback(async (machineUuid) => {
@@ -239,7 +280,17 @@ const LocationTrackPage = () => {
       setPage(pageNumber);
 
       try {
-        const params = { page: pageNumber, limit: limitNumber };
+        const params = {
+          page: pageNumber,
+          limit: limitNumber,
+          ...filters,
+        };
+
+        // Map borrow_status sang tên param của backend
+        if (filters.borrow_status && filters.borrow_status.length > 0) {
+          params.is_borrowed_or_rented_or_borrowed_out = filters.borrow_status;
+        }
+        delete params.borrow_status; // Xóa key cũ
         const response = await api.tracking.getMachinesByDepartment(
           departmentUuid,
           params
@@ -258,7 +309,7 @@ const LocationTrackPage = () => {
         setLoadingMachines(false);
       }
     },
-    [limit]
+    [limit, filters]
   );
 
   const fetchDepartmentTypeStats = useCallback(async (departmentUuid) => {
@@ -277,11 +328,41 @@ const LocationTrackPage = () => {
     }
   }, []);
 
-  // <<< BẮT ĐẦU SỬA ĐỔI useEffect >>>
+  const fetchFilterOptions = useCallback(async () => {
+    let params = {};
+    if (selectedLocation) {
+      params.location_uuid = selectedLocation.uuid_location;
+    } else if (selectedDepartment) {
+      params.department_uuid = selectedDepartment.uuid_department;
+    } else {
+      // Nếu không chọn gì, xóa các tùy chọn và không gọi API
+      setTypeOptions([]);
+      setModelOptions([]);
+      setManufacturerOptions([]);
+      return;
+    }
+    try {
+      // Tải song song các tùy chọn chung
+      const [typeRes, modelRes, manuRes] = await Promise.all([
+        api.machines.getDistinctValues({ field: "type_machine", ...params }),
+        api.machines.getDistinctValues({ field: "model_machine", ...params }),
+        api.machines.getDistinctValues({ field: "manufacturer", ...params }),
+      ]);
+      if (typeRes.success) setTypeOptions(typeRes.data);
+      if (modelRes.success) setModelOptions(modelRes.data);
+      if (manuRes.success) setManufacturerOptions(manuRes.data);
+    } catch (err) {
+      console.error("Error fetching filter options:", err);
+    }
+  }, [selectedDepartment, selectedLocation]);
+
   useEffect(() => {
-    // fetchLocations(); // <-- XÓA DÒNG NÀY
-    fetchDepartments(); // <-- THAY BẰNG DÒNG NÀY
-  }, [fetchDepartments]); // <-- CẬP NHẬT DEPENDENCY
+    fetchDepartments();
+  }, [fetchDepartments]);
+
+  useEffect(() => {
+    fetchFilterOptions();
+  }, [fetchFilterOptions]);
 
   // THÊM useEffect NÀY: Tải Vị trí khi Đơn vị thay đổi
   useEffect(() => {
@@ -291,7 +372,6 @@ const LocationTrackPage = () => {
       fetchLocations(null); // Xóa danh sách vị trí nếu không chọn đơn vị
     }
   }, [selectedDepartment, fetchLocations]);
-  // <<< KẾT THÚC SỬA ĐỔI useEffect >>>
 
   // useEffect để tự động tải lại máy móc khi `selectedLocation` hoặc `page` thay đổi
   useEffect(() => {
@@ -329,27 +409,45 @@ const LocationTrackPage = () => {
       setTypeStats([]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDepartment, selectedLocation, page, limit]);
+  }, [selectedDepartment, selectedLocation, page, limit, filters]);
 
-  // --- Handlers ---
+  const handleFilterChange = (event) => {
+    const { name, value } = event.target;
+    setFilters((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+    setPage(1); // Reset về trang 1 khi lọc
+  };
 
-  // <<< BẮT ĐẦU SỬA ĐỔI HANDLERS >>>
-  // THÊM HANDLER NÀY
   const handleDepartmentChange = (department) => {
     setSelectedDepartment(department);
     // Reset vị trí và máy móc khi đổi đơn vị
     setSelectedLocation(null);
     setMachinesAtLocation([]);
     setPage(1);
+    setFilters({
+      type_machines: [],
+      model_machines: [],
+      manufacturers: [],
+      name_locations: [],
+      current_status: [],
+      borrow_status: [],
+    });
   };
 
-  // SỬA HANDLER NÀY (nhận object thay vì event)
   const handleLocationChange = (location) => {
     setSelectedLocation(location);
     // Reset phân trang và danh sách khi thay đổi vị trí
     setPage(1);
+    setFilters((prev) => ({
+      ...prev,
+      type_machines: [],
+      model_machines: [],
+      manufacturers: [],
+      name_locations: [],
+    }));
   };
-  // <<< KẾT THÚC SỬA ĐỔI HANDLERS >>>
 
   const handlePageChange = (event, value) => {
     // Chỉ cập nhật state page, useEffect sẽ tự động gọi fetchMachinesAtLocation
@@ -370,7 +468,9 @@ const LocationTrackPage = () => {
   const handleRefresh = () => {
     // 1. Tải lại danh sách Đơn vị
     fetchDepartments();
-    fetchLocations(selectedDepartment.uuid_department);
+    if (selectedDepartment) {
+      fetchLocations(selectedDepartment.uuid_department);
+    }
 
     // 2. Tải lại dữ liệu máy móc dựa trên lựa chọn hiện tại
     if (selectedLocation) {
@@ -388,6 +488,67 @@ const LocationTrackPage = () => {
       setPage(1);
       setTypeStats([]);
     }
+  };
+
+  /**
+   * Hàm mới: Xử lý khi nhấp vào thẻ thống kê
+   */
+  const handleStatusFilterClick = (currentStatus = [], borrowStatus = []) => {
+    setFilters((prev) => ({
+      ...prev,
+      // Giữ nguyên các bộ lọc dropdown
+      type_machines: prev.type_machines,
+      model_machines: prev.model_machines,
+      manufacturers: prev.manufacturers,
+      name_locations: prev.name_locations,
+      // Cập nhật bộ lọc trạng thái
+      current_status: currentStatus,
+      borrow_status: borrowStatus,
+    }));
+    setPage(1); // Quay về trang 1 khi lọc
+
+    // Cuộn xuống bảng
+    if (filterCardRef.current) {
+      filterCardRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  };
+
+  /**
+   * Hàm mới: Kiểm tra xem thẻ có đang được chọn (active) hay không
+   */
+  const isStatusFilterActive = (current = [], borrow = []) => {
+    const arraysEqual = (a, b) => {
+      if (a.length !== b.length) return false;
+      const sortedA = [...a].sort();
+      const sortedB = [...b].sort();
+      return sortedA.every((val, index) => val === sortedB[index]);
+    };
+
+    return (
+      arraysEqual(filters.current_status, current) &&
+      arraysEqual(filters.borrow_status, borrow)
+    );
+  };
+
+  // Định nghĩa style cho thẻ active/inactive
+  const activeCardSx = {
+    cursor: "pointer",
+    border: `3px solid ${theme.palette.primary.main}`, // Viền màu tím
+    boxShadow: "0 8px 25px rgba(102, 126, 234, 0.3)", // Đổ bóng
+    transform: "translateY(-4px)", // Nâng lên
+    transition: "all 0.2s ease",
+  };
+  const inactiveCardSx = {
+    cursor: "pointer",
+    border: "1px solid rgba(0, 0, 0, 0.05)",
+    transition: "all 0.2s ease",
+    "&:hover": {
+      transform: "translateY(-2px)",
+      boxShadow: "0 4px 12px rgba(0,0,0,0.05)", // Bóng mờ khi hover
+    },
   };
 
   // --- Render Functions ---
@@ -408,7 +569,6 @@ const LocationTrackPage = () => {
     }
 
     if (!selectedDepartment) {
-      // Sửa điều kiện
       return (
         <Alert severity="info" sx={{ borderRadius: "12px", mt: 1 }}>
           <Typography variant="body1" sx={{ fontWeight: 500 }}>
@@ -417,6 +577,7 @@ const LocationTrackPage = () => {
         </Alert>
       );
     }
+
     const stats = locationStats;
     const renderStatsCards = () => (
       <Grid container spacing={2} sx={{ mb: 3 }}>
@@ -424,6 +585,7 @@ const LocationTrackPage = () => {
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <Card
             elevation={0}
+            onClick={() => handleStatusFilterClick([], [])}
             sx={{
               borderRadius: "20px",
               background:
@@ -433,6 +595,7 @@ const LocationTrackPage = () => {
               display: "flex",
               flexDirection: "column",
               justifyContent: "center",
+              ...(isStatusFilterActive([], []) ? activeCardSx : inactiveCardSx),
             }}
           >
             <CardContent sx={{ textAlign: "center", p: 3 }}>
@@ -457,7 +620,14 @@ const LocationTrackPage = () => {
             <Grid size={{ xs: 6, md: 2.4 }}>
               <Card
                 elevation={0}
-                sx={{ borderRadius: "20px", background: "#2e7d3211" }}
+                onClick={() => handleStatusFilterClick(["available"], [])}
+                sx={{
+                  borderRadius: "20px",
+                  background: "#2e7d3211",
+                  ...(isStatusFilterActive(["available"], [])
+                    ? activeCardSx
+                    : inactiveCardSx),
+                }}
               >
                 <CardContent sx={{ textAlign: "center", p: 2 }}>
                   <Typography
@@ -476,7 +646,14 @@ const LocationTrackPage = () => {
             <Grid size={{ xs: 6, md: 2.4 }}>
               <Card
                 elevation={0}
-                sx={{ borderRadius: "20px", background: "#1976d211" }}
+                onClick={() => handleStatusFilterClick(["in_use"], [])}
+                sx={{
+                  borderRadius: "20px",
+                  background: "#1976d211",
+                  ...(isStatusFilterActive(["in_use"], [])
+                    ? activeCardSx
+                    : inactiveCardSx),
+                }}
               >
                 <CardContent sx={{ textAlign: "center", p: 2 }}>
                   <Typography
@@ -495,7 +672,14 @@ const LocationTrackPage = () => {
             <Grid size={{ xs: 6, md: 2.4 }}>
               <Card
                 elevation={0}
-                sx={{ borderRadius: "20px", background: "#ff980011" }}
+                onClick={() => handleStatusFilterClick(["maintenance"], [])}
+                sx={{
+                  borderRadius: "20px",
+                  background: "#ff980011",
+                  ...(isStatusFilterActive(["maintenance"], [])
+                    ? activeCardSx
+                    : inactiveCardSx),
+                }}
               >
                 <CardContent sx={{ textAlign: "center", p: 2 }}>
                   <Typography
@@ -514,7 +698,14 @@ const LocationTrackPage = () => {
             <Grid size={{ xs: 6, md: 2.4 }}>
               <Card
                 elevation={0}
-                sx={{ borderRadius: "20px", background: "#f4433611" }}
+                onClick={() => handleStatusFilterClick(["liquidation"], [])}
+                sx={{
+                  borderRadius: "20px",
+                  background: "#f4433611",
+                  ...(isStatusFilterActive(["liquidation"], [])
+                    ? activeCardSx
+                    : inactiveCardSx),
+                }}
               >
                 <CardContent sx={{ textAlign: "center", p: 2 }}>
                   <Typography
@@ -533,7 +724,28 @@ const LocationTrackPage = () => {
             <Grid size={{ xs: 6, md: 2.4 }}>
               <Card
                 elevation={0}
-                sx={{ borderRadius: "20px", background: "#9e9e9e11" }}
+                onClick={() =>
+                  handleStatusFilterClick(
+                    [
+                      // "disabled",
+                      "broken",
+                    ],
+                    []
+                  )
+                }
+                sx={{
+                  borderRadius: "20px",
+                  background: "#9e9e9e11",
+                  ...(isStatusFilterActive(
+                    [
+                      // "disabled",
+                      "broken",
+                    ],
+                    []
+                  )
+                    ? activeCardSx
+                    : inactiveCardSx),
+                }}
               >
                 <CardContent sx={{ textAlign: "center", p: 2 }}>
                   <Typography
@@ -541,10 +753,12 @@ const LocationTrackPage = () => {
                     fontWeight="bold"
                     color="#9e9e9e"
                   >
-                    {stats.disabled || 0}/{stats.broken || 0}
+                    {/* {stats.disabled || 0}/ */}
+                    {stats.broken || 0}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    Vô hiệu hóa/Hư
+                    {/* Vô hiệu hóa/ */}
+                    Máy hư
                   </Typography>
                 </CardContent>
               </Card>
@@ -553,7 +767,14 @@ const LocationTrackPage = () => {
             <Grid size={{ xs: 6, md: 2.4 }}>
               <Card
                 elevation={0}
-                sx={{ borderRadius: "20px", background: "#673ab711" }}
+                onClick={() => handleStatusFilterClick([], ["rented"])}
+                sx={{
+                  borderRadius: "20px",
+                  background: "#673ab711",
+                  ...(isStatusFilterActive([], ["rented"])
+                    ? activeCardSx
+                    : inactiveCardSx),
+                }}
               >
                 <CardContent sx={{ textAlign: "center", p: 2 }}>
                   <Typography
@@ -572,7 +793,16 @@ const LocationTrackPage = () => {
             <Grid size={{ xs: 6, md: 2.4 }}>
               <Card
                 elevation={0}
-                sx={{ borderRadius: "20px", background: "#673ab711" }}
+                onClick={() =>
+                  handleStatusFilterClick(["disabled"], ["rented_return"])
+                }
+                sx={{
+                  borderRadius: "20px",
+                  background: "#673ab711",
+                  ...(isStatusFilterActive(["disabled"], ["rented_return"])
+                    ? activeCardSx
+                    : inactiveCardSx),
+                }}
               >
                 <CardContent sx={{ textAlign: "center", p: 2 }}>
                   <Typography
@@ -591,7 +821,14 @@ const LocationTrackPage = () => {
             <Grid size={{ xs: 6, md: 2.4 }}>
               <Card
                 elevation={0}
-                sx={{ borderRadius: "20px", background: "#03a9f411" }}
+                onClick={() => handleStatusFilterClick([], ["borrowed"])}
+                sx={{
+                  borderRadius: "20px",
+                  background: "#03a9f411",
+                  ...(isStatusFilterActive([], ["borrowed"])
+                    ? activeCardSx
+                    : inactiveCardSx),
+                }}
               >
                 <CardContent sx={{ textAlign: "center", p: 2 }}>
                   <Typography
@@ -610,7 +847,16 @@ const LocationTrackPage = () => {
             <Grid size={{ xs: 6, md: 2.4 }}>
               <Card
                 elevation={0}
-                sx={{ borderRadius: "20px", background: "#03a9f411" }}
+                onClick={() =>
+                  handleStatusFilterClick(["disabled"], ["borrowed_return"])
+                }
+                sx={{
+                  borderRadius: "20px",
+                  background: "#03a9f411",
+                  ...(isStatusFilterActive(["disabled"], ["borrowed_return"])
+                    ? activeCardSx
+                    : inactiveCardSx),
+                }}
               >
                 <CardContent sx={{ textAlign: "center", p: 2 }}>
                   <Typography
@@ -629,7 +875,16 @@ const LocationTrackPage = () => {
             <Grid size={{ xs: 6, md: 2.4 }}>
               <Card
                 elevation={0}
-                sx={{ borderRadius: "20px", background: "#00bcd411" }}
+                onClick={() =>
+                  handleStatusFilterClick(["disabled"], ["borrowed_out"])
+                }
+                sx={{
+                  borderRadius: "20px",
+                  background: "#00bcd411",
+                  ...(isStatusFilterActive(["disabled"], ["borrowed_out"])
+                    ? activeCardSx
+                    : inactiveCardSx),
+                }}
               >
                 <CardContent sx={{ textAlign: "center", p: 2 }}>
                   <Typography
@@ -650,38 +905,23 @@ const LocationTrackPage = () => {
       </Grid>
     );
 
-    if (machinesAtLocation.length === 0 && !loadingMachines) {
-      return (
-        <>
-          {renderStatsCards()}
-          {/* Vẫn hiển thị stats dù không có máy */}
-          <Typography
-            variant="body1"
-            color="text.secondary"
-            align="center"
-            sx={{ mt: 3 }}
-          >
-            {/* Thêm thông báo động */}
-            {selectedLocation
-              ? "Không có máy móc nào tại vị trí này."
-              : "Không có máy móc nào tại đơn vị này."}
-          </Typography>
-        </>
-      );
-    }
+    // Tách `locationOptions` ra khỏi return
+    const locationOptions = locations.map((loc) => loc.name_location);
 
+    // Bọc toàn bộ return trong <React.Fragment>
     return (
       <>
+        {/* 1. Luôn hiển thị Stats Cards */}
         {renderStatsCards()}
+
+        {/* 2. Luôn hiển thị Thống kê loại máy (nếu có) */}
         {typeStats.length > 0 && (
           <Grid size={12} sx={{ mt: 3, mb: 3 }}>
-            {" "}
-            {/* Tăng mt để tách biệt khỏi hàng trên */}
             <Card
               elevation={0}
               sx={{
                 borderRadius: "20px",
-                background: "#f5f5f5", // Màu xám nhạt
+                background: "#f5f5f5",
                 border: "1px solid rgba(0, 0, 0, 0.05)",
               }}
             >
@@ -689,11 +929,9 @@ const LocationTrackPage = () => {
                 <Typography variant="h6" fontWeight="bold" gutterBottom>
                   Thống kê theo loại máy
                 </Typography>
-
-                {/* Danh sách các loại máy */}
                 <List dense sx={{ pt: 0, pb: 1, width: "100%" }}>
                   {typeStats
-                    .slice(0, isMachineTypeStatsExpanded ? typeStats.length : 4) // SỬ DỤNG STATE MỚI
+                    .slice(0, isMachineTypeStatsExpanded ? typeStats.length : 4)
                     .map((typeStat) => (
                       <ListItem
                         key={typeStat.type_machine}
@@ -716,7 +954,7 @@ const LocationTrackPage = () => {
                                   textTransform: "uppercase",
                                   overflow: "hidden",
                                   textOverflow: "ellipsis",
-                                  mr: 1, // Thêm khoảng cách
+                                  mr: 1,
                                 }}
                               >
                                 {typeStat.type_machine}:
@@ -726,7 +964,7 @@ const LocationTrackPage = () => {
                                 variant="body1"
                                 fontWeight="bold"
                                 color="#333"
-                                sx={{ flexShrink: 0 }} // Đảm bảo số lượng không bị cắt
+                                sx={{ flexShrink: 0 }}
                               >
                                 {typeStat.count} máy
                               </Typography>
@@ -736,16 +974,13 @@ const LocationTrackPage = () => {
                       </ListItem>
                     ))}
                 </List>
-
-                {/* Nút Expand/Collapse */}
-                {typeStats.length > 4 && ( // Chỉ hiển thị nút nếu có nhiều hơn 4 mục
+                {typeStats.length > 4 && (
                   <Box sx={{ textAlign: "center", mt: 1 }}>
                     <Button
-                      onClick={
-                        () =>
-                          setIsMachineTypeStatsExpanded(
-                            !isMachineTypeStatsExpanded
-                          ) // SỬ DỤNG STATE MỚI
+                      onClick={() =>
+                        setIsMachineTypeStatsExpanded(
+                          !isMachineTypeStatsExpanded
+                        )
                       }
                       size="small"
                       sx={{ borderRadius: "12px" }}
@@ -758,126 +993,274 @@ const LocationTrackPage = () => {
             </Card>
           </Grid>
         )}
-        <TableContainer
-          component={Paper}
-          elevation={1}
+
+        {/* 3. Luôn hiển thị Card "Bộ lọc chi tiết" */}
+        <Card
+          ref={filterCardRef} // Đổi ref về đây
+          elevation={0}
           sx={{
-            borderRadius: "12px",
+            mb: 3,
+            borderRadius: "20px",
             border: "1px solid rgba(0, 0, 0, 0.05)",
-            mb: 2, // Thêm margin bottom cho phân trang
           }}
         >
-          <Table size="small">
-            <TableHead>
-              <TableRow sx={{ backgroundColor: "rgba(102, 126, 234, 0.05)" }}>
-                <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
-                  Mã máy
-                </TableCell>
-                <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
-                  Loại máy
-                </TableCell>
-                <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
-                  Model
-                </TableCell>
-                <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
-                  Serial
-                </TableCell>
-                {!selectedLocation && (
-                  <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
-                    Vị trí
-                  </TableCell>
-                )}
-                <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
-                  Trạng thái (chính)
-                </TableCell>
-                <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
-                  Trạng thái (mượn/thuê)
-                </TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {machinesAtLocation.map((machine) => {
-                const statusInfo = getStatusInfo(machine.current_status);
-                const borrowStatusInfo =
-                  machine.is_borrowed_or_rented_or_borrowed_out
-                    ? getStatusInfo(
-                        machine.is_borrowed_or_rented_or_borrowed_out
-                      )
-                    : null;
-                return (
-                  <TableRow
-                    key={machine.uuid_machine}
-                    hover
-                    onClick={() => handleOpenHistoryDialog(machine)}
-                    sx={{ cursor: "pointer" }}
+          <CardContent sx={{ p: 3, "&:last-child": { pb: 3 } }}>
+            <Typography
+              variant="h6"
+              gutterBottom
+              sx={{ fontWeight: 600, mb: 2 }}
+            >
+              Bộ lọc chi tiết
+            </Typography>
+            <Grid container spacing={2}>
+              {/* Filter: Loại máy */}
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Loại máy</InputLabel>
+                  <Select
+                    multiple
+                    name="type_machines"
+                    value={filters.type_machines}
+                    onChange={handleFilterChange}
+                    label="Loại máy"
+                    renderValue={renderMultiSelectValue}
+                    sx={{ borderRadius: "12px" }}
+                    disabled={typeOptions.length === 0}
                   >
-                    <TableCell sx={{ fontWeight: 600 }}>
-                      {machine.code_machine}
+                    {typeOptions.map((name) => (
+                      <MenuItem key={name} value={name}>
+                        <Checkbox
+                          checked={filters.type_machines.indexOf(name) > -1}
+                        />
+                        <ListItemText primary={name} />
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              {/* Filter: Model */}
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Model</InputLabel>
+                  <Select
+                    multiple
+                    name="model_machines"
+                    value={filters.model_machines}
+                    onChange={handleFilterChange}
+                    label="Model"
+                    renderValue={renderMultiSelectValue}
+                    sx={{ borderRadius: "12px" }}
+                    disabled={modelOptions.length === 0}
+                  >
+                    {modelOptions.map((name) => (
+                      <MenuItem key={name} value={name}>
+                        <Checkbox
+                          checked={filters.model_machines.indexOf(name) > -1}
+                        />
+                        <ListItemText primary={name} />
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              {/* Filter: Hãng SX */}
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Hãng SX</InputLabel>
+                  <Select
+                    multiple
+                    name="manufacturers"
+                    value={filters.manufacturers}
+                    onChange={handleFilterChange}
+                    label="Hãng SX"
+                    renderValue={renderMultiSelectValue}
+                    sx={{ borderRadius: "12px" }}
+                    disabled={manufacturerOptions.length === 0}
+                  >
+                    {manufacturerOptions.map((name) => (
+                      <MenuItem key={name} value={name}>
+                        <Checkbox
+                          checked={filters.manufacturers.indexOf(name) > -1}
+                        />
+                        <ListItemText primary={name} />
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              {/* Filter: Vị trí */}
+              {!selectedLocation && (
+                <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Vị trí (trong Đơn vị)</InputLabel>
+                    <Select
+                      multiple
+                      name="name_locations"
+                      value={filters.name_locations}
+                      onChange={handleFilterChange}
+                      label="Vị trí (trong Đơn vị)"
+                      renderValue={renderMultiSelectValue}
+                      sx={{ borderRadius: "12px" }}
+                      disabled={locationOptions.length === 0}
+                    >
+                      {locationOptions.map((name) => (
+                        <MenuItem key={name} value={name}>
+                          <Checkbox
+                            checked={filters.name_locations.indexOf(name) > -1}
+                          />
+                          <ListItemText primary={name} />
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+              )}
+            </Grid>
+          </CardContent>
+        </Card>
+
+        {/* 4. Hiển thị Bảng hoặc Thông báo "Không có máy" */}
+        {machinesAtLocation.length === 0 && !loadingMachines ? (
+          <Typography
+            variant="body1"
+            color="text.secondary"
+            align="center"
+            sx={{ mt: 3 }}
+          >
+            {selectedLocation
+              ? "Không có máy móc nào tại vị trí này."
+              : "Không có máy móc nào tại đơn vị này."}
+          </Typography>
+        ) : (
+          <>
+            {/* Table */}
+            <TableContainer
+              component={Paper}
+              elevation={1}
+              sx={{
+                borderRadius: "12px",
+                border: "1px solid rgba(0, 0, 0, 0.05)",
+                mb: 2,
+              }}
+            >
+              <Table size="small">
+                <TableHead>
+                  <TableRow
+                    sx={{ backgroundColor: "rgba(102, 126, 234, 0.05)" }}
+                  >
+                    <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                      Mã máy
                     </TableCell>
-                    <TableCell sx={{ whiteSpace: "nowrap" }}>
-                      {machine.type_machine || "-"}
+                    <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                      Loại máy
                     </TableCell>
-                    <TableCell sx={{ whiteSpace: "nowrap" }}>
-                      {machine.model_machine || "-"}
+                    <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                      Model
                     </TableCell>
-                    <TableCell sx={{ whiteSpace: "nowrap" }}>
-                      {machine.serial_machine || "-"}
+                    <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                      Serial
                     </TableCell>
                     {!selectedLocation && (
-                      <TableCell sx={{ whiteSpace: "nowrap" }}>
-                        {machine.name_location || "-"}
+                      <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                        Vị trí
                       </TableCell>
                     )}
-                    <TableCell>
-                      <Chip
-                        label={statusInfo.label}
-                        size="small"
-                        sx={{
-                          background: statusInfo.bg,
-                          color: statusInfo.color,
-                          fontWeight: 600,
-                          borderRadius: "8px",
-                        }}
-                      />
+                    <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                      Trạng thái (chính)
                     </TableCell>
-                    <TableCell>
-                      {borrowStatusInfo ? (
-                        <Chip
-                          label={borrowStatusInfo.label}
-                          size="small"
-                          sx={{
-                            background: borrowStatusInfo.bg,
-                            color: borrowStatusInfo.color,
-                            fontWeight: 600,
-                            borderRadius: "8px",
-                          }}
-                        />
-                      ) : (
-                        "-"
-                      )}
+                    <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                      Trạng thái (mượn/thuê)
                     </TableCell>
                   </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </TableContainer>
+                </TableHead>
+                <TableBody>
+                  {machinesAtLocation.map((machine) => {
+                    const statusInfo = getStatusInfo(machine.current_status);
+                    const borrowStatusInfo =
+                      machine.is_borrowed_or_rented_or_borrowed_out
+                        ? getStatusInfo(
+                            machine.is_borrowed_or_rented_or_borrowed_out
+                          )
+                        : null;
+                    return (
+                      <TableRow
+                        key={machine.uuid_machine}
+                        hover
+                        onClick={() => handleOpenHistoryDialog(machine)}
+                        sx={{ cursor: "pointer" }}
+                      >
+                        <TableCell sx={{ fontWeight: 600 }}>
+                          {machine.code_machine}
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: "nowrap" }}>
+                          {machine.type_machine || "-"}
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: "nowrap" }}>
+                          {machine.model_machine || "-"}
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: "nowrap" }}>
+                          {machine.serial_machine || "-"}
+                        </TableCell>
+                        {!selectedLocation && (
+                          <TableCell sx={{ whiteSpace: "nowrap" }}>
+                            {machine.name_location || "-"}
+                          </TableCell>
+                        )}
+                        <TableCell>
+                          <Chip
+                            label={statusInfo.label}
+                            size="small"
+                            sx={{
+                              background: statusInfo.bg,
+                              color: statusInfo.color,
+                              fontWeight: 600,
+                              borderRadius: "8px",
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          {borrowStatusInfo ? (
+                            <Chip
+                              label={borrowStatusInfo.label}
+                              size="small"
+                              sx={{
+                                background: borrowStatusInfo.bg,
+                                color: borrowStatusInfo.color,
+                                fontWeight: 600,
+                                borderRadius: "8px",
+                              }}
+                            />
+                          ) : (
+                            "-"
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
 
-        {/* PHÂN TRANG */}
-        {totalPages > 1 && (
-          <Box sx={{ display: "flex", justifyContent: "center", mt: 2 }}>
-            <Pagination
-              count={totalPages}
-              page={page}
-              onChange={handlePageChange}
-              color="primary"
-              sx={{
-                "& .MuiPaginationItem-root": {
-                  borderRadius: "8px",
-                },
-              }}
-            />
-          </Box>
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <Box sx={{ display: "flex", justifyContent: "center", mt: 2 }}>
+                <Pagination
+                  count={totalPages}
+                  page={page}
+                  onChange={handlePageChange}
+                  color="primary"
+                  sx={{
+                    "& .MuiPaginationItem-root": {
+                      borderRadius: "8px",
+                    },
+                  }}
+                />
+              </Box>
+            )}
+          </>
         )}
       </>
     );

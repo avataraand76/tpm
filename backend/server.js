@@ -435,42 +435,118 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
     const search = req.query.search || "";
     const offset = (page - 1) * limit;
 
+    const {
+      type_machines,
+      model_machines,
+      manufacturers,
+      name_locations,
+      current_status,
+      is_borrowed_or_rented_or_borrowed_out,
+    } = req.query;
+
     // Build search condition and params
-    let whereClause = "";
+    let whereConditions = []; // <<< CHANGED from string to array
     let countParams = [];
     let dataParams = [];
 
+    // 1. Search filter
     if (search) {
       const searchPattern = `%${search}%`;
-      whereClause = `
-        WHERE (m.type_machine LIKE ?
+      whereConditions.push(`
+        (m.type_machine LIKE ?
         OR m.model_machine LIKE ?
         OR m.code_machine LIKE ? 
         OR m.serial_machine LIKE ? 
         OR m.manufacturer LIKE ?
         OR tl.name_location LIKE ?)
-      `;
-      countParams = [
+      `);
+      countParams.push(
         searchPattern,
         searchPattern,
         searchPattern,
         searchPattern,
         searchPattern,
-        searchPattern,
-      ];
-      dataParams = [
-        searchPattern,
-        searchPattern,
+        searchPattern
+      );
+      dataParams.push(
         searchPattern,
         searchPattern,
         searchPattern,
         searchPattern,
-        limit,
-        offset,
-      ];
-    } else {
-      dataParams = [limit, offset];
+        searchPattern,
+        searchPattern
+      );
     }
+
+    // 2. Type filter (Lưu ý: req.query sẽ tự động parse mảng nếu param được lặp lại)
+    if (type_machines && type_machines.length > 0) {
+      whereConditions.push(`m.type_machine IN (?)`);
+      // Đảm bảo nó luôn là mảng khi push vào params
+      const typeValues = Array.isArray(type_machines)
+        ? type_machines
+        : [type_machines];
+      countParams.push(typeValues);
+      dataParams.push(typeValues);
+    }
+
+    // 3. Model filter
+    if (model_machines && model_machines.length > 0) {
+      whereConditions.push(`m.model_machine IN (?)`);
+      const modelValues = Array.isArray(model_machines)
+        ? model_machines
+        : [model_machines];
+      countParams.push(modelValues);
+      dataParams.push(modelValues);
+    }
+
+    // 4. Manufacturer filter
+    if (manufacturers && manufacturers.length > 0) {
+      whereConditions.push(`m.manufacturer IN (?)`);
+      const manuValues = Array.isArray(manufacturers)
+        ? manufacturers
+        : [manufacturers];
+      countParams.push(manuValues);
+      dataParams.push(manuValues);
+    }
+
+    // 5. Location filter
+    if (name_locations && name_locations.length > 0) {
+      whereConditions.push(`tl.name_location IN (?)`);
+      const locValues = Array.isArray(name_locations)
+        ? name_locations
+        : [name_locations];
+      countParams.push(locValues);
+      dataParams.push(locValues);
+    }
+
+    // 6. Current Status filter (Trạng thái chính)
+    if (current_status && current_status.length > 0) {
+      whereConditions.push(`m.current_status IN (?)`);
+      const statusValues = Array.isArray(current_status)
+        ? current_status
+        : [current_status];
+      countParams.push(statusValues);
+      dataParams.push(statusValues);
+    }
+
+    // 7. Borrow Status filter (Trạng thái mượn/thuê)
+    // (req.query param "is_borrowed_or_rented_or_borrowed_out" sẽ được map tới cột "is_borrowed_...")
+    if (
+      is_borrowed_or_rented_or_borrowed_out &&
+      is_borrowed_or_rented_or_borrowed_out.length > 0
+    ) {
+      whereConditions.push(`m.is_borrowed_or_rented_or_borrowed_out IN (?)`);
+      const borrowValues = Array.isArray(is_borrowed_or_rented_or_borrowed_out)
+        ? is_borrowed_or_rented_or_borrowed_out
+        : [is_borrowed_or_rented_or_borrowed_out];
+      countParams.push(borrowValues);
+      dataParams.push(borrowValues);
+    }
+
+    const whereClause =
+      whereConditions.length > 0
+        ? `WHERE ${whereConditions.join(" AND ")}`
+        : "";
 
     // Get total count
     const countQuery = `
@@ -519,6 +595,8 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
       LIMIT ? OFFSET ?
     `;
 
+    dataParams.push(limit, offset);
+
     const [machines] = await tpmConnection.query(dataQuery, dataParams);
 
     res.json({
@@ -543,6 +621,93 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
     });
   }
 });
+
+app.get(
+  "/api/machines/distinct-values",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { field, department_uuid, location_uuid } = req.query; // <<< THÊM MỚI
+      const allowedFields = [
+        "type_machine",
+        "model_machine",
+        "manufacturer",
+        "name_location",
+      ];
+
+      if (!field || !allowedFields.includes(field)) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Invalid field" });
+      }
+
+      let query;
+      let params = [];
+      let joins = [];
+      let whereConditions = [];
+
+      if (field === "name_location") {
+        // Lọc Vị trí (chỉ dùng khi xem theo Đơn vị)
+        query = `SELECT DISTINCT tl.name_location as value 
+                 FROM tb_location tl 
+                 LEFT JOIN tb_department td ON td.id_department = tl.id_department`;
+        whereConditions.push(
+          `tl.name_location IS NOT NULL AND tl.name_location != ''`
+        );
+
+        if (department_uuid) {
+          whereConditions.push(`td.uuid_department = ?`);
+          params.push(department_uuid);
+        }
+      } else {
+        // Lọc Loại máy, Model, Hãng SX
+        query = `SELECT DISTINCT m.${field} as value 
+                 FROM tb_machine m`;
+        joins.push(
+          `LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine`
+        );
+        joins.push(
+          `LEFT JOIN tb_location tl ON tl.id_location = ml.id_location`
+        );
+        whereConditions.push(`m.${field} IS NOT NULL AND m.${field} != ''`);
+
+        if (location_uuid) {
+          // Ưu tiên lọc theo Vị trí
+          whereConditions.push(`tl.uuid_location = ?`);
+          params.push(location_uuid);
+        } else if (department_uuid) {
+          // Nếu không, lọc theo Đơn vị
+          joins.push(
+            `LEFT JOIN tb_department td ON td.id_department = tl.id_department`
+          );
+          whereConditions.push(`td.uuid_department = ?`);
+          params.push(department_uuid);
+        } else {
+          // Nếu không chọn gì (trường hợp này không nên xảy ra ở LocationTrackPage)
+          // Nó sẽ trả về tất cả
+        }
+      }
+
+      query += " \n " + joins.join(" \n ");
+      if (whereConditions.length > 0) {
+        query += ` WHERE ${whereConditions.join(" AND ")}`;
+      }
+      if (field !== "name_location") {
+        query += ` ORDER BY value ASC`;
+      }
+
+      const [values] = await tpmConnection.query(query, params);
+      res.json({ success: true, data: values.map((v) => v.value) });
+    } catch (error) {
+      console.error("Error fetching distinct values:", error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    }
+  }
+);
 
 // GET /api/machines/stats - Get machine statistics
 app.get("/api/machines/stats", authenticateToken, async (req, res) => {
@@ -3953,6 +4118,14 @@ app.get(
       const limit = parseInt(req.query.limit) || 20;
       const offset = (page - 1) * limit;
 
+      const {
+        type_machines,
+        model_machines,
+        manufacturers,
+        current_status,
+        is_borrowed_or_rented_or_borrowed_out,
+      } = req.query;
+
       // 1. Get internal location ID
       const [locResult] = await tpmConnection.query(
         "SELECT id_location FROM tb_location WHERE uuid_location = ?",
@@ -3967,6 +4140,7 @@ app.get(
       }
       const idLocation = locResult[0].id_location;
 
+      // 2. LẤY THỐNG KÊ (CHO CÁC THẺ) - LUÔN KHÔNG CÓ BỘ LỌC
       const statsQuery = `
         SELECT
           COUNT(*) as total,
@@ -3984,21 +4158,94 @@ app.get(
         FROM tb_machine_location ml
         JOIN tb_machine m ON m.id_machine = ml.id_machine
         WHERE ml.id_location = ?
+        -- Chú ý: Không có filterClause ở đây
       `;
       const [statsResult] = await tpmConnection.query(statsQuery, [idLocation]);
       const stats = statsResult[0];
 
-      // 2. Get total count for pagination
-      const total = stats.total; // <<< SỬA: Lấy total từ stats
+      // 3. XÂY DỰNG BỘ LỌC (CHO BẢNG VÀ PHÂN TRANG)
+      let whereConditions = [];
+      let filterParams = []; // Params chỉ cho filter (dùng cho count)
+      let dataParams = [idLocation]; // Params cho data (dùng cho data query)
+
+      // 1. Type filter
+      if (type_machines && type_machines.length > 0) {
+        whereConditions.push(`m.type_machine IN (?)`);
+        const typeValues = Array.isArray(type_machines)
+          ? type_machines
+          : [type_machines];
+        filterParams.push(typeValues);
+        dataParams.push(typeValues);
+      }
+      // 2. Model filter
+      if (model_machines && model_machines.length > 0) {
+        whereConditions.push(`m.model_machine IN (?)`);
+        const modelValues = Array.isArray(model_machines)
+          ? model_machines
+          : [model_machines];
+        filterParams.push(modelValues);
+        dataParams.push(modelValues);
+      }
+      // 3. Manufacturer filter
+      if (manufacturers && manufacturers.length > 0) {
+        whereConditions.push(`m.manufacturer IN (?)`);
+        const manuValues = Array.isArray(manufacturers)
+          ? manufacturers
+          : [manufacturers];
+        filterParams.push(manuValues);
+        dataParams.push(manuValues);
+      }
+      // 4. Current Status filter
+      if (current_status && current_status.length > 0) {
+        whereConditions.push(`m.current_status IN (?)`);
+        const statusValues = Array.isArray(current_status)
+          ? current_status
+          : [current_status];
+        filterParams.push(statusValues);
+        dataParams.push(statusValues);
+      }
+      // 5. Borrow Status filter
+      if (
+        is_borrowed_or_rented_or_borrowed_out &&
+        is_borrowed_or_rented_or_borrowed_out.length > 0
+      ) {
+        whereConditions.push(`m.is_borrowed_or_rented_or_borrowed_out IN (?)`);
+        const borrowValues = Array.isArray(
+          is_borrowed_or_rented_or_borrowed_out
+        )
+          ? is_borrowed_or_rented_or_borrowed_out
+          : [is_borrowed_or_rented_or_borrowed_out];
+        filterParams.push(borrowValues);
+        dataParams.push(borrowValues);
+      }
+
+      const filterClause =
+        whereConditions.length > 0
+          ? `AND ${whereConditions.join(" AND ")}`
+          : "";
+
+      // 4. LẤY TỔNG SỐ (CHO PHÂN TRANG) - CÓ BỘ LỌC
+      const countQuery = `
+        SELECT COUNT(*) as total
+        FROM tb_machine_location ml
+        JOIN tb_machine m ON m.id_machine = ml.id_machine
+        WHERE ml.id_location = ?
+        ${filterClause}
+      `;
+      const [countResult] = await tpmConnection.query(countQuery, [
+        idLocation,
+        ...filterParams,
+      ]);
+      const total = countResult[0].total; // This is the filtered total
       const totalPages = Math.ceil(total / limit);
 
-      // 3. Get paginated machines at that location
+      // 5. LẤY DỮ LIỆU BẢNG (CHO BẢNG) - CÓ BỘ LỌC
       const dataQuery = `
         SELECT 
           m.uuid_machine,
           m.code_machine,
-          m.type_machine,  -- <<< CHANGED
-          m.model_machine, -- <<< CHANGED
+          m.type_machine,
+          m.model_machine,
           m.serial_machine,
           m.current_status,
           m.is_borrowed_or_rented_or_borrowed_out,
@@ -4008,14 +4255,12 @@ app.get(
         JOIN tb_machine m ON m.id_machine = ml.id_machine
         LEFT JOIN tb_category c ON c.id_category = m.id_category
         WHERE ml.id_location = ?
+        ${filterClause}
         ORDER BY m.code_machine ASC
         LIMIT ? OFFSET ?
       `;
-      const [machines] = await tpmConnection.query(dataQuery, [
-        idLocation,
-        limit,
-        offset,
-      ]);
+      dataParams.push(limit, offset);
+      const [machines] = await tpmConnection.query(dataQuery, dataParams);
 
       res.json({
         success: true,
@@ -4200,7 +4445,16 @@ app.get(
       const limit = parseInt(req.query.limit) || 20;
       const offset = (page - 1) * limit;
 
-      // 1. Lấy ID nội bộ của đơn vị
+      const {
+        type_machines,
+        model_machines,
+        manufacturers,
+        name_locations,
+        current_status,
+        is_borrowed_or_rented_or_borrowed_out,
+      } = req.query;
+
+      // 1. Get internal department ID
       const [deptResult] = await tpmConnection.query(
         "SELECT id_department FROM tb_department WHERE uuid_department = ?",
         [uuid]
@@ -4213,7 +4467,7 @@ app.get(
       }
       const idDepartment = deptResult[0].id_department;
 
-      // 2. Lấy thống kê trạng thái (giống hệt /api/locations/:uuid/machines nhưng JOIN qua tb_location)
+      // 2. LẤY THỐNG KÊ (CHO CÁC THẺ) - LUÔN KHÔNG CÓ BỘ LỌC
       const statsQuery = `
         SELECT
           COUNT(*) as total,
@@ -4232,17 +4486,100 @@ app.get(
         JOIN tb_machine_location ml ON m.id_machine = ml.id_machine
         JOIN tb_location tl ON ml.id_location = tl.id_location
         WHERE tl.id_department = ?
+        -- Chú ý: Không có filterClause ở đây
       `;
       const [statsResult] = await tpmConnection.query(statsQuery, [
         idDepartment,
       ]);
       const stats = statsResult[0];
 
-      // 3. Lấy tổng số máy và phân trang
-      const total = stats.total;
+      // 3. XÂY DỰNG BỘ LỌC (CHO BẢNG VÀ PHÂN TRANG)
+      let whereConditions = [];
+      let filterParams = []; // Params chỉ cho filter (dùng cho count)
+      let dataParams = [idDepartment]; // Params cho data (dùng cho data query)
+
+      // 1. Type filter
+      if (type_machines && type_machines.length > 0) {
+        whereConditions.push(`m.type_machine IN (?)`);
+        const typeValues = Array.isArray(type_machines)
+          ? type_machines
+          : [type_machines];
+        filterParams.push(typeValues);
+        dataParams.push(typeValues);
+      }
+      // 2. Model filter
+      if (model_machines && model_machines.length > 0) {
+        whereConditions.push(`m.model_machine IN (?)`);
+        const modelValues = Array.isArray(model_machines)
+          ? model_machines
+          : [model_machines];
+        filterParams.push(modelValues);
+        dataParams.push(modelValues);
+      }
+      // 3. Manufacturer filter
+      if (manufacturers && manufacturers.length > 0) {
+        whereConditions.push(`m.manufacturer IN (?)`);
+        const manuValues = Array.isArray(manufacturers)
+          ? manufacturers
+          : [manufacturers];
+        filterParams.push(manuValues);
+        dataParams.push(manuValues);
+      }
+      // 4. Location filter (specific to department view)
+      if (name_locations && name_locations.length > 0) {
+        whereConditions.push(`tl.name_location IN (?)`);
+        const locValues = Array.isArray(name_locations)
+          ? name_locations
+          : [name_locations];
+        filterParams.push(locValues);
+        dataParams.push(locValues);
+      }
+      // 5. Current Status filter
+      if (current_status && current_status.length > 0) {
+        whereConditions.push(`m.current_status IN (?)`);
+        const statusValues = Array.isArray(current_status)
+          ? current_status
+          : [current_status];
+        filterParams.push(statusValues);
+        dataParams.push(statusValues);
+      }
+      // 6. Borrow Status filter
+      if (
+        is_borrowed_or_rented_or_borrowed_out &&
+        is_borrowed_or_rented_or_borrowed_out.length > 0
+      ) {
+        whereConditions.push(`m.is_borrowed_or_rented_or_borrowed_out IN (?)`);
+        const borrowValues = Array.isArray(
+          is_borrowed_or_rented_or_borrowed_out
+        )
+          ? is_borrowed_or_rented_or_borrowed_out
+          : [is_borrowed_or_rented_or_borrowed_out];
+        filterParams.push(borrowValues);
+        dataParams.push(borrowValues);
+      }
+
+      const filterClause =
+        whereConditions.length > 0
+          ? `AND ${whereConditions.join(" AND ")}`
+          : "";
+
+      // 4. LẤY TỔNG SỐ (CHO PHÂN TRANG) - CÓ BỘ LỌC
+      const countQuery = `
+        SELECT COUNT(*) as total
+        FROM tb_machine m
+        JOIN tb_machine_location ml ON m.id_machine = ml.id_machine
+        JOIN tb_location tl ON ml.id_location = tl.id_location
+        WHERE tl.id_department = ?
+        ${filterClause}
+      `;
+      const [countResult] = await tpmConnection.query(countQuery, [
+        idDepartment,
+        ...filterParams,
+      ]);
+      const total = countResult[0].total; // This is the filtered total
       const totalPages = Math.ceil(total / limit);
 
-      // 4. Lấy danh sách máy phân trang
+      // 5. LẤY DỮ LIỆU BẢNG (CHO BẢNG) - CÓ BỘ LỌC
       const dataQuery = `
         SELECT 
           m.uuid_machine,
@@ -4260,14 +4597,12 @@ app.get(
         JOIN tb_location tl ON ml.id_location = tl.id_location
         LEFT JOIN tb_category c ON c.id_category = m.id_category
         WHERE tl.id_department = ?
+        ${filterClause}
         ORDER BY tl.name_location ASC, m.code_machine ASC
         LIMIT ? OFFSET ?
       `;
-      const [machines] = await tpmConnection.query(dataQuery, [
-        idDepartment,
-        limit,
-        offset,
-      ]);
+      dataParams.push(limit, offset);
+      const [machines] = await tpmConnection.query(dataQuery, dataParams);
 
       res.json({
         success: true,
