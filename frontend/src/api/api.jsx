@@ -157,6 +157,13 @@ export const api = {
       );
       return response.data;
     },
+    getByRfidList: async (data) => {
+      const response = await httpConnect.post(
+        "/api/machines/by-rfid-list",
+        data
+      );
+      return response.data;
+    },
     batchImport: async (data) => {
       const response = await httpConnect.post(
         "/api/machines/batch-import",

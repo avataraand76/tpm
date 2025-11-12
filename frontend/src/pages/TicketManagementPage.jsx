@@ -58,6 +58,7 @@ import {
   Receipt,
   Delete,
   QrCode2,
+  WifiTethering,
   Refresh,
   Close,
   Save,
@@ -69,6 +70,7 @@ import NavigationBar from "../components/NavigationBar";
 import { api } from "../api/api";
 import MachineQRScanner from "../components/MachineQRScanner";
 import FileUploadComponent from "../components/FileUploadComponent";
+import RfidScannerDialog from "../components/RfidScannerDialog";
 import { useAuth } from "../hooks/useAuth";
 
 const excelHeaderMapping = {
@@ -157,6 +159,7 @@ const TicketManagementPage = () => {
 
   // States for QR Scanner
   const [openScanDialog, setOpenScanDialog] = useState(false);
+  const [openRfidDialog, setOpenRfidDialog] = useState(false);
   const [scannerApiParams, setScannerApiParams] = useState({});
 
   // Snackbar
@@ -493,6 +496,7 @@ const TicketManagementPage = () => {
     setSearchMachineTerm("");
     setSearchPage(1);
     setOpenScanDialog(false);
+    setOpenRfidDialog(false);
     setFilteredLocations([]);
     setFilesToUpload([]);
 
@@ -610,6 +614,7 @@ const TicketManagementPage = () => {
       attached_file: "",
     });
     setOpenScanDialog(false);
+    setOpenRfidDialog(false);
     setFilesToUpload([]);
   };
 
@@ -637,16 +642,42 @@ const TicketManagementPage = () => {
 
   // Handlers for selecting/removing machines in Dialog
   const handleSelectMachine = (machine) => {
+    const isSelected = formData.machines.some(
+      (m) => m.uuid_machine === machine.uuid_machine
+    );
+
+    if (isSelected) {
+      showNotification(
+        "warning",
+        "Máy đã có trong danh sách",
+        `Máy "${machine.code_machine}" (${machine.serial_machine}) đã được thêm vào phiếu.`
+      );
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        machines: [...prev.machines, { ...machine, note: "" }],
+      }));
+    }
+  };
+  const handleAddMachinesFromRfid = (machinesToAdd) => {
+    setFormData((prev) => {
+      const newMachinesWithNote = machinesToAdd.map((m) => ({
+        ...m,
+        note: "",
+      }));
+
+      return {
+        ...prev,
+        machines: [...prev.machines, ...newMachinesWithNote],
+      };
+    });
+  };
+  const handleAddMachineFromScanner = (machine) => {
     setFormData((prev) => ({
       ...prev,
-      machines: prev.machines.some(
-        (m) => m.uuid_machine === machine.uuid_machine
-      )
-        ? prev.machines.filter((m) => m.uuid_machine !== machine.uuid_machine)
-        : [...prev.machines, { ...machine, note: "" }],
+      machines: [...prev.machines, { ...machine, note: "" }],
     }));
   };
-  const handleAddMachineFromScanner = (machine) => handleSelectMachine(machine);
   const handleRemoveSelectedMachine = (uuid_machine) =>
     setFormData((prev) => ({
       ...prev,
@@ -1921,7 +1952,25 @@ const TicketManagementPage = () => {
                                     },
                                   }}
                                 >
-                                  Quét QR
+                                  Quét Mã QR
+                                </Button>
+                                <Button
+                                  variant="outlined"
+                                  startIcon={<WifiTethering />}
+                                  onClick={() => setOpenRfidDialog(true)}
+                                  disabled={isFormDisabled}
+                                  sx={{
+                                    borderRadius: "12px",
+                                    py: 1,
+                                    borderColor: "#2e7d32",
+                                    color: "#2e7d32",
+                                    "&:hover": {
+                                      borderColor: "#4caf50",
+                                      bgcolor: "#2e7d3211",
+                                    },
+                                  }}
+                                >
+                                  Quét RFID/NFC
                                 </Button>
                                 <Button
                                   variant="outlined"
@@ -1962,25 +2011,48 @@ const TicketManagementPage = () => {
                               </Stack>
                             ) : (
                               // Nút bấm cho các loại phiếu khác
-                              <Button
-                                variant="outlined"
-                                startIcon={<QrCode2 />}
-                                onClick={() => setOpenScanDialog(true)}
-                                disabled={isFormDisabled}
-                                sx={{
-                                  borderRadius: "12px",
-                                  py: 1,
-                                  borderColor: "#2e7d32",
-                                  color: "#2e7d32",
-                                  mb: 2,
-                                  "&:hover": {
-                                    borderColor: "#4caf50",
-                                    bgcolor: "#2e7d3211",
-                                  },
-                                }}
+                              <Stack
+                                direction={{ xs: "column", sm: "row" }}
+                                spacing={2}
+                                sx={{ mb: 2, flexWrap: "wrap" }}
                               >
-                                Quét Mã QR Máy Móc
-                              </Button>
+                                <Button
+                                  variant="outlined"
+                                  startIcon={<QrCode2 />}
+                                  onClick={() => setOpenScanDialog(true)}
+                                  disabled={isFormDisabled}
+                                  sx={{
+                                    borderRadius: "12px",
+                                    py: 1,
+                                    borderColor: "#2e7d32",
+                                    color: "#2e7d32",
+                                    "&:hover": {
+                                      borderColor: "#4caf50",
+                                      bgcolor: "#2e7d3211",
+                                    },
+                                  }}
+                                >
+                                  Quét Mã QR
+                                </Button>
+                                <Button
+                                  variant="outlined"
+                                  startIcon={<WifiTethering />}
+                                  onClick={() => setOpenRfidDialog(true)}
+                                  disabled={isFormDisabled}
+                                  sx={{
+                                    borderRadius: "12px",
+                                    py: 1,
+                                    borderColor: "#2e7d32",
+                                    color: "#2e7d32",
+                                    "&:hover": {
+                                      borderColor: "#4caf50",
+                                      bgcolor: "#2e7d3211",
+                                    },
+                                  }}
+                                >
+                                  Quét RFID/NFC
+                                </Button>
+                              </Stack>
                             )}
 
                             <TextField
@@ -2686,6 +2758,7 @@ const TicketManagementPage = () => {
                 gap: 2,
                 width: { xs: "100%", sm: "auto" },
                 justifyContent: { xs: "stretch", sm: "flex-end" },
+                flexDirection: { xs: "column-reverse", sm: "row" },
               }}
             >
               <Button
@@ -2721,7 +2794,7 @@ const TicketManagementPage = () => {
           maxWidth="md"
           fullScreen={isMobile}
           fullWidth
-          PaperProps={{ sx: { borderRadius: isMobile ? 0 : "20px" } }}
+          PaperProps={{ sx: { borderRadius: "20px" } }}
         >
           <DialogTitle
             sx={{
@@ -3022,7 +3095,7 @@ const TicketManagementPage = () => {
           fullWidth
           PaperProps={{
             sx: {
-              borderRadius: isMobile ? 0 : "20px",
+              borderRadius: "20px",
             },
           }}
         >
@@ -3279,6 +3352,15 @@ const TicketManagementPage = () => {
             />
           );
         })()}
+
+        <RfidScannerDialog
+          open={openRfidDialog}
+          onClose={() => setOpenRfidDialog(false)}
+          onAddMachines={handleAddMachinesFromRfid}
+          apiParams={scannerApiParams}
+          showNotification={showNotification}
+          selectedMachineUuids={formData.machines.map((m) => m.uuid_machine)}
+        />
 
         {/* Snackbar Notification */}
         <Snackbar

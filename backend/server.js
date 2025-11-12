@@ -1204,6 +1204,113 @@ app.get(
   }
 );
 
+// POST /api/machines/by-rfid-list - Get multiple machines by a list of RFIDs
+app.post("/api/machines/by-rfid-list", authenticateToken, async (req, res) => {
+  try {
+    const { rfid_list, ticket_type, filter_by_phongban_id } = req.body;
+
+    if (!rfid_list || !Array.isArray(rfid_list) || rfid_list.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Danh sách RFID là bắt buộc.",
+      });
+    }
+
+    // 1. Lọc ra các mã RFID duy nhất và hợp lệ
+    const uniqueRfids = [
+      ...new Set(rfid_list.filter((rfid) => rfid && rfid.trim() !== "")),
+    ];
+
+    if (uniqueRfids.length === 0) {
+      return res.json({
+        success: true,
+        data: {
+          foundMachines: [],
+          notFoundRfids: [],
+        },
+      });
+    }
+
+    // 2. Xây dựng điều kiện truy vấn
+    let whereConditions = [`m.RFID_machine IN (?)`];
+    let queryParams = [uniqueRfids];
+    let joins = [
+      `LEFT JOIN tb_category c ON c.id_category = m.id_category`,
+      `LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine`,
+      `LEFT JOIN tb_location tl ON tl.id_location = ml.id_location`,
+    ];
+
+    // 3. Áp dụng bộ lọc trạng thái máy dựa trên loại phiếu
+    const filterConditions = getMachineFilterConditions(ticket_type);
+    if (ticket_type) {
+      if (filterConditions.where) {
+        whereConditions.push(filterConditions.where);
+      }
+    } else {
+      // Nếu không có ticket_type, áp dụng quy tắc mặc định
+      const defaultConditions = getMachineFilterConditions("purchased");
+      whereConditions.push(defaultConditions.where);
+    }
+
+    // 4. Áp dụng bộ lọc theo phòng ban (nếu có)
+    if (filter_by_phongban_id) {
+      joins.push(
+        `LEFT JOIN tb_department td ON td.id_department = tl.id_department`
+      );
+      whereConditions.push(`td.id_phong_ban = ?`);
+      queryParams.push(filter_by_phongban_id);
+    }
+
+    const joinClause = joins.join(" \n ");
+    const whereClause = `WHERE ${whereConditions.join(" AND ")}`;
+
+    // 5. Truy vấn máy móc
+    const dataQuery = `
+      SELECT 
+        m.uuid_machine,
+        m.code_machine,
+        m.type_machine, 
+        m.model_machine,
+        m.serial_machine,
+        m.RFID_machine,
+        m.current_status,
+        m.is_borrowed_or_rented_or_borrowed_out,
+        m.is_borrowed_or_rented_or_borrowed_out_name,
+        m.is_borrowed_or_rented_or_borrowed_out_date,
+        m.is_borrowed_or_rented_or_borrowed_out_return_date,
+        c.name_category,
+        tl.uuid_location,
+        tl.name_location
+      FROM tb_machine m
+      ${joinClause}
+      ${whereClause}
+    `;
+
+    const [machines] = await tpmConnection.query(dataQuery, queryParams);
+
+    // 6. Xác định các RFID không tìm thấy
+    const foundRfids = new Set(machines.map((m) => m.RFID_machine));
+    const notFoundRfids = uniqueRfids.filter((rfid) => !foundRfids.has(rfid));
+
+    res.json({
+      success: true,
+      message: "Machine details retrieved successfully",
+      data: {
+        foundMachines: machines,
+        notFoundRfids: notFoundRfids,
+        filterMessage: filterConditions.message,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching machines by RFID list:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
 const getMachineFilterConditions = (ticket_type) => {
   let where = "";
   let message = "Không tìm thấy máy phù hợp với loại phiếu này.";
@@ -4408,7 +4515,6 @@ app.get(
         LEFT JOIN tb_category c ON c.id_category = m.id_category
         WHERE ml.id_location = ?
         ${filterClause}
-        ORDER BY m.code_machine ASC
         LIMIT ? OFFSET ?
       `;
       dataParams.push(limit, offset);
@@ -4750,7 +4856,7 @@ app.get(
         LEFT JOIN tb_category c ON c.id_category = m.id_category
         WHERE tl.id_department = ?
         ${filterClause}
-        ORDER BY tl.name_location ASC, m.code_machine ASC
+        ORDER BY tl.name_location ASC
         LIMIT ? OFFSET ?
       `;
       dataParams.push(limit, offset);

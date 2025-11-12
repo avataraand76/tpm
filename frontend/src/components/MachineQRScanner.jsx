@@ -337,12 +337,12 @@ const MachineQRScanner = ({
     <Dialog
       open={isOpen}
       onClose={onClose}
-      maxWidth="sm" // <<< SỬA: Dialog nhỏ hơn
+      maxWidth="sm"
       fullWidth
       fullScreen={isMobile}
       PaperProps={{
         sx: {
-          borderRadius: isMobile ? 0 : "20px",
+          borderRadius: "20px",
           overflow: "hidden",
           height: isMobile ? "100%" : "auto",
         },
