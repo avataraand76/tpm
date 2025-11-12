@@ -68,6 +68,7 @@ import * as XLSX from "xlsx-js-style";
 import NavigationBar from "../components/NavigationBar";
 import { api } from "../api/api";
 import MachineQRScanner from "../components/MachineQRScanner";
+import FileUploadComponent from "../components/FileUploadComponent";
 import { useAuth } from "../hooks/useAuth";
 
 const excelHeaderMapping = {
@@ -131,6 +132,7 @@ const TicketManagementPage = () => {
   const [dialogType, setDialogType] = useState("import"); // import, export, internal
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [filesToUpload, setFilesToUpload] = useState([]);
 
   // Form states (for create/view dialog)
   const [formData, setFormData] = useState({
@@ -142,6 +144,7 @@ const TicketManagementPage = () => {
     is_borrowed_or_rented_or_borrowed_out_name: "",
     is_borrowed_or_rented_or_borrowed_out_date: "",
     is_borrowed_or_rented_or_borrowed_out_return_date: "",
+    attached_file: "",
   });
 
   // States for machine search (used in both dialog and update tab)
@@ -491,6 +494,7 @@ const TicketManagementPage = () => {
     setSearchPage(1);
     setOpenScanDialog(false);
     setFilteredLocations([]);
+    setFilesToUpload([]);
 
     setOpenCreateMachineDialog(false);
     setOpenImportDialog(false);
@@ -498,18 +502,21 @@ const TicketManagementPage = () => {
     setFileName("");
     setImportFile(null);
 
+    const initialFormData = {
+      to_location_uuid: "",
+      type: "",
+      date: new Date().toISOString().split("T")[0],
+      note: "",
+      machines: [],
+      is_borrowed_or_rented_or_borrowed_out_name: "",
+      is_borrowed_or_rented_or_borrowed_out_date: "",
+      is_borrowed_or_rented_or_borrowed_out_return_date: "",
+      attached_file: "",
+    };
+
     if (mode === "create") {
       setSelectedTicket(null);
-      setFormData({
-        to_location_uuid: "",
-        type: "",
-        date: new Date().toISOString().split("T")[0],
-        note: "",
-        machines: [],
-        is_borrowed_or_rented_or_borrowed_out_name: "",
-        is_borrowed_or_rented_or_borrowed_out_date: "",
-        is_borrowed_or_rented_or_borrowed_out_return_date: "",
-      });
+      setFormData(initialFormData);
       if (type === "internal") {
         await fetchLocations("internal");
       } else {
@@ -518,16 +525,7 @@ const TicketManagementPage = () => {
     } else if (mode === "view" && ticket) {
       setSelectedTicket(ticket);
       setDetailLoading(true);
-      setFormData({
-        to_location_uuid: "",
-        type: "",
-        date: "",
-        note: "",
-        machines: [],
-        is_borrowed_or_rented_or_borrowed_out_name: "",
-        is_borrowed_or_rented_or_borrowed_out_date: "",
-        is_borrowed_or_rented_or_borrowed_out_return_date: "",
-      });
+      setFormData(initialFormData);
       try {
         const uuid =
           ticket.uuid_machine_import ||
@@ -585,6 +583,7 @@ const TicketManagementPage = () => {
                   .toISOString()
                   .split("T")[0]
               : "",
+          attached_file: ticketDetails.attached_file || "",
         });
       } catch (error) {
         console.error("Error fetching ticket details:", error);
@@ -608,8 +607,10 @@ const TicketManagementPage = () => {
       is_borrowed_or_rented_or_borrowed_out_name: "",
       is_borrowed_or_rented_or_borrowed_out_date: "",
       is_borrowed_or_rented_or_borrowed_out_return_date: "",
+      attached_file: "",
     });
     setOpenScanDialog(false);
+    setFilesToUpload([]);
   };
 
   const handleFormChange = (field, value) => {
@@ -663,6 +664,7 @@ const TicketManagementPage = () => {
   const handleSubmit = async () => {
     setLoading(true);
     try {
+      // 1. Validate machines
       const machinesToSend = formData.machines
         .map((m) => ({ uuid_machine: m.uuid_machine, note: m.note }))
         .filter((m) => m.uuid_machine);
@@ -676,59 +678,69 @@ const TicketManagementPage = () => {
         return;
       }
 
-      let submitData = { note: formData.note, machines: machinesToSend };
+      // 2. Validate location
+      if (!formData.to_location_uuid) {
+        const locationLabel =
+          dialogType === "internal" ? "vị trí đến" : "vị trí nhập/xuất";
+        showNotification(
+          "error",
+          "Lỗi nhập liệu",
+          `Vui lòng chọn ${locationLabel}.`
+        );
+        setLoading(false);
+        return;
+      }
+
+      // 3. Create FormData object
+      const data = new FormData();
+
+      // 4. Append text/JSON data
+      data.append("note", formData.note);
+      data.append("machines", JSON.stringify(machinesToSend));
+      data.append("to_location_uuid", formData.to_location_uuid);
+      data.append("date", formData.date);
+
       let successMessage = "";
       let apiCall;
 
       if (dialogType === "internal") {
-        if (!formData.to_location_uuid) {
-          showNotification(
-            "error",
-            "Lỗi nhập liệu",
-            "Vui lòng chọn vị trí đến."
-          );
-          setLoading(false);
-          return;
-        }
-        submitData = {
-          ...submitData,
-          to_location_uuid: formData.to_location_uuid,
-          transfer_date: formData.date,
-        };
-        apiCall = api.internal_transfers.create(submitData);
+        data.append("transfer_date", formData.date); // Server.js dùng transfer_date
+        apiCall = api.internal_transfers.create(data);
         successMessage = "Tạo phiếu điều chuyển thành công";
       } else {
-        if (!formData.to_location_uuid) {
-          showNotification(
-            "error",
-            "Lỗi nhập liệu",
-            "Vui lòng chọn vị trí nhập/xuất."
-          );
-          setLoading(false);
-          return;
-        }
-        submitData = {
-          ...submitData,
-          to_location_uuid: formData.to_location_uuid,
-          is_borrowed_or_rented_or_borrowed_out_name:
-            formData.is_borrowed_or_rented_or_borrowed_out_name || null,
-          is_borrowed_or_rented_or_borrowed_out_date:
-            formData.is_borrowed_or_rented_or_borrowed_out_date || null,
-          is_borrowed_or_rented_or_borrowed_out_return_date:
-            formData.is_borrowed_or_rented_or_borrowed_out_return_date || null,
-        };
+        // Append borrow/rent info
+        data.append(
+          "is_borrowed_or_rented_or_borrowed_out_name",
+          formData.is_borrowed_or_rented_or_borrowed_out_name || ""
+        );
+        data.append(
+          "is_borrowed_or_rented_or_borrowed_out_date",
+          formData.is_borrowed_or_rented_or_borrowed_out_date || ""
+        );
+        data.append(
+          "is_borrowed_or_rented_or_borrowed_out_return_date",
+          formData.is_borrowed_or_rented_or_borrowed_out_return_date || ""
+        );
+
         if (dialogType === "import") {
-          submitData.import_type = formData.type;
-          submitData.import_date = formData.date;
-          apiCall = api.imports.create(submitData);
+          data.append("import_type", formData.type);
+          data.append("import_date", formData.date);
+          apiCall = api.imports.create(data);
           successMessage = "Tạo phiếu nhập thành công";
         } else {
-          submitData.export_type = formData.type;
-          submitData.export_date = formData.date;
-          apiCall = api.exports.create(submitData);
+          data.append("export_type", formData.type);
+          data.append("export_date", formData.date);
+          apiCall = api.exports.create(data);
           successMessage = "Tạo phiếu xuất thành công";
         }
       }
+
+      // 5. Append files
+      filesToUpload.forEach((file) => {
+        data.append("attachments", file); // Tên field 'attachments' phải khớp với server.js
+      });
+
+      // 6. Make API call
       await apiCall;
       showNotification("success", "Thành công", successMessage);
       handleCloseDialog();
@@ -2269,6 +2281,12 @@ const TicketManagementPage = () => {
                         }
                         disabled={isFormDisabled || dialogMode === "view"}
                         sx={DISABLED_VIEW_SX}
+                      />
+                      <FileUploadComponent
+                        onFilesChange={setFilesToUpload}
+                        existingFiles={formData.attached_file}
+                        disabled={dialogMode === "view"}
+                        showNotification={showNotification}
                       />
                       {dialogMode === "view" &&
                         formData.machines.length > 0 && (

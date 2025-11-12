@@ -19,6 +19,17 @@ httpConnect.interceptors.request.use(
     if (token) {
       config.headers["Authorization"] = `Bearer ${token}`;
     }
+
+    // Nếu data là FormData, KHÔNG set Content-Type
+    // (để axios tự động set 'multipart/form-data' cùng với 'boundary')
+    if (config.data instanceof FormData) {
+      // Xóa Content-Type 'application/json' đã set ở trên
+      delete config.headers["Content-Type"];
+    } else {
+      // Nếu không phải FormData, giữ nguyên 'application/json'
+      config.headers["Content-Type"] = "application/json";
+    }
+
     return config;
   },
   (error) => {

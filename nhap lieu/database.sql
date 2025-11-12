@@ -161,6 +161,7 @@ create table if not exists tb_machine_import
 	is_borrowed_or_rented_or_borrowed_out_date date,
 	is_borrowed_or_rented_or_borrowed_out_return_date date,
     note text,
+    attached_file text,
 
     -- key
     primary key (id_machine_import),
@@ -213,6 +214,7 @@ create table if not exists tb_machine_export
 	is_borrowed_or_rented_or_borrowed_out_date date,
 	is_borrowed_or_rented_or_borrowed_out_return_date date,
     note text,
+    attached_file text,
 
     -- key
     primary key (id_machine_export),
@@ -258,6 +260,7 @@ create table if not exists tb_machine_internal_transfer
     transfer_date date,
     status enum('pending_confirmation', 'pending_approval', 'completed', 'cancelled') default 'pending_confirmation',
     note text,
+    attached_file text,
 
     -- key
     primary key (id_machine_internal_transfer),

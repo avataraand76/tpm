@@ -5,10 +5,9 @@ const express = require("express");
 // const sql = require("mssql");
 const mysql = require("mysql2/promise");
 const cors = require("cors");
-const axios = require("axios");
-// const multer = require("multer");
-// const { google } = require("googleapis");
-// const { Readable } = require("stream");
+const multer = require("multer");
+const { google } = require("googleapis");
+const { Readable } = require("stream");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 // const bodyParser = require("body-parser");
@@ -19,6 +18,98 @@ const app = express();
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 100 * 1024 * 1024, // 100 MB
+    files: 10, // Tối đa 10 file
+  },
+  fileFilter: (req, file, cb) => {
+    // Ép multer đọc tên file (originalname) bằng 'utf8' thay vì 'latin1'
+    file.originalname = Buffer.from(file.originalname, "latin1").toString(
+      "utf8"
+    );
+    cb(null, true);
+  },
+});
+
+// 1. Khởi tạo OAuth2 client từ các biến .env
+const oauth2Client = new google.auth.OAuth2(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET,
+  process.env.GOOGLE_REDIRECT_URI
+);
+
+// 2. Set Refresh Token (Lấy từ file .env)
+// Đây là bước quan trọng nhất. Server sẽ dùng token này để tự động lấy access token mới.
+oauth2Client.setCredentials({
+  refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+});
+
+// 3. Lấy ID thư mục từ .env
+const GOOGLE_DRIVE_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID;
+
+// 4. Hàm upload file (sử dụng oauth2Client)
+const uploadFileToDrive = async (fileObject) => {
+  if (!fileObject) {
+    console.warn("uploadFileToDrive: fileObject is null");
+    return null;
+  }
+  try {
+    const drive = google.drive({ version: "v3", auth: oauth2Client });
+    const { buffer, originalname, mimetype } = fileObject;
+
+    const bufferStream = new Readable();
+    bufferStream.push(buffer);
+    bufferStream.push(null);
+
+    const fileMetadata = {
+      name: originalname,
+      parents: [GOOGLE_DRIVE_FOLDER_ID],
+      mimeType: mimetype,
+    };
+
+    const media = {
+      mimeType: mimetype,
+      body: bufferStream,
+    };
+
+    const response = await drive.files.create({
+      requestBody: fileMetadata,
+      media: media,
+      fields: "id",
+    });
+
+    // Cấp quyền xem cho mọi người (publicly viewable)
+    await drive.permissions.create({
+      fileId: response.data.id,
+      requestBody: {
+        role: "reader",
+        type: "anyone",
+      },
+    });
+
+    // Tạo link 'preview' (nhúng) thay vì 'view' (mở tab)
+    const fileId = response.data.id;
+    const embedLink = `https://drive.google.com/file/d/${fileId}/preview`;
+
+    // Trả về object {name, link}
+    return {
+      name: originalname,
+      link: embedLink,
+    };
+  } catch (err) {
+    console.error("Error uploading file to Google Drive:", err.message);
+    if (err.message.includes("invalid_grant")) {
+      console.error(
+        "LỖI NGHIÊM TRỌNG: GOOGLE_REFRESH_TOKEN có thể đã hết hạn hoặc bị thu hồi. Hãy chạy lại file token.js để lấy token mới."
+      );
+    }
+    return null;
+  }
+};
 
 // MySQL Configuration for main database
 const tpmConnection = mysql.createPool({
@@ -1071,8 +1162,8 @@ app.get(
       SELECT 
         m.uuid_machine,
         m.code_machine,
-        m.type_machine,  -- <<< CHANGED
-        m.model_machine, -- <<< CHANGED
+        m.type_machine, 
+        m.model_machine,
         m.serial_machine,
         m.current_status,
         m.is_borrowed_or_rented_or_borrowed_out,
@@ -1909,204 +2000,227 @@ app.get("/api/locations", authenticateToken, async (req, res) => {
 // MARK: IMPORT OPERATIONS
 
 // POST /api/imports - Create new import slip
-app.post("/api/imports", authenticateToken, async (req, res) => {
-  const connection = await tpmConnection.getConnection();
-  try {
-    await connection.beginTransaction();
+app.post(
+  "/api/imports",
+  authenticateToken,
+  upload.array("attachments"),
+  async (req, res) => {
+    const connection = await tpmConnection.getConnection();
+    try {
+      await connection.beginTransaction();
 
-    const {
-      to_location_uuid,
-      import_type,
-      import_date,
-      note,
-      machines,
-      is_borrowed_or_rented_or_borrowed_out_name,
-      is_borrowed_or_rented_or_borrowed_out_date,
-      is_borrowed_or_rented_or_borrowed_out_return_date,
-    } = req.body;
+      const {
+        to_location_uuid,
+        import_type,
+        import_date,
+        note,
+        is_borrowed_or_rented_or_borrowed_out_name,
+        is_borrowed_or_rented_or_borrowed_out_date,
+        is_borrowed_or_rented_or_borrowed_out_return_date,
+      } = req.body;
+      const machines = JSON.parse(req.body.machines || "[]");
 
-    // Validate required fields
-    if (!to_location_uuid || !import_type || !import_date) {
-      await connection.rollback();
-      return res.status(400).json({
-        success: false,
-        message: "Vị trí nhập, loại nhập và ngày nhập là bắt buộc",
-      });
-    }
-
-    let to_location_id = null;
-    if (to_location_uuid) {
-      const [toLoc] = await connection.query(
-        "SELECT id_location FROM tb_location WHERE uuid_location = ?",
-        [to_location_uuid]
-      );
-      if (toLoc.length === 0) {
+      // Validate required fields
+      if (!to_location_uuid || !import_type || !import_date) {
         await connection.rollback();
-        return res
-          .status(404)
-          .json({ success: false, message: "Không tìm thấy vị trí nhập." });
+        return res.status(400).json({
+          success: false,
+          message: "Vị trí nhập, loại nhập và ngày nhập là bắt buộc",
+        });
       }
-      to_location_id = toLoc[0].id_location;
-    }
 
-    const isBorrowOrRent = ["borrowed", "rented"].includes(import_type);
-    if (
-      isBorrowOrRent &&
-      (!is_borrowed_or_rented_or_borrowed_out_name ||
-        !is_borrowed_or_rented_or_borrowed_out_date)
-    ) {
-      await connection.rollback();
-      return res.status(400).json({
-        success: false,
-        message: "Tên người/đơn vị và Ngày mượn/thuê là bắt buộc.",
-      });
-    }
+      let to_location_id = null;
+      if (to_location_uuid) {
+        const [toLoc] = await connection.query(
+          "SELECT id_location FROM tb_location WHERE uuid_location = ?",
+          [to_location_uuid]
+        );
+        if (toLoc.length === 0) {
+          await connection.rollback();
+          return res
+            .status(404)
+            .json({ success: false, message: "Không tìm thấy vị trí nhập." });
+        }
+        to_location_id = toLoc[0].id_location;
+      }
 
-    // Format date
-    const dateObj = new Date(import_date);
-    const formattedDate = `${dateObj.getFullYear()}-${String(
-      dateObj.getMonth() + 1
-    ).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")}`;
+      const isBorrowOrRent = ["borrowed", "rented"].includes(import_type);
+      if (
+        isBorrowOrRent &&
+        (!is_borrowed_or_rented_or_borrowed_out_name ||
+          !is_borrowed_or_rented_or_borrowed_out_date)
+      ) {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Tên người/đơn vị và Ngày mượn/thuê là bắt buộc.",
+        });
+      }
 
-    const userId = req.user.id;
+      let attachedFileString = null;
+      if (req.files && req.files.length > 0) {
+        // 1. Tạo một mảng các "promise" upload
+        const uploadPromises = req.files.map((file) => uploadFileToDrive(file));
 
-    // Insert import slip
-    const [importResult] = await connection.query(
-      `
+        // 2. Chờ tất cả upload hoàn thành song song
+        const fileInfos = await Promise.all(uploadPromises);
+
+        // 3. Lọc kết quả và tạo chuỗi
+        const attachedFilePairs = fileInfos
+          .filter((fileInfo) => fileInfo && fileInfo.link) // Lọc ra các file upload lỗi (null)
+          .map((fileInfo) => `${fileInfo.name}|${fileInfo.link}`); // Định dạng: TenFile.pdf|LinkCuaFile
+
+        attachedFileString = attachedFilePairs.join("; ");
+      }
+
+      // Format date
+      const dateObj = new Date(import_date);
+      const formattedDate = `${dateObj.getFullYear()}-${String(
+        dateObj.getMonth() + 1
+      ).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")}`;
+
+      const userId = req.user.id;
+
+      // Insert import slip
+      const [importResult] = await connection.query(
+        `
       INSERT INTO tb_machine_import 
         (to_location_id, import_type, import_date, status, note, created_by, updated_by,
          is_borrowed_or_rented_or_borrowed_out_name,
          is_borrowed_or_rented_or_borrowed_out_date,
-         is_borrowed_or_rented_or_borrowed_out_return_date)
-      VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)
+         is_borrowed_or_rented_or_borrowed_out_return_date,
+         attached_file) 
+      VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)
       `,
-      [
-        to_location_id,
-        import_type,
-        formattedDate,
-        note || null,
-        userId,
-        userId,
-        isBorrowOrRent ? is_borrowed_or_rented_or_borrowed_out_name : null,
-        isBorrowOrRent ? is_borrowed_or_rented_or_borrowed_out_date : null,
-        isBorrowOrRent
-          ? is_borrowed_or_rented_or_borrowed_out_return_date || null
-          : null,
-      ]
-    );
+        [
+          to_location_id,
+          import_type,
+          formattedDate,
+          note || null,
+          userId,
+          userId,
+          isBorrowOrRent ? is_borrowed_or_rented_or_borrowed_out_name : null,
+          isBorrowOrRent ? is_borrowed_or_rented_or_borrowed_out_date : null,
+          isBorrowOrRent
+            ? is_borrowed_or_rented_or_borrowed_out_return_date || null
+            : null,
+          attachedFileString || null,
+        ]
+      );
 
-    const importId = importResult.insertId;
+      const importId = importResult.insertId;
 
-    // Insert import details if machines provided
-    if (machines && Array.isArray(machines) && machines.length > 0) {
-      for (const machine of machines) {
-        if (!machine.uuid_machine) continue; // Bỏ qua nếu không có uuid
+      // Insert import details if machines provided
+      if (machines && Array.isArray(machines) && machines.length > 0) {
+        for (const machine of machines) {
+          if (!machine.uuid_machine) continue; // Bỏ qua nếu không có uuid
 
-        // 1. Tra cứu id_machine và kiểm tra trạng thái
-        const [machineResult] = await connection.query(
-          "SELECT id_machine, current_status, is_borrowed_or_rented_or_borrowed_out FROM tb_machine WHERE uuid_machine = ?",
-          [machine.uuid_machine]
-        );
+          // 1. Tra cứu id_machine và kiểm tra trạng thái
+          const [machineResult] = await connection.query(
+            "SELECT id_machine, current_status, is_borrowed_or_rented_or_borrowed_out FROM tb_machine WHERE uuid_machine = ?",
+            [machine.uuid_machine]
+          );
 
-        if (machineResult.length === 0) {
-          await connection.rollback();
-          return res.status(404).json({
-            success: false,
-            message: `Máy có UUID ${machine.uuid_machine} không tồn tại.`,
-          });
-        }
+          if (machineResult.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({
+              success: false,
+              message: `Máy có UUID ${machine.uuid_machine} không tồn tại.`,
+            });
+          }
 
-        const {
-          id_machine,
-          current_status,
-          is_borrowed_or_rented_or_borrowed_out,
-        } = machineResult[0];
+          const {
+            id_machine,
+            current_status,
+            is_borrowed_or_rented_or_borrowed_out,
+          } = machineResult[0];
 
-        // 2. Kiểm tra trạng thái máy (chỉ cho phép nhập máy không phải 'liquidation' hoặc 'disabled')
-        let isValid = false;
-        let errorMessage = `Máy ${machine.uuid_machine} (Trạng thái: ${
-          current_status || "NULL"
-        }, Mượn/Thuê: ${
-          is_borrowed_or_rented_or_borrowed_out || "NULL"
-        }) không hợp lệ cho loại phiếu '${import_type}'.`;
+          // 2. Kiểm tra trạng thái máy (chỉ cho phép nhập máy không phải 'liquidation' hoặc 'disabled')
+          let isValid = false;
+          let errorMessage = `Máy ${machine.uuid_machine} (Trạng thái: ${
+            current_status || "NULL"
+          }, Mượn/Thuê: ${
+            is_borrowed_or_rented_or_borrowed_out || "NULL"
+          }) không hợp lệ cho loại phiếu '${import_type}'.`;
 
-        switch (import_type) {
-          // a. nhập mua mới (case 1)
-          case "purchased":
-            if (
-              current_status === "available" &&
-              is_borrowed_or_rented_or_borrowed_out === null
-            ) {
-              isValid = true;
-            }
-            break;
+          switch (import_type) {
+            // a. nhập mua mới (case 1)
+            case "purchased":
+              if (
+                current_status === "available" &&
+                is_borrowed_or_rented_or_borrowed_out === null
+              ) {
+                isValid = true;
+              }
+              break;
 
-          // b. nhập sau bảo trì (case 3)
-          case "maintenance_return":
-            if (
-              current_status === "maintenance" &&
-              is_borrowed_or_rented_or_borrowed_out === null
-            ) {
-              isValid = true;
-            }
-            break;
+            // b. nhập sau bảo trì (case 3)
+            case "maintenance_return":
+              if (
+                current_status === "maintenance" &&
+                is_borrowed_or_rented_or_borrowed_out === null
+              ) {
+                isValid = true;
+              }
+              break;
 
-          // c. nhập thuê (case 1, 13, 14)
-          case "rented":
-          // d. nhập mượn (case 1, 13, 14)
-          case "borrowed":
-            if (
-              (current_status === "available" &&
-                is_borrowed_or_rented_or_borrowed_out === null) ||
-              (current_status === "disabled" &&
-                is_borrowed_or_rented_or_borrowed_out === "borrowed_return") ||
-              (current_status === "disabled" &&
-                is_borrowed_or_rented_or_borrowed_out === "rented_return")
-            ) {
-              isValid = true;
-            }
-            break;
+            // c. nhập thuê (case 1, 13, 14)
+            case "rented":
+            // d. nhập mượn (case 1, 13, 14)
+            case "borrowed":
+              if (
+                (current_status === "available" &&
+                  is_borrowed_or_rented_or_borrowed_out === null) ||
+                (current_status === "disabled" &&
+                  is_borrowed_or_rented_or_borrowed_out ===
+                    "borrowed_return") ||
+                (current_status === "disabled" &&
+                  is_borrowed_or_rented_or_borrowed_out === "rented_return")
+              ) {
+                isValid = true;
+              }
+              break;
 
-          // e. nhập trả (máy cho mượn) (case 6)
-          case "borrowed_out_return":
-            if (
-              current_status === "disabled" &&
-              is_borrowed_or_rented_or_borrowed_out === "borrowed_out"
-            ) {
-              isValid = true;
-            }
-            break;
+            // e. nhập trả (máy cho mượn) (case 6)
+            case "borrowed_out_return":
+              if (
+                current_status === "disabled" &&
+                is_borrowed_or_rented_or_borrowed_out === "borrowed_out"
+              ) {
+                isValid = true;
+              }
+              break;
 
-          default:
-            isValid = false;
-            errorMessage = `Loại phiếu nhập '${import_type}' không có quy tắc kiểm tra hợp lệ.`;
-        }
+            default:
+              isValid = false;
+              errorMessage = `Loại phiếu nhập '${import_type}' không có quy tắc kiểm tra hợp lệ.`;
+          }
 
-        if (!isValid) {
-          await connection.rollback();
-          return res.status(400).json({
-            success: false,
-            message: errorMessage,
-          });
-        }
+          if (!isValid) {
+            await connection.rollback();
+            return res.status(400).json({
+              success: false,
+              message: errorMessage,
+            });
+          }
 
-        // 3. Chèn chi tiết phiếu nhập (sử dụng idMachine đã tra cứu)
-        await connection.query(
-          `
+          // 3. Chèn chi tiết phiếu nhập (sử dụng idMachine đã tra cứu)
+          await connection.query(
+            `
           INSERT INTO tb_machine_import_detail 
             (id_machine_import, id_machine, note, created_by, updated_by)
           VALUES (?, ?, ?, ?, ?)
           `,
-          [importId, id_machine, machine.note || null, userId, userId]
-        );
+            [importId, id_machine, machine.note || null, userId, userId]
+          );
+        }
       }
-    }
 
-    await connection.commit();
+      await connection.commit();
 
-    // Get created import with details
-    const [importData] = await connection.query(
-      `
+      // Get created import with details
+      const [importData] = await connection.query(
+        `
       SELECT 
         i.uuid_machine_import,
         i.import_type,
@@ -2124,47 +2238,43 @@ app.post("/api/imports", authenticateToken, async (req, res) => {
       LEFT JOIN tb_department td ON td.id_department = tl.id_department
       WHERE i.id_machine_import = ?
       `,
-      [importId]
-    );
+        [importId]
+      );
 
-    const [details] = await connection.query(
-      `
+      const [details] = await connection.query(
+        `
       SELECT 
         d.note,
         d.created_at,
         d.updated_at,
         m.uuid_machine,
         m.code_machine,
-        m.type_machine,  -- <<< CHANGED
-        m.model_machine, -- <<< CHANGED
+        m.type_machine,
+        m.model_machine,
         m.serial_machine
       FROM tb_machine_import_detail d
       LEFT JOIN tb_machine m ON m.id_machine = d.id_machine
       WHERE d.id_machine_import = ?
       `,
-      [importId]
-    );
+        [importId]
+      );
 
-    res.status(201).json({
-      success: true,
-      message: "Tạo phiếu nhập thành công",
-      data: {
-        import: importData[0],
-        details: details,
-      },
-    });
-  } catch (error) {
-    await connection.rollback();
-    console.error("Error creating import:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal server error",
-      error: error.message,
-    });
-  } finally {
-    connection.release();
+      res
+        .status(201)
+        .json({ success: true, message: "Tạo phiếu nhập thành công" });
+    } catch (error) {
+      await connection.rollback();
+      console.error("Error creating import:", error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    } finally {
+      connection.release();
+    }
   }
-});
+);
 
 // GET /api/imports - Get all import slips with pagination
 app.get("/api/imports", authenticateToken, async (req, res) => {
@@ -2297,6 +2407,7 @@ app.get("/api/imports/:uuid", authenticateToken, async (req, res) => {
         i.import_date,
         i.status,
         i.note,
+        i.attached_file,
         i.created_at,
         i.updated_at,
         i.created_by,
@@ -2539,214 +2650,236 @@ app.put("/api/imports/:uuid/status", authenticateToken, async (req, res) => {
 // MARK: EXPORT OPERATIONS
 
 // POST /api/exports - Create new export slip
-app.post("/api/exports", authenticateToken, async (req, res) => {
-  const connection = await tpmConnection.getConnection();
-  try {
-    await connection.beginTransaction();
+app.post(
+  "/api/exports",
+  authenticateToken,
+  upload.array("attachments"),
+  async (req, res) => {
+    const connection = await tpmConnection.getConnection();
+    try {
+      await connection.beginTransaction();
 
-    const {
-      to_location_uuid,
-      export_type,
-      export_date,
-      note,
-      machines,
-      is_borrowed_or_rented_or_borrowed_out_name,
-      is_borrowed_or_rented_or_borrowed_out_date,
-      is_borrowed_or_rented_or_borrowed_out_return_date,
-    } = req.body;
-
-    // Validate required fields
-    if (!to_location_uuid || !export_type || !export_date) {
-      await connection.rollback();
-      return res.status(400).json({
-        success: false,
-        message: "Vị trí xuất, loại xuất và ngày xuất là bắt buộc",
-      });
-    }
-
-    let to_location_id = null;
-    if (to_location_uuid) {
-      const [toLoc] = await connection.query(
-        "SELECT id_location FROM tb_location WHERE uuid_location = ?",
-        [to_location_uuid]
-      );
-      if (toLoc.length === 0) {
-        await connection.rollback();
-        return res
-          .status(404)
-          .json({ success: false, message: "Không tìm thấy vị trí xuất." });
-      }
-      to_location_id = toLoc[0].id_location;
-    }
-
-    const isBorrowOut = export_type === "borrowed_out";
-    if (
-      isBorrowOut &&
-      (!is_borrowed_or_rented_or_borrowed_out_name ||
-        !is_borrowed_or_rented_or_borrowed_out_date)
-    ) {
-      await connection.rollback();
-      return res.status(400).json({
-        success: false,
-        message: "Tên người/đơn vị và Ngày cho mượn là bắt buộc.",
-      });
-    }
-
-    // Format date
-    const dateObj = new Date(export_date);
-    const formattedDate = `${dateObj.getFullYear()}-${String(
-      dateObj.getMonth() + 1
-    ).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")}`;
-
-    const userId = req.user.id;
-
-    // Insert export slip
-    const [exportResult] = await connection.query(
-      `
-      INSERT INTO tb_machine_export 
-        (to_location_id, export_type, export_date, status, note, created_by, updated_by,
-         is_borrowed_or_rented_or_borrowed_out_name,
-         is_borrowed_or_rented_or_borrowed_out_date,
-         is_borrowed_or_rented_or_borrowed_out_return_date)
-      VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)
-      `,
-      [
-        to_location_id,
+      const {
+        to_location_uuid,
         export_type,
-        formattedDate,
-        note || null,
-        userId,
-        userId,
-        isBorrowOut ? is_borrowed_or_rented_or_borrowed_out_name : null,
-        isBorrowOut ? is_borrowed_or_rented_or_borrowed_out_date : null,
-        isBorrowOut
-          ? is_borrowed_or_rented_or_borrowed_out_return_date || null
-          : null,
-      ]
-    );
+        export_date,
+        note,
+        is_borrowed_or_rented_or_borrowed_out_name,
+        is_borrowed_or_rented_or_borrowed_out_date,
+        is_borrowed_or_rented_or_borrowed_out_return_date,
+      } = req.body;
+      const machines = JSON.parse(req.body.machines || "[]");
 
-    const exportId = exportResult.insertId;
+      // Validate required fields
+      if (!to_location_uuid || !export_type || !export_date) {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Vị trí xuất, loại xuất và ngày xuất là bắt buộc",
+        });
+      }
 
-    // Insert export details if machines provided
-    if (machines && Array.isArray(machines) && machines.length > 0) {
-      for (const machine of machines) {
-        if (!machine.uuid_machine) continue; // Bỏ qua nếu không có uuid
-
-        // 1. Tra cứu id_machine và kiểm tra trạng thái
-        const [machineResult] = await connection.query(
-          "SELECT id_machine, current_status, is_borrowed_or_rented_or_borrowed_out FROM tb_machine WHERE uuid_machine = ?",
-          [machine.uuid_machine]
+      let to_location_id = null;
+      if (to_location_uuid) {
+        const [toLoc] = await connection.query(
+          "SELECT id_location FROM tb_location WHERE uuid_location = ?",
+          [to_location_uuid]
         );
-
-        if (machineResult.length === 0) {
+        if (toLoc.length === 0) {
           await connection.rollback();
-          return res.status(404).json({
-            success: false,
-            message: `Máy có UUID ${machine.uuid_machine} không tồn tại.`,
-          });
+          return res
+            .status(404)
+            .json({ success: false, message: "Không tìm thấy vị trí xuất." });
         }
+        to_location_id = toLoc[0].id_location;
+      }
 
-        const {
-          id_machine,
-          current_status,
-          is_borrowed_or_rented_or_borrowed_out,
-        } = machineResult[0];
+      const isBorrowOut = export_type === "borrowed_out";
+      if (
+        isBorrowOut &&
+        (!is_borrowed_or_rented_or_borrowed_out_name ||
+          !is_borrowed_or_rented_or_borrowed_out_date)
+      ) {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Tên người/đơn vị và Ngày cho mượn là bắt buộc.",
+        });
+      }
 
-        // 2. Kiểm tra trạng thái máy: chỉ cho phép xuất máy đang 'available' hoặc 'maintenance' (nếu xuất bảo trì)
-        let isValid = false;
-        let errorMessage = `Máy ${machine.uuid_machine} (Trạng thái: ${
-          current_status || "NULL"
-        }, Mượn/Thuê: ${
-          is_borrowed_or_rented_or_borrowed_out || "NULL"
-        }) không hợp lệ cho loại phiếu '${export_type}'.`;
+      let attachedFileString = null;
+      if (req.files && req.files.length > 0) {
+        // 1. Tạo một mảng các "promise" upload
+        const uploadPromises = req.files.map((file) => uploadFileToDrive(file));
 
-        switch (export_type) {
-          // f. xuất thanh lý (case 1, 2, 5)
-          case "liquidation":
-            if (
-              ["available", "in_use", "broken"].includes(current_status) &&
-              is_borrowed_or_rented_or_borrowed_out === null
-            ) {
-              isValid = true;
-            }
-            break;
+        // 2. Chờ tất cả upload hoàn thành song song
+        const fileInfos = await Promise.all(uploadPromises);
 
-          // g. xuất bảo trì (case 1, 2, 5)
-          case "maintenance":
-            if (
-              ["available", "in_use", "broken"].includes(current_status) &&
-              is_borrowed_or_rented_or_borrowed_out === null
-            ) {
-              isValid = true;
-            }
-            break;
+        // 3. Lọc kết quả và tạo chuỗi
+        const attachedFilePairs = fileInfos
+          .filter((fileInfo) => fileInfo && fileInfo.link) // Lọc ra các file upload lỗi (null)
+          .map((fileInfo) => `${fileInfo.name}|${fileInfo.link}`); // Định dạng: TenFile.pdf|LinkCuaFile
 
-          // h. xuất cho mượn (case 1, 2)
-          case "borrowed_out":
-            if (
-              ["available", "in_use"].includes(current_status) &&
-              is_borrowed_or_rented_or_borrowed_out === null
-            ) {
-              isValid = true;
-            }
-            break;
+        attachedFileString = attachedFilePairs.join("; ");
+      }
 
-          // i. xuất trả (máy thuê) (case 10, 11, 12)
-          case "rented_return":
-            if (
-              ["available", "in_use", "broken"].includes(current_status) &&
-              is_borrowed_or_rented_or_borrowed_out === "rented"
-            ) {
-              isValid = true;
-            }
-            break;
+      // Format date
+      const dateObj = new Date(export_date);
+      const formattedDate = `${dateObj.getFullYear()}-${String(
+        dateObj.getMonth() + 1
+      ).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")}`;
 
-          // j. xuất trả (máy mượn) (case 7, 8, 9)
-          case "borrowed_return":
-            if (
-              ["available", "in_use", "broken"].includes(current_status) &&
-              is_borrowed_or_rented_or_borrowed_out === "borrowed"
-            ) {
-              isValid = true;
-            }
-            break;
+      const userId = req.user.id;
 
-          default:
-            isValid = false;
-            errorMessage = `Loại phiếu xuất '${export_type}' không có quy tắc kiểm tra hợp lệ.`;
-        }
+      // Insert export slip
+      const [exportResult] = await connection.query(
+        `
+      INSERT INTO tb_machine_export 
+          (to_location_id, export_type, export_date, status, note, created_by, updated_by,
+           is_borrowed_or_rented_or_borrowed_out_name,
+           is_borrowed_or_rented_or_borrowed_out_date,
+           is_borrowed_or_rented_or_borrowed_out_return_date,
+           attached_file)
+        VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)
+      `,
+        [
+          to_location_id,
+          export_type,
+          formattedDate,
+          note || null,
+          userId,
+          userId,
+          isBorrowOut ? is_borrowed_or_rented_or_borrowed_out_name : null,
+          isBorrowOut ? is_borrowed_or_rented_or_borrowed_out_date : null,
+          isBorrowOut
+            ? is_borrowed_or_rented_or_borrowed_out_return_date || null
+            : null,
+          attachedFileString || null,
+        ]
+      );
 
-        if (!isValid) {
-          await connection.rollback();
-          return res.status(400).json({
-            success: false,
-            message: errorMessage,
-          });
-        }
+      const exportId = exportResult.insertId;
 
-        // 3. Chèn chi tiết phiếu xuất (sử dụng idMachine đã tra cứu)
-        await connection.query(
-          `
+      // Insert export details if machines provided
+      if (machines && Array.isArray(machines) && machines.length > 0) {
+        for (const machine of machines) {
+          if (!machine.uuid_machine) continue; // Bỏ qua nếu không có uuid
+
+          // 1. Tra cứu id_machine và kiểm tra trạng thái
+          const [machineResult] = await connection.query(
+            "SELECT id_machine, current_status, is_borrowed_or_rented_or_borrowed_out FROM tb_machine WHERE uuid_machine = ?",
+            [machine.uuid_machine]
+          );
+
+          if (machineResult.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({
+              success: false,
+              message: `Máy có UUID ${machine.uuid_machine} không tồn tại.`,
+            });
+          }
+
+          const {
+            id_machine,
+            current_status,
+            is_borrowed_or_rented_or_borrowed_out,
+          } = machineResult[0];
+
+          // 2. Kiểm tra trạng thái máy: chỉ cho phép xuất máy đang 'available' hoặc 'maintenance' (nếu xuất bảo trì)
+          let isValid = false;
+          let errorMessage = `Máy ${machine.uuid_machine} (Trạng thái: ${
+            current_status || "NULL"
+          }, Mượn/Thuê: ${
+            is_borrowed_or_rented_or_borrowed_out || "NULL"
+          }) không hợp lệ cho loại phiếu '${export_type}'.`;
+
+          switch (export_type) {
+            // f. xuất thanh lý (case 1, 2, 5)
+            case "liquidation":
+              if (
+                ["available", "in_use", "broken"].includes(current_status) &&
+                is_borrowed_or_rented_or_borrowed_out === null
+              ) {
+                isValid = true;
+              }
+              break;
+
+            // g. xuất bảo trì (case 1, 2, 5)
+            case "maintenance":
+              if (
+                ["available", "in_use", "broken"].includes(current_status) &&
+                is_borrowed_or_rented_or_borrowed_out === null
+              ) {
+                isValid = true;
+              }
+              break;
+
+            // h. xuất cho mượn (case 1, 2)
+            case "borrowed_out":
+              if (
+                ["available", "in_use"].includes(current_status) &&
+                is_borrowed_or_rented_or_borrowed_out === null
+              ) {
+                isValid = true;
+              }
+              break;
+
+            // i. xuất trả (máy thuê) (case 10, 11, 12)
+            case "rented_return":
+              if (
+                ["available", "in_use", "broken"].includes(current_status) &&
+                is_borrowed_or_rented_or_borrowed_out === "rented"
+              ) {
+                isValid = true;
+              }
+              break;
+
+            // j. xuất trả (máy mượn) (case 7, 8, 9)
+            case "borrowed_return":
+              if (
+                ["available", "in_use", "broken"].includes(current_status) &&
+                is_borrowed_or_rented_or_borrowed_out === "borrowed"
+              ) {
+                isValid = true;
+              }
+              break;
+
+            default:
+              isValid = false;
+              errorMessage = `Loại phiếu xuất '${export_type}' không có quy tắc kiểm tra hợp lệ.`;
+          }
+
+          if (!isValid) {
+            await connection.rollback();
+            return res.status(400).json({
+              success: false,
+              message: errorMessage,
+            });
+          }
+
+          // 3. Chèn chi tiết phiếu xuất (sử dụng idMachine đã tra cứu)
+          await connection.query(
+            `
           INSERT INTO tb_machine_export_detail 
             (id_machine_export, id_machine, note, created_by, updated_by)
           VALUES (?, ?, ?, ?, ?)
           `,
-          [
-            exportId,
-            id_machine, // SỬ DỤNG ID NỘI BỘ ĐÃ TRA CỨU
-            machine.note || null,
-            userId,
-            userId,
-          ]
-        );
+            [
+              exportId,
+              id_machine, // SỬ DỤNG ID NỘI BỘ ĐÃ TRA CỨU
+              machine.note || null,
+              userId,
+              userId,
+            ]
+          );
+        }
       }
-    }
 
-    await connection.commit();
+      await connection.commit();
 
-    // Get created export with details
-    const [exportData] = await connection.query(
-      `
+      // Get created export with details
+      const [exportData] = await connection.query(
+        `
       SELECT 
         e.uuid_machine_export,
         e.export_type,
@@ -2764,47 +2897,43 @@ app.post("/api/exports", authenticateToken, async (req, res) => {
       LEFT JOIN tb_department td ON td.id_department = tl.id_department
       WHERE e.id_machine_export = ?
       `,
-      [exportId]
-    );
+        [exportId]
+      );
 
-    const [details] = await connection.query(
-      `
+      const [details] = await connection.query(
+        `
       SELECT 
         d.note,
         d.created_at,
         d.updated_at,
         m.uuid_machine,
         m.code_machine,
-        m.type_machine,  -- <<< CHANGED
-        m.model_machine, -- <<< CHANGED
+        m.type_machine,
+        m.model_machine,
         m.serial_machine
       FROM tb_machine_export_detail d
       LEFT JOIN tb_machine m ON m.id_machine = d.id_machine
       WHERE d.id_machine_export = ?
       `,
-      [exportId]
-    );
+        [exportId]
+      );
 
-    res.status(201).json({
-      success: true,
-      message: "Tạo phiếu xuất thành công",
-      data: {
-        export: exportData[0],
-        details: details,
-      },
-    });
-  } catch (error) {
-    await connection.rollback();
-    console.error("Error creating export:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal server error",
-      error: error.message,
-    });
-  } finally {
-    connection.release();
+      res
+        .status(201)
+        .json({ success: true, message: "Tạo phiếu xuất thành công" });
+    } catch (error) {
+      await connection.rollback();
+      console.error("Error creating export:", error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    } finally {
+      connection.release();
+    }
   }
-});
+);
 
 // GET /api/exports - Get all export slips with pagination
 app.get("/api/exports", authenticateToken, async (req, res) => {
@@ -2937,6 +3066,7 @@ app.get("/api/exports/:uuid", authenticateToken, async (req, res) => {
         e.export_date,
         e.status,
         e.note,
+        e.attached_file,
         e.created_at,
         e.updated_at,
         e.created_by,
@@ -3496,6 +3626,7 @@ app.get(
           t.transfer_date,
           t.status,
           t.note,
+          t.attached_file,
           t.created_at,
           t.updated_at,
           t.created_by,
@@ -3586,26 +3717,31 @@ app.get(
 );
 
 // POST /api/internal-transfers - Create new internal transfer slip
-app.post("/api/internal-transfers", authenticateToken, async (req, res) => {
-  const connection = await tpmConnection.getConnection();
-  try {
-    await connection.beginTransaction();
+app.post(
+  "/api/internal-transfers",
+  authenticateToken,
+  upload.array("attachments"),
+  async (req, res) => {
+    const connection = await tpmConnection.getConnection();
+    try {
+      await connection.beginTransaction();
 
-    const { to_location_uuid, transfer_date, note, machines } = req.body;
-    const userPhongBanId = req.user.phongban_id; // Lấy phòng ban của User 1
-    const userId = req.user.id;
+      const { to_location_uuid, transfer_date, note } = req.body;
+      const machines = JSON.parse(req.body.machines || "[]");
+      const userPhongBanId = req.user.phongban_id; // Lấy phòng ban của User 1
+      const userId = req.user.id;
 
-    if (!to_location_uuid || !transfer_date) {
-      await connection.rollback();
-      return res.status(400).json({
-        success: false,
-        message: "Vị trí đến và ngày là bắt buộc",
-      });
-    }
+      if (!to_location_uuid || !transfer_date) {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Vị trí đến và ngày là bắt buộc",
+        });
+      }
 
-    // Lấy ID nội bộ VÀ id_phong_ban của vị trí đến
-    const [toLoc] = await connection.query(
-      `
+      // Lấy ID nội bộ VÀ id_phong_ban của vị trí đến
+      const [toLoc] = await connection.query(
+        `
       SELECT 
         tl.id_location,
         td.id_phong_ban
@@ -3613,123 +3749,139 @@ app.post("/api/internal-transfers", authenticateToken, async (req, res) => {
       LEFT JOIN tb_department td ON td.id_department = tl.id_department
       WHERE tl.uuid_location = ?
       `,
-      [to_location_uuid]
-    );
+        [to_location_uuid]
+      );
 
-    if (toLoc.length === 0) {
-      await connection.rollback();
-      return res
-        .status(404)
-        .json({ success: false, message: "Không tìm thấy vị trí đến." });
-    }
-    const to_location_id = toLoc[0].id_location;
-    const to_location_phongban_id = toLoc[0].id_phong_ban;
+      if (toLoc.length === 0) {
+        await connection.rollback();
+        return res
+          .status(404)
+          .json({ success: false, message: "Không tìm thấy vị trí đến." });
+      }
+      const to_location_id = toLoc[0].id_location;
+      const to_location_phongban_id = toLoc[0].id_phong_ban;
 
-    // <<< START: LOGIC YÊU CẦU 2 (Luồng duyệt động) >>>
-    let initialStatus;
-    if (userPhongBanId === to_location_phongban_id) {
-      // Kịch bản A: Cập nhật vị trí (Cùng phòng ban)
-      // User 1 -> Admin
-      initialStatus = "pending_approval";
-    } else {
-      // Kịch bản B: Điều chuyển nội bộ (Khác phòng ban)
-      // User 1 -> User 2 (Confirm) -> Admin (Approve)
-      initialStatus = "pending_confirmation";
-    }
-    // <<< END: LOGIC YÊU CẦU 2 >>>
+      let attachedFileString = null;
+      if (req.files && req.files.length > 0) {
+        // 1. Tạo một mảng các "promise" upload
+        const uploadPromises = req.files.map((file) => uploadFileToDrive(file));
 
-    const dateObj = new Date(transfer_date);
-    const formattedDate = `${dateObj.getFullYear()}-${String(
-      dateObj.getMonth() + 1
-    ).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")}`;
+        // 2. Chờ tất cả upload hoàn thành song song
+        const fileInfos = await Promise.all(uploadPromises);
 
-    // 1. Insert phiếu với trạng thái (status) đã được quyết định
-    const [transferResult] = await connection.query(
-      `
+        // 3. Lọc kết quả và tạo chuỗi
+        const attachedFilePairs = fileInfos
+          .filter((fileInfo) => fileInfo && fileInfo.link) // Lọc ra các file upload lỗi (null)
+          .map((fileInfo) => `${fileInfo.name}|${fileInfo.link}`); // Định dạng: TenFile.pdf|LinkCuaFile
+
+        attachedFileString = attachedFilePairs.join("; ");
+      }
+
+      let initialStatus;
+      if (userPhongBanId === to_location_phongban_id) {
+        // Kịch bản A: Cập nhật vị trí (Cùng phòng ban)
+        // User 1 -> Admin
+        initialStatus = "pending_approval";
+      } else {
+        // Kịch bản B: Điều chuyển nội bộ (Khác phòng ban)
+        // User 1 -> User 2 (Confirm) -> Admin (Approve)
+        initialStatus = "pending_confirmation";
+      }
+
+      const dateObj = new Date(transfer_date);
+      const formattedDate = `${dateObj.getFullYear()}-${String(
+        dateObj.getMonth() + 1
+      ).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")}`;
+
+      // 1. Insert phiếu với trạng thái (status) đã được quyết định
+      const [transferResult] = await connection.query(
+        `
         INSERT INTO tb_machine_internal_transfer
-          (to_location_id, transfer_date, status, note, created_by, updated_by)
-        VALUES (?, ?, ?, ?, ?, ?)
+          (to_location_id, transfer_date, status, note, created_by, updated_by, attached_file)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         `,
-      [
-        to_location_id,
-        formattedDate,
-        initialStatus,
-        note || null,
-        userId,
-        userId,
-      ]
-    );
-    const transferId = transferResult.insertId;
+        [
+          to_location_id,
+          formattedDate,
+          initialStatus,
+          note || null,
+          userId,
+          userId,
+          attachedFileString || null,
+        ]
+      );
+      const transferId = transferResult.insertId;
 
-    // 2. Insert chi tiết máy (Giữ nguyên logic này)
-    if (machines && Array.isArray(machines) && machines.length > 0) {
-      for (const machine of machines) {
-        const [machineResult] = await connection.query(
-          "SELECT id_machine, current_status, is_borrowed_or_rented_or_borrowed_out FROM tb_machine WHERE uuid_machine = ?",
-          [machine.uuid_machine]
-        );
-        if (machineResult.length === 0) {
-          await connection.rollback();
-          return res.status(404).json({
-            success: false,
-            message: `Máy có UUID ${machine.uuid_machine} không tồn tại.`,
-          });
-        }
-
-        const {
-          id_machine,
-          current_status,
-          is_borrowed_or_rented_or_borrowed_out,
-        } = machineResult[0];
-
-        const isStatusValid = ["available", "in_use", "broken"].includes(
-          current_status
-        );
-        const isBorrowValid =
-          is_borrowed_or_rented_or_borrowed_out === null ||
-          ["borrowed", "rented"].includes(
-            is_borrowed_or_rented_or_borrowed_out
+      // 2. Insert chi tiết máy (Giữ nguyên logic này)
+      if (machines && Array.isArray(machines) && machines.length > 0) {
+        for (const machine of machines) {
+          const [machineResult] = await connection.query(
+            "SELECT id_machine, current_status, is_borrowed_or_rented_or_borrowed_out FROM tb_machine WHERE uuid_machine = ?",
+            [machine.uuid_machine]
           );
+          if (machineResult.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({
+              success: false,
+              message: `Máy có UUID ${machine.uuid_machine} không tồn tại.`,
+            });
+          }
 
-        if (!(isStatusValid && isBorrowValid)) {
-          await connection.rollback();
-          return res.status(400).json({
-            success: false,
-            message: `Máy ${machine.uuid_machine} (Trạng thái: ${
-              current_status || "NULL"
-            }, Mượn/Thuê: ${
-              is_borrowed_or_rented_or_borrowed_out || "NULL"
-            }) không hợp lệ để điều chuyển nội bộ.`,
-          });
-        }
+          const {
+            id_machine,
+            current_status,
+            is_borrowed_or_rented_or_borrowed_out,
+          } = machineResult[0];
 
-        await connection.query(
-          `
+          const isStatusValid = ["available", "in_use", "broken"].includes(
+            current_status
+          );
+          const isBorrowValid =
+            is_borrowed_or_rented_or_borrowed_out === null ||
+            ["borrowed", "rented"].includes(
+              is_borrowed_or_rented_or_borrowed_out
+            );
+
+          if (!(isStatusValid && isBorrowValid)) {
+            await connection.rollback();
+            return res.status(400).json({
+              success: false,
+              message: `Máy ${machine.uuid_machine} (Trạng thái: ${
+                current_status || "NULL"
+              }, Mượn/Thuê: ${
+                is_borrowed_or_rented_or_borrowed_out || "NULL"
+              }) không hợp lệ để điều chuyển nội bộ.`,
+            });
+          }
+
+          await connection.query(
+            `
           INSERT INTO tb_machine_internal_transfer_detail 
             (id_machine_internal_transfer, id_machine, note, created_by, updated_by)
           VALUES (?, ?, ?, ?, ?)
           `,
-          [transferId, id_machine, machine.note || null, userId, userId]
-        );
+            [transferId, id_machine, machine.note || null, userId, userId]
+          );
+        }
       }
-    }
 
-    await connection.commit();
-    res
-      .status(201)
-      .json({ success: true, message: "Tạo phiếu điều chuyển thành công" });
-  } catch (error) {
-    await connection.rollback();
-    console.error("Error creating internal transfer:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal server error",
-      error: error.message,
-    });
-  } finally {
-    connection.release();
+      await connection.commit();
+      res
+        .status(201)
+        .json({ success: true, message: "Tạo phiếu điều chuyển thành công" });
+    } catch (error) {
+      await connection.rollback();
+      console.error("Error creating internal transfer:", error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    } finally {
+      connection.release();
+    }
   }
-});
+);
 
 // PUT /api/internal-transfers/:uuid/confirm - (USER 2) Confirm ticket
 app.put(
