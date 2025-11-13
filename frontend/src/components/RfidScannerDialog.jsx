@@ -173,7 +173,7 @@ const RfidScannerDialog = ({
       fullScreen={isMobile}
       PaperProps={{
         sx: {
-          borderRadius: "20px",
+          borderRadius: isMobile ? 0 : "20px",
         },
       }}
     >

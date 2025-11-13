@@ -1,6 +1,6 @@
 // frontend/src/pages/MachineListPage.jsx
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Container,
   Typography,
@@ -241,7 +241,7 @@ const MachineListPage = () => {
   const [isImporting, setIsImporting] = useState(false);
   const [importResults, setImportResults] = useState(null);
   const [fileName, setFileName] = useState("");
-  const tableCardRef = React.useRef(null);
+  const tableCardRef = useRef(null);
 
   // State for filter dropdown data
   const [typeOptions, setTypeOptions] = useState([]);
@@ -686,8 +686,22 @@ const MachineListPage = () => {
           editedData
         );
         if (result.success) {
-          // Refresh the list
-          fetchMachines(searchTerm);
+          // 1. Lấy dữ liệu máy đã được cập nhật từ kết quả API
+          const updatedMachine = result.data;
+
+          // 2. Cập nhật state 'machines' (danh sách trong bảng)
+          //    bằng cách thay thế máy cũ bằng máy mới.
+          //    Việc này KHÔNG gây tải lại (loading) và giữ nguyên vị trí cuộn.
+          setMachines((prevMachines) =>
+            prevMachines.map(
+              (machine) =>
+                machine.uuid_machine === updatedMachine.uuid_machine
+                  ? updatedMachine // Thay thế máy đã sửa
+                  : machine // Giữ nguyên các máy khác
+            )
+          );
+
+          // 3. Tải lại Stats (việc này nhanh và không ảnh hưởng đến bảng)
           fetchStats();
           // Update selected machine with new data
           setSelectedMachine(result.data);
@@ -2631,8 +2645,6 @@ const MachineListPage = () => {
               background: "linear-gradient(45deg, #667eea, #764ba2)",
               color: "white",
               fontWeight: 700,
-              borderTopLeftRadius: "20px", // Đảm bảo bo tròn góc
-              borderTopRightRadius: "20px", // Đảm bảo bo tròn góc
             }}
           >
             <Stack
@@ -3297,8 +3309,6 @@ const MachineListPage = () => {
               background: "linear-gradient(45deg, #2e7d32, #4caf50)",
               color: "white",
               fontWeight: 700,
-              borderTopLeftRadius: "20px",
-              borderTopRightRadius: "20px",
             }}
           >
             <Stack
@@ -3531,7 +3541,7 @@ const MachineListPage = () => {
         {/* Notification Snackbar */}
         <Snackbar
           open={notification.open}
-          autoHideDuration={2000}
+          autoHideDuration={5000}
           onClose={handleCloseNotification}
           anchorOrigin={
             isMobile

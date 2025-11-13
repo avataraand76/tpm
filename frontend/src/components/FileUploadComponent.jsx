@@ -15,6 +15,8 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  useTheme,
+  useMediaQuery,
 } from "@mui/material";
 import {
   AttachFile,
@@ -30,6 +32,8 @@ const FileUploadComponent = ({
   disabled,
   showNotification,
 }) => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [selectedFiles, setSelectedFiles] = useState([]);
   const fileInputRef = useRef(null);
   const [previewFile, setPreviewFile] = useState(null); // {name, link}
@@ -262,13 +266,12 @@ const FileUploadComponent = ({
         onClose={handleClosePreview}
         maxWidth="lg"
         fullWidth
+        fullScreen={isMobile}
         PaperProps={{
           sx: {
-            height: "90vh",
-            width: "90vw",
-            maxWidth: "1400px",
-            borderRadius: "20px",
-            overflow: "hidden", // Ẩn thanh cuộn của dialog
+            height: isMobile ? "100%" : "90vh",
+            borderRadius: isMobile ? 0 : "20px",
+            overflow: "hidden",
           },
         }}
       >

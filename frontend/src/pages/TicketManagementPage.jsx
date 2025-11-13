@@ -1601,7 +1601,7 @@ const TicketManagementPage = () => {
           maxWidth="lg"
           fullScreen
           fullWidth
-          PaperProps={{ sx: { borderRadius: "20px" } }}
+          PaperProps={{ sx: { borderRadius: isMobile ? 0 : "20px" } }}
         >
           <DialogTitle
             sx={{
@@ -2224,7 +2224,8 @@ const TicketManagementPage = () => {
                                   variant="subtitle1"
                                   sx={{ fontWeight: 600, mb: 1 }}
                                 >
-                                  Danh sách máy sẽ thêm:
+                                  Danh sách máy sẽ thêm (
+                                  {formData.machines.length} máy):{" "}
                                 </Typography>
                                 <Stack spacing={2}>
                                   {formData.machines.map((machine) => (
@@ -2794,7 +2795,7 @@ const TicketManagementPage = () => {
           maxWidth="md"
           fullScreen={isMobile}
           fullWidth
-          PaperProps={{ sx: { borderRadius: "20px" } }}
+          PaperProps={{ sx: { borderRadius: isMobile ? 0 : "20px" } }}
         >
           <DialogTitle
             sx={{
@@ -3095,7 +3096,7 @@ const TicketManagementPage = () => {
           fullWidth
           PaperProps={{
             sx: {
-              borderRadius: "20px",
+              borderRadius: isMobile ? 0 : "20px",
             },
           }}
         >
@@ -3365,7 +3366,7 @@ const TicketManagementPage = () => {
         {/* Snackbar Notification */}
         <Snackbar
           open={notification.open}
-          autoHideDuration={2000}
+          autoHideDuration={5000}
           onClose={handleCloseNotification}
           anchorOrigin={
             isMobile
