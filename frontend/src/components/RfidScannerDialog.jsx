@@ -1,6 +1,6 @@
 // frontend/src/components/RfidScannerDialog.jsx
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -15,6 +15,7 @@ import {
   IconButton,
   useTheme,
   useMediaQuery,
+  Box,
 } from "@mui/material";
 import { Close } from "@mui/icons-material";
 import { api } from "../api/api";
@@ -31,11 +32,20 @@ const RfidScannerDialog = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const inputRef = useRef(null);
 
   const handleClose = () => {
     setRfidInput("");
     setIsProcessing(false);
     onClose();
+  };
+
+  const handleClearInput = () => {
+    setRfidInput("");
+    // Ngay sau khi xóa, focus lại vào ô input
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
   };
 
   const handleSubmit = async () => {
@@ -199,20 +209,47 @@ const RfidScannerDialog = ({
             <br />
             Các mã trùng lặp sẽ tự động được lọc.
           </Alert>
-          <TextField
-            fullWidth
-            multiline
-            rows={10}
-            label="Danh sách mã RFID/NFC"
-            placeholder="RFID1
+
+          <Box sx={{ position: "relative" }}>
+            {/* Nút Xóa (Clear) */}
+            {rfidInput && !isProcessing && (
+              <IconButton
+                size="small"
+                onClick={handleClearInput}
+                sx={{
+                  position: "absolute",
+                  top: 8,
+                  right: 8,
+                  zIndex: 10,
+                  color: "text.secondary",
+                }}
+              >
+                CLEAR{" "}
+              </IconButton>
+            )}
+
+            {/* Ô nhập liệu */}
+            <TextField
+              inputRef={inputRef}
+              fullWidth
+              multiline
+              rows={10}
+              label="Danh sách mã RFID/NFC"
+              placeholder="RFID1
 RFID2
 RFID1
 RFID3..."
-            value={rfidInput}
-            onChange={(e) => setRfidInput(e.target.value)}
-            disabled={isProcessing}
-            autoFocus
-          />
+              value={rfidInput}
+              onChange={(e) => setRfidInput(e.target.value)}
+              disabled={isProcessing}
+              autoFocus
+              sx={{
+                "& .MuiInputBase-root": {
+                  paddingRight: "40px",
+                },
+              }}
+            />
+          </Box>
         </Stack>
       </DialogContent>
       <DialogActions
