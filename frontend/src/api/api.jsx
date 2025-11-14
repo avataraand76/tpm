@@ -54,7 +54,7 @@ httpConnect.interceptors.response.use(
 
       // 2. Chỉ thực hiện logout nếu không phải là lỗi từ trang Login
       // (tránh vòng lặp vô tận nếu gõ sai mật khẩu)
-      if (!error.config.url.includes("/auth/login")) {
+      if (!error.config.url.includes("/api/auth/login")) {
         console.error("Authentication Error:", message);
 
         // 3. Xóa token và user
@@ -79,7 +79,7 @@ httpConnect.interceptors.response.use(
 export const api = {
   // MARK: LOGIN
   login: async (data) => {
-    const response = await httpConnect.post("/auth/login", data);
+    const response = await httpConnect.post("/api/auth/login", data);
     return response.data;
   },
 

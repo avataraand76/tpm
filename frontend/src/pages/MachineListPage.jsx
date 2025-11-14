@@ -3270,7 +3270,7 @@ const MachineListPage = () => {
               sx={{ borderRadius: "12px", width: { xs: "100%", sm: "auto" } }}
             >
               {/* <<< 4. THAY ĐỔI: ĐỔI TÊN NÚT CHO VIEW-ONLY >>> */}
-              {isAdmin || canEdit ? "Hủy" : "Đóng"}
+              Đóng
             </Button>
 
             {/* <<< 5. THAY ĐỔI: ẨN NÚT LƯU CHO VIEW-ONLY >>> */}

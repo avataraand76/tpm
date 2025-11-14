@@ -42,7 +42,6 @@ const RfidScannerDialog = ({
 
   const handleClearInput = () => {
     setRfidInput("");
-    // Ngay sau khi xóa, focus lại vào ô input
     if (inputRef.current) {
       inputRef.current.focus();
     }
@@ -81,7 +80,6 @@ const RfidScannerDialog = ({
 
         const machinesToAdd = [];
         const duplicateMachines = [];
-        // Dùng Set để kiểm tra trùng lặp hiệu quả
         const selectedSet = new Set(selectedMachineUuids || []);
 
         if (foundMachines.length > 0) {
@@ -90,28 +88,23 @@ const RfidScannerDialog = ({
               duplicateMachines.push(machine);
             } else {
               machinesToAdd.push(machine);
-              // Thêm vào Set để tránh thêm trùng lặp (nếu trong batch quét có 2 mã giống nhau)
               selectedSet.add(machine.uuid_machine);
             }
           }
         }
 
-        // Chỉ gọi hàm ở component cha nếu thực sự có máy mới để thêm
         if (machinesToAdd.length > 0) {
           onAddMachines(machinesToAdd);
         }
 
-        // --- Xây dựng thông báo tóm tắt ---
         let title = "";
         let message = "";
         let severity = "success";
-
         const addedCount = machinesToAdd.length;
         const duplicateCount = duplicateMachines.length;
         const notFoundCount = notFoundRfids.length;
 
         if (addedCount > 0 && duplicateCount === 0 && notFoundCount === 0) {
-          // Kịch bản hoàn hảo
           title = "Thành công";
           message = `Đã tìm thấy và thêm ${addedCount} máy.`;
           severity = "success";
@@ -120,15 +113,12 @@ const RfidScannerDialog = ({
           duplicateCount > 0 &&
           notFoundCount === 0
         ) {
-          // Tìm thấy máy, nhưng tất cả đều đã có
           title = "Không thêm máy mới";
           message = `Đã tìm thấy ${duplicateCount} máy, nhưng tất cả đều đã có trong danh sách.`;
           severity = "info";
         } else {
-          // Kịch bản hỗn hợp (có lỗi, có trùng, có thêm mới)
           title = "Hoàn tất (có cảnh báo)";
           severity = "warning";
-
           let parts = [];
           if (addedCount > 0) parts.push(`Đã thêm ${addedCount} máy`);
           if (duplicateCount > 0)
@@ -137,14 +127,13 @@ const RfidScannerDialog = ({
             );
           if (notFoundCount > 0)
             parts.push(`${notFoundCount} mã không tìm thấy`);
-
           message =
             parts.join(". ") +
             `. (Lý do lọc: ${filterMessage || "Máy không hợp lệ"})`;
         }
 
         showNotification(severity, title, message);
-        handleClose(); // Tự động đóng dialog
+        handleClose();
       } else {
         showNotification(
           "error",
@@ -205,9 +194,11 @@ const RfidScannerDialog = ({
       <DialogContent sx={{ pt: 3, pb: 1 }}>
         <Stack spacing={2}>
           <Alert severity="info" sx={{ borderRadius: "12px" }}>
-            Dán danh sách mã RFID/NFC từ máy quét vào ô bên dưới.
+            {isMobile
+              ? "Ô nhập liệu đã sẵn sàng, hãy dùng máy quét."
+              : "Dán danh sách mã RFID/NFC từ máy quét vào ô bên dưới."}
             <br />
-            Các mã trùng lặp sẽ tự động được lọc.
+            <strong>Các mã trùng lặp sẽ tự động được lọc.</strong>
           </Alert>
 
           <Box sx={{ position: "relative" }}>
@@ -268,7 +259,7 @@ RFID3..."
             width: { xs: "100%", sm: "auto" },
           }}
         >
-          Hủy
+          Đóng
         </Button>
         <Button
           variant="contained"

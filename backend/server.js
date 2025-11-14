@@ -188,13 +188,19 @@ const authenticateToken = (req, res, next) => {
     );
   }
 
-  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-    if (err) {
-      return res.status(403).json({ success: false, message: "Invalid token" });
+  jwt.verify(
+    token,
+    process.env.JWT_SECRET || "your-default-secret-key",
+    (err, decoded) => {
+      if (err) {
+        return res
+          .status(403)
+          .json({ success: false, message: "Invalid token" });
+      }
+      req.user = decoded;
+      next();
     }
-    req.user = decoded;
-    next();
-  });
+  );
 };
 
 // MARK: SERVER START
@@ -205,8 +211,8 @@ app.listen(process.env.PORT || 8081, () => {
 
 // MARK: LOGIN
 
-// POST /auth/login - Login with employee ID and password
-app.post("/auth/login", async (req, res) => {
+// POST /api/auth/login - Login with employee ID and password
+app.post("/api/auth/login", async (req, res) => {
   try {
     const { ma_nv, password } = req.body;
 

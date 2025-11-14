@@ -2571,7 +2571,7 @@ const TicketManagementPage = () => {
                 display: "flex",
                 gap: 2,
                 width: { xs: "100%", sm: "auto" },
-                justifyContent: { xs: "stretch", sm: "flex-start" },
+                flexDirection: { xs: "column", sm: "row" },
               }}
             >
               {dialogMode === "view" &&
@@ -2594,7 +2594,7 @@ const TicketManagementPage = () => {
                       sx={{
                         borderRadius: "12px",
                         px: 3,
-                        flexGrow: { xs: 1, sm: 0 },
+                        width: { xs: "100%", sm: "auto" },
                       }}
                     >
                       {loading ? <CircularProgress size={24} /> : "Duyệt phiếu"}
@@ -2617,7 +2617,7 @@ const TicketManagementPage = () => {
                         sx={{
                           borderRadius: "12px",
                           px: 3,
-                          flexGrow: { xs: 1, sm: 0 },
+                          width: { xs: "100%", sm: "auto" },
                         }}
                       >
                         {loading ? <CircularProgress size={24} /> : "Hủy phiếu"}
@@ -2641,7 +2641,11 @@ const TicketManagementPage = () => {
                         )
                       }
                       disabled={loading}
-                      sx={{ borderRadius: "12px", px: 3 }}
+                      sx={{
+                        borderRadius: "12px",
+                        px: 3,
+                        width: { xs: "100%", sm: "auto" },
+                      }}
                     >
                       {loading ? <CircularProgress size={24} /> : "Duyệt phiếu"}
                     </Button>
@@ -2660,7 +2664,11 @@ const TicketManagementPage = () => {
                           )
                         }
                         disabled={loading}
-                        sx={{ borderRadius: "12px", px: 3 }}
+                        sx={{
+                          borderRadius: "12px",
+                          px: 3,
+                          width: { xs: "100%", sm: "auto" },
+                        }}
                       >
                         {loading ? <CircularProgress size={24} /> : "Hủy phiếu"}
                       </Button>
@@ -2700,7 +2708,11 @@ const TicketManagementPage = () => {
                             color="primary"
                             onClick={() => handleConfirmTicket(uuid)}
                             disabled={loading}
-                            sx={{ borderRadius: "12px", px: 3 }}
+                            sx={{
+                              borderRadius: "12px",
+                              px: 3,
+                              width: { xs: "100%", sm: "auto" },
+                            }}
                           >
                             {loading ? (
                               <CircularProgress size={24} />
@@ -2717,7 +2729,11 @@ const TicketManagementPage = () => {
                             color="success"
                             onClick={() => handleApproveTicket(uuid)}
                             disabled={loading}
-                            sx={{ borderRadius: "12px", px: 3 }}
+                            sx={{
+                              borderRadius: "12px",
+                              px: 3,
+                              width: { xs: "100%", sm: "auto" },
+                            }}
                           >
                             {loading ? (
                               <CircularProgress size={24} />
@@ -2736,7 +2752,11 @@ const TicketManagementPage = () => {
                               handleUpdateStatus(uuid, "cancelled", "internal")
                             }
                             disabled={loading}
-                            sx={{ borderRadius: "12px", px: 3 }}
+                            sx={{
+                              borderRadius: "12px",
+                              px: 3,
+                              width: { xs: "100%", sm: "auto" },
+                            }}
                           >
                             {loading ? (
                               <CircularProgress size={24} />
@@ -2765,9 +2785,13 @@ const TicketManagementPage = () => {
               <Button
                 variant="outlined"
                 onClick={handleCloseDialog}
-                sx={{ borderRadius: "12px", px: 3, flexGrow: { xs: 1, sm: 0 } }}
+                sx={{
+                  borderRadius: "12px",
+                  px: 3,
+                  width: { xs: "100%", sm: "auto" },
+                }}
               >
-                {dialogMode === "view" ? "Đóng" : "Hủy"}
+                Đóng
               </Button>
               {dialogMode === "create" && (
                 <Button
@@ -2778,7 +2802,7 @@ const TicketManagementPage = () => {
                     borderRadius: "12px",
                     background: "linear-gradient(45deg, #667eea, #764ba2)",
                     px: 3,
-                    flexGrow: { xs: 1, sm: 0 },
+                    width: { xs: "100%", sm: "auto" },
                   }}
                 >
                   {loading ? <CircularProgress size={24} /> : "Tạo phiếu"}
@@ -3068,7 +3092,7 @@ const TicketManagementPage = () => {
               color="inherit"
               sx={{ borderRadius: "12px", width: { xs: "100%", sm: "auto" } }}
             >
-              Hủy
+              Đóng
             </Button>
             {canCreateOrImportMachines && (
               <Button
