@@ -4,6 +4,7 @@ import {
   Routes,
   Route,
   Navigate,
+  useLocation,
 } from "react-router-dom";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
@@ -14,6 +15,9 @@ import HomePage from "./pages/HomePage";
 import MachineListPage from "./pages/MachineListPage";
 import TicketManagementPage from "./pages/TicketManagementPage";
 import LocationTrackPage from "./pages/LocationTrackPage";
+import UpdateRfidPage from "./pages/UpdateRfidPage";
+import { useAuth } from "./hooks/useAuth";
+import { Box, CircularProgress } from "@mui/material";
 
 // Create MUI theme
 const theme = createTheme({
@@ -81,6 +85,52 @@ const theme = createTheme({
   },
 });
 
+const AdminPCDRoute = ({ children }) => {
+  const { user, permissions, isAuthenticated, loading } = useAuth();
+  const location = useLocation();
+
+  // Định nghĩa vai trò
+  const isAdmin = permissions.includes("admin");
+  const phongCoDienId = 14;
+  const isPhongCoDien =
+    permissions.includes("edit") &&
+    !isAdmin &&
+    user?.phongban_id === phongCoDienId;
+
+  // Quyền truy cập
+  const canAccess = isAdmin || isPhongCoDien;
+
+  if (loading) {
+    // Hiển thị loading trong khi AuthContext đang kiểm tra
+    return (
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          height: "100vh",
+        }}
+      >
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (!isAuthenticated) {
+    // Nếu chưa đăng nhập, đá về trang login
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  if (isAuthenticated && !canAccess) {
+    // Đã đăng nhập nhưng KHÔNG CÓ QUYỀN
+    // Đá về trang chủ (hoặc trang 403 Not Found nếu có)
+    return <Navigate to="/" replace />;
+  }
+
+  // Đã đăng nhập VÀ CÓ QUYỀN
+  return children;
+};
+
 function App() {
   return (
     <ThemeProvider theme={theme}>
@@ -122,6 +172,14 @@ function App() {
                 <ProtectedRoute>
                   <LocationTrackPage />
                 </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/up-rfid"
+              element={
+                <AdminPCDRoute>
+                  <UpdateRfidPage />
+                </AdminPCDRoute>
               }
             />
 

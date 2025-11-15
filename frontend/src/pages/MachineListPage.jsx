@@ -2839,7 +2839,7 @@ const MachineListPage = () => {
                     onChange={(e) =>
                       handleInputChange("code_machine", e.target.value)
                     }
-                    disabled={!(isAdmin || canEdit) || !isCreateMode} // Bị khóa nếu là view-only HOẶC là chế độ xem chi tiết
+                    disabled={!canCreateOrImport || !isCreateMode} // Bị khóa nếu là view-only và cơ điện xưởng HOẶC là chế độ xem chi tiết
                     sx={
                       !(isAdmin || canEdit) || !isCreateMode
                         ? DISABLED_VIEW_SX
@@ -2856,7 +2856,7 @@ const MachineListPage = () => {
                     onChange={(e) =>
                       handleInputChange("serial_machine", e.target.value)
                     }
-                    disabled={!(isAdmin || canEdit) || !isCreateMode} // Bị khóa nếu là view-only HOẶC là chế độ xem chi tiết
+                    disabled={!canCreateOrImport || !isCreateMode} // Bị khóa nếu là view-only và cơ điện xưởng HOẶC là chế độ xem chi tiết
                     sx={
                       !(isAdmin || canEdit) || !isCreateMode
                         ? DISABLED_VIEW_SX
@@ -2872,12 +2872,13 @@ const MachineListPage = () => {
                     onChange={(e) =>
                       handleInputChange("RFID_machine", e.target.value)
                     }
-                    disabled={!(isAdmin || canEdit)} // Bị khóa nếu là view-only
+                    disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
+                    sx={DISABLED_VIEW_SX}
                   />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
                   {isCreateMode ? (
-                    <FormControl fullWidth disabled={!(isAdmin || canEdit)}>
+                    <FormControl fullWidth disabled={!canCreateOrImport}>
                       <InputLabel>Loại</InputLabel>
                       <Select
                         value={editedData.id_category || 1}
@@ -2910,7 +2911,8 @@ const MachineListPage = () => {
                     onChange={(e) =>
                       handleInputChange("type_machine", e.target.value)
                     }
-                    disabled={!(isAdmin || canEdit)} // Bị khóa nếu là view-only
+                    disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
+                    sx={DISABLED_VIEW_SX}
                   />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
@@ -2922,7 +2924,8 @@ const MachineListPage = () => {
                     onChange={(e) =>
                       handleInputChange("model_machine", e.target.value)
                     }
-                    disabled={!(isAdmin || canEdit)} // Bị khóa nếu là view-only
+                    disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
+                    sx={DISABLED_VIEW_SX}
                   />
                 </Grid>
 
@@ -2934,11 +2937,16 @@ const MachineListPage = () => {
                     onChange={(e) =>
                       handleInputChange("manufacturer", e.target.value)
                     }
-                    disabled={!(isAdmin || canEdit)} // Bị khóa nếu là view-only
+                    disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
+                    sx={DISABLED_VIEW_SX}
                   />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
-                  <FormControl fullWidth disabled={!(isAdmin || canEdit)}>
+                  <FormControl
+                    fullWidth
+                    disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
+                    sx={DISABLED_VIEW_SX}
+                  >
                     <InputLabel>Trạng thái</InputLabel>
                     <Select
                       value={editedData.current_status}
@@ -2949,9 +2957,9 @@ const MachineListPage = () => {
                     >
                       <MenuItem value="available">Sẵn sàng</MenuItem>
                       <MenuItem value="in_use">Đang sử dụng</MenuItem>
-                      {/* <MenuItem value="maintenance">Bảo trì</MenuItem>
+                      <MenuItem value="maintenance">Bảo trì</MenuItem>
                       <MenuItem value="liquidation">Thanh lý</MenuItem>
-                      <MenuItem value="disabled">Vô hiệu hóa</MenuItem> */}
+                      <MenuItem value="disabled">Vô hiệu hóa</MenuItem>
                       <MenuItem value="broken">Máy hư</MenuItem>
                     </Select>
                   </FormControl>
@@ -3122,7 +3130,8 @@ const MachineListPage = () => {
                           )
                         }
                         InputLabelProps={{ shrink: true }}
-                        disabled={!(isAdmin || canEdit)} // Bị khóa nếu là view-only
+                        disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
+                        sx={DISABLED_VIEW_SX}
                       />
                     </Grid>
                   </>
@@ -3145,7 +3154,8 @@ const MachineListPage = () => {
                         parsedValue ? parseFloat(parsedValue) : ""
                       );
                     }}
-                    disabled={!(isAdmin || canEdit)} // Bị khóa nếu là view-only
+                    disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
+                    sx={DISABLED_VIEW_SX}
                   />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
@@ -3173,7 +3183,8 @@ const MachineListPage = () => {
                       inputMode: "numeric",
                       pattern: "[0-9]*",
                     }}
-                    disabled={!(isAdmin || canEdit)} // Bị khóa nếu là view-only
+                    disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
+                    sx={DISABLED_VIEW_SX}
                   />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
@@ -3188,7 +3199,8 @@ const MachineListPage = () => {
                         parsedValue ? parseFloat(parsedValue) : ""
                       );
                     }}
-                    disabled={!(isAdmin || canEdit)} // Bị khóa nếu là view-only
+                    disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
+                    sx={DISABLED_VIEW_SX}
                   />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
@@ -3202,7 +3214,8 @@ const MachineListPage = () => {
                       handleInputChange("date_of_use", e.target.value)
                     }
                     InputLabelProps={{ shrink: true }}
-                    disabled={!(isAdmin || canEdit)} // Bị khóa nếu là view-only
+                    disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
+                    sx={DISABLED_VIEW_SX}
                   />
                 </Grid>
                 <Grid size={{ xs: 12 }}>
@@ -3213,7 +3226,8 @@ const MachineListPage = () => {
                     rows={3}
                     value={editedData.note || ""}
                     onChange={(e) => handleInputChange("note", e.target.value)}
-                    disabled={!(isAdmin || canEdit)} // Bị khóa nếu là view-only
+                    disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
+                    sx={DISABLED_VIEW_SX}
                   />
                 </Grid>
 
@@ -3273,8 +3287,8 @@ const MachineListPage = () => {
               Đóng
             </Button>
 
-            {/* <<< 5. THAY ĐỔI: ẨN NÚT LƯU CHO VIEW-ONLY >>> */}
-            {(isAdmin || canEdit) && (
+            {/* <<< 5. THAY ĐỔI: ẨN NÚT LƯU CHO VIEW-ONLY VÀ CƠ ĐIỆN XƯỞNG >>> */}
+            {canCreateOrImport && (
               <Button
                 onClick={handleSave}
                 variant="contained"

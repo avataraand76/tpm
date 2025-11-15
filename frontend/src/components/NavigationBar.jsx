@@ -6,7 +6,6 @@ import {
   AppBar,
   Toolbar,
   Typography,
-  Button,
   Box,
   Avatar,
   Menu,
@@ -21,18 +20,17 @@ import {
   AccountCircle,
   ExitToApp,
   Home,
-  Science,
-  Psychology,
   Dashboard,
   PrecisionManufacturing,
   Receipt,
   LocationOn,
-  Menu as MenuIcon, // NEW: Import MenuIcon
+  Menu as MenuIcon,
+  Update,
 } from "@mui/icons-material";
 import { useAuth } from "../hooks/useAuth";
 
 const NavigationBar = () => {
-  const { user, logout, isAuthenticated } = useAuth();
+  const { user, logout, isAuthenticated, permissions } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [anchorEl, setAnchorEl] = React.useState(null); // State cho menu người dùng
@@ -43,17 +41,30 @@ const NavigationBar = () => {
   // "md" (medium) là breakpoint, bạn có thể đổi thành "sm" (small) nếu muốn
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
+  const isAdmin = permissions.includes("admin");
+  const canEdit = permissions.includes("edit");
+  const phongCoDienId = 14;
+  const isPhongCoDien =
+    canEdit && !isAdmin && user?.phongban_id === phongCoDienId;
+
   const getCurrentTab = () => {
     const pathname = location.pathname;
     if (pathname === "/") return 0;
     if (pathname === "/machines") return 1;
     if (pathname === "/tickets") return 2;
     if (pathname === "/location-track") return 3;
+    // if (pathname === "/up-rfid") return 4;
     return 0;
   };
 
   const handleTabChange = (event, newValue) => {
-    const routes = ["/", "/machines", "/tickets", "/location-track"];
+    const routes = [
+      "/",
+      "/machines",
+      "/tickets",
+      "/location-track",
+      // "/up-rfid",
+    ];
     navigate(routes[newValue]);
   };
 
@@ -102,6 +113,15 @@ const NavigationBar = () => {
     { label: "Máy móc", icon: <PrecisionManufacturing />, route: "/machines" },
     { label: "Quản lý phiếu", icon: <Receipt />, route: "/tickets" },
     { label: "Vị trí", icon: <LocationOn />, route: "/location-track" },
+    // ...(isAdmin || isPhongCoDien
+    //   ? [
+    //       {
+    //         label: "Cập nhật RFID",
+    //         icon: <Update />,
+    //         route: "/up-rfid",
+    //       },
+    //     ]
+    //   : []),
   ];
 
   return (
@@ -216,6 +236,13 @@ const NavigationBar = () => {
                   label="Vị trí"
                   iconPosition="start"
                 />
+                {/* {(isAdmin || isPhongCoDien) && (
+                  <Tab
+                    icon={<Update />}
+                    label="Cập nhật RFID"
+                    iconPosition="start"
+                  />
+                )} */}
               </Tabs>
             </Box>
 
@@ -288,6 +315,15 @@ const NavigationBar = () => {
               <AccountCircle sx={{ mr: 1 }} />
               {user?.name}
             </MenuItem>
+            {(isAdmin || isPhongCoDien) && (
+              <MenuItem
+                onClick={() => navigate("/up-rfid")}
+                sx={{ minWidth: 200 }}
+              >
+                <Update sx={{ mr: 1 }} />
+                Cập nhật RFID
+              </MenuItem>
+            )}
             <MenuItem onClick={handleLogout}>
               <ExitToApp sx={{ mr: 1 }} />
               Đăng xuất

@@ -1129,14 +1129,8 @@ app.get(
 
       const filterConditions = getMachineFilterConditions(ticket_type);
 
-      if (ticket_type) {
-        if (filterConditions.where) {
-          whereConditions.push(filterConditions.where);
-        }
-      } else if (!ticket_type) {
-        // Nếu không có ticket_type (mặc định), áp dụng quy tắc 'purchased'
-        const defaultConditions = getMachineFilterConditions("purchased");
-        whereConditions.push(defaultConditions.where);
+      if (filterConditions.where) {
+        whereConditions.push(filterConditions.where);
       }
 
       let joins = [
@@ -1171,6 +1165,7 @@ app.get(
         m.type_machine, 
         m.model_machine,
         m.serial_machine,
+        m.RFID_machine,
         m.current_status,
         m.is_borrowed_or_rented_or_borrowed_out,
         m.is_borrowed_or_rented_or_borrowed_out_name,
@@ -1206,6 +1201,160 @@ app.get(
         message: "Internal server error",
         error: error.message,
       });
+    }
+  }
+);
+
+// POST /api/machines/batch-check-serials - Batch check serials
+app.post(
+  "/api/machines/batch-check-serials",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { serials } = req.body; // ["serial1", "serial2", ...]
+
+      if (!serials || !Array.isArray(serials) || serials.length === 0) {
+        return res
+          .status(400)
+          .json({ success: false, message: "No serials provided" });
+      }
+
+      // Lọc ra các serial duy nhất
+      const uniqueSerials = [...new Set(serials)];
+
+      const [machines] = await tpmConnection.query(
+        `
+        SELECT 
+          m.serial_machine,
+          m.type_machine, 
+          m.model_machine,
+          m.RFID_machine
+        FROM tb_machine m
+        WHERE m.serial_machine IN (?)
+        `,
+        [uniqueSerials]
+      );
+
+      res.json({ success: true, data: machines });
+    } catch (error) {
+      console.error("Error batch checking serials:", error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// POST /api/machines/batch-update-rfid - Batch update RFID
+app.post(
+  "/api/machines/batch-update-rfid",
+  authenticateToken,
+  async (req, res) => {
+    const connection = await tpmConnection.getConnection();
+    try {
+      const { updates } = req.body; // [{ serial: "s1", rfid: "r1" }, { serial: "s2", rfid: "r2" }]
+      const userId = req.user.id;
+
+      if (!updates || !Array.isArray(updates) || updates.length === 0) {
+        return res
+          .status(400)
+          .json({ success: false, message: "No updates provided" });
+      }
+
+      await connection.beginTransaction();
+
+      let successCount = 0;
+      let errorCount = 0;
+      const errors = [];
+
+      // Dùng Promise.all để chạy các lệnh update song song
+      const updatePromises = updates.map(async (update, index) => {
+        if (!update.serial || !update.rfid) {
+          errorCount++;
+          errors.push(`Dòng ${index + 1}: Thiếu Serial hoặc RFID.`);
+          return;
+        }
+
+        try {
+          // Kiểm tra xem RFID mới có bị trùng không (trên máy khác)
+          const [existingRfid] = await connection.query(
+            "SELECT serial_machine FROM tb_machine WHERE RFID_machine = ? AND serial_machine != ?",
+            [update.rfid, update.serial]
+          );
+
+          if (existingRfid.length > 0) {
+            errorCount++;
+            errors.push(
+              `Dòng ${index + 1} (${update.serial}): RFID "${
+                update.rfid
+              }" đã tồn tại trên máy "${existingRfid[0].serial_machine}".`
+            );
+            return;
+          }
+
+          // Thực hiện cập nhật
+          const [result] = await connection.query(
+            `
+            UPDATE tb_machine 
+            SET 
+              RFID_machine = ?,
+              updated_by = ?,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE serial_machine = ?
+            `,
+            [update.rfid, userId, update.serial]
+          );
+
+          if (result.affectedRows > 0) {
+            successCount++;
+          } else {
+            errorCount++;
+            errors.push(
+              `Dòng ${index + 1}: Không tìm thấy Serial "${
+                update.serial
+              }" để cập nhật.`
+            );
+          }
+        } catch (err) {
+          errorCount++;
+          errors.push(
+            `Dòng ${index + 1} (${update.serial}): Lỗi DB - ${err.message}`
+          );
+        }
+      });
+
+      // Chờ tất cả các promise hoàn thành
+      await Promise.all(updatePromises);
+
+      // Nếu có bất kỳ lỗi nào, rollback
+      if (errorCount > 0) {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Đã xảy ra lỗi, không có máy nào được cập nhật.",
+          data: { successCount, errorCount, errors },
+        });
+      }
+
+      // Nếu không có lỗi, commit transaction
+      await connection.commit();
+      res.json({
+        success: true,
+        message: `Đã cập nhật thành công ${successCount} máy.`,
+        data: { successCount, errorCount, errors },
+      });
+    } catch (error) {
+      await connection.rollback();
+      console.error("Error batch updating RFID:", error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    } finally {
+      connection.release();
     }
   }
 );
@@ -1248,14 +1397,8 @@ app.post("/api/machines/by-rfid-list", authenticateToken, async (req, res) => {
 
     // 3. Áp dụng bộ lọc trạng thái máy dựa trên loại phiếu
     const filterConditions = getMachineFilterConditions(ticket_type);
-    if (ticket_type) {
-      if (filterConditions.where) {
-        whereConditions.push(filterConditions.where);
-      }
-    } else {
-      // Nếu không có ticket_type, áp dụng quy tắc mặc định
-      const defaultConditions = getMachineFilterConditions("purchased");
-      whereConditions.push(defaultConditions.where);
+    if (filterConditions.where) {
+      whereConditions.push(filterConditions.where);
     }
 
     // 4. Áp dụng bộ lọc theo phòng ban (nếu có)
@@ -1421,9 +1564,7 @@ const getMachineFilterConditions = (ticket_type) => {
 
     // Mặc định (nếu ticket_type không xác định, ví dụ: scanner mở trước khi chọn loại phiếu)
     default:
-      where = `(m.current_status = 'available' AND m.is_borrowed_or_rented_or_borrowed_out IS NULL)`;
-      message =
-        "Chỉ nhận những máy có trạng thái 'Sẵn sàng' (không mượn/thuê/cho mượn).";
+      where = "";
       break;
   }
 

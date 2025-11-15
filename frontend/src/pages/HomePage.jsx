@@ -5,22 +5,18 @@ import { useNavigate } from "react-router-dom";
 import {
   Container,
   Typography,
-  Paper,
   Box,
   Grid,
   Card,
   CardContent,
   Chip,
   Button,
-  CardActions,
   Stack,
   Avatar,
   useTheme,
   useMediaQuery,
 } from "@mui/material";
 import {
-  Science,
-  Psychology,
   Dashboard,
   ArrowForward,
   PrecisionManufacturing,

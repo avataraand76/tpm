@@ -171,6 +171,22 @@ export const api = {
       );
       return response.data;
     },
+    batchCheckSerials: async (data) => {
+      // data = { serials: [...] }
+      const response = await httpConnect.post(
+        "/api/machines/batch-check-serials",
+        data
+      );
+      return response.data;
+    },
+    batchUpdateRfid: async (data) => {
+      // data = { updates: [{ serial, rfid }, ...] }
+      const response = await httpConnect.post(
+        "/api/machines/batch-update-rfid",
+        data
+      );
+      return response.data;
+    },
   },
 
   // MARK: DEPARTMENTS
