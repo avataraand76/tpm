@@ -564,6 +564,7 @@ const TicketManagementPage = () => {
           ticketDetails = response.data.transfer;
           ticketDate = ticketDetails.transfer_date;
         }
+        setSelectedTicket(ticketDetails);
 
         const ticketType =
           ticketDetails.import_type || ticketDetails.export_type || "internal";
@@ -1913,7 +1914,8 @@ const TicketManagementPage = () => {
                           />
                         )}
                         sx={
-                          formData.type === "borrowed_out"
+                          formData.type === "borrowed_out" ||
+                          dialogMode === "view"
                             ? DISABLED_VIEW_SX
                             : {}
                         }
@@ -2595,7 +2597,7 @@ const TicketManagementPage = () => {
                     </Button>
                   )}
                   {/* Nút Hủy (Admin hoặc Người tạo) */}
-                  {(isAdmin || user.id === selectedTicket.created_by) &&
+                  {(isAdmin || selectedTicket.is_creator) &&
                     selectedTicket.status === "pending" && (
                       <Button
                         variant="contained"
@@ -2645,7 +2647,7 @@ const TicketManagementPage = () => {
                     </Button>
                   )}
                   {/* Nút Hủy (Admin hoặc Người tạo) */}
-                  {(isAdmin || user.id === selectedTicket.created_by) &&
+                  {(isAdmin || selectedTicket.is_creator) &&
                     selectedTicket.status === "pending" && (
                       <Button
                         variant="contained"
@@ -2676,22 +2678,27 @@ const TicketManagementPage = () => {
                     const ticket = selectedTicket;
                     const uuid = ticket.uuid_machine_internal_transfer;
 
-                    // User 2 (Trưởng BP)
-                    const canConfirm =
-                      (isAdmin || canEdit) &&
-                      ticket.status === "pending_confirmation" &&
-                      user.phongban_id === ticket.to_location_phongban_id &&
-                      user.id !== ticket.created_by;
+                    // === SỬA TẠI ĐÂY: Dùng cờ từ Backend ===
+                    // Backend đã tính toán sẵn logic:
+                    // 1. Trạng thái là pending_confirmation
+                    // 2. User thuộc phòng ban đích
+                    // 3. User không phải người tạo
+                    const canConfirm = ticket.can_confirm;
+                    // ========================================
 
-                    // User 3 (Admin)
+                    // Admin duyệt phiếu khi đã xác nhận
                     const canApprove =
                       ticket.status === "pending_approval" && isAdmin;
 
-                    // User 1 (Creator) hoặc Admin
+                    // Admin hoặc Người tạo có thể hủy
+                    // Backend trả về is_creator, hoặc so sánh thủ công nếu backend chưa trả
+                    const isCreator =
+                      ticket.is_creator || user.id === ticket.created_by;
+
                     const canCancel =
                       (ticket.status === "pending_confirmation" ||
                         ticket.status === "pending_approval") &&
-                      (isAdmin || user.id === ticket.created_by);
+                      (isAdmin || isCreator);
 
                     return (
                       <>

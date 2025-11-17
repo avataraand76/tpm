@@ -2279,7 +2279,7 @@ app.get("/api/locations", authenticateToken, async (req, res) => {
         tl.uuid_location, 
         tl.name_location,
         td.name_department,
-        td.id_phong_ban,
+        td.uuid_department,
         COUNT(ml.id_machine) AS machine_count
       FROM tb_location tl
       LEFT JOIN tb_department td ON td.id_department = tl.id_department
@@ -2307,7 +2307,7 @@ app.get("/api/locations", authenticateToken, async (req, res) => {
       query += ` WHERE ${whereConditions.join(" AND ")}`;
     }
 
-    query += ` GROUP BY tl.id_location, tl.name_location, td.name_department, td.id_phong_ban`;
+    query += ` GROUP BY tl.id_location, tl.name_location, td.name_department, td.uuid_department`;
 
     const [locations] = await tpmConnection.query(query, params);
 
@@ -2663,7 +2663,6 @@ app.get("/api/imports", authenticateToken, async (req, res) => {
         i.note,
         i.created_at,
         i.updated_at,
-        i.created_by,
         i.is_borrowed_or_rented_or_borrowed_out_name,
         i.is_borrowed_or_rented_or_borrowed_out_date,
         i.is_borrowed_or_rented_or_borrowed_out_return_date,
@@ -2711,6 +2710,7 @@ app.get("/api/imports", authenticateToken, async (req, res) => {
 app.get("/api/imports/:uuid", authenticateToken, async (req, res) => {
   try {
     const { uuid } = req.params;
+    const currentUserId = req.user.id;
 
     // 1. Truy vấn ID nội bộ và kiểm tra sự tồn tại
     const [idResult] = await tpmConnection.query(
@@ -2819,11 +2819,20 @@ app.get("/api/imports/:uuid", authenticateToken, async (req, res) => {
       [importId]
     );
 
+    const ticketData = imports[0];
+
+    // Tính toán cờ is_creator
+    const isCreator = ticketData.created_by === currentUserId;
+    delete ticketData.created_by;
+
     res.json({
       success: true,
       message: "Import details retrieved successfully",
       data: {
-        import: imports[0],
+        import: {
+          ...ticketData,
+          is_creator: isCreator,
+        },
         details: details,
       },
     });
@@ -3322,7 +3331,6 @@ app.get("/api/exports", authenticateToken, async (req, res) => {
         e.note,
         e.created_at,
         e.updated_at,
-        e.created_by,
         e.is_borrowed_or_rented_or_borrowed_out_name,
         e.is_borrowed_or_rented_or_borrowed_out_date,
         e.is_borrowed_or_rented_or_borrowed_out_return_date,
@@ -3370,6 +3378,7 @@ app.get("/api/exports", authenticateToken, async (req, res) => {
 app.get("/api/exports/:uuid", authenticateToken, async (req, res) => {
   try {
     const { uuid } = req.params;
+    const currentUserId = req.user.id;
 
     // 1. Truy vấn ID nội bộ và kiểm tra sự tồn tại
     const [idResult] = await tpmConnection.query(
@@ -3478,11 +3487,20 @@ app.get("/api/exports/:uuid", authenticateToken, async (req, res) => {
       [exportId]
     );
 
+    const ticketData = exports[0];
+
+    // Tính toán cờ is_creator
+    const isCreator = ticketData.created_by === currentUserId;
+    delete ticketData.created_by;
+
     res.json({
       success: true,
       message: "Export details retrieved successfully",
       data: {
-        export: exports[0],
+        export: {
+          ...ticketData,
+          is_creator: isCreator,
+        },
         details: details,
       },
     });
@@ -3896,26 +3914,76 @@ app.get("/api/internal-transfers", authenticateToken, async (req, res) => {
           t.note,
           t.created_at,
           t.updated_at,
-          t.created_by,
           loc_to.name_location as to_location_name,
-          td.id_phong_ban AS to_location_phongban_id,
+          td.uuid_department AS to_location_department_uuid,
           COUNT(d.id_machine) as machine_count
         FROM tb_machine_internal_transfer t
         LEFT JOIN tb_location loc_to ON loc_to.id_location = t.to_location_id
         LEFT JOIN tb_department td ON td.id_department = loc_to.id_department
         LEFT JOIN tb_machine_internal_transfer_detail d ON d.id_machine_internal_transfer = t.id_machine_internal_transfer
         ${whereClause}
-        GROUP BY t.id_machine_internal_transfer, td.id_phong_ban
+        GROUP BY t.id_machine_internal_transfer, td.uuid_department
         ORDER BY t.transfer_date DESC, t.created_at DESC
         LIMIT ? OFFSET ?
         `,
       [...params, limit, offset]
     );
 
+    const userPhongBanId = req.user.phongban_id;
+    const userId = req.user.id;
+
+    // 1. Lấy danh sách UUID phòng ban đích
+    const deptUuids = [
+      ...new Set(
+        transfers.map((t) => t.to_location_department_uuid).filter(Boolean)
+      ),
+    ];
+
+    // 2. Tra cứu ID phòng ban từ UUID
+    let deptMap = new Map();
+    if (deptUuids.length > 0) {
+      const [deptInfo] = await tpmConnection.query(
+        "SELECT uuid_department, id_phong_ban FROM tb_department WHERE uuid_department IN (?)",
+        [deptUuids]
+      );
+      deptMap = new Map(
+        deptInfo.map((d) => [d.uuid_department, d.id_phong_ban])
+      );
+    }
+
+    const finalData = transfers.map((t) => {
+      const toLocationPhongBanId = deptMap.get(t.to_location_department_uuid);
+
+      // Logic xác định quyền confirm:
+      // 1. Phiếu phải ở trạng thái 'pending_confirmation'
+      // 2. User phải thuộc phòng ban đích (toLocationPhongBanId)
+      // 3. User KHÔNG phải là người tạo phiếu (tùy chọn, nhưng thường là vậy để đảm bảo quy trình 2 người)
+      let canConfirm = false;
+      if (
+        t.status === "pending_confirmation" &&
+        userPhongBanId === toLocationPhongBanId &&
+        userId !== t.created_by
+      ) {
+        canConfirm = true;
+      }
+
+      return {
+        uuid_machine_internal_transfer: t.uuid_machine_internal_transfer,
+        transfer_date: t.transfer_date,
+        status: t.status,
+        note: t.note,
+        created_at: t.created_at,
+        updated_at: t.updated_at,
+        to_location_name: t.to_location_name,
+        machine_count: t.machine_count,
+        can_confirm: canConfirm, // <<< TRẢ VỀ CỜ NÀY
+      };
+    });
+
     res.json({
       success: true,
       message: "Transfers retrieved successfully",
-      data: transfers,
+      data: finalData,
       pagination: { page, limit, total, totalPages },
     });
   } catch (error) {
@@ -3935,6 +4003,7 @@ app.get(
   async (req, res) => {
     try {
       const { uuid } = req.params;
+      const userId = req.user.id;
 
       const [idResult] = await tpmConnection.query(
         "SELECT id_machine_internal_transfer FROM tb_machine_internal_transfer WHERE uuid_machine_internal_transfer = ?",
@@ -3959,11 +4028,10 @@ app.get(
           t.created_at,
           t.updated_at,
           t.created_by,
-          t.confirmed_by,
           t.confirmed_at,
           loc_to.uuid_location as to_location_uuid,
           loc_to.name_location as to_location_name,
-          td.id_phong_ban AS to_location_phongban_id,
+          td.uuid_department AS to_location_department_uuid,
           
           -- Dùng CASE để điền thông tin user ảo (test users)
           CASE
@@ -3976,7 +4044,7 @@ app.get(
             WHEN t.created_by = 99994 THEN '99994'
             WHEN t.created_by = 99995 THEN '99995'
             ELSE nv.ma_nv
-          END AS creator_ma_nv, -- Đặt tên mới
+          END AS creator_ma_nv,
 
           CASE
             WHEN t.created_by = 99999 THEN 'Quản Trị Viên (Test)'
@@ -3988,7 +4056,7 @@ app.get(
             WHEN t.created_by = 99994 THEN 'Cơ Điện Xưởng 4 (Test)'
             WHEN t.created_by = 99995 THEN 'Viewer (Test)'
             ELSE nv.ten_nv
-          END AS creator_ten_nv -- Đặt tên mới
+          END AS creator_ten_nv
           
         FROM tb_machine_internal_transfer t
         LEFT JOIN tb_location loc_to ON loc_to.id_location = t.to_location_id
@@ -4026,11 +4094,40 @@ app.get(
         [transferId]
       );
 
+      let transferInfo = transferData[0];
+      let canConfirm = false;
+      const isCreator = transferInfo.created_by === userId;
+
+      if (transferInfo.to_location_department_uuid) {
+        const [dept] = await tpmConnection.query(
+          "SELECT id_phong_ban FROM tb_department WHERE uuid_department = ?",
+          [transferInfo.to_location_department_uuid]
+        );
+
+        if (dept.length > 0) {
+          const toLocationPhongBanId = dept[0].id_phong_ban;
+          const userPhongBanId = req.user.phongban_id;
+
+          if (
+            transferInfo.status === "pending_confirmation" &&
+            userPhongBanId === toLocationPhongBanId &&
+            userId !== transferInfo.created_by
+          ) {
+            canConfirm = true;
+          }
+        }
+      }
+      delete transferInfo.created_by;
+
       res.json({
         success: true,
         message: "Transfer details retrieved successfully",
         data: {
-          transfer: transferData[0],
+          transfer: {
+            ...transferInfo,
+            can_confirm: canConfirm,
+            is_creator: isCreator,
+          },
           details: details,
         },
       });
@@ -4068,16 +4165,10 @@ app.post(
         });
       }
 
-      // Lấy ID nội bộ VÀ id_phong_ban của vị trí đến
+      // SỬA: Chỉ lấy id_location và id_department (để liên kết)
+      // Không Join để lấy id_phong_ban ở đây
       const [toLoc] = await connection.query(
-        `
-      SELECT 
-        tl.id_location,
-        td.id_phong_ban
-      FROM tb_location tl
-      LEFT JOIN tb_department td ON td.id_department = tl.id_department
-      WHERE tl.uuid_location = ?
-      `,
+        `SELECT id_location, id_department FROM tb_location WHERE uuid_location = ?`,
         [to_location_uuid]
       );
 
@@ -4088,7 +4179,19 @@ app.post(
           .json({ success: false, message: "Không tìm thấy vị trí đến." });
       }
       const to_location_id = toLoc[0].id_location;
-      const to_location_phongban_id = toLoc[0].id_phong_ban;
+      const id_department = toLoc[0].id_department;
+
+      // Query riêng để lấy id_phong_ban từ id_department
+      let to_location_phongban_id = null;
+      if (id_department) {
+        const [dept] = await connection.query(
+          "SELECT id_phong_ban FROM tb_department WHERE id_department = ?",
+          [id_department]
+        );
+        if (dept.length > 0) {
+          to_location_phongban_id = dept[0].id_phong_ban;
+        }
+      }
 
       let attachedFileString = null;
       if (req.files && req.files.length > 0) {
@@ -4221,8 +4324,8 @@ app.put(
     try {
       await connection.beginTransaction();
       const { uuid } = req.params;
-      const userId = req.user.id; // ID của User 2 (người đang nhấn xác nhận)
-      const userPhongBanId = req.user.phongban_id; // <<< LẤY TỪ TOKEN
+      const userId = req.user.id;
+      const userPhongBanId = req.user.phongban_id;
 
       // 1. Lấy thông tin phiếu
       const [existing] = await connection.query(
@@ -4231,10 +4334,9 @@ app.put(
           t.id_machine_internal_transfer, 
           t.status,
           t.created_by,
-          td.id_phong_ban AS to_location_phongban_id
+          l_to.id_department -- Lấy id_department thay vì id_phong_ban
         FROM tb_machine_internal_transfer t
         LEFT JOIN tb_location l_to ON l_to.id_location = t.to_location_id
-        LEFT JOIN tb_department td ON td.id_department = l_to.id_department
         WHERE t.uuid_machine_internal_transfer = ?
         `,
         [uuid]
@@ -4248,6 +4350,18 @@ app.put(
       }
 
       const ticket = existing[0];
+
+      // Tra cứu id_phong_ban từ id_department
+      let to_location_phongban_id = null;
+      if (ticket.id_department) {
+        const [dept] = await connection.query(
+          "SELECT id_phong_ban FROM tb_department WHERE id_department = ?",
+          [ticket.id_department]
+        );
+        if (dept.length > 0) {
+          to_location_phongban_id = dept[0].id_phong_ban;
+        }
+      }
 
       // 2. Kiểm tra logic
       if (ticket.status !== "pending_confirmation") {
@@ -4266,7 +4380,7 @@ app.put(
         });
       }
 
-      // 3. Kiểm tra phòng ban của User 2 (lấy từ token)
+      // 3. Kiểm tra phòng ban của User 2
       if (!userPhongBanId) {
         await connection.rollback();
         return res.status(404).json({
@@ -4275,8 +4389,8 @@ app.put(
         });
       }
 
-      // 4. So sánh phòng ban
-      if (userPhongBanId !== ticket.to_location_phongban_id) {
+      // 4. So sánh phòng ban (Dùng biến đã tra cứu)
+      if (userPhongBanId !== to_location_phongban_id) {
         await connection.rollback();
         return res.status(403).json({
           success: false,
@@ -5492,9 +5606,7 @@ app.get("/api/admin/departments-with-locations", async (req, res) => {
       return {
         uuid_department: dept.uuid_department,
         name_department: dept.name_department,
-
         ten_phong_ban: ten_phong_ban,
-
         locations: deptLocations,
       };
     });
