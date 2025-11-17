@@ -522,6 +522,31 @@ app.get("/api/auth/permissions", authenticateToken, async (req, res) => {
   }
 });
 
+// MARK: CATEGORIES
+
+// GET /api/categories - Get all categories
+app.get("/api/categories", authenticateToken, async (req, res) => {
+  try {
+    // SỬA: Chỉ lấy ten_phong_ban, không lấy id
+    const [categories] = await tpmConnection.query(
+      "SELECT DISTINCT name_category FROM tb_category ORDER BY name_category ASC"
+    );
+    res.json({
+      success: true,
+      message: "Categories retrieved successfully",
+      // Trả về: [{ name_category: "..." }, { name_category: "..." }]
+      data: categories,
+    });
+  } catch (error) {
+    console.error("Error fetching categories:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
 // MARK: MACHINE LIST
 
 // GET /api/machines - Get all machines with pagination
@@ -1587,14 +1612,14 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
       repair_cost,
       note,
       current_status,
-      id_category,
+      name_category,
     } = req.body;
 
     // Validate required fields
-    if (!code_machine || !type_machine || !serial_machine) {
+    if (!code_machine || !type_machine || !serial_machine || !name_category) {
       return res.status(400).json({
         success: false,
-        message: "Mã máy, Loại máy, Serial máy là bắt buộc",
+        message: "Mã máy, Loại máy, Serial máy và Phân loại là bắt buộc",
       });
     }
 
@@ -1636,6 +1661,23 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
       formattedDate = `${year}-${month}-${day}`;
     }
 
+    let id_category = null;
+    if (name_category) {
+      const [cat] = await tpmConnection.query(
+        "SELECT id_category FROM tb_category WHERE name_category = ? LIMIT 1",
+        [name_category]
+      );
+      if (cat.length > 0) {
+        id_category = cat[0].id_category;
+      } else {
+        // Nếu vì lý do nào đó không tìm thấy, trả lỗi
+        return res.status(404).json({
+          success: false,
+          message: `Phân loại '${name_category}' không tồn tại.`,
+        });
+      }
+    }
+
     // Get user ID from token
     const userId = req.user.id;
 
@@ -1661,7 +1703,7 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
         repair_cost || null,
         note || null,
         current_status || "available",
-        id_category || 1, // Default to category 1 if not provided
+        id_category,
         userId, // created_by
         userId, // updated_by
       ]
@@ -1981,6 +2023,23 @@ app.post("/api/machines/batch-import", authenticateToken, async (req, res) => {
     const codesInFile = machines.map((m) => m.code_machine).filter(Boolean);
     const serialsInFile = machines.map((m) => m.serial_machine).filter(Boolean);
 
+    // 1. Lấy tất cả TÊN category duy nhất từ file
+    const categoryNamesInFile = [
+      ...new Set(machines.map((m) => m.name_category).filter(Boolean)),
+    ];
+    let categoryMap = new Map();
+    if (categoryNamesInFile.length > 0) {
+      // 2. Tra cứu 1 lần duy nhất
+      const [categories] = await connection.query(
+        "SELECT id_category, name_category FROM tb_category WHERE name_category IN (?)",
+        [categoryNamesInFile]
+      );
+      // 3. Tạo Map: {"Máy móc thiết bị": 1, "Phụ kiện": 2}
+      categoryMap = new Map(
+        categories.map((c) => [c.name_category, c.id_category])
+      );
+    }
+
     // --- 2. Kiểm tra trùng lặp trong DB ---
     let existingCodes = new Set();
     let existingSerials = new Set();
@@ -2014,16 +2073,32 @@ app.post("/api/machines/batch-import", authenticateToken, async (req, res) => {
       if (
         !machine.code_machine ||
         !machine.serial_machine ||
-        !machine.type_machine
+        !machine.type_machine ||
+        !machine.name_category
       ) {
         errors.push({
           line,
           code: machine.code_machine || "N/A",
           serial: machine.serial_machine || "N/A",
-          message: "Thiếu thông tin bắt buộc (Mã máy, Serial, Loại máy)",
+          message:
+            "Thiếu thông tin bắt buộc (Mã máy, Serial, Loại máy, Phân loại)",
         });
         continue;
       }
+
+      // Tra cứu ID category từ map đã tạo
+      const id_category = categoryMap.get(machine.name_category);
+      if (!id_category) {
+        errors.push({
+          line,
+          code: machine.code_machine,
+          serial: machine.serial_machine,
+          message: `Phân loại "${machine.name_category}" không tồn tại trong Cơ sở dữ liệu`,
+        });
+        continue;
+      }
+      // Gán ID đã tra cứu vào object machine để dùng khi INSERT
+      machine.id_category_looked_up = id_category;
 
       // Check DB duplicates
       if (existingCodes.has(machine.code_machine)) {
@@ -2117,7 +2192,7 @@ app.post("/api/machines/batch-import", authenticateToken, async (req, res) => {
             machine.repair_cost || null,
             machine.note || null,
             machine.current_status || "available",
-            machine.id_category || 1,
+            machine.id_category_looked_up,
             userId, // created_by
             userId, // updated_by
           ]
@@ -5244,3 +5319,500 @@ app.post(
     }
   }
 );
+
+// MARK: ADMIN
+
+const authenticateAdmin = async (req, res, next) => {
+  try {
+    const userId = req.user.id; // Lấy từ 'authenticateToken'
+
+    // Kiểm tra quyền 'admin' trong tb_user_permission
+    const [perms] = await tpmConnection.query(
+      `
+      SELECT p.name_permission 
+      FROM tb_user_permission up
+      JOIN tb_permission p ON up.id_permission = p.id_permission
+      WHERE up.id_nhan_vien = ? AND p.name_permission = 'admin'
+      `,
+      [userId]
+    );
+
+    if (perms.length === 0) {
+      return res.status(403).json({
+        success: false,
+        message: "Bạn không có quyền Admin để thực hiện hành động này.",
+      });
+    }
+
+    // Nếu là Admin, cho phép tiếp tục
+    next();
+  } catch (error) {
+    console.error("Error in admin authentication middleware:", error);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi máy chủ khi xác thực quyền Admin",
+      error: error.message,
+    });
+  }
+};
+
+// Middleware: Tất cả các route /api/admin/* đều phải qua 2 lớp xác thực
+// 1. Phải đăng nhập (authenticateToken)
+// 2. Phải là Admin (authenticateAdmin)
+app.use("/api/admin", authenticateToken, authenticateAdmin);
+
+// GET /api/admin/categories - Get all categories
+app.get("/api/admin/categories", async (req, res) => {
+  try {
+    const [categories] = await tpmConnection.query(
+      "SELECT uuid_category, name_category FROM tb_category"
+    );
+    res.json({ success: true, data: categories });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/admin/categories - Create category
+app.post("/api/admin/categories", async (req, res) => {
+  try {
+    const { name_category } = req.body;
+    const userId = req.user.id;
+    if (!name_category) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Tên loại là bắt buộc" });
+    }
+    const [result] = await tpmConnection.query(
+      "INSERT INTO tb_category (name_category, created_by, updated_by) VALUES (?, ?, ?)",
+      [name_category, userId, userId]
+    );
+    // Lấy lại dữ liệu vừa tạo (bao gồm UUID)
+    const [newData] = await tpmConnection.query(
+      "SELECT uuid_category, name_category FROM tb_category WHERE id_category = ?",
+      [result.insertId]
+    );
+    res.status(201).json({
+      success: true,
+      message: "Tạo loại thành công",
+      data: newData[0],
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// PUT /api/admin/categories/:uuid - Update category by UUID
+app.put("/api/admin/categories/:uuid", async (req, res) => {
+  try {
+    const { uuid } = req.params;
+    const { name_category } = req.body;
+    const userId = req.user.id;
+    if (!name_category) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Tên loại là bắt buộc" });
+    }
+    await tpmConnection.query(
+      "UPDATE tb_category SET name_category = ?, updated_by = ? WHERE uuid_category = ?",
+      [name_category, userId, uuid]
+    );
+    res.json({ success: true, message: "Cập nhật loại thành công" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/admin/hitimesheet-departments - Get all departments from HiTimeSheet
+app.get("/api/admin/hitimesheet-departments", async (req, res) => {
+  try {
+    const [departments] = await dataHiTimesheetConnection.query(
+      `
+      SELECT DISTINCT ten_phong_ban 
+      FROM sync_phong_ban
+      WHERE ten_phong_ban IS NOT NULL AND ten_phong_ban != ''
+      ORDER BY ten_phong_ban ASC
+      `
+    );
+    res.json({ success: true, data: departments });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/admin/departments-with-locations - Get departments with locations
+app.get("/api/admin/departments-with-locations", async (req, res) => {
+  try {
+    // 1. Lấy tất cả Đơn vị (vẫn lấy id_phong_ban để tra cứu)
+    const [departments] = await tpmConnection.query(
+      "SELECT uuid_department, name_department, id_phong_ban FROM tb_department"
+    );
+
+    // 2. Lấy tất cả Vị trí (Không thay đổi)
+    const [locations] = await tpmConnection.query(
+      `
+      SELECT 
+        tl.uuid_location, 
+        tl.name_location, 
+        td.uuid_department 
+      FROM tb_location tl
+      JOIN tb_department td ON tl.id_department = td.id_department
+      `
+    );
+
+    // 3. Logic tra cứu (Map) là BẮT BUỘC để lấy TÊN
+    const phongBanIds = [
+      ...new Set(departments.map((dept) => dept.id_phong_ban).filter(Boolean)),
+    ];
+    let phongBanMap = new Map();
+    if (phongBanIds.length > 0) {
+      // Dùng ID để tra cứu TÊN
+      const [phongBanNames] = await dataHiTimesheetConnection.query(
+        `SELECT id, ten_phong_ban FROM sync_phong_ban WHERE id IN (?)`,
+        [phongBanIds]
+      );
+      phongBanMap = new Map(
+        phongBanNames.map((pb) => [pb.id, pb.ten_phong_ban])
+      );
+    }
+
+    // 4. Gộp Vị trí vào Đơn vị
+    const data = departments.map((dept) => {
+      const deptLocations = locations
+        .filter((loc) => loc.uuid_department === dept.uuid_department)
+        .map((loc) => ({
+          uuid_location: loc.uuid_location,
+          name_location: loc.name_location,
+        }));
+
+      const ten_phong_ban =
+        phongBanMap.get(dept.id_phong_ban) || // Lấy tên (ví dụ: "Bộ phận Cơ Điện")
+        "N/A"; // Nếu không có ID hoặc không tìm thấy, trả N/A
+
+      return {
+        uuid_department: dept.uuid_department,
+        name_department: dept.name_department,
+
+        ten_phong_ban: ten_phong_ban,
+
+        locations: deptLocations,
+      };
+    });
+
+    res.json({ success: true, data: data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/admin/departments - Create department
+app.post("/api/admin/departments", async (req, res) => {
+  try {
+    // SỬA: Lấy ten_phong_ban (string)
+    const { name_department, ten_phong_ban } = req.body;
+    const userId = req.user.id;
+    if (!name_department) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Tên đơn vị là bắt buộc" });
+    }
+
+    let id_phong_ban = null;
+    if (ten_phong_ban) {
+      const [phongban] = await dataHiTimesheetConnection.query(
+        "SELECT id FROM sync_phong_ban WHERE ten_phong_ban = ? LIMIT 1",
+        [ten_phong_ban]
+      );
+      if (phongban.length > 0) {
+        id_phong_ban = phongban[0].id;
+      } else {
+        console.warn(
+          `(POST) Không tìm thấy ID cho ten_phong_ban: ${ten_phong_ban}`
+        );
+        // (Tùy chọn: Bạn có thể trả lỗi ở đây nếu muốn)
+        // return res.status(404).json({ success: false, message: `Tên phòng ban '${ten_phong_ban}' không tồn tại trong HiTimeSheet.` });
+      }
+    }
+
+    const [result] = await tpmConnection.query(
+      "INSERT INTO tb_department (name_department, id_phong_ban, created_by, updated_by) VALUES (?, ?, ?, ?)",
+      [name_department, id_phong_ban, userId, userId]
+    );
+
+    // Lấy lại dữ liệu vừa tạo
+    const [newData] = await tpmConnection.query(
+      "SELECT uuid_department, name_department FROM tb_department WHERE id_department = ?",
+      [result.insertId]
+    );
+    res.status(201).json({
+      success: true,
+      message: "Tạo đơn vị thành công",
+      data: {
+        ...newData[0],
+        ten_phong_ban: ten_phong_ban || "N/A", // Trả TÊN về cho frontend
+        locations: [],
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// PUT /api/admin/departments/:uuid - Update department by UUID
+app.put("/api/admin/departments/:uuid", async (req, res) => {
+  try {
+    const { uuid } = req.params;
+    // SỬA: Lấy ten_phong_ban (string)
+    const { name_department, ten_phong_ban } = req.body;
+    const userId = req.user.id;
+    if (!name_department) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Tên đơn vị là bắt buộc" });
+    }
+
+    // SỬA: Logic tra cứu ID từ TÊN
+    let id_phong_ban = null;
+    if (ten_phong_ban) {
+      const [phongban] = await dataHiTimesheetConnection.query(
+        "SELECT id FROM sync_phong_ban WHERE ten_phong_ban = ? LIMIT 1",
+        [ten_phong_ban]
+      );
+      if (phongban.length > 0) {
+        id_phong_ban = phongban[0].id;
+      } else {
+        console.warn(
+          `(PUT) Không tìm thấy ID cho ten_phong_ban: ${ten_phong_ban}`
+        );
+        // (Tùy chọn: trả lỗi)
+        // return res.status(404).json({ success: false, message: `Tên phòng ban '${ten_phong_ban}' không tồn tại trong HiTimeSheet.` });
+      }
+    } // Nếu ten_phong_ban là rỗng/null (Không chọn), id_phong_ban sẽ là null
+
+    await tpmConnection.query(
+      "UPDATE tb_department SET name_department = ?, id_phong_ban = ?, updated_by = ? WHERE uuid_department = ?",
+      [name_department, id_phong_ban, userId, uuid]
+    );
+    res.json({ success: true, message: "Cập nhật đơn vị thành công" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/admin/locations - Create location
+app.post("/api/admin/locations", async (req, res) => {
+  try {
+    const { name_location, uuid_department } = req.body;
+    const userId = req.user.id;
+    if (!name_location || !uuid_department) {
+      return res.status(400).json({
+        success: false,
+        message: "Tên vị trí và Đơn vị là bắt buộc",
+      });
+    }
+
+    // Tìm id_department từ uuid_department
+    const [dept] = await tpmConnection.query(
+      "SELECT id_department FROM tb_department WHERE uuid_department = ?",
+      [uuid_department]
+    );
+    if (dept.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy đơn vị (department).",
+      });
+    }
+    const id_department = dept[0].id_department;
+
+    const [result] = await tpmConnection.query(
+      "INSERT INTO tb_location (name_location, id_department, created_by, updated_by) VALUES (?, ?, ?, ?)",
+      [name_location, id_department, userId, userId]
+    );
+    // Lấy lại dữ liệu vừa tạo
+    const [newData] = await tpmConnection.query(
+      "SELECT * FROM tb_location WHERE id_location = ?",
+      [result.insertId]
+    );
+    res.status(201).json({
+      success: true,
+      message: "Tạo vị trí thành công",
+      data: newData[0],
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// PUT /api/admin/locations/:uuid - Update location by UUID
+app.put("/api/admin/locations/:uuid", async (req, res) => {
+  try {
+    const { uuid } = req.params;
+    const { name_location } = req.body;
+    const userId = req.user.id;
+
+    if (!name_location) {
+      return res.status(400).json({
+        success: false,
+        message: "Tên vị trí là bắt buộc",
+      });
+    }
+
+    await tpmConnection.query(
+      "UPDATE tb_location SET name_location = ?, updated_by = ? WHERE uuid_location = ?",
+      [name_location, userId, uuid]
+    );
+    res.json({ success: true, message: "Cập nhật vị trí thành công" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/admin/permissions - Lấy tất cả quyền đang có
+app.get("/api/admin/permissions", async (req, res) => {
+  try {
+    // Lấy tên quyền
+    const [permissions] = await tpmConnection.query(
+      "SELECT name_permission FROM tb_permission"
+    );
+    res.json({
+      success: true,
+      data: permissions.map((p) => p.name_permission), // Trả về mảng TÊN: ['admin', 'edit', 'view']
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/admin/users/search - Tìm user (không trả ID)
+app.get("/api/admin/users/search", async (req, res) => {
+  try {
+    const { query } = req.query;
+    if (!query || query.length < 2) {
+      return res.json({ success: true, data: [] });
+    }
+    const searchPattern = `%${query}%`;
+    // Tìm trong CSDL HiTimeSheet
+    const [users] = await dataHiTimesheetConnection.query(
+      `
+      SELECT ma_nv, ten_nv 
+      FROM sync_nhan_vien 
+      WHERE ma_nv LIKE ? OR ten_nv LIKE ?
+      ORDER BY ma_nv ASC
+      `,
+      [searchPattern, searchPattern]
+    );
+    res.json({ success: true, data: users });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/admin/users/permissions - Lấy quyền của 1 user theo ma_nv
+app.get("/api/admin/users/permissions", async (req, res) => {
+  try {
+    const { ma_nv } = req.query;
+    if (!ma_nv) {
+      return res
+        .status(400)
+        .json({ success: false, message: "ma_nv là bắt buộc" });
+    }
+
+    // 1. Tra cứu ID từ ma_nv (trong code)
+    const [user] = await dataHiTimesheetConnection.query(
+      "SELECT id FROM sync_nhan_vien WHERE ma_nv = ?",
+      [ma_nv]
+    );
+    if (user.length === 0) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Không tìm thấy User" });
+    }
+    const id_nhan_vien = user[0].id;
+
+    // 2. Lấy TÊN quyền từ ID
+    const [permissions] = await tpmConnection.query(
+      `
+      SELECT p.name_permission
+      FROM tb_user_permission up
+      JOIN tb_permission p ON up.id_permission = p.id_permission
+      WHERE up.id_nhan_vien = ?
+      `,
+      [id_nhan_vien]
+    );
+
+    res.json({
+      success: true,
+      data: permissions.map((p) => p.name_permission), // Trả về mảng TÊN: ['admin', 'edit']
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// PUT /api/admin/users/permissions - Cập nhật quyền cho 1 user (bằng ma_nv và TÊN quyền)
+app.put("/api/admin/users/permissions", async (req, res) => {
+  const connection = await tpmConnection.getConnection();
+  try {
+    const { ma_nv, permissions } = req.body; // permissions là mảng TÊN: ['admin', 'edit']
+    const userId = req.user.id; // ID của Admin đang thao tác
+
+    if (!ma_nv) {
+      return res
+        .status(400)
+        .json({ success: false, message: "ma_nv là bắt buộc" });
+    }
+
+    // 1. Tra cứu ID User từ ma_nv (trong code)
+    const [user] = await dataHiTimesheetConnection.query(
+      "SELECT id FROM sync_nhan_vien WHERE ma_nv = ?",
+      [ma_nv]
+    );
+    if (user.length === 0) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Không tìm thấy User" });
+    }
+    const id_nhan_vien = user[0].id;
+
+    // 2. Tra cứu ID Quyền từ TÊN quyền (trong code)
+    let permissionIds = [];
+    if (permissions && permissions.length > 0) {
+      const [perms] = await connection.query(
+        "SELECT id_permission FROM tb_permission WHERE name_permission IN (?)",
+        [permissions]
+      );
+      permissionIds = perms.map((p) => p.id_permission);
+    }
+
+    // 3. Thực hiện Transaction: Xóa cũ, Thêm mới
+    await connection.beginTransaction();
+
+    // Xóa tất cả quyền cũ của user này
+    await connection.query(
+      "DELETE FROM tb_user_permission WHERE id_nhan_vien = ?",
+      [id_nhan_vien]
+    );
+
+    // Thêm quyền mới (nếu có)
+    if (permissionIds.length > 0) {
+      const values = permissionIds.map((id_permission) => [
+        id_permission,
+        id_nhan_vien,
+        userId, // created_by
+        userId, // updated_by
+      ]);
+      await connection.query(
+        "INSERT INTO tb_user_permission (id_permission, id_nhan_vien, created_by, updated_by) VALUES ?",
+        [values]
+      );
+    }
+
+    await connection.commit();
+    res.json({ success: true, message: "Cập nhật quyền thành công" });
+  } catch (error) {
+    await connection.rollback();
+    res.status(500).json({ success: false, message: error.message });
+  } finally {
+    connection.release();
+  }
+});

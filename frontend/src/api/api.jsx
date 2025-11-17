@@ -90,6 +90,14 @@ export const api = {
     },
   },
 
+  // MARK: CATEGORIES
+  categories: {
+    getAll: async () => {
+      const response = await httpConnect.get("/api/categories");
+      return response.data;
+    },
+  },
+
   // MARK: MACHINES
   machines: {
     getAll: async (params = {}) => {
@@ -249,6 +257,7 @@ export const api = {
     },
   },
 
+  // MARK: INTERNAL TRANSFERS
   internal_transfers: {
     getAll: async (params = {}) => {
       const response = await httpConnect.get("/api/internal-transfers", {
@@ -351,6 +360,83 @@ export const api = {
         "/api/locations/update-machines",
         data
       );
+      return response.data;
+    },
+  },
+
+  // MARK: ADMIN
+  admin: {
+    getCategories: async () => {
+      const response = await httpConnect.get("/api/admin/categories");
+      return response.data;
+    },
+    createCategory: async (data) => {
+      const response = await httpConnect.post("/api/admin/categories", data);
+      return response.data;
+    },
+    updateCategory: async (uuid, data) => {
+      const response = await httpConnect.put(
+        `/api/admin/categories/${uuid}`,
+        data
+      );
+      return response.data;
+    },
+    getHiTimeSheetDepartments: async () => {
+      const response = await httpConnect.get(
+        "/api/admin/hitimesheet-departments"
+      );
+      return response.data;
+    },
+    getDepartmentsWithLocations: async () => {
+      const response = await httpConnect.get(
+        "/api/admin/departments-with-locations"
+      );
+      return response.data;
+    },
+    createDepartment: async (data) => {
+      const response = await httpConnect.post("/api/admin/departments", data);
+      return response.data;
+    },
+    updateDepartment: async (uuid, data) => {
+      const response = await httpConnect.put(
+        `/api/admin/departments/${uuid}`,
+        data
+      );
+      return response.data;
+    },
+    createLocation: async (data) => {
+      const response = await httpConnect.post("/api/admin/locations", data);
+      return response.data;
+    },
+    updateLocation: async (uuid, data) => {
+      const response = await httpConnect.put(
+        `/api/admin/locations/${uuid}`,
+        data
+      );
+      return response.data;
+    },
+    getAllPermissions: async () => {
+      const response = await httpConnect.get("/api/admin/permissions");
+      return response.data;
+    },
+    searchUsers: async (query) => {
+      const response = await httpConnect.get("/api/admin/users/search", {
+        params: { query },
+      });
+      return response.data;
+    },
+    getUserPermissions: async (ma_nv) => {
+      const response = await httpConnect.get("/api/admin/users/permissions", {
+        params: { ma_nv },
+      });
+      return response.data;
+    },
+    updateUserPermissions: async (ma_nv, permissions) => {
+      // permissions là mảng TÊN: ['admin', 'edit']
+      const response = await httpConnect.put("/api/admin/users/permissions", {
+        ma_nv,
+        permissions,
+      });
       return response.data;
     },
   },

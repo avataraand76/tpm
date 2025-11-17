@@ -26,6 +26,7 @@ import {
   LocationOn,
   Menu as MenuIcon,
   Update,
+  AdminPanelSettings,
 } from "@mui/icons-material";
 import { useAuth } from "../hooks/useAuth";
 
@@ -54,18 +55,26 @@ const NavigationBar = () => {
     if (pathname === "/tickets") return 2;
     if (pathname === "/location-track") return 3;
     // if (pathname === "/up-rfid") return 4;
+    // if (pathname === "/admin") return 5;
     return 0;
   };
 
   const handleTabChange = (event, newValue) => {
-    const routes = [
-      "/",
-      "/machines",
-      "/tickets",
-      "/location-track",
-      // "/up-rfid",
-    ];
-    navigate(routes[newValue]);
+    const baseRoutes = ["/", "/machines", "/tickets", "/location-track"];
+
+    // if (isAdmin || isPhongCoDien) {
+    //   baseRoutes.push("/up-rfid");
+    // }
+
+    // // Thêm các route có điều kiện
+    // if (isAdmin) {
+    //   baseRoutes.push("/admin");
+    // }
+
+    // Xử lý an toàn
+    if (newValue < baseRoutes.length) {
+      navigate(baseRoutes[newValue]);
+    }
   };
 
   // Handlers cho Menu Người dùng (Profile/Logout)
@@ -119,6 +128,15 @@ const NavigationBar = () => {
     //         label: "Cập nhật RFID",
     //         icon: <Update />,
     //         route: "/up-rfid",
+    //       },
+    //     ]
+    //   : []),
+    // ...(isAdmin
+    //   ? [
+    //       {
+    //         label: "Trang Admin",
+    //         icon: <AdminPanelSettings />,
+    //         route: "/admin",
     //       },
     //     ]
     //   : []),
@@ -242,6 +260,13 @@ const NavigationBar = () => {
                     label="Cập nhật RFID"
                     iconPosition="start"
                   />
+                )}
+                {isAdmin && (
+                  <Tab
+                    icon={<AdminPanelSettings />}
+                    label="Trang Admin"
+                    iconPosition="start"
+                  />
                 )} */}
               </Tabs>
             </Box>
@@ -315,6 +340,15 @@ const NavigationBar = () => {
               <AccountCircle sx={{ mr: 1 }} />
               {user?.name}
             </MenuItem>
+            {isAdmin && (
+              <MenuItem
+                onClick={() => navigate("/admin")}
+                sx={{ minWidth: 200 }}
+              >
+                <AdminPanelSettings sx={{ mr: 1 }} />
+                Trang Admin
+              </MenuItem>
+            )}
             {(isAdmin || isPhongCoDien) && (
               <MenuItem
                 onClick={() => navigate("/up-rfid")}

@@ -16,6 +16,7 @@ import MachineListPage from "./pages/MachineListPage";
 import TicketManagementPage from "./pages/TicketManagementPage";
 import LocationTrackPage from "./pages/LocationTrackPage";
 import UpdateRfidPage from "./pages/UpdateRfidPage";
+import AdminPage from "./pages/AdminPage";
 import { useAuth } from "./hooks/useAuth";
 import { Box, CircularProgress } from "@mui/material";
 
@@ -131,6 +132,41 @@ const AdminPCDRoute = ({ children }) => {
   return children;
 };
 
+const AdminRoute = ({ children }) => {
+  const { permissions, isAuthenticated, loading } = useAuth();
+  const location = useLocation();
+
+  // Quyền truy cập (chỉ admin)
+  const canAccess = permissions.includes("admin");
+
+  if (loading) {
+    return (
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          height: "100vh",
+        }}
+      >
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  if (isAuthenticated && !canAccess) {
+    // Nếu không phải Admin, đá về trang chủ
+    return <Navigate to="/" replace />;
+  }
+
+  // Là Admin
+  return children;
+};
+
 function App() {
   return (
     <ThemeProvider theme={theme}>
@@ -180,6 +216,15 @@ function App() {
                 <AdminPCDRoute>
                   <UpdateRfidPage />
                 </AdminPCDRoute>
+              }
+            />
+
+            <Route
+              path="/admin"
+              element={
+                <AdminRoute>
+                  <AdminPage />
+                </AdminRoute>
               }
             />
 

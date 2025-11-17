@@ -86,14 +86,14 @@ const excelHeaderMapping = {
   "Tuổi thọ (năm)": "lifespan",
   "Chi phí sửa chữa (VNĐ)": "repair_cost",
   "Ghi chú": "note",
-  "Loại (Máy móc thiết bị/Phụ kiện)": "id_category",
+  "Phân loại (Máy móc thiết bị/Phụ kiện)": "name_category",
 };
 // Lấy danh sách các cột bắt buộc (sẽ dùng để tô màu)
 const requiredHeaders = [
   "Mã máy",
   "Serial",
   "Loại máy",
-  "Loại (Máy móc thiết bị/Phụ kiện)",
+  "Phân loại (Máy móc thiết bị/Phụ kiện)",
 ];
 
 const TicketManagementPage = () => {
@@ -170,7 +170,8 @@ const TicketManagementPage = () => {
     message: "",
   });
 
-  // <<< THÊM MỚI: States cho Dialog Tạo Máy Mới (từ MachineListPage)
+  const [categoryOptions, setCategoryOptions] = useState([]);
+
   const [openCreateMachineDialog, setOpenCreateMachineDialog] = useState(false);
   const [newMachineData, setNewMachineData] = useState({
     code_machine: "",
@@ -185,16 +186,14 @@ const TicketManagementPage = () => {
     repair_cost: "",
     note: "",
     current_status: "available",
-    id_category: 1,
+    name_category: "",
   });
 
-  // <<< THÊM MỚI: States cho Dialog Import Excel (từ MachineListPage)
   const [openImportDialog, setOpenImportDialog] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importResults, setImportResults] = useState(null);
   const [fileName, setFileName] = useState("");
-  // >>> KẾT THÚC THÊM MỚI
 
   // Config statuses
   const STATUS_CONFIG = {
@@ -259,7 +258,6 @@ const TicketManagementPage = () => {
         })
       : "-";
 
-  // <<< THÊM MỚI: Helpers (từ MachineListPage)
   const formatDateForInput = (dateString) => {
     if (!dateString) return "";
     const date = new Date(dateString);
@@ -282,7 +280,6 @@ const TicketManagementPage = () => {
     const cleanValue = value.replace(/\./g, "").replace(",", ".");
     return cleanValue;
   };
-  // >>> KẾT THÚC THÊM MỚI
 
   // --- Data Fetching ---
   const fetchLocations = useCallback(
@@ -391,7 +388,25 @@ const TicketManagementPage = () => {
   }, [fetchData]);
   useEffect(() => {
     fetchExternalLocations();
-  }, [fetchExternalLocations]);
+
+    const fetchCategories = async () => {
+      try {
+        const catRes = await api.categories.getAll(); // API này đã được sửa ở bước trước
+        if (catRes.success) {
+          setCategoryOptions(catRes.data); // Data là [{ name_category: "..." }]
+        }
+      } catch (err) {
+        console.error("Error fetching categories:", err);
+        showNotification(
+          "error",
+          "Lỗi tải Phân loại",
+          "Không thể tải danh sách phân loại."
+        );
+      }
+    };
+    fetchCategories();
+  }, [fetchExternalLocations, showNotification]);
+
   useEffect(() => {
     setScannerApiParams(getMachineFiltersForDialog());
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -872,6 +887,11 @@ const TicketManagementPage = () => {
       newMachineData.serial_machine.trim() === ""
     )
       errors.push("Serial");
+    if (
+      !newMachineData.name_category ||
+      newMachineData.name_category.trim() === ""
+    )
+      errors.push("Phân loại");
     return errors;
   };
 
@@ -889,7 +909,7 @@ const TicketManagementPage = () => {
       repair_cost: "",
       note: "",
       current_status: "available",
-      id_category: 1,
+      name_category: "",
     });
     setOpenCreateMachineDialog(true);
   };
@@ -1021,11 +1041,6 @@ const TicketManagementPage = () => {
             }
           }
 
-          const categoryString = (newRow.id_category || "").toLowerCase();
-          if (categoryString.includes("máy móc")) newRow.id_category = 1;
-          else if (categoryString.includes("phụ kiện")) newRow.id_category = 2;
-          else newRow.id_category = 1;
-
           const dateString = newRow.date_of_use;
           if (dateString && typeof dateString === "string") {
             const parts = dateString.split("/");
@@ -1052,23 +1067,9 @@ const TicketManagementPage = () => {
           );
 
           if (result.data.successes && result.data.successes.length > 0) {
-            // `result.data.successes` là mảng các máy đã được tạo thành công
-            // (server.js trả về thông tin này)
-            // Cần lấy thông tin chi tiết hơn từ server (đã được làm trong server.js)
+            // Logic tự động thêm máy vào phiếu
+            let addedCount = 0;
             for (const newMachine of result.data.successes) {
-              // Cần có uuid_machine để handleSelectMachine hoạt động
-              // Giả định server trả về đầy đủ object máy (đã check server.js, nó không trả về uuid)
-              // *** ĐIỀU CHỈNH ***
-              // server.js /batch-import CHỈ trả về: code, serial, type, model
-              // => Không đủ thông tin (thiếu uuid_machine, current_status...)
-              // *** GIẢI PHÁP ***
-              // Thay vì thêm ngay, ta chỉ hiển thị thông báo.
-              // Tốt hơn: Server.js `batchImport` nên trả về mảng các máy đã tạo (giống `create`)
-              // *** GIẢ ĐỊNH server.js đã được sửa để trả về uuid_machine ***
-              // (server.js chưa sửa, nhưng ta cứ code)
-              // Do server.js /batch-import không trả về uuid_machine, ta phải tìm lại
-              // Tạm thời, ta sẽ tìm lại máy bằng SERIAL (vì nó là duy nhất)
-
               if (newMachine.serial) {
                 try {
                   // Dùng api.machines.getBySerial để lấy full data (bao gồm uuid)
@@ -1078,17 +1079,20 @@ const TicketManagementPage = () => {
                   );
                   if (machineData.success) {
                     handleSelectMachine(machineData.data);
+                    addedCount++;
                   }
                 } catch (findErr) {
                   console.error("Lỗi khi tự động tìm máy vừa import:", findErr);
                 }
               }
             }
-            showNotification(
-              "info",
-              "Đã thêm máy",
-              `Đã tự động thêm ${result.data.successCount} máy vào phiếu.`
-            );
+            if (addedCount > 0) {
+              showNotification(
+                "info",
+                "Đã thêm máy",
+                `Đã tự động thêm ${addedCount} máy vào phiếu.`
+              );
+            }
           }
         } else {
           showNotification(
@@ -1110,7 +1114,6 @@ const TicketManagementPage = () => {
     };
     reader.readAsBinaryString(importFile);
   };
-  // >>> KẾT THÚC THÊM MỚI
 
   // --- Render Helpers ---
   const getStatusColor = (status) =>
@@ -1417,7 +1420,6 @@ const TicketManagementPage = () => {
             </Box>
 
             {/* Content for Tabs 0, 1, 2 (Filters, Table, Pagination) */}
-
             <Grid container spacing={2} sx={{ mb: 3 }}>
               <Grid size={{ xs: 12, md: activeTab === 2 ? 12 : 6 }}>
                 <TextField
@@ -1433,8 +1435,7 @@ const TicketManagementPage = () => {
                   <MenuItem value="">Tất cả</MenuItem>
 
                   {activeTab === 2
-                    ? // Tab Điều chuyển (Internal)
-                      [
+                    ? [
                         <MenuItem
                           key="pending_confirmation"
                           value="pending_confirmation"
@@ -1454,8 +1455,7 @@ const TicketManagementPage = () => {
                           Đã hủy
                         </MenuItem>,
                       ]
-                    : // Tab Nhập (Import) hoặc Xuất (Export)
-                      [
+                    : [
                         <MenuItem key="pending" value="pending">
                           Chờ duyệt
                         </MenuItem>,
@@ -1757,13 +1757,11 @@ const TicketManagementPage = () => {
                                     ? newValue.uuid_location
                                     : "";
 
-                                  // Cập nhật tên đơn vị
                                   handleFormChange(
                                     "is_borrowed_or_rented_or_borrowed_out_name",
                                     newName
                                   );
 
-                                  // Đồng bộ với "Xuất đến" NẾU đây là phiếu "Xuất cho mượn"
                                   if (formData.type === "borrowed_out") {
                                     handleFormChange(
                                       "to_location_uuid",
@@ -1879,7 +1877,6 @@ const TicketManagementPage = () => {
                           isFormDisabled ||
                           dialogMode === "view" ||
                           locationLoading ||
-                          // <<< THÊM: Vô hiệu hóa nếu là phiếu "Xuất cho mượn" (để đồng bộ)
                           formData.type === "borrowed_out"
                         }
                         loading={locationLoading}
@@ -1916,7 +1913,6 @@ const TicketManagementPage = () => {
                           />
                         )}
                         sx={
-                          // <<< THÊM: Dùng style disabled nếu là phiếu "Xuất cho mượn"
                           formData.type === "borrowed_out"
                             ? DISABLED_VIEW_SX
                             : {}
@@ -1930,7 +1926,6 @@ const TicketManagementPage = () => {
                             </Typography>
 
                             {isSpecialImport ? (
-                              // Nút bấm cho Nhập Mua Mới / Thuê / Mượn
                               <Stack
                                 direction={{ xs: "column", sm: "row" }}
                                 spacing={2}
@@ -2010,7 +2005,6 @@ const TicketManagementPage = () => {
                                 </Button>
                               </Stack>
                             ) : (
-                              // Nút bấm cho các loại phiếu khác
                               <Stack
                                 direction={{ xs: "column", sm: "row" }}
                                 spacing={2}
@@ -2425,7 +2419,7 @@ const TicketManagementPage = () => {
                                           whiteSpace: "nowrap",
                                         }}
                                       >
-                                        Loại
+                                        Phân loại
                                       </TableCell>
                                       <TableCell
                                         sx={{
@@ -2904,21 +2898,33 @@ const TicketManagementPage = () => {
                   disabled={!canCreateOrImportMachines}
                 />
               </Grid>
+
               <Grid size={{ xs: 12, sm: 6 }}>
-                <FormControl fullWidth disabled={!canCreateOrImportMachines}>
-                  <InputLabel>Loại</InputLabel>
+                <FormControl
+                  fullWidth
+                  disabled={!canCreateOrImportMachines}
+                  required
+                >
+                  <InputLabel>Phân loại</InputLabel>
                   <Select
-                    value={newMachineData.id_category || 1}
-                    label="Loại"
+                    name="name_category"
+                    value={newMachineData.name_category || ""}
+                    label="Phân loại"
                     onChange={(e) =>
                       handleCreateMachineInputChange(
-                        "id_category",
+                        "name_category",
                         e.target.value
                       )
                     }
                   >
-                    <MenuItem value={1}>Máy móc thiết bị</MenuItem>
-                    <MenuItem value={2}>Phụ kiện</MenuItem>
+                    {categoryOptions.map((category) => (
+                      <MenuItem
+                        key={category.name_category}
+                        value={category.name_category}
+                      >
+                        {category.name_category}
+                      </MenuItem>
+                    ))}
                   </Select>
                 </FormControl>
               </Grid>
@@ -3166,18 +3172,29 @@ const TicketManagementPage = () => {
             <Alert severity="info" sx={{ borderRadius: "12px" }}>
               <AlertTitle>Hướng dẫn</AlertTitle>
               <Typography variant="body2" gutterBottom>
-                1. Các cột <strong>bắt buộc</strong>: <strong>Mã máy</strong>,{" "}
-                <strong>Serial</strong>, <strong>Loại máy</strong>,{" "}
-                <strong>Loại (Máy móc thiết bị/Phụ kiện)</strong>.
+                1. Chuẩn bị file Excel (.xlsx hoặc .xls) với các cột dữ liệu
+                theo đúng tên cột.
               </Typography>
               <Typography variant="body2" gutterBottom>
-                2. Cột <strong>Ngày sử dụng</strong>: Nhập định dạng{" "}
-                <strong>DD/MM/YYYY</strong>.
+                2. Các cột <strong>bắt buộc</strong> (được tô vàng trong file
+                mẫu): <strong>Mã máy</strong>, <strong>Serial</strong>,{" "}
+                <strong>Loại máy</strong>,{" "}
+                <strong>Phân loại (Máy móc thiết bị/Phụ kiện)</strong>.
               </Typography>
               <Typography variant="body2" gutterBottom>
-                3. Các máy được tạo thành công sẽ{" "}
-                <strong>tự động được thêm</strong> vào phiếu nhập hiện tại.
+                3. Cột <strong>Phân loại</strong>: Nhập "
+                <strong>Máy móc thiết bị</strong>" hoặc "
+                <strong>Phụ kiện</strong>".
               </Typography>
+              <Typography variant="body2" gutterBottom>
+                4. Cột <strong>Ngày sử dụng</strong>: Nhập định dạng{" "}
+                <strong>DD/MM/YYYY</strong> (ví dụ: 31/10/2025).
+              </Typography>
+              <Typography variant="body2">
+                5. Hệ thống sẽ kiểm tra trùng lặp <strong>Mã máy</strong> và{" "}
+                <strong>Serial</strong> đã có trong CSDL.
+              </Typography>
+
               <Box sx={{ mt: 1 }}>
                 <Link
                   href="/Mau_Excel_MayMoc.xlsx"

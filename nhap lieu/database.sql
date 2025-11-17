@@ -432,6 +432,7 @@ insert into tb_department (name_department, id_phong_ban) values
 ('Phòng kỹ thuật', 28),
 ('Xưởng cắt', 57),
 ('Kho nguyên phụ liệu', 3202),
+('Kho thành phẩm', 42),
 ('Đơn vị bên ngoài', null);
 
 insert into tb_location (name_location, id_department) values
@@ -489,10 +490,10 @@ insert into tb_location (name_location, id_department) values
 ('Chuyền chuyên dùng - Xưởng 4', 5),
 ('Chuyền hoàn thành 1 - Xưởng 4', 5),
 ('Chuyền hoàn thành 2 - Xưởng 4', 5),
-('Công ty A', 9),
-('Công ty B', 9),
-('Công ty C', 9),
-('Đơn vị thanh lý', 9),
-('Đơn vị bảo trì', 9);
+('Công ty A', 10),
+('Công ty B', 10),
+('Công ty C', 10),
+('Đơn vị thanh lý', 10),
+('Đơn vị bảo trì', 10);
 
 insert into tb_permission (name_permission) values ('admin'), ('edit'), ('view');

@@ -112,7 +112,7 @@ const columnConfig = {
   manufacturer: "Hãng SX",
   serial_machine: "Serial",
   RFID_machine: "RFID",
-  name_category: "Loại",
+  name_category: "Phân loại",
   name_location: "Vị trí hiện tại",
   current_status: "Trạng thái (chính)",
   is_borrowed_or_rented_or_borrowed_out: "Trạng thái (mượn/thuê)",
@@ -248,6 +248,7 @@ const MachineListPage = () => {
   const [modelOptions, setModelOptions] = useState([]);
   const [manufacturerOptions, setManufacturerOptions] = useState([]);
   const [locationOptions, setLocationOptions] = useState([]);
+  const [categoryOptions, setCategoryOptions] = useState([]);
 
   // State for selected filter values
   const [filters, setFilters] = useState({
@@ -321,16 +322,18 @@ const MachineListPage = () => {
 
   const fetchFilterOptions = async () => {
     try {
-      const [typeRes, modelRes, manuRes, locRes] = await Promise.all([
+      const [typeRes, modelRes, manuRes, locRes, catRes] = await Promise.all([
         api.machines.getDistinctValues({ field: "type_machine" }),
         api.machines.getDistinctValues({ field: "model_machine" }),
         api.machines.getDistinctValues({ field: "manufacturer" }),
         api.machines.getDistinctValues({ field: "name_location" }),
+        api.categories.getAll(),
       ]);
       if (typeRes.success) setTypeOptions(typeRes.data);
       if (modelRes.success) setModelOptions(modelRes.data);
       if (manuRes.success) setManufacturerOptions(manuRes.data);
       if (locRes.success) setLocationOptions(locRes.data);
+      if (catRes.success) setCategoryOptions(catRes.data);
     } catch (err) {
       console.error("Error fetching filter options:", err);
       // Hiển thị thông báo lỗi cho người dùng (tùy chọn)
@@ -439,7 +442,7 @@ const MachineListPage = () => {
       repair_cost: "",
       note: "",
       current_status: "available",
-      id_category: 1, // Default category
+      id_category: "", // Default category
       // Các trường is_borrowed... không cần khởi tạo vì form tạo mới không có
     });
     setIsCreateMode(true);
@@ -769,14 +772,14 @@ const MachineListPage = () => {
     "Tuổi thọ (năm)": "lifespan",
     "Chi phí sửa chữa (VNĐ)": "repair_cost",
     "Ghi chú": "note",
-    "Loại (Máy móc thiết bị/Phụ kiện)": "id_category",
+    "Phân loại (Máy móc thiết bị/Phụ kiện)": "name_category",
   };
   // Lấy danh sách các cột bắt buộc (sẽ dùng để tô màu)
   const requiredHeaders = [
     "Mã máy",
     "Serial",
     "Loại máy",
-    "Loại (Máy móc thiết bị/Phụ kiện)",
+    "Phân loại (Máy móc thiết bị/Phụ kiện)",
   ];
 
   const handleOpenImportDialog = () => {
@@ -864,17 +867,6 @@ const MachineListPage = () => {
             if (row[vietnameseHeader] !== undefined) {
               newRow[englishKey] = row[vietnameseHeader];
             }
-          }
-
-          // Xử lý 'id_category'
-          const categoryString = (newRow.id_category || "").toLowerCase();
-          if (categoryString.includes("máy móc")) {
-            newRow.id_category = 1;
-          } else if (categoryString.includes("phụ kiện")) {
-            newRow.id_category = 2;
-          } else {
-            // Mặc định là 1 nếu không điền hoặc điền sai
-            newRow.id_category = 1;
           }
 
           // Xử lý 'date_of_use' (DD/MM/YYYY)
@@ -2147,7 +2139,7 @@ const MachineListPage = () => {
                           }
                           onClick={() => handleSortRequest("name_category")}
                         >
-                          Loại
+                          Phân loại
                         </TableSortLabel>
                       </TableCell>
                     )}
@@ -2878,23 +2870,34 @@ const MachineListPage = () => {
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
                   {isCreateMode ? (
-                    <FormControl fullWidth disabled={!canCreateOrImport}>
-                      <InputLabel>Loại</InputLabel>
+                    <FormControl
+                      fullWidth
+                      disabled={!canCreateOrImport}
+                      required
+                    >
+                      <InputLabel>Phân loại</InputLabel>
                       <Select
-                        value={editedData.id_category || 1}
-                        label="Loại"
+                        name="name_category"
+                        value={editedData.name_category || ""}
+                        label="Phân loại"
                         onChange={(e) =>
-                          handleInputChange("id_category", e.target.value)
+                          handleInputChange("name_category", e.target.value)
                         }
                       >
-                        <MenuItem value={1}>Máy móc thiết bị</MenuItem>
-                        <MenuItem value={2}>Phụ kiện</MenuItem>
+                        {categoryOptions.map((category) => (
+                          <MenuItem
+                            key={category.name_category}
+                            value={category.name_category} // Value là TÊN
+                          >
+                            {category.name_category}
+                          </MenuItem>
+                        ))}
                       </Select>
                     </FormControl>
                   ) : (
                     <TextField
                       fullWidth
-                      label="Loại"
+                      label="Phân loại"
                       value={editedData.name_category || ""}
                       disabled={true}
                       sx={DISABLED_VIEW_SX} // Luôn bị khóa
@@ -2919,7 +2922,6 @@ const MachineListPage = () => {
                   <TextField
                     fullWidth
                     label="Model máy"
-                    required
                     value={editedData.model_machine || ""}
                     onChange={(e) =>
                       handleInputChange("model_machine", e.target.value)
@@ -3208,7 +3210,6 @@ const MachineListPage = () => {
                     fullWidth
                     label="Ngày sử dụng"
                     type="date"
-                    required
                     value={formatDateForInput(editedData.date_of_use)}
                     onChange={(e) =>
                       handleInputChange("date_of_use", e.target.value)
@@ -3356,10 +3357,10 @@ const MachineListPage = () => {
                 2. Các cột <strong>bắt buộc</strong> (được tô vàng trong file
                 mẫu): <strong>Mã máy</strong>, <strong>Serial</strong>,{" "}
                 <strong>Loại máy</strong>,{" "}
-                <strong>Loại (Máy móc thiết bị/Phụ kiện)</strong>.
+                <strong>Phân loại (Máy móc thiết bị/Phụ kiện)</strong>.
               </Typography>
               <Typography variant="body2" gutterBottom>
-                3. Cột <strong>Loại</strong>: Nhập "
+                3. Cột <strong>Phân loại</strong>: Nhập "
                 <strong>Máy móc thiết bị</strong>" hoặc "
                 <strong>Phụ kiện</strong>".
               </Typography>
@@ -3372,20 +3373,20 @@ const MachineListPage = () => {
                 <strong>Serial</strong> đã có trong CSDL.
               </Typography>
 
-              <Link
-                href="/Mau_Excel_MayMoc.xlsx" // Đường dẫn tới file trong thư mục public
-                download="Mau_Excel_MayMoc.xlsx" // Tên file khi tải về
-                variant="body2"
-                sx={{
-                  mt: 1,
-                  fontWeight: "bold",
-                  cursor: "pointer",
-                  textAlign: "left",
-                  textDecoration: "underline",
-                }}
-              >
-                Tải xuống file Excel mẫu tại đây
-              </Link>
+              <Box sx={{ mt: 1 }}>
+                <Link
+                  href="/Mau_Excel_MayMoc.xlsx"
+                  download="Mau_Excel_MayMoc.xlsx"
+                  variant="body2"
+                  sx={{
+                    fontWeight: "bold",
+                    cursor: "pointer",
+                    textDecoration: "underline",
+                  }}
+                >
+                  Tải xuống file Excel mẫu tại đây
+                </Link>
+              </Box>
             </Alert>
 
             {/* Chọn file */}
