@@ -46,6 +46,7 @@ import {
   Link,
   useTheme,
   useMediaQuery,
+  Tooltip,
 } from "@mui/material";
 import {
   PrecisionManufacturing,
@@ -242,6 +243,8 @@ const MachineListPage = () => {
   const [importResults, setImportResults] = useState(null);
   const [fileName, setFileName] = useState("");
   const tableCardRef = useRef(null);
+  const searchInputRef = useRef(null);
+  const searchTimeoutRef = useRef(null);
 
   // State for filter dropdown data
   const [typeOptions, setTypeOptions] = useState([]);
@@ -361,15 +364,24 @@ const MachineListPage = () => {
   }, [page, rowsPerPage]);
 
   useEffect(() => {
-    // Debounce search
-    const timeoutId = setTimeout(() => {
-      setPage(1); // Reset to first page on search
-      fetchMachines(searchTerm);
-    }, 500);
-
-    return () => clearTimeout(timeoutId);
+    fetchMachines(searchTerm);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchTerm, filters]);
+
+  const handleSearchChange = (event) => {
+    const value = event.target.value;
+
+    // 1. Xóa timer cũ nếu người dùng đang gõ tiếp
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    // 2. Đặt timer mới: Chỉ cập nhật State (gây re-render) sau khi dừng gõ 800ms
+    searchTimeoutRef.current = setTimeout(() => {
+      setSearchTerm(value);
+      setPage(1); // Reset về trang 1 khi tìm kiếm
+    }, 800);
+  };
 
   const handleFilterChange = (event) => {
     const { name, value } = event.target;
@@ -864,26 +876,49 @@ const MachineListPage = () => {
           // Dịch từ Tiếng Việt -> Tiếng Anh
           for (const vietnameseHeader in excelHeaderMapping) {
             const englishKey = excelHeaderMapping[vietnameseHeader];
-            if (row[vietnameseHeader] !== undefined) {
-              newRow[englishKey] = row[vietnameseHeader];
+            let cellValue = row[vietnameseHeader];
+
+            if (cellValue !== undefined) {
+              // 1. Xử lý dữ liệu chuỗi (cắt khoảng trắng thừa)
+              if (typeof cellValue === "string") {
+                cellValue = cellValue.trim();
+              }
+
+              // 2. Xử lý các trường SỐ (Giá, Chi phí)
+              if (["price", "repair_cost"].includes(englishKey)) {
+                if (typeof cellValue === "string") {
+                  const clean = cellValue.replace(/[^0-9]/g, "");
+                  const parsed = parseInt(clean, 10);
+                  newRow[englishKey] = isNaN(parsed) ? 0 : parsed;
+                } else if (typeof cellValue === "number") {
+                  newRow[englishKey] = cellValue;
+                }
+              }
+              // 3. Giữ nguyên các trường khác
+              else {
+                newRow[englishKey] = cellValue;
+              }
             }
           }
 
-          // Xử lý 'date_of_use' (DD/MM/YYYY)
-          const dateString = newRow.date_of_use; // Đây có thể là string "DD/MM/YYYY"
-          if (dateString && typeof dateString === "string") {
-            const parts = dateString.split("/");
-            if (parts.length === 3) {
-              // new Date(YYYY, MM-1, DD)
-              const jsDate = new Date(+parts[2], parts[1] - 1, +parts[0]);
-              // Gửi đi dưới dạng ISO string hoặc Date object
-              // server.js đã có logic xử lý Date object, nên ta gửi Date object
-              newRow.date_of_use = jsDate;
-            } else {
-              newRow.date_of_use = null; // Sai định dạng
+          // 4. Xử lý riêng Date
+          const dateString = newRow.date_of_use;
+          if (dateString) {
+            if (typeof dateString === "string") {
+              const parts = dateString.split("/");
+              if (parts.length === 3) {
+                newRow.date_of_use = new Date(
+                  +parts[2],
+                  parts[1] - 1,
+                  +parts[0]
+                );
+              } else {
+                newRow.date_of_use = null;
+              }
+            } else if (dateString instanceof Date) {
+              newRow.date_of_use = dateString;
             }
           }
-          // Nếu `cellDates: true` và `raw: false` trả về Date object, nó sẽ được giữ nguyên và server.js xử lý được
 
           return newRow;
         });
@@ -1692,27 +1727,92 @@ const MachineListPage = () => {
                 spacing={2}
                 sx={{ flexGrow: 1, width: { xs: "100%", sm: "auto" } }}
               >
-                <TextField
-                  placeholder="Tìm kiếm máy móc..."
-                  variant="outlined"
-                  size="medium"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  sx={{
-                    width: "100%",
-                    maxWidth: { sm: 400 },
-                    "& .MuiOutlinedInput-root": {
-                      borderRadius: "12px",
-                    },
-                  }}
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <Search />
-                      </InputAdornment>
-                    ),
-                  }}
-                />
+                <Tooltip
+                  arrow
+                  placement="top-start"
+                  title={
+                    <Box sx={{ p: 1 }}>
+                      <Typography
+                        variant="subtitle2"
+                        fontWeight="bold"
+                        sx={{ mb: 1 }}
+                      >
+                        Mẹo tìm kiếm nâng cao:
+                      </Typography>
+                      <ul
+                        style={{
+                          margin: 0,
+                          paddingLeft: "1.2rem",
+                          fontSize: "0.85rem",
+                          lineHeight: "1.5",
+                        }}
+                      >
+                        <li>Nhập thường: Tìm tất cả thông tin</li>
+                        <li>
+                          <b>loai:</b>... (Tìm theo Loại)
+                        </li>
+                        <li>
+                          <b>model:</b>... (Tìm theo Model)
+                        </li>
+                        <li>
+                          <b>rfid:</b>... (Tìm theo RFID)
+                        </li>
+                        <li>
+                          <b>seri:</b>... (Tìm theo Serial)
+                        </li>
+                        <li>
+                          <b>hang:</b>... (Tìm theo Hãng SX)
+                        </li>
+                        <li>
+                          <b>ma:</b>... (Tìm theo Mã máy)
+                        </li>
+                      </ul>
+                    </Box>
+                  }
+                >
+                  <TextField
+                    placeholder="Tìm kiếm máy móc..."
+                    variant="outlined"
+                    size="medium"
+                    defaultValue=""
+                    inputRef={searchInputRef}
+                    onChange={handleSearchChange}
+                    sx={{
+                      width: "100%",
+                      maxWidth: { sm: 400 },
+                      "& .MuiOutlinedInput-root": {
+                        borderRadius: "12px",
+                        paddingRight: 1,
+                      },
+                    }}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <Search />
+                        </InputAdornment>
+                      ),
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            onClick={() => {
+                              if (searchInputRef.current) {
+                                searchInputRef.current.value = "";
+                                searchInputRef.current.focus();
+                              }
+                              setSearchTerm("");
+                              setPage(1);
+                            }}
+                            edge="end"
+                            size="small"
+                            sx={{ color: "text.secondary" }}
+                          >
+                            <Close fontSize="small" />
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                </Tooltip>
                 <FormControl
                   sx={{ minWidth: 120, width: { xs: "100%", sm: 120 } }}
                 >

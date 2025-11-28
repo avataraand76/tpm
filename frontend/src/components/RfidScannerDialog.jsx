@@ -125,8 +125,12 @@ const RfidScannerDialog = ({
             parts.push(
               `${duplicateCount} máy bị bỏ qua (đã có trong danh sách)`
             );
-          if (notFoundCount > 0)
-            parts.push(`${notFoundCount} mã không tìm thấy`);
+          if (notFoundCount > 0) {
+            const missingCodesStr = notFoundRfids.join(", ");
+            parts.push(
+              `${notFoundCount} mã không tìm thấy: [${missingCodesStr}]`
+            );
+          }
           message =
             parts.join(". ") +
             `. (Lý do lọc: ${filterMessage || "Máy không hợp lệ"})`;

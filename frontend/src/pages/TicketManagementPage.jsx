@@ -1,6 +1,6 @@
 // frontend/src/pages/TicketManagementPage.jsx
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Container,
   Typography,
@@ -194,6 +194,8 @@ const TicketManagementPage = () => {
   const [isImporting, setIsImporting] = useState(false);
   const [importResults, setImportResults] = useState(null);
   const [fileName, setFileName] = useState("");
+  const searchTimeoutRef = useRef(null);
+  const searchInputRef = useRef(null);
 
   // Config statuses
   const STATUS_CONFIG = {
@@ -464,11 +466,20 @@ const TicketManagementPage = () => {
   };
 
   // Handlers for Search
-  const handleSearchTermChange = (e) => {
-    const term = e.target.value;
-    setSearchMachineTerm(term);
-    const filters = getMachineFiltersForDialog();
-    searchMachines(term, 1, filters);
+  const handleSearchChange = (event) => {
+    const value = event.target.value;
+
+    // Xóa timer cũ nếu người dùng đang gõ tiếp
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    // Đặt timer mới: Chỉ gọi API sau khi dừng gõ 800ms
+    searchTimeoutRef.current = setTimeout(() => {
+      setSearchMachineTerm(value); // Cập nhật state để dùng cho pagination sau này
+      const filters = getMachineFiltersForDialog();
+      searchMachines(value, 1, filters); // Gọi API
+    }, 800);
   };
   const handleSearchPageChange = (event, value) => {
     setSearchPage(value);
@@ -510,6 +521,9 @@ const TicketManagementPage = () => {
     setSearchResults([]);
     setSearchMachineTerm("");
     setSearchPage(1);
+    if (searchInputRef.current) {
+      searchInputRef.current.value = "";
+    }
     setOpenScanDialog(false);
     setOpenRfidDialog(false);
     setFilteredLocations([]);
@@ -650,6 +664,9 @@ const TicketManagementPage = () => {
       setSearchMachineTerm("");
       setSearchResults([]);
       setSearchPage(1);
+      if (searchInputRef.current) {
+        searchInputRef.current.value = "";
+      }
       setSearchTotalPages(1);
     } else {
       setFormData((prev) => ({ ...prev, [field]: value }));
@@ -1035,21 +1052,53 @@ const TicketManagementPage = () => {
 
         const machinesToImport = json.map((row) => {
           const newRow = {};
+
           for (const vietnameseHeader in excelHeaderMapping) {
             const englishKey = excelHeaderMapping[vietnameseHeader];
-            if (row[vietnameseHeader] !== undefined) {
-              newRow[englishKey] = row[vietnameseHeader];
+            let cellValue = row[vietnameseHeader];
+
+            if (cellValue !== undefined) {
+              // 1. Xử lý dữ liệu chuỗi (cắt khoảng trắng thừa)
+              if (typeof cellValue === "string") {
+                cellValue = cellValue.trim();
+              }
+
+              // 2. Xử lý các trường SỐ (Giá, Chi phí)
+              if (["price", "repair_cost"].includes(englishKey)) {
+                if (typeof cellValue === "string") {
+                  const clean = cellValue.replace(/[^0-9]/g, "");
+                  const parsed = parseInt(clean, 10);
+                  newRow[englishKey] = isNaN(parsed) ? 0 : parsed;
+                } else if (typeof cellValue === "number") {
+                  newRow[englishKey] = cellValue;
+                }
+              }
+              // 3. Giữ nguyên các trường khác
+              else {
+                newRow[englishKey] = cellValue;
+              }
             }
           }
 
+          // 4. Xử lý riêng Date
           const dateString = newRow.date_of_use;
-          if (dateString && typeof dateString === "string") {
-            const parts = dateString.split("/");
-            if (parts.length === 3) {
-              const jsDate = new Date(+parts[2], parts[1] - 1, +parts[0]);
-              newRow.date_of_use = jsDate;
-            } else newRow.date_of_use = null;
+          if (dateString) {
+            if (typeof dateString === "string") {
+              const parts = dateString.split("/");
+              if (parts.length === 3) {
+                newRow.date_of_use = new Date(
+                  +parts[2],
+                  parts[1] - 1,
+                  +parts[0]
+                );
+              } else {
+                newRow.date_of_use = null;
+              }
+            } else if (dateString instanceof Date) {
+              newRow.date_of_use = dateString;
+            }
           }
+
           return newRow;
         });
 
@@ -1141,7 +1190,7 @@ const TicketManagementPage = () => {
       rented: "Nhập thuê",
       purchased: "Nhập mua mới",
       maintenance_return: "Nhập sau bảo trì",
-      borrowed_out_return: "Nhập trả (từ cho mượn)",
+      borrowed_out_return: "Nhập trả (máy cho mượn)",
       maintenance: "Xuất bảo trì",
       borrowed_out: "Xuất cho mượn",
       liquidation: "Xuất thanh lý",
@@ -2051,27 +2100,95 @@ const TicketManagementPage = () => {
                               </Stack>
                             )}
 
-                            <TextField
-                              fullWidth
-                              label="Tìm kiếm máy"
-                              value={searchMachineTerm}
-                              onChange={handleSearchTermChange}
-                              disabled={isFormDisabled}
-                              InputProps={{
-                                startAdornment: (
-                                  <InputAdornment position="start">
-                                    <Search />
-                                  </InputAdornment>
-                                ),
-                                endAdornment: searchLoading && (
-                                  <InputAdornment position="end">
-                                    <CircularProgress size={20} />
-                                  </InputAdornment>
-                                ),
-                                sx: { borderRadius: "12px" },
-                              }}
-                              sx={{ mb: 2 }}
-                            />
+                            <Tooltip
+                              arrow
+                              placement="top-start"
+                              title={
+                                <Box sx={{ p: 1 }}>
+                                  <Typography
+                                    variant="subtitle2"
+                                    fontWeight="bold"
+                                    sx={{ mb: 1 }}
+                                  >
+                                    Mẹo tìm kiếm nâng cao:
+                                  </Typography>
+                                  <ul
+                                    style={{
+                                      margin: 0,
+                                      paddingLeft: "1.2rem",
+                                      fontSize: "0.85rem",
+                                      lineHeight: "1.5",
+                                    }}
+                                  >
+                                    <li>Nhập thường: Tìm tất cả thông tin</li>
+                                    <li>
+                                      <b>loai:</b>... (Tìm theo Loại)
+                                    </li>
+                                    <li>
+                                      <b>model:</b>... (Tìm theo Model)
+                                    </li>
+                                    <li>
+                                      <b>rfid:</b>... (Tìm theo RFID)
+                                    </li>
+                                    <li>
+                                      <b>seri:</b>... (Tìm theo Serial)
+                                    </li>
+                                    <li>
+                                      <b>hang:</b>... (Tìm theo Hãng SX)
+                                    </li>
+                                    <li>
+                                      <b>ma:</b>... (Tìm theo Mã máy)
+                                    </li>
+                                  </ul>
+                                </Box>
+                              }
+                            >
+                              <TextField
+                                fullWidth
+                                placeholder="Tìm kiếm máy"
+                                defaultValue=""
+                                inputRef={searchInputRef}
+                                onChange={handleSearchChange}
+                                disabled={isFormDisabled}
+                                sx={{
+                                  mb: 2,
+                                  "& .MuiOutlinedInput-root": {
+                                    borderRadius: "12px",
+                                  },
+                                }}
+                                InputProps={{
+                                  startAdornment: (
+                                    <InputAdornment position="start">
+                                      <Search />
+                                    </InputAdornment>
+                                  ),
+                                  endAdornment: (
+                                    <InputAdornment position="end">
+                                      {searchLoading ? (
+                                        <CircularProgress size={20} />
+                                      ) : (
+                                        /* Nút Xóa Input */
+                                        <IconButton
+                                          onClick={() => {
+                                            if (searchInputRef.current) {
+                                              searchInputRef.current.value = "";
+                                              searchInputRef.current.focus();
+                                            }
+                                            setSearchMachineTerm("");
+                                            setSearchResults([]); // Xóa kết quả tìm kiếm
+                                          }}
+                                          edge="end"
+                                          size="small"
+                                          sx={{ color: "text.secondary" }}
+                                        >
+                                          <Close fontSize="small" />
+                                        </IconButton>
+                                      )}
+                                    </InputAdornment>
+                                  ),
+                                }}
+                              />
+                            </Tooltip>
                             {searchResults.length > 0 && (
                               <>
                                 <Paper

@@ -10,6 +10,7 @@ const { google } = require("googleapis");
 const { Readable } = require("stream");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
+const axios = require("axios");
 // const bodyParser = require("body-parser");
 require("dotenv").config();
 
@@ -98,6 +99,7 @@ const uploadFileToDrive = async (fileObject) => {
     // Trả về object {name, link}
     return {
       name: originalname,
+      id: fileId,
       link: embedLink,
     };
   } catch (err) {
@@ -573,31 +575,83 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
 
     // 1. Search filter
     if (search) {
-      const searchPattern = `%${search}%`;
-      whereConditions.push(`
-        (m.type_machine LIKE ?
-        OR m.model_machine LIKE ?
-        OR m.code_machine LIKE ? 
-        OR m.serial_machine LIKE ? 
-        OR m.manufacturer LIKE ?
-        OR tl.name_location LIKE ?)
-      `);
-      countParams.push(
-        searchPattern,
-        searchPattern,
-        searchPattern,
-        searchPattern,
-        searchPattern,
-        searchPattern
-      );
-      dataParams.push(
-        searchPattern,
-        searchPattern,
-        searchPattern,
-        searchPattern,
-        searchPattern,
-        searchPattern
-      );
+      const searchLower = search.toLowerCase().trim();
+      let isSpecificSearch = false;
+      let searchColumn = "";
+      let searchTermRaw = "";
+
+      // --- A. KIỂM TRA CÁC TAG (PREFIX) ---
+      // Nếu khớp tag nào thì lấy cột tương ứng và cắt bỏ tag đi
+      if (searchLower.startsWith("type:") || searchLower.startsWith("loai:")) {
+        searchColumn = "m.type_machine";
+        searchTermRaw = search.substring(search.indexOf(":") + 1).trim();
+        isSpecificSearch = true;
+      } else if (
+        searchLower.startsWith("model:") ||
+        searchLower.startsWith("mo:")
+      ) {
+        //
+        searchColumn = "m.model_machine";
+        searchTermRaw = search.substring(search.indexOf(":") + 1).trim();
+        isSpecificSearch = true;
+      } else if (
+        searchLower.startsWith("rfid:") ||
+        searchLower.startsWith("id:")
+      ) {
+        searchColumn = "m.RFID_machine";
+        searchTermRaw = search.substring(search.indexOf(":") + 1).trim();
+        isSpecificSearch = true;
+      } else if (
+        searchLower.startsWith("seri:") ||
+        searchLower.startsWith("serial:")
+      ) {
+        searchColumn = "m.serial_machine";
+        searchTermRaw = search.substring(search.indexOf(":") + 1).trim();
+        isSpecificSearch = true;
+      } else if (
+        searchLower.startsWith("hsx:") ||
+        searchLower.startsWith("hang:")
+      ) {
+        searchColumn = "m.manufacturer";
+        searchTermRaw = search.substring(search.indexOf(":") + 1).trim();
+        isSpecificSearch = true;
+      } else if (
+        searchLower.startsWith("ma:") ||
+        searchLower.startsWith("code:")
+      ) {
+        searchColumn = "m.code_machine";
+        searchTermRaw = search.substring(search.indexOf(":") + 1).trim();
+        isSpecificSearch = true;
+      }
+
+      // --- B. ÁP DỤNG ĐIỀU KIỆN ---
+
+      if (isSpecificSearch && searchTermRaw.length > 0) {
+        // TRƯỜNG HỢP 1: TÌM KIẾM CỤ THỂ (NẾU CÓ TAG)
+        // Chỉ tìm đúng cột đã định nghĩa
+        const searchPattern = `%${searchTermRaw}%`;
+        whereConditions.push(`${searchColumn} LIKE ?`);
+        countParams.push(searchPattern);
+        dataParams.push(searchPattern);
+      } else {
+        // TRƯỜNG HỢP 2: TÌM KIẾM CŨ (MẶC ĐỊNH)
+        // Giữ nguyên logic cũ của bạn: Tìm OR trên tất cả các trường
+        const searchPattern = `%${search}%`;
+        whereConditions.push(`
+          (m.type_machine LIKE ?
+          OR m.model_machine LIKE ?
+          OR m.code_machine LIKE ? 
+          OR m.serial_machine LIKE ? 
+          OR m.manufacturer LIKE ?
+          OR tl.name_location LIKE ?
+          OR m.RFID_machine LIKE ?)
+        `);
+        // Push params 7 lần cho 7 dấu ?
+        for (let i = 0; i < 7; i++) {
+          countParams.push(searchPattern);
+          dataParams.push(searchPattern);
+        }
+      }
     }
 
     // 2. Type filter (Lưu ý: req.query sẽ tự động parse mảng nếu param được lặp lại)
@@ -902,34 +956,99 @@ app.get("/api/machines/search", authenticateToken, async (req, res) => {
   try {
     const search = req.query.search || "";
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10; // Giới hạn số lượng kết quả trả về
+    const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
     const { ticket_type, filter_by_phongban_id } = req.query;
 
-    if (!search || search.length < 2) {
+    if (!search || search.trim().length === 0) {
       return res.json({
         success: true,
-        message: "Cần tối thiểu 2 ký tự để tìm kiếm.",
+        message: "Vui lòng nhập từ khóa tìm kiếm.",
         data: [],
         pagination: { page: 1, limit: limit, total: 0, totalPages: 1 },
       });
     }
 
-    const searchPattern = `%${search}%`;
-    let searchParams = [
-      searchPattern,
-      searchPattern,
-      searchPattern,
-      searchPattern,
-      searchPattern,
-    ];
+    let whereConditions = [];
+    let searchParams = [];
 
-    let whereConditions = [
-      `(m.type_machine LIKE ? OR m.model_machine LIKE ? OR m.code_machine LIKE ? OR m.serial_machine LIKE ? OR m.RFID_machine LIKE ?)`,
-    ];
+    // --- 1. XỬ LÝ LOGIC TÌM KIẾM (TAGS) ---
+    const searchLower = search.toLowerCase().trim();
+    let isSpecificSearch = false;
+    let searchColumn = "";
+    let searchTermRaw = "";
 
-    // <<< BẮT ĐẦU THAY THẾ LOGIC LỌC
-    // Áp dụng bộ lọc trạng thái máy dựa trên loại phiếu
+    // Kiểm tra các tiền tố (prefix)
+    if (searchLower.startsWith("type:") || searchLower.startsWith("loai:")) {
+      searchColumn = "m.type_machine";
+      searchTermRaw = search.substring(search.indexOf(":") + 1).trim();
+      isSpecificSearch = true;
+    } else if (
+      searchLower.startsWith("model:") ||
+      searchLower.startsWith("mo:")
+    ) {
+      searchColumn = "m.model_machine";
+      searchTermRaw = search.substring(search.indexOf(":") + 1).trim();
+      isSpecificSearch = true;
+    } else if (
+      searchLower.startsWith("rfid:") ||
+      searchLower.startsWith("id:")
+    ) {
+      searchColumn = "m.RFID_machine";
+      searchTermRaw = search.substring(search.indexOf(":") + 1).trim();
+      isSpecificSearch = true;
+    } else if (
+      searchLower.startsWith("seri:") ||
+      searchLower.startsWith("serial:")
+    ) {
+      searchColumn = "m.serial_machine";
+      searchTermRaw = search.substring(search.indexOf(":") + 1).trim();
+      isSpecificSearch = true;
+    } else if (
+      searchLower.startsWith("hsx:") ||
+      searchLower.startsWith("hang:")
+    ) {
+      searchColumn = "m.manufacturer";
+      searchTermRaw = search.substring(search.indexOf(":") + 1).trim();
+      isSpecificSearch = true;
+    } else if (
+      searchLower.startsWith("ma:") ||
+      searchLower.startsWith("code:")
+    ) {
+      searchColumn = "m.code_machine";
+      searchTermRaw = search.substring(search.indexOf(":") + 1).trim();
+      isSpecificSearch = true;
+    }
+
+    if (isSpecificSearch && searchTermRaw.length > 0) {
+      // TRƯỜNG HỢP A: TÌM CỤ THỂ THEO CỘT
+      whereConditions.push(`${searchColumn} LIKE ?`);
+      searchParams.push(`%${searchTermRaw}%`);
+    } else {
+      // TRƯỜNG HỢP B: TÌM KIẾM CHUNG (Mặc định)
+      // Nếu tìm chung thì yêu cầu tối thiểu 2 ký tự để tránh lag DB
+      if (search.length < 2) {
+        return res.json({
+          success: true,
+          message: "Cần tối thiểu 2 ký tự để tìm kiếm chung.",
+          data: [],
+          pagination: { page: 1, limit: limit, total: 0, totalPages: 1 },
+        });
+      }
+
+      whereConditions.push(`
+        (m.type_machine LIKE ? 
+        OR m.model_machine LIKE ? 
+        OR m.code_machine LIKE ? 
+        OR m.serial_machine LIKE ? 
+        OR m.RFID_machine LIKE ?)
+      `);
+      const pattern = `%${search}%`;
+      // Push 5 lần cho 5 dấu ?
+      searchParams.push(pattern, pattern, pattern, pattern, pattern);
+    }
+
+    // --- 2. XỬ LÝ LOGIC LỌC THEO LOẠI PHIẾU (Ticket Type) ---
     if (ticket_type) {
       const conditions = getMachineFilterConditions(ticket_type);
       if (conditions.where) {
@@ -937,12 +1056,14 @@ app.get("/api/machines/search", authenticateToken, async (req, res) => {
       }
     }
 
+    // --- 3. XÂY DỰNG CÂU TRUY VẤN ---
     let joins = [
       `LEFT JOIN tb_category c ON c.id_category = m.id_category`,
       `LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine`,
       `LEFT JOIN tb_location tl ON tl.id_location = ml.id_location`,
     ];
 
+    // Lọc theo phòng ban (nếu có - cho điều chuyển nội bộ)
     if (filter_by_phongban_id) {
       joins.push(
         `LEFT JOIN tb_department td ON td.id_department = tl.id_department`
@@ -952,22 +1073,25 @@ app.get("/api/machines/search", authenticateToken, async (req, res) => {
     }
 
     const joinClause = joins.join(" \n ");
-    const whereClause = `WHERE ${whereConditions.join(" AND ")}`;
+    const whereClause =
+      whereConditions.length > 0
+        ? `WHERE ${whereConditions.join(" AND ")}`
+        : "";
 
-    // 1. Get total count
+    // --- 4. THỰC THI TRUY VẤN ---
+
+    // A. Đếm tổng số kết quả
     const countQuery = `
       SELECT COUNT(*) as total
       FROM tb_machine m
       ${joinClause}
       ${whereClause} 
     `;
-
     const [countResult] = await tpmConnection.query(countQuery, searchParams);
-
     const total = countResult[0].total;
     const totalPages = Math.ceil(total / limit);
 
-    // 2. Get paginated data
+    // B. Lấy dữ liệu phân trang
     const dataQuery = `
       SELECT 
         m.uuid_machine,
@@ -987,11 +1111,10 @@ app.get("/api/machines/search", authenticateToken, async (req, res) => {
       LIMIT ? OFFSET ?
     `;
 
-    const [machines] = await tpmConnection.query(dataQuery, [
-      ...searchParams,
-      limit,
-      offset,
-    ]);
+    // Thêm params cho LIMIT và OFFSET
+    const dataParams = [...searchParams, limit, offset];
+
+    const [machines] = await tpmConnection.query(dataQuery, dataParams);
 
     res.json({
       success: true,

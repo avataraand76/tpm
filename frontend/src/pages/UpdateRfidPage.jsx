@@ -169,6 +169,17 @@ const UpdateRfidPage = () => {
   // State cho bảng kết quả (Bao gồm cả Cột RFID Mới)
   // { serial, name, currentRfid, newRfid, notFound }
   const [processedData, setProcessedData] = useState([]);
+  const [filterStatus, setFilterStatus] = useState("all");
+  const filteredData = processedData.filter((row) => {
+    if (filterStatus === "all") return true;
+    if (filterStatus === "duplicate") return row.isDuplicateSerial;
+    if (filterStatus === "notFound") return row.notFound;
+    if (row.notFound) return false;
+    if (filterStatus === "diff") return row.newRfid !== row.currentRfid;
+    if (filterStatus === "same") return row.newRfid === row.currentRfid;
+
+    return true;
+  });
 
   // State
   const [loadingCheck, setLoadingCheck] = useState(false);
@@ -218,14 +229,15 @@ const UpdateRfidPage = () => {
     }
 
     setLoadingCheck(true);
-    setProcessedData([]); // Xóa bảng cũ
+    setProcessedData([]);
 
-    // 1. Tách Serial, làm sạch và loại bỏ dòng trống/trùng lặp
-    const serialsToProcess = [
-      ...new Set(serialInput.split("\n").map(cleanSerial).filter(Boolean)),
-    ];
+    // 1. Tách Serial
+    const serialsToProcess = serialInput
+      .split("\n")
+      .map(cleanSerial)
+      .filter(Boolean);
 
-    // Tách RFID, làm sạch và loại bỏ dòng trống
+    // Tách RFID
     const rfidsToProcess = rfidInput.split("\n").map(cleanRfid).filter(Boolean);
 
     if (serialsToProcess.length === 0) {
@@ -244,10 +256,16 @@ const UpdateRfidPage = () => {
       return;
     }
 
+    const serialCounts = serialsToProcess.reduce((acc, curr) => {
+      acc[curr] = (acc[curr] || 0) + 1;
+      return acc;
+    }, {});
+
     try {
-      // 2. Gọi API kiểm tra hàng loạt (API mới)
+      // 2. Gọi API kiểm tra (Chỉ gửi danh sách unique lên server để tối ưu)
+      const uniqueSerials = [...new Set(serialsToProcess)];
       const result = await api.machines.batchCheckSerials({
-        serials: serialsToProcess,
+        serials: uniqueSerials,
       });
 
       if (!result.success) {
@@ -263,8 +281,11 @@ const UpdateRfidPage = () => {
       // Lặp theo mảng Serial và ghép cặp với RFID
       for (let i = 0; i < serialsToProcess.length; i++) {
         const serial = serialsToProcess[i];
-        const newRfid = rfidsToProcess[i]; // Ghép cặp RFID theo thứ tự
+        const newRfid = rfidsToProcess[i];
         const machine = machineMap.get(serial);
+
+        // Kiểm tra xem serial này có bị trùng trong danh sách nhập vào không
+        const isDuplicate = serialCounts[serial] > 1;
 
         if (machine) {
           // Tìm thấy
@@ -276,15 +297,16 @@ const UpdateRfidPage = () => {
             currentRfid: machine.RFID_machine || "(Chưa có)",
             newRfid: newRfid,
             notFound: false,
+            isDuplicateSerial: isDuplicate,
           });
         } else {
-          // Không tìm thấy
           dataForTable.push({
             serial: serial,
             name: "(Serial không tìm thấy)",
             currentRfid: "(Serial không tìm thấy)",
             newRfid: newRfid,
             notFound: true,
+            isDuplicateSerial: isDuplicate,
           });
         }
       }
@@ -292,13 +314,22 @@ const UpdateRfidPage = () => {
       // 5. Cập nhật state
       setProcessedData(dataForTable);
 
-      showNotification(
-        "success",
-        "Ghép cặp & Kiểm tra hoàn tất",
-        `Đã xử lý ${serialsToProcess.length} cặp Serial-RFID.`
-      );
+      // Thông báo: Nếu có trùng lặp thì cảnh báo nhẹ
+      const hasDuplicates = dataForTable.some((d) => d.isDuplicateSerial);
+      if (hasDuplicates) {
+        showNotification(
+          "warning",
+          "Kiểm tra hoàn tất (Có trùng lặp)",
+          `Đã xử lý ${serialsToProcess.length} dòng. Phát hiện Serial trùng lặp (màu cam).`
+        );
+      } else {
+        showNotification(
+          "success",
+          "Ghép cặp & Kiểm tra hoàn tất",
+          `Đã xử lý ${serialsToProcess.length} cặp Serial-RFID.`
+        );
+      }
 
-      // Tự động cuộn xuống bảng
       setTimeout(() => {
         tableContainerRef.current?.scrollIntoView({ behavior: "smooth" });
       }, 100);
@@ -391,6 +422,32 @@ const UpdateRfidPage = () => {
     setRfidInput("");
     setProcessedData([]);
   };
+
+  const stats = processedData.reduce(
+    (acc, row) => {
+      // 1. Đếm Serial bị trùng (Đếm tổng số dòng bị đánh dấu trùng)
+      if (row.isDuplicateSerial) {
+        acc.duplicateCount++;
+      }
+
+      // 2. Đếm Serial không tìm thấy
+      if (row.notFound) {
+        acc.notFoundCount++;
+      }
+      // Nếu tìm thấy thì mới so sánh RFID
+      else {
+        if (row.newRfid === row.currentRfid) {
+          // 3. RFID Mới GIỐNG RFID Cũ
+          acc.sameRfidCount++;
+        } else {
+          // 4. RFID Mới KHÁC RFID Cũ (Cần cập nhật)
+          acc.diffRfidCount++;
+        }
+      }
+      return acc;
+    },
+    { diffRfidCount: 0, sameRfidCount: 0, notFoundCount: 0, duplicateCount: 0 }
+  );
 
   return (
     <>
@@ -548,6 +605,177 @@ const UpdateRfidPage = () => {
                   Bước 3: Xem lại và Cập nhật
                 </Typography>
 
+                <Stack
+                  direction={{ xs: "column", md: "row" }}
+                  spacing={2}
+                  sx={{ mb: 2 }}
+                >
+                  {/* Thẻ: TẤT CẢ (Để reset bộ lọc) */}
+                  <Paper
+                    variant="outlined"
+                    onClick={() => setFilterStatus("all")}
+                    sx={{
+                      p: 1.5,
+                      flex: 1,
+                      cursor: "pointer",
+                      borderColor: "grey.500",
+                      bgcolor:
+                        filterStatus === "all"
+                          ? "rgba(0, 0, 0, 0.1)"
+                          : "transparent",
+                      borderWidth: filterStatus === "all" ? 2 : 1,
+                      transition: "all 0.2s",
+                    }}
+                  >
+                    <Typography
+                      variant="subtitle2"
+                      color="text.secondary"
+                      fontWeight="bold"
+                    >
+                      Tất cả
+                    </Typography>
+                    <Typography
+                      variant="h5"
+                      color="text.primary"
+                      fontWeight="bold"
+                    >
+                      {processedData.length}
+                    </Typography>
+                  </Paper>
+
+                  {/* Thẻ: Cần cập nhật */}
+                  <Paper
+                    variant="outlined"
+                    onClick={() => setFilterStatus("diff")}
+                    sx={{
+                      p: 1.5,
+                      flex: 1,
+                      cursor: "pointer",
+                      borderColor: "primary.main",
+                      bgcolor:
+                        filterStatus === "diff"
+                          ? "rgba(25, 118, 210, 0.15)"
+                          : "rgba(25, 118, 210, 0.04)",
+                      borderWidth: filterStatus === "diff" ? 2 : 1,
+                      transition: "all 0.2s",
+                    }}
+                  >
+                    <Typography
+                      variant="subtitle2"
+                      color="primary.main"
+                      fontWeight="bold"
+                    >
+                      RFID cần cập nhật
+                    </Typography>
+                    <Typography
+                      variant="h5"
+                      color="primary.main"
+                      fontWeight="bold"
+                    >
+                      {stats.diffRfidCount}
+                    </Typography>
+                  </Paper>
+
+                  {/* Thẻ: Giống nhau */}
+                  <Paper
+                    variant="outlined"
+                    onClick={() => setFilterStatus("same")}
+                    sx={{
+                      p: 1.5,
+                      flex: 1,
+                      cursor: "pointer",
+                      borderColor: "success.main",
+                      bgcolor:
+                        filterStatus === "same"
+                          ? "rgba(46, 125, 50, 0.15)"
+                          : "rgba(46, 125, 50, 0.04)",
+                      borderWidth: filterStatus === "same" ? 2 : 1,
+                      transition: "all 0.2s",
+                    }}
+                  >
+                    <Typography
+                      variant="subtitle2"
+                      color="success.main"
+                      fontWeight="bold"
+                    >
+                      RFID trùng khớp
+                    </Typography>
+                    <Typography
+                      variant="h5"
+                      color="success.main"
+                      fontWeight="bold"
+                    >
+                      {stats.sameRfidCount}
+                    </Typography>
+                  </Paper>
+
+                  {/* Thẻ: Không tìm thấy */}
+                  <Paper
+                    variant="outlined"
+                    onClick={() => setFilterStatus("notFound")}
+                    sx={{
+                      p: 1.5,
+                      flex: 1,
+                      cursor: "pointer",
+                      borderColor: "error.main",
+                      bgcolor:
+                        filterStatus === "notFound"
+                          ? "rgba(211, 47, 47, 0.15)"
+                          : "rgba(211, 47, 47, 0.04)",
+                      borderWidth: filterStatus === "notFound" ? 2 : 1,
+                      transition: "all 0.2s",
+                    }}
+                  >
+                    <Typography
+                      variant="subtitle2"
+                      color="error.main"
+                      fontWeight="bold"
+                    >
+                      Không tìm thấy Serial
+                    </Typography>
+                    <Typography
+                      variant="h5"
+                      color="error.main"
+                      fontWeight="bold"
+                    >
+                      {stats.notFoundCount}
+                    </Typography>
+                  </Paper>
+
+                  {/* Thẻ: Serial Trùng */}
+                  <Paper
+                    variant="outlined"
+                    onClick={() => setFilterStatus("duplicate")}
+                    sx={{
+                      p: 1.5,
+                      flex: 1,
+                      cursor: "pointer",
+                      borderColor: "warning.main",
+                      bgcolor:
+                        filterStatus === "duplicate"
+                          ? "rgba(237, 108, 2, 0.15)"
+                          : "rgba(237, 108, 2, 0.04)",
+                      borderWidth: filterStatus === "duplicate" ? 2 : 1,
+                      transition: "all 0.2s",
+                    }}
+                  >
+                    <Typography
+                      variant="subtitle2"
+                      color="warning.main"
+                      fontWeight="bold"
+                    >
+                      Serial bị trùng
+                    </Typography>
+                    <Typography
+                      variant="h5"
+                      color="warning.main"
+                      fontWeight="bold"
+                    >
+                      {stats.duplicateCount}
+                    </Typography>
+                  </Paper>
+                </Stack>
+
                 <TableContainer
                   component={Paper}
                   elevation={0}
@@ -609,7 +837,7 @@ const UpdateRfidPage = () => {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {processedData.map((row, index) => {
+                      {filteredData.map((row, index) => {
                         let statusIcon = null;
                         let rfidColor = "text.primary";
 
@@ -665,9 +893,15 @@ const UpdateRfidPage = () => {
                               sx={{
                                 padding: "8px 10px",
                                 fontWeight: 600,
+                                // Nếu trùng serial thì dùng màu cam, nếu không thì màu mặc định
+                                color: row.isDuplicateSerial
+                                  ? "warning.main"
+                                  : "text.primary",
                               }}
                             >
                               {row.serial}
+                              {/* (Tuỳ chọn) Nếu muốn hiện thêm chữ thì bỏ comment dòng dưới */}
+                              {row.isDuplicateSerial && " (Trùng)"}
                             </TableCell>
                             <TableCell
                               sx={{
