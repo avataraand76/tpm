@@ -38,6 +38,7 @@ import {
   Select,
   MenuItem,
   Checkbox,
+  IconButton,
 } from "@mui/material";
 import {
   LocationOn,
@@ -45,7 +46,10 @@ import {
   Business,
   MeetingRoom,
   Refresh,
+  KeyboardArrowDown,
+  KeyboardArrowUp,
 } from "@mui/icons-material";
+import { alpha } from "@mui/material/styles";
 import NavigationBar from "../components/NavigationBar";
 import { api } from "../api/api";
 
@@ -59,6 +63,477 @@ const renderMultiSelectValue = (selected) => (
     )}
   </Box>
 );
+
+const formatNumber = (num) => {
+  if (num === null || num === undefined || num === "") return "0";
+  return Number(num).toLocaleString("en-US");
+};
+
+const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
+  const theme = useTheme();
+  const [openNotInUse, setOpenNotInUse] = useState(false);
+
+  // 1. Cấu hình cột
+  const columns = [
+    { key: "internal", label: "Máy nội bộ" },
+    { key: "borrowed", label: "Máy mượn" },
+    { key: "rented", label: "Máy thuê" },
+  ];
+
+  // 2. Cấu hình hàng chính
+  const rowConfig = [
+    {
+      key: "available",
+      label: "Có thể sử dụng",
+      color: "#2e7d32",
+      bg: "#e8f5e9",
+    },
+    { key: "in_use", label: "Đang sử dụng", color: "#1976d2", bg: "#e3f2fd" },
+    {
+      key: "not_in_use",
+      label: "Chưa sử dụng",
+      color: "#ed6c02",
+      bg: "#fff3e0",
+      hasChildren: true,
+    },
+    {
+      key: "pending_liquidation",
+      label: "Chờ thanh lý",
+      color: "#ff5722",
+      bg: "#fbe9e7",
+    },
+  ];
+
+  // 3. Cấu hình hàng con: ĐỒNG BỘ MÀU CAM CHO TẤT CẢ
+  const subRowConfig = [
+    { key: "maintenance", label: "Bảo trì", color: "#00bcd4", bg: "#e0f7fa" },
+    { key: "broken", label: "Máy hư", color: "#00bcd4", bg: "#e0f7fa" },
+    { key: "disabled", label: "Cho mượn", color: "#00bcd4", bg: "#e0f7fa" },
+  ];
+
+  // 4. Xử lý dữ liệu (Giữ nguyên logic cũ của bạn)
+  const processData = () => {
+    if (!data) return {};
+    const newData = JSON.parse(JSON.stringify(data));
+    Object.keys(newData).forEach((statusKey) => {
+      const row = newData[statusKey];
+      if (row) {
+        const borrowedOutCount = row["borrowed_out"] || 0;
+        row["internal"] = (row["internal"] || 0) + borrowedOutCount;
+        row["borrowed_out"] = 0;
+      }
+    });
+    newData["not_in_use"] = {};
+    const mergedStatuses = ["maintenance", "broken", "disabled"];
+    columns.forEach((col) => {
+      let sum = 0;
+      mergedStatuses.forEach((status) => {
+        if (newData[status]) {
+          sum += newData[status][col.key] || 0;
+        }
+      });
+      newData["not_in_use"][col.key] = sum;
+    });
+    return newData;
+  };
+
+  const processedData = processData();
+
+  // --- Logic Active (Giữ nguyên) ---
+  const isSelected = (rowKey, colKey) => {
+    if (!activeFilters) return false;
+    const { current_status, borrow_status } = activeFilters;
+    let isRowMatch = false;
+    if (rowKey === "ALL") {
+      isRowMatch =
+        current_status.length === 0 || current_status.includes("ALL");
+    } else if (rowKey === "not_in_use") {
+      const mergedStatuses = ["maintenance", "broken", "disabled"];
+      isRowMatch =
+        mergedStatuses.every((s) => current_status.includes(s)) &&
+        current_status.length === mergedStatuses.length;
+    } else {
+      isRowMatch =
+        current_status.includes(rowKey) && current_status.length === 1;
+    }
+    const isColMatch =
+      colKey === "ALL"
+        ? borrow_status.length === 0 || borrow_status.includes("ALL")
+        : colKey === "internal"
+        ? borrow_status.includes("internal")
+        : borrow_status.includes(colKey);
+    return isRowMatch && isColMatch;
+  };
+
+  const isRowActive = (rowKey) => {
+    if (!activeFilters) return false;
+    if (rowKey === "ALL")
+      return (
+        activeFilters.current_status.length === 0 ||
+        activeFilters.current_status.includes("ALL")
+      );
+    if (rowKey === "not_in_use") {
+      const mergedStatuses = ["maintenance", "broken", "disabled"];
+      return mergedStatuses.every((s) =>
+        activeFilters.current_status.includes(s)
+      );
+    }
+    return activeFilters.current_status.includes(rowKey);
+  };
+
+  const isColActive = (colKey) => {
+    if (!activeFilters) return false;
+    if (colKey === "ALL")
+      return (
+        activeFilters.borrow_status.length === 0 ||
+        activeFilters.borrow_status.includes("ALL")
+      );
+    return colKey === "internal"
+      ? activeFilters.borrow_status.includes("internal")
+      : activeFilters.borrow_status.includes(colKey);
+  };
+
+  const calculateRowTotal = (rowData) => {
+    if (!rowData) return 0;
+    return columns.reduce((sum, col) => sum + (rowData[col.key] || 0), 0);
+  };
+  const calculateColTotal = (colKey) => {
+    if (!processedData) return 0;
+    return rowConfig.reduce((sum, row) => {
+      if (row.key === "liquidation") return sum;
+      return sum + (processedData[row.key]?.[colKey] || 0);
+    }, 0);
+  };
+  const calculateGrandTotal = () => {
+    if (!processedData) return 0;
+    let total = 0;
+    rowConfig.forEach((row) => {
+      if (row.key === "liquidation") return;
+      total += calculateRowTotal(processedData[row.key]);
+    });
+    return total;
+  };
+
+  // --- CẤU HÌNH MÀU TÍM CHO TỔNG (Giống MachineListPage) ---
+  const TOTAL_COL_COLOR = "#667eea";
+  const TOTAL_COL_BG = "#ede7f6";
+  const TOTAL_ROW_COLOR = "#667eea";
+  const TOTAL_ROW_BG = "#ede7f6";
+
+  if (loading) {
+    return (
+      <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  const renderRow = (row, isSubRow = false) => {
+    const rowData = processedData[row.key] || {};
+    const rowTotal = calculateRowTotal(rowData);
+    const hasDataRow = rowTotal > 0;
+    const rowActive = isRowActive(row.key);
+
+    return (
+      <TableRow key={row.key} sx={{ "& > *": { borderBottom: "unset" } }}>
+        <TableCell
+          className="cell-first-col"
+          sx={{
+            cursor: "default",
+            color: row.color,
+            bgcolor: rowActive ? row.bg : "#fff",
+            boxShadow: rowActive ? `inset 3px 0 0 0 ${row.color}` : "none",
+            pl: isSubRow ? 4 : 2,
+            "&:hover": {
+              bgcolor: row.bg,
+              color: row.color,
+              boxShadow: `inset 3px 0 0 0 ${row.color}`,
+            },
+          }}
+        >
+          <Box sx={{ display: "flex", alignItems: "center" }}>
+            {row.hasChildren && (
+              <IconButton
+                aria-label="expand row"
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpenNotInUse(!openNotInUse);
+                }}
+                sx={{ mr: 0.5, p: 0 }}
+              >
+                {openNotInUse ? <KeyboardArrowUp /> : <KeyboardArrowDown />}
+              </IconButton>
+            )}
+            <Box component="span" sx={{ flexGrow: 1, fontWeight: 600 }}>
+              {row.label}
+            </Box>
+          </Box>
+        </TableCell>
+
+        {columns.map((col) => {
+          const value = rowData[col.key] || 0;
+          const hasDataCell = value > 0;
+          const cellSelected = isSelected(row.key, col.key);
+          return (
+            <TableCell
+              key={col.key}
+              onClick={() => onCellClick(row.key, col.key)}
+              sx={{
+                cursor: "pointer",
+                bgcolor: cellSelected
+                  ? alpha(row.color, 0.2)
+                  : hasDataCell
+                  ? row.bg
+                  : "transparent",
+                color: hasDataCell || cellSelected ? row.color : "#e0e0e0",
+                fontWeight: hasDataCell || cellSelected ? "bold" : "normal",
+                boxShadow: cellSelected
+                  ? `inset 0 0 0 2px ${row.color}`
+                  : "none",
+                "&:hover": {
+                  bgcolor:
+                    hasDataCell || cellSelected
+                      ? alpha(row.color, 0.25)
+                      : "#f5f5f5",
+                  boxShadow: `inset 0 0 0 2px ${row.color}`,
+                  color: hasDataCell || cellSelected ? row.color : "#757575",
+                },
+              }}
+            >
+              {value ? formatNumber(value) : "-"}
+            </TableCell>
+          );
+        })}
+
+        {(() => {
+          const cellSelected = isSelected(row.key, "ALL");
+          return (
+            <TableCell
+              onClick={() => onCellClick(row.key, "ALL")}
+              sx={{
+                cursor: "pointer",
+                fontWeight: "bold",
+                color: hasDataRow || cellSelected ? row.color : "#bdbdbd",
+                backgroundColor: cellSelected
+                  ? alpha(row.color, 0.2)
+                  : hasDataRow
+                  ? alpha(row.color, 0.08)
+                  : "transparent",
+                boxShadow: cellSelected
+                  ? `inset 0 0 0 2px ${row.color}`
+                  : "none",
+                "&:hover": {
+                  bgcolor: alpha(row.color, 0.2),
+                  boxShadow: `inset 0 0 0 2px ${row.color}`,
+                },
+              }}
+            >
+              {rowTotal ? formatNumber(rowTotal) : "-"}
+            </TableCell>
+          );
+        })()}
+      </TableRow>
+    );
+  };
+
+  return (
+    <Card
+      elevation={0}
+      sx={{
+        borderRadius: "20px",
+        border: "1px solid rgba(0, 0, 0, 0.05)",
+        overflow: "hidden",
+        height: "100%",
+        transition: "all 0.2s ease",
+        "&:hover": { boxShadow: "0 4px 12px rgba(0,0,0,0.05)" },
+      }}
+    >
+      <Box sx={{ p: 2, borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
+        <Typography variant="h6" fontWeight="bold">
+          Trạng thái chi tiết
+        </Typography>
+      </Box>
+      <TableContainer>
+        <Table
+          size="small"
+          sx={{
+            "& .MuiTableCell-root": {
+              borderBottom: "1px solid rgba(224, 224, 224, 0.4)",
+              textAlign: "center",
+              fontSize: "0.9rem",
+              transition: "all 0.2s ease-in-out",
+              position: "relative",
+            },
+            "& .MuiTableCell-head": {
+              backgroundColor: "#f9fafb",
+              fontWeight: 700,
+              color: "#637381",
+              py: 2,
+            },
+            "& .cell-first-col": {
+              textAlign: "left",
+              fontWeight: 600,
+              position: "sticky",
+              left: 0,
+              zIndex: 1,
+              borderRight: "1px solid rgba(0,0,0,0.05)",
+            },
+          }}
+        >
+          <TableHead>
+            <TableRow>
+              <TableCell className="cell-first-col" sx={{ minWidth: 180 }}>
+                Trạng thái chính
+              </TableCell>
+              {columns.map((col) => {
+                const active = isColActive(col.key);
+                return (
+                  <TableCell
+                    key={col.key}
+                    sx={{
+                      cursor: "default",
+                      color: active ? theme.palette.primary.main : "inherit",
+                      bgcolor: active ? "#f0f4f8" : "inherit",
+                      boxShadow: active
+                        ? `inset 0 -3px 0 0 ${theme.palette.primary.main}`
+                        : "none",
+                      "&:hover": {
+                        color: theme.palette.primary.main,
+                        bgcolor: "#f0f4f8",
+                        boxShadow: `inset 0 -3px 0 0 ${theme.palette.primary.main}`,
+                      },
+                    }}
+                  >
+                    {col.label}
+                  </TableCell>
+                );
+              })}
+              {(() => {
+                const active = isColActive("ALL");
+                return (
+                  <TableCell
+                    sx={{
+                      cursor: "default",
+                      fontWeight: "bold !important",
+                      color: active
+                        ? `${TOTAL_COL_COLOR} !important`
+                        : `${TOTAL_COL_COLOR} !important`,
+                      backgroundColor: active
+                        ? `${TOTAL_COL_BG} !important`
+                        : "#f9fafb !important",
+                      boxShadow: active
+                        ? `inset 0 -3px 0 0 ${TOTAL_COL_COLOR}`
+                        : "none",
+                      "&:hover": {
+                        backgroundColor: TOTAL_COL_BG + " !important",
+                        boxShadow: `inset 0 -3px 0 0 ${TOTAL_COL_COLOR}`,
+                      },
+                    }}
+                  >
+                    Tổng
+                  </TableCell>
+                );
+              })()}
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {rowConfig.map((row) => (
+              <React.Fragment key={row.key}>
+                {renderRow(row)}
+                {row.key === "not_in_use" &&
+                  openNotInUse &&
+                  subRowConfig.map((subRow) => renderRow(subRow, true))}
+              </React.Fragment>
+            ))}
+
+            {/* --- CẬP NHẬT HÀNG TỔNG (MÀU TÍM) --- */}
+            <TableRow sx={{ backgroundColor: "#fafafa" }}>
+              {(() => {
+                const active = isRowActive("ALL");
+                return (
+                  <TableCell
+                    className="cell-first-col"
+                    sx={{
+                      cursor: "default",
+                      fontWeight: "bold !important",
+                      color: active
+                        ? `${TOTAL_ROW_COLOR} !important`
+                        : `${TOTAL_ROW_COLOR} !important`,
+                      backgroundColor: active
+                        ? `${TOTAL_ROW_BG} !important`
+                        : "#fafafa !important",
+                      boxShadow: active
+                        ? `inset 3px 0 0 0 ${TOTAL_ROW_COLOR}`
+                        : "none",
+                      "&:hover": {
+                        backgroundColor: TOTAL_ROW_BG + " !important",
+                        boxShadow: `inset 3px 0 0 0 ${TOTAL_ROW_COLOR}`,
+                      },
+                    }}
+                  >
+                    Tổng
+                  </TableCell>
+                );
+              })()}
+              {columns.map((col) => {
+                const colTotal = calculateColTotal(col.key);
+                const cellSelected = isSelected("ALL", col.key);
+                return (
+                  <TableCell
+                    key={col.key}
+                    onClick={() => onCellClick("ALL", col.key)}
+                    sx={{
+                      cursor: "pointer",
+                      fontWeight: "bold",
+                      color:
+                        colTotal > 0 || cellSelected
+                          ? TOTAL_ROW_COLOR
+                          : "#bdbdbd",
+                      bgcolor: cellSelected ? TOTAL_ROW_BG : "transparent",
+                      boxShadow: cellSelected
+                        ? `inset 0 0 0 2px ${TOTAL_ROW_COLOR}`
+                        : "none",
+                      "&:hover": {
+                        bgcolor: TOTAL_ROW_BG,
+                        color: TOTAL_ROW_COLOR,
+                        boxShadow: `inset 0 0 0 2px ${TOTAL_ROW_COLOR}`,
+                      },
+                    }}
+                  >
+                    {colTotal ? formatNumber(colTotal) : "-"}
+                  </TableCell>
+                );
+              })}
+              {/* --- Ô GRAND TOTAL (GÓC DƯỚI PHẢI) --- */}
+              <TableCell
+                onClick={() => onCellClick("ALL", "ALL")}
+                sx={{
+                  backgroundColor: `${alpha(TOTAL_ROW_COLOR, 0.15)} !important`,
+                  color: `${TOTAL_ROW_COLOR} !important`,
+                  fontWeight: "bold",
+                  fontSize: "1.1rem !important",
+                  cursor: "pointer",
+                  boxShadow: isSelected("ALL", "ALL")
+                    ? `inset 0 0 0 2px ${TOTAL_ROW_COLOR}`
+                    : "none",
+                  "&:hover": {
+                    filter: "brightness(0.95)",
+                    boxShadow: `inset 0 0 0 2px ${TOTAL_ROW_COLOR}`,
+                  },
+                }}
+              >
+                {calculateGrandTotal()
+                  ? formatNumber(calculateGrandTotal())
+                  : "-"}
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Card>
+  );
+};
 
 const LocationTrackPage = () => {
   const theme = useTheme();
@@ -85,6 +560,7 @@ const LocationTrackPage = () => {
     borrowed: 0,
     borrowed_return: 0,
     rented_return: 0,
+    pending_liquidation: 0,
   });
 
   // BỔ SUNG STATES CHO PHÂN TRANG
@@ -107,6 +583,9 @@ const LocationTrackPage = () => {
   const [modelOptions, setModelOptions] = useState([]);
   const [manufacturerOptions, setManufacturerOptions] = useState([]);
 
+  const [matrixData, setMatrixData] = useState({});
+  const [matrixLoading, setMatrixLoading] = useState(false);
+
   // State for selected filter values
   const [filters, setFilters] = useState({
     type_machines: [],
@@ -122,10 +601,15 @@ const LocationTrackPage = () => {
     available: { bg: "#2e7d3222", color: "#2e7d32", label: "Sẵn sàng" },
     in_use: { bg: "#667eea22", color: "#667eea", label: "Đang sử dụng" },
     maintenance: { bg: "#ff980022", color: "#ff9800", label: "Bảo trì" },
-    rented: { bg: "#673ab722", color: "#673ab7", label: "Đang thuê" },
-    borrowed: { bg: "#03a9f422", color: "#03a9f4", label: "Đang mượn" },
+    rented: { bg: "#673ab722", color: "#673ab7", label: "Máy thuê" },
+    borrowed: { bg: "#03a9f422", color: "#03a9f4", label: "Máy mượn" },
     borrowed_out: { bg: "#00bcd422", color: "#00bcd4", label: "Cho mượn" },
     liquidation: { bg: "#f4433622", color: "#f44336", label: "Thanh lý" },
+    pending_liquidation: {
+      bg: "#ff572222",
+      color: "#ff5722",
+      label: "Chờ thanh lý",
+    },
     disabled: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Vô hiệu hóa" },
   };
 
@@ -465,31 +949,6 @@ const LocationTrackPage = () => {
     setHistoryData([]);
   };
 
-  const handleRefresh = () => {
-    // 1. Tải lại danh sách Đơn vị
-    fetchDepartments();
-    if (selectedDepartment) {
-      fetchLocations(selectedDepartment.uuid_department);
-    }
-
-    // 2. Tải lại dữ liệu máy móc dựa trên lựa chọn hiện tại
-    if (selectedLocation) {
-      setPage(1); // Quay về trang 1
-      fetchMachinesAtLocation(selectedLocation.uuid_location, 1, limit);
-      fetchMachineTypeStats(selectedLocation.uuid_location);
-    } else if (selectedDepartment) {
-      setPage(1); // Quay về trang 1
-      fetchMachinesAtDepartment(selectedDepartment.uuid_department, 1, limit);
-      fetchDepartmentTypeStats(selectedDepartment.uuid_department);
-    } else {
-      // Nếu không, chỉ cần reset
-      setMachinesAtLocation([]);
-      setTotalPages(1);
-      setPage(1);
-      setTypeStats([]);
-    }
-  };
-
   /**
    * Hàm mới: Xử lý khi nhấp vào thẻ thống kê
    */
@@ -551,6 +1010,130 @@ const LocationTrackPage = () => {
     },
   };
 
+  const fetchMatrixStats = useCallback(async (locationUuid, departmentUuid) => {
+    setMatrixLoading(true);
+    try {
+      let result = { success: false, data: {} };
+      if (locationUuid) {
+        // Gọi API ma trận cho Location
+        result = await api.tracking.getMatrixStatsByLocation(locationUuid);
+      } else if (departmentUuid) {
+        // Gọi API ma trận cho Department
+        result = await api.tracking.getMatrixStatsByDepartment(departmentUuid);
+      } else {
+        // Reset nếu không có gì chọn
+        setMatrixData({});
+        setMatrixLoading(false);
+        return;
+      }
+
+      if (result.success) {
+        setMatrixData(result.data);
+      } else {
+        setMatrixData({});
+      }
+    } catch (err) {
+      console.error("Error fetching matrix stats:", err);
+      setMatrixData({});
+    } finally {
+      setMatrixLoading(false);
+    }
+  }, []);
+
+  // 4. THÊM HÀM handleMatrixClick (Tương tự MachineListPage)
+  const handleMatrixClick = (statusKey, sourceKey) => {
+    let newStatusFilter = [];
+    let newBorrowFilter = [];
+
+    // 1. Xử lý STATUS (Dòng)
+    if (statusKey === "ALL") {
+      newStatusFilter = [];
+    } else if (statusKey === "not_in_use") {
+      // Khi chọn "Chưa sử dụng", lấy cả 3 trạng thái con (bao gồm disabled/Cho mượn)
+      newStatusFilter = ["maintenance", "broken", "disabled"];
+    } else {
+      newStatusFilter = [statusKey];
+    }
+
+    // 2. Xử lý SOURCE (Cột)
+    if (sourceKey === "ALL") {
+      newBorrowFilter = [];
+    } else if (sourceKey === "internal") {
+      // <<< CẬP NHẬT: Khi chọn "Nội bộ", lấy cả máy Nội bộ VÀ máy Cho mượn (borrowed_out)
+      // Backend sẽ xử lý mảng này: 'internal' -> NULL, 'borrowed_out' -> 'borrowed_out'
+      newBorrowFilter = ["internal", "borrowed_out"];
+    } else {
+      newBorrowFilter = [sourceKey];
+    }
+
+    // 3. Cập nhật State Filters
+    setFilters((prev) => ({
+      ...prev,
+      current_status: newStatusFilter,
+      borrow_status: newBorrowFilter,
+    }));
+
+    setPage(1);
+    if (filterCardRef.current) {
+      const ref = filterCardRef.current;
+      ref.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  };
+
+  // 5. CẬP NHẬT useEffect (Gọi thêm fetchMatrixStats)
+  useEffect(() => {
+    if (selectedLocation) {
+      // ƯU TIÊN 1: VỊ TRÍ
+      fetchMachinesAtLocation(selectedLocation.uuid_location, page, limit);
+      fetchMachineTypeStats(selectedLocation.uuid_location);
+      fetchMatrixStats(selectedLocation.uuid_location, null); // <<< GỌI MATRIX
+    } else if (selectedDepartment) {
+      // ƯU TIÊN 2: ĐƠN VỊ
+      fetchMachinesAtDepartment(
+        selectedDepartment.uuid_department,
+        page,
+        limit
+      );
+      fetchDepartmentTypeStats(selectedDepartment.uuid_department);
+      fetchMatrixStats(null, selectedDepartment.uuid_department); // <<< GỌI MATRIX
+    } else {
+      // RESET
+      setMachinesAtLocation([]);
+      setLocationStats({
+        /* reset values */
+      });
+      setTotalPages(1);
+      setPage(1);
+      setTypeStats([]);
+      setMatrixData({}); // <<< RESET MATRIX
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDepartment, selectedLocation, page, limit, filters]);
+
+  // 6. CẬP NHẬT hàm handleRefresh
+  const handleRefresh = () => {
+    fetchDepartments();
+    if (selectedDepartment) fetchLocations(selectedDepartment.uuid_department);
+
+    if (selectedLocation) {
+      setPage(1);
+      fetchMachinesAtLocation(selectedLocation.uuid_location, 1, limit);
+      fetchMachineTypeStats(selectedLocation.uuid_location);
+      fetchMatrixStats(selectedLocation.uuid_location, null); // Refresh Matrix
+    } else if (selectedDepartment) {
+      setPage(1);
+      fetchMachinesAtDepartment(selectedDepartment.uuid_department, 1, limit);
+      fetchDepartmentTypeStats(selectedDepartment.uuid_department);
+      fetchMatrixStats(null, selectedDepartment.uuid_department); // Refresh Matrix
+    } else {
+      // Reset logic...
+      setMatrixData({});
+    }
+  };
+
   // --- Render Functions ---
   const renderMachineTable = () => {
     if (loadingMachines) {
@@ -579,6 +1162,11 @@ const LocationTrackPage = () => {
     }
 
     const stats = locationStats;
+    const displayTotal =
+      (stats.total || 0) -
+      (stats.liquidation || 0) -
+      (stats.borrowed_return || 0) -
+      (stats.rented_return || 0);
     const renderStatsCards = () => (
       <Grid container spacing={2} sx={{ mb: 3 }}>
         {/* Tổng số máy (Thẻ Lớn) */}
@@ -607,7 +1195,7 @@ const LocationTrackPage = () => {
                 fontWeight="bold"
                 color="#667eea"
               >
-                {stats.total || 0}
+                {formatNumber(displayTotal || 0)}
               </Typography>
             </CardContent>
           </Card>
@@ -616,8 +1204,9 @@ const LocationTrackPage = () => {
         {/* Các thẻ nhỏ */}
         <Grid size={{ xs: 12, sm: 6, md: 9 }}>
           <Grid container spacing={2}>
-            {/* Hàng 1 */}
-            <Grid size={{ xs: 6, md: 2.4 }}>
+            {/* --- HÀNG 1 --- */}
+            {/* 1. Sẵn sàng */}
+            <Grid size={{ xs: 6 }}>
               <Card
                 elevation={0}
                 onClick={() => handleStatusFilterClick(["available"], [])}
@@ -635,15 +1224,17 @@ const LocationTrackPage = () => {
                     fontWeight="bold"
                     color="#2e7d32"
                   >
-                    {stats.available || 0}
+                    {formatNumber(stats.available || 0)}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    Sẵn sàng
+                    Có thể sử dụng
                   </Typography>
                 </CardContent>
               </Card>
             </Grid>
-            <Grid size={{ xs: 6, md: 2.4 }}>
+
+            {/* 2. Đang sử dụng */}
+            <Grid size={{ xs: 6 }}>
               <Card
                 elevation={0}
                 onClick={() => handleStatusFilterClick(["in_use"], [])}
@@ -661,7 +1252,7 @@ const LocationTrackPage = () => {
                     fontWeight="bold"
                     color="#1976d2"
                   >
-                    {stats.in_use || 0}
+                    {formatNumber(stats.in_use || 0)}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
                     Đang sử dụng
@@ -669,7 +1260,7 @@ const LocationTrackPage = () => {
                 </CardContent>
               </Card>
             </Grid>
-            <Grid size={{ xs: 6, md: 2.4 }}>
+            {/* <Grid size={{ xs: 6, md: 2.4 }}>
               <Card
                 elevation={0}
                 onClick={() => handleStatusFilterClick(["maintenance"], [])}
@@ -752,19 +1343,90 @@ const LocationTrackPage = () => {
                     variant={isMobile ? "h6" : "h5"}
                     fontWeight="bold"
                     color="#9e9e9e"
+                  > */}
+            {/* {stats.disabled || 0}/ */}
+            {/* {stats.broken || 0}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary"> */}
+            {/* Vô hiệu hóa/ */}
+            {/* Máy hư
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid> */}
+
+            {/* --- HÀNG 2 --- */}
+            {/* 3. Chưa sử dụng (Bảo trì + Hư + Vô hiệu hóa/Cho mượn) */}
+            <Grid size={{ xs: 6 }}>
+              <Card
+                elevation={0}
+                onClick={() =>
+                  handleStatusFilterClick(
+                    ["maintenance", "broken", "disabled"],
+                    []
+                  )
+                }
+                sx={{
+                  borderRadius: "20px",
+                  background: "#ff980011",
+                  ...(isStatusFilterActive(
+                    ["maintenance", "broken", "disabled"],
+                    []
+                  )
+                    ? activeCardSx
+                    : inactiveCardSx),
+                }}
+              >
+                <CardContent sx={{ textAlign: "center", p: 2 }}>
+                  <Typography
+                    variant={isMobile ? "h6" : "h5"}
+                    fontWeight="bold"
+                    color="#ed6c02"
                   >
-                    {/* {stats.disabled || 0}/ */}
-                    {stats.broken || 0}
+                    {/* Tổng hợp số lượng */}
+                    {formatNumber(
+                      (Number(stats.maintenance) || 0) +
+                        (Number(stats.broken) || 0) +
+                        (Number(stats.borrowed_out) || 0)
+                    )}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    {/* Vô hiệu hóa/ */}
-                    Máy hư
+                    Chưa sử dụng
                   </Typography>
                 </CardContent>
               </Card>
             </Grid>
-            {/* Hàng 2 */}
-            <Grid size={{ xs: 6, md: 2.4 }}>
+
+            {/* 4. Chờ thanh lý */}
+            <Grid size={{ xs: 6 }}>
+              <Card
+                elevation={0}
+                onClick={() =>
+                  handleStatusFilterClick(["pending_liquidation"], [])
+                }
+                sx={{
+                  borderRadius: "20px",
+                  background: "#ff572211",
+                  ...(isStatusFilterActive(["pending_liquidation"], [])
+                    ? activeCardSx
+                    : inactiveCardSx),
+                }}
+              >
+                <CardContent sx={{ textAlign: "center", p: 2 }}>
+                  <Typography
+                    variant={isMobile ? "h6" : "h5"}
+                    fontWeight="bold"
+                    color="#ff5722"
+                  >
+                    {formatNumber(stats.pending_liquidation || 0)}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Chờ thanh lý
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            {/* <Grid size={{ xs: 6, md: 2.4 }}>
               <Card
                 elevation={0}
                 onClick={() => handleStatusFilterClick([], ["rented"])}
@@ -899,7 +1561,7 @@ const LocationTrackPage = () => {
                   </Typography>
                 </CardContent>
               </Card>
-            </Grid>
+            </Grid> */}
           </Grid>
         </Grid>
       </Grid>
@@ -913,6 +1575,15 @@ const LocationTrackPage = () => {
       <>
         {/* 1. Luôn hiển thị Stats Cards */}
         {renderStatsCards()}
+
+        <Grid size={12} sx={{ mt: 1, mb: 3 }}>
+          <StatusMatrixTable
+            data={matrixData}
+            loading={matrixLoading}
+            onCellClick={handleMatrixClick}
+            activeFilters={filters}
+          />
+        </Grid>
 
         {/* 2. Luôn hiển thị Thống kê loại máy (nếu có) */}
         {typeStats.length > 0 && (

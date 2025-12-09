@@ -127,6 +127,10 @@ export const api = {
       const response = await httpConnect.get("/api/machines/stats");
       return response.data;
     },
+    getMatrixStats: async () => {
+      const response = await httpConnect.get("/api/machines/matrix-stats");
+      return response.data;
+    },
     getStatsByType: async () => {
       const response = await httpConnect.get("/api/machines/stats-by-type");
       return response.data;
@@ -193,6 +197,12 @@ export const api = {
         "/api/machines/batch-update-rfid",
         data
       );
+      return response.data;
+    },
+    getNextCode: async (prefix) => {
+      const response = await httpConnect.get("/api/machines/next-code", {
+        params: { prefix },
+      });
       return response.data;
     },
   },
@@ -349,6 +359,18 @@ export const api = {
       );
       return response.data;
     },
+    getMatrixStatsByLocation: async (locationUuid) => {
+      const response = await httpConnect.get(
+        `/api/locations/${locationUuid}/matrix-stats`
+      );
+      return response.data;
+    },
+    getMatrixStatsByDepartment: async (departmentUuid) => {
+      const response = await httpConnect.get(
+        `/api/departments/${departmentUuid}/matrix-stats`
+      );
+      return response.data;
+    },
     getMachineHistory: async (machineUuid) => {
       const response = await httpConnect.get(
         `/api/machines/${machineUuid}/history`
@@ -437,6 +459,18 @@ export const api = {
         ma_nv,
         permissions,
       });
+      return response.data;
+    },
+  },
+
+  // MARK: TEST PROPOSALS
+  test_proposals: {
+    create: async (data) => {
+      // data là FormData chứa file và text
+      const response = await httpConnect.post(
+        "/api/test-proposals/create",
+        data
+      );
       return response.data;
     },
   },

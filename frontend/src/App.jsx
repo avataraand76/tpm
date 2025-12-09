@@ -16,6 +16,7 @@ import MachineListPage from "./pages/MachineListPage";
 import TicketManagementPage from "./pages/TicketManagementPage";
 import LocationTrackPage from "./pages/LocationTrackPage";
 import UpdateRfidPage from "./pages/UpdateRfidPage";
+import TestProposalPage from "./pages/TestProposalPage";
 import AdminPage from "./pages/AdminPage";
 import { useAuth } from "./hooks/useAuth";
 import { Box, CircularProgress } from "@mui/material";
@@ -195,10 +196,18 @@ function App() {
               }
             />
             <Route
-              path="/tickets"
+              path="/tickets1"
               element={
                 <ProtectedRoute>
                   <TicketManagementPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/tickets2"
+              element={
+                <ProtectedRoute>
+                  <TestProposalPage />
                 </ProtectedRoute>
               }
             />

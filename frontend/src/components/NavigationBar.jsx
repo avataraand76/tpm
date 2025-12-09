@@ -51,8 +51,8 @@ const NavigationBar = () => {
   const getCurrentTab = () => {
     const pathname = location.pathname;
     if (pathname === "/") return 0;
-    if (pathname === "/machines") return 1;
-    if (pathname === "/tickets") return 2;
+    if (pathname === "/tickets2") return 1;
+    if (pathname === "/machines") return 2;
     if (pathname === "/location-track") return 3;
     // if (pathname === "/up-rfid") return 4;
     // if (pathname === "/admin") return 5;
@@ -60,7 +60,7 @@ const NavigationBar = () => {
   };
 
   const handleTabChange = (event, newValue) => {
-    const baseRoutes = ["/", "/machines", "/tickets", "/location-track"];
+    const baseRoutes = ["/", "/tickets2", "/machines", "/location-track"];
 
     // if (isAdmin || isPhongCoDien) {
     //   baseRoutes.push("/up-rfid");
@@ -119,8 +119,8 @@ const NavigationBar = () => {
   // Danh sách các mục điều hướng (dùng chung cho mobile)
   const navItems = [
     { label: "Trang chủ", icon: <Home />, route: "/" },
+    { label: "Quản lý phiếu", icon: <Receipt />, route: "/tickets2" },
     { label: "Máy móc", icon: <PrecisionManufacturing />, route: "/machines" },
-    { label: "Quản lý phiếu", icon: <Receipt />, route: "/tickets" },
     { label: "Vị trí", icon: <LocationOn />, route: "/location-track" },
     // ...(isAdmin || isPhongCoDien
     //   ? [
@@ -240,13 +240,13 @@ const NavigationBar = () => {
               >
                 <Tab icon={<Home />} label="Trang chủ" iconPosition="start" />
                 <Tab
-                  icon={<PrecisionManufacturing />}
-                  label="Máy móc"
+                  icon={<Receipt />}
+                  label="Quản lý phiếu"
                   iconPosition="start"
                 />
                 <Tab
-                  icon={<Receipt />}
-                  label="Quản lý phiếu"
+                  icon={<PrecisionManufacturing />}
+                  label="Máy móc"
                   iconPosition="start"
                 />
                 <Tab

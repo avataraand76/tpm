@@ -601,6 +601,10 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
         searchColumn = "m.RFID_machine";
         searchTermRaw = search.substring(search.indexOf(":") + 1).trim();
         isSpecificSearch = true;
+      } else if (searchLower.startsWith("nfc:")) {
+        searchColumn = "m.NFC_machine";
+        searchTermRaw = search.substring(search.indexOf(":") + 1).trim();
+        isSpecificSearch = true;
       } else if (
         searchLower.startsWith("seri:") ||
         searchLower.startsWith("serial:")
@@ -644,10 +648,11 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
           OR m.serial_machine LIKE ? 
           OR m.manufacturer LIKE ?
           OR tl.name_location LIKE ?
-          OR m.RFID_machine LIKE ?)
+          OR m.RFID_machine LIKE ?
+          OR m.NFC_machine LIKE ?)
         `);
-        // Push params 7 lần cho 7 dấu ?
-        for (let i = 0; i < 7; i++) {
+        // Push params 8 lần cho 8 dấu ?
+        for (let i = 0; i < 8; i++) {
           countParams.push(searchPattern);
           dataParams.push(searchPattern);
         }
@@ -711,12 +716,38 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
       is_borrowed_or_rented_or_borrowed_out &&
       is_borrowed_or_rented_or_borrowed_out.length > 0
     ) {
-      whereConditions.push(`m.is_borrowed_or_rented_or_borrowed_out IN (?)`);
       const borrowValues = Array.isArray(is_borrowed_or_rented_or_borrowed_out)
         ? is_borrowed_or_rented_or_borrowed_out
         : [is_borrowed_or_rented_or_borrowed_out];
-      countParams.push(borrowValues);
-      dataParams.push(borrowValues);
+
+      const hasInternal = borrowValues.includes("internal");
+      const otherValues = borrowValues.filter((v) => v !== "internal");
+
+      let conditionParts = [];
+
+      // Xử lý các giá trị khác (rented, borrowed, ...)
+      if (otherValues.length > 0) {
+        // Tạo dấu hỏi động: ?,?,? tương ứng số lượng phần tử
+        const placeholders = otherValues.map(() => "?").join(",");
+        conditionParts.push(
+          `m.is_borrowed_or_rented_or_borrowed_out IN (${placeholders})`
+        );
+
+        // Push từng giá trị vào params (spread operator) thay vì push cả mảng
+        dataParams.push(...otherValues);
+        countParams.push(...otherValues);
+      }
+
+      // Xử lý internal (NULL hoặc rỗng)
+      if (hasInternal) {
+        conditionParts.push(
+          `(m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out = '')`
+        );
+      }
+
+      if (conditionParts.length > 0) {
+        whereConditions.push(`(${conditionParts.join(" OR ")})`);
+      }
     }
 
     const whereClause =
@@ -745,6 +776,7 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
         m.uuid_machine,
         m.serial_machine,
         m.RFID_machine,
+        m.NFC_machine,
         m.code_machine,
         m.type_machine,
         m.model_machine,
@@ -898,6 +930,7 @@ app.get("/api/machines/stats", authenticateToken, async (req, res) => {
         SUM(CASE WHEN current_status = 'liquidation' THEN 1 ELSE 0 END) as liquidation,
         SUM(CASE WHEN current_status = 'disabled' THEN 1 ELSE 0 END) as disabled,
         SUM(CASE WHEN current_status = 'broken' THEN 1 ELSE 0 END) as broken,
+        SUM(CASE WHEN current_status = 'pending_liquidation' THEN 1 ELSE 0 END) as pending_liquidation,
         SUM(CASE WHEN is_borrowed_or_rented_or_borrowed_out = 'borrowed' THEN 1 ELSE 0 END) as borrowed,
         SUM(CASE WHEN is_borrowed_or_rented_or_borrowed_out = 'rented' THEN 1 ELSE 0 END) as rented,
         SUM(CASE WHEN is_borrowed_or_rented_or_borrowed_out = 'borrowed_out' THEN 1 ELSE 0 END) as borrowed_out,
@@ -921,6 +954,225 @@ app.get("/api/machines/stats", authenticateToken, async (req, res) => {
     });
   }
 });
+
+// GET /api/machines/matrix-stats - Get detailed matrix statistics
+app.get("/api/machines/matrix-stats", authenticateToken, async (req, res) => {
+  try {
+    // Query nhóm theo cả 2 trạng thái
+    const query = `
+      SELECT 
+        current_status,
+        COALESCE(is_borrowed_or_rented_or_borrowed_out, 'internal') as source_type,
+        COUNT(*) as count
+      FROM tb_machine
+      GROUP BY current_status, is_borrowed_or_rented_or_borrowed_out
+    `;
+
+    const [rows] = await tpmConnection.query(query);
+
+    // Khởi tạo cấu trúc dữ liệu trả về
+    // Các dòng (Rows)
+    const statuses = [
+      "available",
+      "in_use",
+      "maintenance",
+      "liquidation",
+      "broken",
+      "disabled",
+      "pending_liquidation",
+    ];
+    // Các cột (Cols)
+    const sources = [
+      "internal",
+      "borrowed",
+      "rented",
+      "borrowed_out",
+      "borrowed_return",
+      "rented_return",
+    ];
+
+    // Tạo object chứa dữ liệu mặc định là 0
+    let matrix = {};
+    statuses.forEach((status) => {
+      matrix[status] = {};
+      sources.forEach((source) => {
+        matrix[status][source] = 0;
+      });
+    });
+
+    // Điền dữ liệu từ DB vào matrix
+    rows.forEach((row) => {
+      const status = row.current_status;
+      const source = row.source_type;
+
+      if (matrix[status] && matrix[status][source] !== undefined) {
+        matrix[status][source] = row.count;
+      }
+    });
+
+    res.json({
+      success: true,
+      message: "Matrix statistics retrieved successfully",
+      data: matrix,
+    });
+  } catch (error) {
+    console.error("Error fetching matrix stats:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+// GET /api/locations/:uuid/matrix-stats - Get matrix stats for a specific location
+app.get(
+  "/api/locations/:uuid/matrix-stats",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { uuid } = req.params;
+
+      // 1. Lấy ID nội bộ
+      const [locResult] = await tpmConnection.query(
+        "SELECT id_location FROM tb_location WHERE uuid_location = ?",
+        [uuid]
+      );
+      if (locResult.length === 0)
+        return res
+          .status(404)
+          .json({ success: false, message: "Location not found" });
+      const idLocation = locResult[0].id_location;
+
+      // 2. Query Group By
+      const query = `
+      SELECT 
+        m.current_status,
+        COALESCE(m.is_borrowed_or_rented_or_borrowed_out, 'internal') as source_type,
+        COUNT(*) as count
+      FROM tb_machine m
+      JOIN tb_machine_location ml ON m.id_machine = ml.id_machine
+      WHERE ml.id_location = ?
+      GROUP BY m.current_status, m.is_borrowed_or_rented_or_borrowed_out
+    `;
+      const [rows] = await tpmConnection.query(query, [idLocation]);
+
+      // 3. Format Matrix Data (Giống API matrix-stats chung)
+      const statuses = [
+        "available",
+        "in_use",
+        "maintenance",
+        "liquidation",
+        "broken",
+        "disabled",
+        "pending_liquidation",
+      ];
+      const sources = [
+        "internal",
+        "borrowed",
+        "rented",
+        "borrowed_out",
+        "borrowed_return",
+        "rented_return",
+      ];
+      let matrix = {};
+      statuses.forEach((status) => {
+        matrix[status] = {};
+        sources.forEach((source) => {
+          matrix[status][source] = 0;
+        });
+      });
+
+      rows.forEach((row) => {
+        const status = row.current_status;
+        const source = row.source_type;
+        if (matrix[status] && matrix[status][source] !== undefined) {
+          matrix[status][source] = row.count;
+        }
+      });
+
+      res.json({ success: true, data: matrix });
+    } catch (error) {
+      console.error("Error fetching location matrix stats:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+);
+
+// GET /api/departments/:uuid/matrix-stats - Get matrix stats for a specific department
+app.get(
+  "/api/departments/:uuid/matrix-stats",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { uuid } = req.params;
+
+      // 1. Lấy ID nội bộ
+      const [deptResult] = await tpmConnection.query(
+        "SELECT id_department FROM tb_department WHERE uuid_department = ?",
+        [uuid]
+      );
+      if (deptResult.length === 0)
+        return res
+          .status(404)
+          .json({ success: false, message: "Department not found" });
+      const idDepartment = deptResult[0].id_department;
+
+      // 2. Query Group By (Join qua tb_location)
+      const query = `
+      SELECT 
+        m.current_status,
+        COALESCE(m.is_borrowed_or_rented_or_borrowed_out, 'internal') as source_type,
+        COUNT(*) as count
+      FROM tb_machine m
+      JOIN tb_machine_location ml ON m.id_machine = ml.id_machine
+      JOIN tb_location tl ON ml.id_location = tl.id_location
+      WHERE tl.id_department = ?
+      GROUP BY m.current_status, m.is_borrowed_or_rented_or_borrowed_out
+    `;
+      const [rows] = await tpmConnection.query(query, [idDepartment]);
+
+      // 3. Format Matrix Data
+      const statuses = [
+        "available",
+        "in_use",
+        "maintenance",
+        "liquidation",
+        "broken",
+        "disabled",
+        "pending_liquidation",
+      ];
+      const sources = [
+        "internal",
+        "borrowed",
+        "rented",
+        "borrowed_out",
+        "borrowed_return",
+        "rented_return",
+      ];
+      let matrix = {};
+      statuses.forEach((status) => {
+        matrix[status] = {};
+        sources.forEach((source) => {
+          matrix[status][source] = 0;
+        });
+      });
+
+      rows.forEach((row) => {
+        const status = row.current_status;
+        const source = row.source_type;
+        if (matrix[status] && matrix[status][source] !== undefined) {
+          matrix[status][source] = row.count;
+        }
+      });
+
+      res.json({ success: true, data: matrix });
+    } catch (error) {
+      console.error("Error fetching department matrix stats:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+);
 
 // GET /api/machines/stats-by-type - Get machine counts by type
 app.get("/api/machines/stats-by-type", authenticateToken, async (req, res) => {
@@ -997,6 +1249,10 @@ app.get("/api/machines/search", authenticateToken, async (req, res) => {
       searchColumn = "m.RFID_machine";
       searchTermRaw = search.substring(search.indexOf(":") + 1).trim();
       isSpecificSearch = true;
+    } else if (searchLower.startsWith("nfc:")) {
+      searchColumn = "m.NFC_machine";
+      searchTermRaw = search.substring(search.indexOf(":") + 1).trim();
+      isSpecificSearch = true;
     } else if (
       searchLower.startsWith("seri:") ||
       searchLower.startsWith("serial:")
@@ -1041,11 +1297,12 @@ app.get("/api/machines/search", authenticateToken, async (req, res) => {
         OR m.model_machine LIKE ? 
         OR m.code_machine LIKE ? 
         OR m.serial_machine LIKE ? 
-        OR m.RFID_machine LIKE ?)
+        OR m.RFID_machine LIKE ?
+        OR m.NFC_machine LIKE ?)
       `);
       const pattern = `%${search}%`;
-      // Push 5 lần cho 5 dấu ?
-      searchParams.push(pattern, pattern, pattern, pattern, pattern);
+      // Push 6 lần cho 6 dấu ?
+      searchParams.push(pattern, pattern, pattern, pattern, pattern, pattern);
     }
 
     // --- 2. XỬ LÝ LOGIC LỌC THEO LOẠI PHIẾU (Ticket Type) ---
@@ -1100,6 +1357,7 @@ app.get("/api/machines/search", authenticateToken, async (req, res) => {
         m.model_machine,
         m.serial_machine,
         m.RFID_machine,
+        m.NFC_machine,
         m.current_status,
         m.is_borrowed_or_rented_or_borrowed_out,
         c.name_category,
@@ -1139,6 +1397,72 @@ app.get("/api/machines/search", authenticateToken, async (req, res) => {
   }
 });
 
+// GET /api/machines/next-code - Lấy mã máy tiếp theo dựa trên prefix (Hãng SX)
+app.get("/api/machines/next-code", authenticateToken, async (req, res) => {
+  try {
+    const { prefix } = req.query;
+
+    if (!prefix) {
+      return res.json({ success: true, nextCode: "" });
+    }
+
+    // 1. Chuẩn hóa prefix: Viết hoa, bỏ khoảng trắng thừa, bỏ ký tự đặc biệt
+    // Ví dụ: "Naomoto " -> "NAOMOTO"
+    const cleanPrefix = prefix
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "");
+
+    if (!cleanPrefix) {
+      return res.json({ success: true, nextCode: "" });
+    }
+
+    // 2. Tìm mã máy lớn nhất đang bắt đầu bằng prefix này trong DB
+    // Chúng ta tìm các mã có dạng: PREFIXXXXXX (ví dụ NAOMOTO00001)
+    const [rows] = await tpmConnection.query(
+      `
+      SELECT code_machine 
+      FROM tb_machine 
+      WHERE code_machine LIKE CONCAT(?, '%')
+      AND code_machine REGEXP CONCAT('^', ?, '[0-9]+$')
+      ORDER BY LENGTH(code_machine) DESC, code_machine DESC
+      LIMIT 1
+      `,
+      [cleanPrefix, cleanPrefix]
+    );
+
+    let nextSeq = 1;
+
+    if (rows.length > 0) {
+      const currentCode = rows[0].code_machine;
+      // Cắt bỏ phần prefix để lấy số đuôi
+      const numberPart = currentCode.replace(cleanPrefix, "");
+      const currentSeq = parseInt(numberPart, 10);
+
+      if (!isNaN(currentSeq)) {
+        nextSeq = currentSeq + 1;
+      }
+    }
+
+    // 3. Format số thành 5 chữ số (00001)
+    const seqString = String(nextSeq).padStart(5, "0");
+    const nextCode = `${cleanPrefix}${seqString}`;
+
+    res.json({
+      success: true,
+      message: "Generated next code successfully",
+      data: { nextCode },
+    });
+  } catch (error) {
+    console.error("Error generating next code:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
 // GET /api/machines/:uuid - Get single machine details by UUID
 app.get("/api/machines/:uuid", authenticateToken, async (req, res) => {
   try {
@@ -1150,6 +1474,7 @@ app.get("/api/machines/:uuid", authenticateToken, async (req, res) => {
         m.uuid_machine,
         m.serial_machine,
         m.RFID_machine,
+        m.NFC_machine,
         m.code_machine,
         m.type_machine,
         m.model_machine,
@@ -1314,6 +1639,7 @@ app.get(
         m.model_machine,
         m.serial_machine,
         m.RFID_machine,
+        m.NFC_machine,
         m.current_status,
         m.is_borrowed_or_rented_or_borrowed_out,
         m.is_borrowed_or_rented_or_borrowed_out_name,
@@ -1515,16 +1841,16 @@ app.post("/api/machines/by-rfid-list", authenticateToken, async (req, res) => {
     if (!rfid_list || !Array.isArray(rfid_list) || rfid_list.length === 0) {
       return res.status(400).json({
         success: false,
-        message: "Danh sách RFID là bắt buộc.",
+        message: "Danh sách mã là bắt buộc.",
       });
     }
 
-    // 1. Lọc ra các mã RFID duy nhất và hợp lệ
-    const uniqueRfids = [
-      ...new Set(rfid_list.filter((rfid) => rfid && rfid.trim() !== "")),
+    // 1. Lọc ra các mã duy nhất và hợp lệ (Input Codes)
+    const uniqueCodes = [
+      ...new Set(rfid_list.filter((code) => code && code.trim() !== "")),
     ];
 
-    if (uniqueRfids.length === 0) {
+    if (uniqueCodes.length === 0) {
       return res.json({
         success: true,
         data: {
@@ -1534,9 +1860,11 @@ app.post("/api/machines/by-rfid-list", authenticateToken, async (req, res) => {
       });
     }
 
-    // 2. Xây dựng điều kiện truy vấn
-    let whereConditions = [`m.RFID_machine IN (?)`];
-    let queryParams = [uniqueRfids];
+    // 2. Xây dựng điều kiện truy vấn: Tìm trong cả RFID HOẶC NFC
+    // Lưu ý: Chúng ta truyền uniqueCodes vào 2 lần cho 2 dấu ?
+    let whereConditions = [`(m.RFID_machine IN (?) OR m.NFC_machine IN (?))`];
+    let queryParams = [uniqueCodes, uniqueCodes];
+
     let joins = [
       `LEFT JOIN tb_category c ON c.id_category = m.id_category`,
       `LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine`,
@@ -1570,6 +1898,7 @@ app.post("/api/machines/by-rfid-list", authenticateToken, async (req, res) => {
         m.model_machine,
         m.serial_machine,
         m.RFID_machine,
+        m.NFC_machine,
         m.current_status,
         m.is_borrowed_or_rented_or_borrowed_out,
         m.is_borrowed_or_rented_or_borrowed_out_name,
@@ -1585,21 +1914,35 @@ app.post("/api/machines/by-rfid-list", authenticateToken, async (req, res) => {
 
     const [machines] = await tpmConnection.query(dataQuery, queryParams);
 
-    // 6. Xác định các RFID không tìm thấy
-    const foundRfids = new Set(machines.map((m) => m.RFID_machine));
-    const notFoundRfids = uniqueRfids.filter((rfid) => !foundRfids.has(rfid));
+    // 6. Xác định các Mã không tìm thấy
+    // Logic: Duyệt qua các máy tìm thấy, xem mã nào trong danh sách Input khớp với RFID hoặc NFC của máy đó
+    const inputSet = new Set(uniqueCodes);
+    const foundCodes = new Set();
+
+    machines.forEach((m) => {
+      // Nếu RFID của máy nằm trong danh sách input -> Đánh dấu đã tìm thấy
+      if (m.RFID_machine && inputSet.has(m.RFID_machine)) {
+        foundCodes.add(m.RFID_machine);
+      }
+      // Nếu NFC của máy nằm trong danh sách input -> Đánh dấu đã tìm thấy
+      if (m.NFC_machine && inputSet.has(m.NFC_machine)) {
+        foundCodes.add(m.NFC_machine);
+      }
+    });
+
+    const notFoundCodes = uniqueCodes.filter((code) => !foundCodes.has(code));
 
     res.json({
       success: true,
       message: "Machine details retrieved successfully",
       data: {
         foundMachines: machines,
-        notFoundRfids: notFoundRfids,
+        notFoundRfids: notFoundCodes,
         filterMessage: filterConditions.message,
       },
     });
   } catch (error) {
-    console.error("Error fetching machines by RFID list:", error);
+    console.error("Error fetching machines by Code list:", error);
     res.status(500).json({
       success: false,
       message: "Internal server error",
@@ -1726,8 +2069,9 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
       code_machine,
       serial_machine,
       RFID_machine,
-      type_machine, // <<< CHANGED
-      model_machine, // <<< CHANGED
+      NFC_machine,
+      type_machine,
+      model_machine,
       manufacturer,
       price,
       date_of_use,
@@ -1808,17 +2152,18 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
     const [result] = await tpmConnection.query(
       `
       INSERT INTO tb_machine 
-        (code_machine, serial_machine, RFID_machine, type_machine, model_machine, manufacturer, 
+        (code_machine, serial_machine, RFID_machine, NFC_machine, type_machine, model_machine, manufacturer, 
          price, date_of_use, lifespan, repair_cost, note, current_status, id_category,
          created_by, updated_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, // <<< CHANGED (15 placeholders)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
       [
         code_machine,
         serial_machine,
         RFID_machine || null,
-        type_machine || null, // <<< CHANGED
-        model_machine || null, // <<< CHANGED
+        NFC_machine || null,
+        type_machine || null,
+        model_machine || null,
         manufacturer || null,
         price || null,
         formattedDate || null,
@@ -1934,8 +2279,9 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
       code_machine,
       serial_machine,
       RFID_machine,
-      type_machine, // <<< CHANGED
-      model_machine, // <<< CHANGED
+      NFC_machine,
+      type_machine,
+      model_machine,
       manufacturer,
       price,
       date_of_use,
@@ -1996,6 +2342,7 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         code_machine = ?,
         serial_machine = ?,
         RFID_machine = ?,
+        NFC_machine = ?,
         type_machine = ?,
         model_machine = ?,
         manufacturer = ?,
@@ -2014,8 +2361,9 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         code_machine,
         serial_machine,
         RFID_machine,
-        type_machine, // <<< CHANGED
-        model_machine, // <<< CHANGED
+        NFC_machine,
+        type_machine,
+        model_machine,
         manufacturer,
         price,
         formattedDate,
@@ -2297,15 +2645,16 @@ app.post("/api/machines/batch-import", authenticateToken, async (req, res) => {
         await connection.query(
           `
           INSERT INTO tb_machine 
-            (code_machine, serial_machine, RFID_machine, type_machine, model_machine, manufacturer, 
+            (code_machine, serial_machine, RFID_machine, NFC_machine, type_machine, model_machine, manufacturer, 
              price, date_of_use, lifespan, repair_cost, note, current_status, id_category,
              created_by, updated_by)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `,
           [
             machine.code_machine,
             machine.serial_machine,
             machine.RFID_machine || null,
+            machine.NFC_machine || null,
             machine.type_machine || null,
             machine.model_machine || null,
             machine.manufacturer || null,
@@ -2786,6 +3135,7 @@ app.get("/api/imports", authenticateToken, async (req, res) => {
         i.note,
         i.created_at,
         i.updated_at,
+        i.approval_flow,
         i.is_borrowed_or_rented_or_borrowed_out_name,
         i.is_borrowed_or_rented_or_borrowed_out_date,
         i.is_borrowed_or_rented_or_borrowed_out_return_date,
@@ -2806,10 +3156,21 @@ app.get("/api/imports", authenticateToken, async (req, res) => {
       [...params, limit, offset]
     );
 
+    const enrichedImports = await Promise.all(
+      imports.map(async (item) => {
+        if (item.approval_flow) {
+          item.approval_flow = await enrichApprovalFlowWithNames(
+            item.approval_flow
+          );
+        }
+        return item;
+      })
+    );
+
     res.json({
       success: true,
       message: "Imports retrieved successfully",
-      data: imports,
+      data: enrichedImports,
       pagination: {
         page,
         limit,
@@ -2860,6 +3221,7 @@ app.get("/api/imports/:uuid", authenticateToken, async (req, res) => {
         i.status,
         i.note,
         i.attached_file,
+        i.approval_flow,
         i.created_at,
         i.updated_at,
         i.created_by,
@@ -2943,6 +3305,12 @@ app.get("/api/imports/:uuid", authenticateToken, async (req, res) => {
     );
 
     const ticketData = imports[0];
+
+    if (ticketData.approval_flow) {
+      ticketData.approval_flow = await enrichApprovalFlowWithNames(
+        ticketData.approval_flow
+      );
+    }
 
     // Tính toán cờ is_creator
     const isCreator = ticketData.created_by === currentUserId;
@@ -3454,6 +3822,7 @@ app.get("/api/exports", authenticateToken, async (req, res) => {
         e.note,
         e.created_at,
         e.updated_at,
+        e.approval_flow,
         e.is_borrowed_or_rented_or_borrowed_out_name,
         e.is_borrowed_or_rented_or_borrowed_out_date,
         e.is_borrowed_or_rented_or_borrowed_out_return_date,
@@ -3474,10 +3843,21 @@ app.get("/api/exports", authenticateToken, async (req, res) => {
       [...params, limit, offset]
     );
 
+    const enrichedExports = await Promise.all(
+      exports.map(async (item) => {
+        if (item.approval_flow) {
+          item.approval_flow = await enrichApprovalFlowWithNames(
+            item.approval_flow
+          );
+        }
+        return item;
+      })
+    );
+
     res.json({
       success: true,
       message: "Exports retrieved successfully",
-      data: exports,
+      data: enrichedExports,
       pagination: {
         page,
         limit,
@@ -3528,6 +3908,7 @@ app.get("/api/exports/:uuid", authenticateToken, async (req, res) => {
         e.status,
         e.note,
         e.attached_file,
+        e.approval_flow,
         e.created_at,
         e.updated_at,
         e.created_by,
@@ -3611,6 +3992,12 @@ app.get("/api/exports/:uuid", authenticateToken, async (req, res) => {
     );
 
     const ticketData = exports[0];
+
+    if (ticketData.approval_flow) {
+      ticketData.approval_flow = await enrichApprovalFlowWithNames(
+        ticketData.approval_flow
+      );
+    }
 
     // Tính toán cờ is_creator
     const isCreator = ticketData.created_by === currentUserId;
@@ -4037,6 +4424,7 @@ app.get("/api/internal-transfers", authenticateToken, async (req, res) => {
           t.note,
           t.created_at,
           t.updated_at,
+          t.approval_flow,
           loc_to.name_location as to_location_name,
           td.uuid_department AS to_location_department_uuid,
           COUNT(d.id_machine) as machine_count
@@ -4074,34 +4462,42 @@ app.get("/api/internal-transfers", authenticateToken, async (req, res) => {
       );
     }
 
-    const finalData = transfers.map((t) => {
-      const toLocationPhongBanId = deptMap.get(t.to_location_department_uuid);
+    const finalData = await Promise.all(
+      transfers.map(async (t) => {
+        const toLocationPhongBanId = deptMap.get(t.to_location_department_uuid);
 
-      // Logic xác định quyền confirm:
-      // 1. Phiếu phải ở trạng thái 'pending_confirmation'
-      // 2. User phải thuộc phòng ban đích (toLocationPhongBanId)
-      // 3. User KHÔNG phải là người tạo phiếu (tùy chọn, nhưng thường là vậy để đảm bảo quy trình 2 người)
-      let canConfirm = false;
-      if (
-        t.status === "pending_confirmation" &&
-        userPhongBanId === toLocationPhongBanId &&
-        userId !== t.created_by
-      ) {
-        canConfirm = true;
-      }
+        // Logic xác định quyền confirm:
+        // 1. Phiếu phải ở trạng thái 'pending_confirmation'
+        // 2. User phải thuộc phòng ban đích (toLocationPhongBanId)
+        // 3. User KHÔNG phải là người tạo phiếu (tùy chọn, nhưng thường là vậy để đảm bảo quy trình 2 người)
+        let canConfirm = false;
+        if (
+          t.status === "pending_confirmation" &&
+          userPhongBanId === toLocationPhongBanId &&
+          userId !== t.created_by
+        ) {
+          canConfirm = true;
+        }
 
-      return {
-        uuid_machine_internal_transfer: t.uuid_machine_internal_transfer,
-        transfer_date: t.transfer_date,
-        status: t.status,
-        note: t.note,
-        created_at: t.created_at,
-        updated_at: t.updated_at,
-        to_location_name: t.to_location_name,
-        machine_count: t.machine_count,
-        can_confirm: canConfirm, // <<< TRẢ VỀ CỜ NÀY
-      };
-    });
+        let enrichedFlow = t.approval_flow;
+        if (enrichedFlow) {
+          enrichedFlow = await enrichApprovalFlowWithNames(enrichedFlow);
+        }
+
+        return {
+          uuid_machine_internal_transfer: t.uuid_machine_internal_transfer,
+          transfer_date: t.transfer_date,
+          status: t.status,
+          note: t.note,
+          created_at: t.created_at,
+          updated_at: t.updated_at,
+          to_location_name: t.to_location_name,
+          machine_count: t.machine_count,
+          can_confirm: canConfirm,
+          approval_flow: enrichedFlow,
+        };
+      })
+    );
 
     res.json({
       success: true,
@@ -4148,6 +4544,7 @@ app.get(
           t.status,
           t.note,
           t.attached_file,
+          t.approval_flow,
           t.created_at,
           t.updated_at,
           t.created_by,
@@ -4218,6 +4615,13 @@ app.get(
       );
 
       let transferInfo = transferData[0];
+
+      if (transferInfo.approval_flow) {
+        transferInfo.approval_flow = await enrichApprovalFlowWithNames(
+          transferInfo.approval_flow
+        );
+      }
+
       let canConfirm = false;
       const isCreator = transferInfo.created_by === userId;
 
@@ -4927,14 +5331,39 @@ app.get(
         is_borrowed_or_rented_or_borrowed_out &&
         is_borrowed_or_rented_or_borrowed_out.length > 0
       ) {
-        whereConditions.push(`m.is_borrowed_or_rented_or_borrowed_out IN (?)`);
         const borrowValues = Array.isArray(
           is_borrowed_or_rented_or_borrowed_out
         )
           ? is_borrowed_or_rented_or_borrowed_out
           : [is_borrowed_or_rented_or_borrowed_out];
-        filterParams.push(borrowValues);
-        dataParams.push(borrowValues);
+
+        const hasInternal = borrowValues.includes("internal");
+        const otherValues = borrowValues.filter((v) => v !== "internal");
+
+        let conditionParts = [];
+
+        // Xử lý các giá trị có text (borrowed, rented, borrowed_out...)
+        if (otherValues.length > 0) {
+          // Tạo dấu hỏi động: ?,?,?
+          const placeholders = otherValues.map(() => "?").join(",");
+          conditionParts.push(
+            `m.is_borrowed_or_rented_or_borrowed_out IN (${placeholders})`
+          );
+          // Push từng giá trị vào params
+          filterParams.push(...otherValues);
+          dataParams.push(...otherValues);
+        }
+
+        // Xử lý internal (là NULL hoặc rỗng)
+        if (hasInternal) {
+          conditionParts.push(
+            `(m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out = '')`
+          );
+        }
+
+        if (conditionParts.length > 0) {
+          whereConditions.push(`(${conditionParts.join(" OR ")})`);
+        }
       }
 
       const filterClause =
@@ -5265,14 +5694,35 @@ app.get(
         is_borrowed_or_rented_or_borrowed_out &&
         is_borrowed_or_rented_or_borrowed_out.length > 0
       ) {
-        whereConditions.push(`m.is_borrowed_or_rented_or_borrowed_out IN (?)`);
         const borrowValues = Array.isArray(
           is_borrowed_or_rented_or_borrowed_out
         )
           ? is_borrowed_or_rented_or_borrowed_out
           : [is_borrowed_or_rented_or_borrowed_out];
-        filterParams.push(borrowValues);
-        dataParams.push(borrowValues);
+
+        const hasInternal = borrowValues.includes("internal");
+        const otherValues = borrowValues.filter((v) => v !== "internal");
+
+        let conditionParts = [];
+
+        if (otherValues.length > 0) {
+          const placeholders = otherValues.map(() => "?").join(",");
+          conditionParts.push(
+            `m.is_borrowed_or_rented_or_borrowed_out IN (${placeholders})`
+          );
+          filterParams.push(...otherValues);
+          dataParams.push(...otherValues);
+        }
+
+        if (hasInternal) {
+          conditionParts.push(
+            `(m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out = '')`
+          );
+        }
+
+        if (conditionParts.length > 0) {
+          whereConditions.push(`(${conditionParts.join(" OR ")})`);
+        }
       }
 
       const filterClause =
@@ -6047,6 +6497,787 @@ app.put("/api/admin/users/permissions", async (req, res) => {
   } catch (error) {
     await connection.rollback();
     res.status(500).json({ success: false, message: error.message });
+  } finally {
+    connection.release();
+  }
+});
+
+// Helper: Map loại phiếu sang tên proposal
+const getProposalName = (type, specificType) => {
+  const mapping = {
+    purchased: "Nhập mua mới",
+    maintenance_return: "Nhập sau bảo trì",
+    rented: "Nhập thuê",
+    borrowed: "Nhập mượn",
+    borrowed_out_return: "Nhập trả (máy cho mượn)",
+    liquidation: "Xuất thanh lý",
+    maintenance: "Xuất bảo trì",
+    borrowed_out: "Xuất cho mượn",
+    rented_return: "Xuất trả (máy thuê)",
+    borrowed_return: "Xuất trả (máy mượn)",
+    internal: "Điều chuyển",
+  };
+  // Nếu là điều chuyển, specificType sẽ null hoặc không khớp key, ta trả về "Điều chuyển"
+  if (type === "internal") return "Điều chuyển";
+  return mapping[specificType] || "Phiếu khác";
+};
+
+async function enrichApprovalFlowWithNames(flowJson) {
+  if (!flowJson) return [];
+
+  let flow = [];
+  try {
+    // Nếu là string JSON thì parse, nếu là object rồi thì dùng luôn
+    flow = typeof flowJson === "string" ? JSON.parse(flowJson) : flowJson;
+  } catch (e) {
+    console.error("Error parsing approval flow JSON", e);
+    return [];
+  }
+
+  if (!Array.isArray(flow) || flow.length === 0) return [];
+
+  // Lấy danh sách ma_nv
+  const maNvs = flow.map((step) => step.ma_nv).filter(Boolean);
+  if (maNvs.length === 0) return flow;
+
+  try {
+    // Query bảng sync_nhan_vien để lấy tên
+    const [users] = await dataHiTimesheetConnection.query(
+      `SELECT ma_nv, ten_nv FROM sync_nhan_vien WHERE ma_nv IN (?)`,
+      [maNvs]
+    );
+
+    // Tạo map để tra cứu nhanh: '10107' => 'Nguyễn Văn A'
+    const userMap = {};
+    users.forEach((u) => {
+      userMap[u.ma_nv] = u.ten_nv;
+    });
+
+    // Gán tên vào flow
+    const enrichedFlow = flow.map((step) => ({
+      ...step,
+      ten_nv: userMap[step.ma_nv] || "(Chưa cập nhật tên)",
+    }));
+
+    return enrichedFlow;
+  } catch (err) {
+    console.error("Error fetching employee names for flow:", err);
+    // Nếu lỗi query tên, trả về flow gốc (chỉ có mã)
+    return flow;
+  }
+}
+
+// POST /api/test-proposals/create - Create ticket AND send to External API
+app.post(
+  "/api/test-proposals/create",
+  authenticateToken,
+  upload.array("attachments"),
+  async (req, res) => {
+    const connection = await tpmConnection.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      const {
+        category, // 'import', 'export', 'internal'
+        type, // Loại chi tiết (purchased, borrowed, etc.)
+        date,
+        note,
+        to_location_uuid,
+        machines: machinesJson,
+        // Các trường cũ
+        is_borrowed_or_rented_or_borrowed_out_name,
+        is_borrowed_or_rented_or_borrowed_out_date,
+        is_borrowed_or_rented_or_borrowed_out_return_date,
+        // Các trường MỚI từ Frontend (cho phiếu Xuất)
+        receiver_name, // Họ tên người nhận
+        vehicle_number, // Số xe
+        department_address, // Địa chỉ (bộ phận)
+      } = req.body;
+
+      const machines = JSON.parse(machinesJson || "[]");
+      const userId = req.user.id;
+      const ma_nv_login = req.user.ma_nv;
+
+      // --- 1. LẤY THÔNG TIN CẦN THIẾT ---
+      let user_phongban_id = null;
+      let id_department_str = "1-14";
+
+      // Lấy thông tin user (giữ nguyên logic cũ)
+      if (userId >= 90000) {
+        user_phongban_id = req.user.phongban_id;
+        id_department_str = `1-${user_phongban_id}`;
+      } else {
+        const [userInfo] = await dataHiTimesheetConnection.query(
+          `SELECT CONCAT(com.id_company, '-', pb.id) AS id_department_str, pb.id AS id_phong_ban 
+           FROM sync_nhan_vien nv 
+           LEFT JOIN sync_bo_phan bp ON bp.id = nv.id_bo_phan 
+           LEFT JOIN sync_phong_ban pb ON pb.id = bp.id_phong_ban 
+           LEFT JOIN sync_company com ON com.id_company = pb.id_company 
+           WHERE nv.id = ?`,
+          [userId]
+        );
+        user_phongban_id = userInfo[0]?.id_phong_ban;
+        id_department_str = userInfo[0]?.id_department_str || "1-14";
+      }
+
+      let dest_phongban_id = null;
+      let to_location_id = null;
+      let to_location_name = ""; // Khai báo biến để lưu tên vị trí
+
+      if (to_location_uuid) {
+        // CẬP NHẬT QUERY ĐỂ LẤY name_location
+        const [locRes] = await connection.query(
+          `SELECT tl.id_location, tl.name_location, td.id_phong_ban 
+           FROM tb_location tl 
+           LEFT JOIN tb_department td ON tl.id_department = td.id_department 
+           WHERE tl.uuid_location = ?`,
+          [to_location_uuid]
+        );
+        if (locRes.length > 0) {
+          to_location_id = locRes[0].id_location;
+          to_location_name = locRes[0].name_location; // Lấy tên vị trí
+          dest_phongban_id = locRes[0].id_phong_ban;
+        } else {
+          throw new Error("Vị trí không tồn tại");
+        }
+      }
+
+      // --- 2. CẤU HÌNH LUỒNG DUYỆT ĐỘNG ---
+      let approvalFlowForDB = [];
+      if (category === "import") {
+        approvalFlowForDB = [
+          {
+            // ma_nv: "06264",
+            ma_nv: "10107",
+            step_flow: 0,
+            isFinalFlow: 0,
+            status_text: "Đang chờ duyệt",
+            is_forward: 0,
+            display_name: "Trưởng phòng Cơ điện",
+            is_flow: 1,
+            indexOf: 1,
+          },
+          {
+            // ma_nv: "00039",
+            ma_nv: "09802",
+            step_flow: 1,
+            isFinalFlow: 1,
+            status_text: "Đang chờ duyệt",
+            is_forward: 0,
+            display_name: "Trưởng phòng Lean",
+            is_flow: 1,
+            indexOf: 2,
+          },
+        ];
+      } else if (category === "export") {
+        approvalFlowForDB = [
+          {
+            ma_nv: "AĂÂEÊ",
+            // ma_nv: "10107",
+            step_flow: 0,
+            isFinalFlow: 0,
+            status_text: "Đang chờ duyệt",
+            is_forward: 0,
+            display_name: "Bên nhận",
+            is_flow: 0,
+            indexOf: 1,
+          },
+          {
+            // ma_nv: "06264",
+            ma_nv: "10107",
+            step_flow: 0,
+            isFinalFlow: 0,
+            status_text: "Đang chờ duyệt",
+            is_forward: 0,
+            display_name: "Bên giao",
+            is_flow: 1,
+            indexOf: 2,
+          },
+          {
+            // ma_nv: "00057",
+            ma_nv: "09802",
+            step_flow: 1,
+            isFinalFlow: 1,
+            status_text: "Đang chờ duyệt",
+            is_forward: 0,
+            display_name: "Kế toán trưởng",
+            is_flow: 1,
+            indexOf: 3,
+          },
+          // {
+          //   ma_nv: "00007",
+          //   step_flow: 2,
+          //   isFinalFlow: 1,
+          //   status_text: "Đang chờ duyệt",
+          //   is_forward: 0,
+          //   display_name: "Giám đốc",
+          //   is_flow: 1,
+          //   indexOf: 4,
+          // },
+        ];
+      } else if (category === "internal") {
+        if (user_phongban_id === dest_phongban_id) {
+          approvalFlowForDB = [
+            {
+              // ma_nv: "06264",
+              ma_nv: "09802",
+              step_flow: 0,
+              isFinalFlow: 1,
+              status_text: "Đang chờ duyệt",
+              is_forward: 0,
+              display_name: "Trưởng phòng Cơ điện",
+              is_flow: 1,
+              indexOf: 3,
+            },
+          ];
+        } else {
+          const [destUsers] = await dataHiTimesheetConnection.query(
+            `SELECT nv.id, nv.ma_nv FROM sync_nhan_vien nv JOIN sync_bo_phan bp ON nv.id_bo_phan = bp.id WHERE bp.id_phong_ban = ?`,
+            [dest_phongban_id]
+          );
+          let validApprovers = [];
+          const destUserIds = destUsers.map((u) => u.id);
+          if (destUserIds.length > 0) {
+            const [perms] = await connection.query(
+              `SELECT DISTINCT id_nhan_vien FROM tb_user_permission WHERE id_nhan_vien IN (?) AND id_permission = 2`,
+              [destUserIds]
+            );
+            const permittedSet = new Set(perms.map((p) => p.id_nhan_vien));
+            validApprovers = destUsers
+              .filter((u) => permittedSet.has(u.id))
+              .map((u) => ({
+                ma_nv: u.ma_nv,
+                step_flow: 0,
+                isFinalFlow: 0,
+                status_text: "Đang chờ duyệt",
+                is_forward: 0,
+                display_name: "Cơ điện Xưởng",
+                is_flow: 1,
+                indexOf: 1,
+              }));
+          }
+          if (validApprovers.length > 0) {
+            approvalFlowForDB = [
+              ...validApprovers,
+              {
+                // ma_nv: "06264",
+                ma_nv: "09802",
+                step_flow: 1,
+                isFinalFlow: 1,
+                status_text: "Đang chờ duyệt",
+                is_forward: 0,
+                display_name: "Trưởng phòng Cơ điện",
+                is_flow: 1,
+                indexOf: 2,
+              },
+            ];
+          } else {
+            approvalFlowForDB = [
+              {
+                // ma_nv: "06264",
+                ma_nv: "09802",
+                step_flow: 0,
+                isFinalFlow: 1,
+                status_text: "Đang chờ duyệt",
+                is_forward: 0,
+                display_name: "Trưởng phòng Cơ điện",
+                is_flow: 1,
+                indexOf: 1,
+              },
+            ];
+          }
+        }
+      } else {
+        approvalFlowForDB = [
+          {
+            // ma_nv: "06264",
+            ma_nv: "09802",
+            step_flow: 0,
+            isFinalFlow: 1,
+            status_text: "Đang chờ duyệt",
+            is_forward: 0,
+            display_name: "Trưởng phòng Cơ điện",
+            is_flow: 1,
+            indexOf: 1,
+          },
+        ];
+      }
+
+      const approvalFlowForExternal = approvalFlowForDB.map(
+        ({ status_text, is_forward, ...rest }) => rest
+      );
+      const approvalFlowForLocalDB = approvalFlowForDB.filter(
+        (step) => step.is_flow === 1
+      );
+      const approvalFlowJson = JSON.stringify(approvalFlowForLocalDB);
+
+      // --- 3. XỬ LÝ FILE ---
+      let attachedFileString = null;
+      let attachedLinksForExternal = [];
+      if (req.files && req.files.length > 0) {
+        const uploadPromises = req.files.map((file) => uploadFileToDrive(file));
+        const fileInfos = await Promise.all(uploadPromises);
+        const validFiles = fileInfos.filter((f) => f && f.link);
+        attachedFileString = validFiles
+          .map((f) => `${f.name}|${f.link}`)
+          .join("; ");
+        attachedLinksForExternal = validFiles.map((f) => ({
+          url: f.link,
+          id: f.id,
+          filename: f.name,
+        }));
+      }
+
+      // --- 4. CẤU HÌNH PAYLOAD EXTERNAL & EXPANSION FIELD ---
+      let targetUidProposalType = "8622ae80-4345-4efd-9a8a-62a1308d5a3f";
+      let expansionField = [];
+      const proposalName = getProposalName(category, type);
+
+      // A. Phiếu Nhập
+      if (category === "import") {
+        targetUidProposalType = "188b0afe-fc1d-4b19-b030-e437a846aec6";
+        let fromUnit = "";
+        let toUnit = "Việt Long Hưng";
+        let duration = "";
+        if (type === "borrowed" || type === "rented") {
+          fromUnit = is_borrowed_or_rented_or_borrowed_out_name || "";
+          duration = is_borrowed_or_rented_or_borrowed_out_return_date || "";
+        }
+        expansionField = [
+          { "Từ đơn vị:": fromUnit },
+          { "Đến đơn vị:": toUnit },
+          { "Thời hạn:": duration },
+        ];
+      }
+      // B. Phiếu Xuất (SỬA ĐỔI CHÍNH Ở ĐÂY)
+      else if (category === "export") {
+        targetUidProposalType = "03bb46e0-c614-4746-bf94-f532ca065911";
+
+        let reason = proposalName;
+        let duration = "";
+        let fromUnit = "Việt Long Hưng";
+        let toUnit = "";
+
+        // Logic xác định "Đến đơn vị"
+        if (type === "borrowed_out") {
+          toUnit = is_borrowed_or_rented_or_borrowed_out_name || ""; // Nếu mượn -> Tên người mượn
+          duration = is_borrowed_or_rented_or_borrowed_out_return_date || "";
+        } else {
+          // Nếu KHÔNG phải mượn (VD: Thanh lý, Bảo trì, Trả thuê...) -> Lấy tên vị trí xuất đến
+          toUnit = to_location_name || ""; // <--- SỬ DỤNG BIẾN to_location_name ĐÃ QUERY Ở PHẦN 1
+        }
+
+        expansionField = [
+          { "Lý do điều động:": reason },
+          { "Thời hạn:": duration },
+          { "Từ đơn vị:": fromUnit },
+          { "Đến đơn vị:": toUnit },
+          { "Họ tên người nhận hàng:": receiver_name || "" },
+          { "Số xe:": vehicle_number || "" },
+          { "Địa chỉ (bộ phận):": department_address || "" },
+          { "Xuất tại kho:": "Kho cơ điện" },
+        ];
+      }
+      // C. Phiếu Điều Chuyển
+      else if (category === "internal") {
+        targetUidProposalType = "8622ae80-4345-4efd-9a8a-62a1308d5a3f";
+        expansionField = [];
+      }
+
+      // --- 5. LƯU VÀO DB ---
+      let newTicketUuid = "";
+      let ticketId = null;
+      let dateFormatted = new Date(date).toISOString().split("T")[0];
+      const expansionFieldJson = JSON.stringify(expansionField);
+
+      // ... (Giữ nguyên phần INSERT vào DB cho import, export, internal) ...
+      // Chú ý: Ở phần insert export, nhớ insert cột expansion_field như code trước đã làm
+      if (category === "import") {
+        const [resImport] = await connection.query(
+          `INSERT INTO tb_machine_import (to_location_id, import_type, import_date, status, note, created_by, updated_by, attached_file, approval_flow, is_borrowed_or_rented_or_borrowed_out_name, is_borrowed_or_rented_or_borrowed_out_date, is_borrowed_or_rented_or_borrowed_out_return_date) VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            to_location_id,
+            type,
+            dateFormatted,
+            note,
+            userId,
+            userId,
+            attachedFileString,
+            approvalFlowJson,
+            is_borrowed_or_rented_or_borrowed_out_name,
+            is_borrowed_or_rented_or_borrowed_out_date,
+            is_borrowed_or_rented_or_borrowed_out_return_date,
+          ]
+        );
+        ticketId = resImport.insertId;
+        const [uuidRes] = await connection.query(
+          "SELECT uuid_machine_import FROM tb_machine_import WHERE id_machine_import = ?",
+          [ticketId]
+        );
+        newTicketUuid = uuidRes[0].uuid_machine_import;
+        for (const m of machines) {
+          const [mId] = await connection.query(
+            "SELECT id_machine FROM tb_machine WHERE uuid_machine = ?",
+            [m.uuid_machine]
+          );
+          if (mId.length > 0)
+            await connection.query(
+              `INSERT INTO tb_machine_import_detail (id_machine_import, id_machine, note, created_by, updated_by) VALUES (?, ?, ?, ?, ?)`,
+              [ticketId, mId[0].id_machine, m.note, userId, userId]
+            );
+        }
+      } else if (category === "export") {
+        const [resExport] = await connection.query(
+          `INSERT INTO tb_machine_export (to_location_id, export_type, export_date, status, note, created_by, updated_by, attached_file, approval_flow, is_borrowed_or_rented_or_borrowed_out_name, is_borrowed_or_rented_or_borrowed_out_date, is_borrowed_or_rented_or_borrowed_out_return_date, expansion_field) VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            to_location_id,
+            type,
+            dateFormatted,
+            note,
+            userId,
+            userId,
+            attachedFileString,
+            approvalFlowJson,
+            is_borrowed_or_rented_or_borrowed_out_name,
+            is_borrowed_or_rented_or_borrowed_out_date,
+            is_borrowed_or_rented_or_borrowed_out_return_date,
+            expansionFieldJson,
+          ]
+        );
+        ticketId = resExport.insertId;
+        const [uuidRes] = await connection.query(
+          "SELECT uuid_machine_export FROM tb_machine_export WHERE id_machine_export = ?",
+          [ticketId]
+        );
+        newTicketUuid = uuidRes[0].uuid_machine_export;
+        for (const m of machines) {
+          const [mId] = await connection.query(
+            "SELECT id_machine FROM tb_machine WHERE uuid_machine = ?",
+            [m.uuid_machine]
+          );
+          if (mId.length > 0)
+            await connection.query(
+              `INSERT INTO tb_machine_export_detail (id_machine_export, id_machine, note, created_by, updated_by) VALUES (?, ?, ?, ?, ?)`,
+              [ticketId, mId[0].id_machine, m.note, userId, userId]
+            );
+        }
+      } else if (category === "internal") {
+        const [resTransfer] = await connection.query(
+          `INSERT INTO tb_machine_internal_transfer (to_location_id, transfer_date, status, note, created_by, updated_by, attached_file, approval_flow) VALUES (?, ?, 'pending_confirmation', ?, ?, ?, ?, ?)`,
+          [
+            to_location_id,
+            dateFormatted,
+            note,
+            userId,
+            userId,
+            attachedFileString,
+            approvalFlowJson,
+          ]
+        );
+        ticketId = resTransfer.insertId;
+        const [uuidRes] = await connection.query(
+          "SELECT uuid_machine_internal_transfer FROM tb_machine_internal_transfer WHERE id_machine_internal_transfer = ?",
+          [ticketId]
+        );
+        newTicketUuid = uuidRes[0].uuid_machine_internal_transfer;
+        for (const m of machines) {
+          const [mId] = await connection.query(
+            "SELECT id_machine FROM tb_machine WHERE uuid_machine = ?",
+            [m.uuid_machine]
+          );
+          if (mId.length > 0)
+            await connection.query(
+              `INSERT INTO tb_machine_internal_transfer_detail (id_machine_internal_transfer, id_machine, note, created_by, updated_by) VALUES (?, ?, ?, ?, ?)`,
+              [ticketId, mId[0].id_machine, m.note, userId, userId]
+            );
+        }
+      }
+
+      // --- 6. GỬI SANG EXTERNAL API ---
+      // ... (Giữ nguyên logic gửi API) ...
+      const tableRows = machines.map((m, index) => [
+        index + 1,
+        m.type_machine || "",
+        m.model_machine || "",
+        "Máy",
+        "1",
+        m.serial_machine || "",
+        m.note || "",
+      ]);
+      tableRows.push(["", "Tổng", "", "Máy", machines.length, "", ""]);
+
+      const externalPayload = {
+        uid_proposal_type: targetUidProposalType,
+        ma_nv: ma_nv_login,
+        name_proposal_reality: proposalName,
+        id_department: id_department_str,
+        uid_reference_success:
+          "https://sveffmachine.vietlonghung.com.vn/api/tpm/api/test-proposals/callback",
+        id_reference_outside: newTicketUuid,
+        group_people_flow: approvalFlowForExternal,
+        attacted_file:
+          attachedLinksForExternal.length > 0 ? attachedLinksForExternal : null,
+        table: {
+          columns: [
+            "STT",
+            "Tên thiết bị",
+            "Model",
+            "ĐVT",
+            "Số lượng",
+            "Serial",
+            "Ghi chú",
+          ],
+          columnWidths: [0.7, 2.0, 3.0, 1.2, 1.2, 2.0, 3.0],
+          rows: tableRows,
+        },
+        ...(expansionField.length > 0 && { expansion_field: expansionField }),
+      };
+
+      try {
+        console.log(
+          "Sending to External API:",
+          JSON.stringify(externalPayload, null, 2)
+        );
+        const externalResponse = await axios.post(
+          "https://servertienich.vietlonghung.com.vn/api/fw/create-proposal-reality-outdoor",
+          externalPayload
+        );
+        console.log("External API Response:", externalResponse.data);
+      } catch (extError) {
+        console.error("Error calling External API:", extError.message);
+      }
+
+      await connection.commit();
+      res.json({
+        success: true,
+        message: "Tạo phiếu thử nghiệm và gửi duyệt thành công",
+        data: { local_uuid: newTicketUuid },
+      });
+    } catch (error) {
+      await connection.rollback();
+      console.error("Error creating test proposal:", error);
+      res.status(500).json({
+        success: false,
+        message: "Lỗi khi tạo phiếu",
+        error: error.message,
+      });
+    } finally {
+      connection.release();
+    }
+  }
+);
+
+// POST /api/test-proposals/callback - Callback từ hệ thống duyệt
+app.post("/api/test-proposals/callback", async (req, res) => {
+  const connection = await tpmConnection.getConnection();
+  try {
+    console.log("\n>>> NHAN DU LIEU CUA CHI HAI <<<");
+    console.log("Body Data:", JSON.stringify(req.body, null, 2));
+    const { id_refer, status: externalStatus, arrayApprovalFlow } = req.body;
+
+    if (!id_refer) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Missing id_refer" });
+    }
+
+    await connection.beginTransaction();
+
+    // 1. Xác định phiếu và LẤY LUỒNG DUYỆT CŨ
+    let table = "";
+    let idCol = "";
+    let ticketId = null;
+    let ticketType = "";
+    let ticketInfo = null;
+    let currentFlowJson = null;
+
+    // Kiểm tra Import
+    const [importCheck] = await connection.query(
+      "SELECT id_machine_import, approval_flow, created_by, import_type, to_location_id, is_borrowed_or_rented_or_borrowed_out_name, is_borrowed_or_rented_or_borrowed_out_date, is_borrowed_or_rented_or_borrowed_out_return_date FROM tb_machine_import WHERE uuid_machine_import = ?",
+      [id_refer]
+    );
+    if (importCheck.length > 0) {
+      table = "tb_machine_import";
+      idCol = "id_machine_import";
+      ticketId = importCheck[0].id_machine_import;
+      ticketType = "import";
+      ticketInfo = importCheck[0];
+      currentFlowJson = importCheck[0].approval_flow;
+    } else {
+      // Kiểm tra Export
+      const [exportCheck] = await connection.query(
+        "SELECT id_machine_export, approval_flow, created_by, export_type, to_location_id, is_borrowed_or_rented_or_borrowed_out_name, is_borrowed_or_rented_or_borrowed_out_date, is_borrowed_or_rented_or_borrowed_out_return_date FROM tb_machine_export WHERE uuid_machine_export = ?",
+        [id_refer]
+      );
+      if (exportCheck.length > 0) {
+        table = "tb_machine_export";
+        idCol = "id_machine_export";
+        ticketId = exportCheck[0].id_machine_export;
+        ticketType = "export";
+        ticketInfo = exportCheck[0];
+        currentFlowJson = exportCheck[0].approval_flow;
+      } else {
+        // Kiểm tra Internal
+        const [internalCheck] = await connection.query(
+          "SELECT id_machine_internal_transfer, approval_flow, created_by, to_location_id FROM tb_machine_internal_transfer WHERE uuid_machine_internal_transfer = ?",
+          [id_refer]
+        );
+        if (internalCheck.length > 0) {
+          table = "tb_machine_internal_transfer";
+          idCol = "id_machine_internal_transfer";
+          ticketId = internalCheck[0].id_machine_internal_transfer;
+          ticketType = "internal";
+          ticketInfo = internalCheck[0];
+          currentFlowJson = internalCheck[0].approval_flow;
+        }
+      }
+    }
+
+    if (!table) {
+      await connection.rollback();
+      return res
+        .status(404)
+        .json({ success: false, message: "Ticket not found" });
+    }
+
+    // 2. Xử lý Luồng Duyệt Mới
+    let newFlowToSave = [];
+
+    if (arrayApprovalFlow && Array.isArray(arrayApprovalFlow)) {
+      // a. Lấy Map luồng cũ để KẾ THỪA thuộc tính is_forward [THAY ĐỔI QUAN TRỌNG]
+      let oldFlowMap = new Map(); // Map<ma_nv, stepObject>
+      try {
+        const oldFlow =
+          typeof currentFlowJson === "string"
+            ? JSON.parse(currentFlowJson)
+            : currentFlowJson;
+        if (Array.isArray(oldFlow)) {
+          oldFlow.forEach((step) => {
+            // Lưu lại thông tin step cũ vào Map với key là ma_nv
+            oldFlowMap.set(step.ma_nv, step);
+          });
+        }
+      } catch (e) {
+        console.error("Error parsing old flow:", e);
+      }
+
+      // b. Tìm các bước đã hoàn tất
+      const stepsApproved = new Set();
+      arrayApprovalFlow.forEach((item) => {
+        if (item.is_approval_flow === 1) {
+          stepsApproved.add(item.step_flow);
+        }
+      });
+
+      // c. Map dữ liệu mới
+      newFlowToSave = arrayApprovalFlow.map((item) => {
+        let statusText = item.status_text || "Đang chờ duyệt";
+        let isForward = 0;
+
+        // LOGIC 1: Xác định is_forward (KẾ THỪA hoặc TẠO MỚI) [THAY ĐỔI QUAN TRỌNG]
+        if (oldFlowMap.has(item.ma_nv)) {
+          // Nếu người này ĐÃ CÓ trong DB, giữ nguyên giá trị is_forward cũ của họ
+          // (Để tránh việc họ duyệt xong bị mất chip Chuyển tiếp)
+          const oldStep = oldFlowMap.get(item.ma_nv);
+          isForward = oldStep.is_forward || 0;
+        } else {
+          // Nếu người này CHƯA CÓ trong DB => Là người mới được thêm vào => is_forward = 1
+          isForward = 1;
+        }
+
+        // LOGIC 2: Đánh dấu Đồng cấp đã duyệt
+        if (stepsApproved.has(item.step_flow) && item.is_approval_flow !== 1) {
+          statusText = "Đồng cấp đã duyệt";
+        }
+
+        return {
+          ma_nv: item.ma_nv,
+          ten_nv: item.ten_nv,
+          step_flow: item.step_flow,
+          isFinalFlow: item.isFinalFlow,
+          status_text: statusText,
+          is_forward: isForward,
+        };
+      });
+    }
+
+    // 3. Map trạng thái chung
+    let internalStatus = "pending";
+    const statusLower = externalStatus ? externalStatus.toLowerCase() : "";
+
+    if (
+      statusLower.includes("đã duyệt") ||
+      statusLower.includes("hoàn thành") ||
+      statusLower.includes("completed")
+    ) {
+      internalStatus = "completed";
+    } else if (
+      statusLower.includes("hủy") ||
+      statusLower.includes("từ chối") ||
+      statusLower.includes("cancelled")
+    ) {
+      internalStatus = "cancelled";
+    } else {
+      internalStatus =
+        table === "tb_machine_internal_transfer"
+          ? "pending_approval"
+          : "pending";
+    }
+
+    // 4. Cập nhật Database
+    await connection.query(
+      `UPDATE ${table} SET approval_flow = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE ${idCol} = ?`,
+      [JSON.stringify(newFlowToSave), internalStatus, ticketId]
+    );
+
+    // 5. Logic hoàn thành phiếu
+    if (internalStatus === "completed") {
+      const [locRes] = await connection.query(
+        "SELECT name_location FROM tb_location WHERE id_location = ?",
+        [ticketInfo.to_location_id]
+      );
+      const locationName = locRes[0]?.name_location || "";
+
+      const ticketBorrowInfo = {
+        name: ticketInfo.is_borrowed_or_rented_or_borrowed_out_name,
+        date: ticketInfo.is_borrowed_or_rented_or_borrowed_out_date,
+        return_date:
+          ticketInfo.is_borrowed_or_rented_or_borrowed_out_return_date,
+      };
+
+      const updaterId = ticketInfo.created_by || 99999;
+
+      if (ticketType === "internal") {
+        await handleInternalTransferApproval(
+          connection,
+          ticketId,
+          ticketInfo.to_location_id,
+          locationName,
+          updaterId
+        );
+      } else {
+        await updateMachineLocationAndStatus(
+          connection,
+          ticketType,
+          ticketId,
+          ticketInfo.to_location_id,
+          locationName,
+          internalStatus,
+          ticketInfo.import_type || ticketInfo.export_type,
+          ticketBorrowInfo,
+          updaterId
+        );
+      }
+    }
+
+    await connection.commit();
+    res
+      .status(200)
+      .json({ success: true, message: "Callback processed successfully" });
+  } catch (error) {
+    await connection.rollback();
+    console.error("Error processing callback:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
   } finally {
     connection.release();
   }

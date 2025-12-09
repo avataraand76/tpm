@@ -67,7 +67,11 @@ import {
   FileUpload,
   CheckCircleOutline,
   ErrorOutline,
+  KeyboardArrowDown,
+  KeyboardArrowUp,
+  HourglassFull,
 } from "@mui/icons-material";
+import { alpha } from "@mui/material/styles";
 import * as XLSX from "xlsx-js-style";
 import { QRCodeSVG } from "qrcode.react";
 import NavigationBar from "../components/NavigationBar";
@@ -113,6 +117,7 @@ const columnConfig = {
   manufacturer: "Hãng SX",
   serial_machine: "Serial",
   RFID_machine: "RFID",
+  NFC_machine: "NFC",
   name_category: "Phân loại",
   name_location: "Vị trí hiện tại",
   current_status: "Trạng thái (chính)",
@@ -122,7 +127,7 @@ const columnConfig = {
   is_borrowed_or_rented_or_borrowed_out_return_date: "Ngày trả (mượn/thuê)",
   price: "Giá",
   lifespan: "Tuổi thọ (năm)",
-  repair_cost: "Chi phí SC",
+  repair_cost: "Chi phí sửa chữa",
   date_of_use: "Ngày sử dụng",
 };
 
@@ -134,6 +139,7 @@ const initialColumnVisibility = {
   manufacturer: true,
   serial_machine: true,
   RFID_machine: false,
+  NFC_machine: false,
   name_category: false,
   name_location: true,
   current_status: true,
@@ -161,6 +167,503 @@ const renderMultiSelectValue = (selected) => (
     )}
   </Box>
 );
+
+const formatNumber = (num) => {
+  if (num === null || num === undefined || num === "") return "0";
+  return Number(num).toLocaleString("en-US");
+};
+
+const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
+  const theme = useTheme();
+  const [openNotInUse, setOpenNotInUse] = useState(false);
+
+  // 1. Cấu hình cột: ẨN cột "Cho mượn" (borrowed_out)
+  const columns = [
+    { key: "internal", label: "Máy nội bộ" },
+    { key: "borrowed", label: "Máy mượn" },
+    { key: "rented", label: "Máy thuê" },
+    // { key: "borrowed_out", label: "Cho mượn" }, // Đã ẩn
+  ];
+
+  // 2. Cấu hình hàng chính
+  const rowConfig = [
+    {
+      key: "available",
+      label: "Có thể sử dụng",
+      color: "#2e7d32",
+      bg: "#e8f5e9",
+    },
+    { key: "in_use", label: "Đang sử dụng", color: "#1976d2", bg: "#e3f2fd" },
+    {
+      key: "not_in_use",
+      label: "Chưa sử dụng",
+      color: "#ed6c02",
+      bg: "#fff3e0",
+      hasChildren: true,
+    },
+    {
+      key: "pending_liquidation",
+      label: "Chờ thanh lý",
+      color: "#ff5722",
+      bg: "#fbe9e7",
+    },
+    // { key: "liquidation", label: "Thanh lý", color: "#d32f2f", bg: "#ffebee" },
+  ];
+
+  // 3. Cấu hình hàng con: ĐỔI TÊN "Vô hiệu hóa" thành "Cho mượn"
+  const subRowConfig = [
+    { key: "maintenance", label: "Bảo trì", color: "#00bcd4", bg: "#e0f7fa" },
+    { key: "broken", label: "Máy hư", color: "#00bcd4", bg: "#e0f7fa" },
+    { key: "disabled", label: "Cho mượn", color: "#00bcd4", bg: "#e0f7fa" },
+  ];
+
+  // 4. Xử lý dữ liệu: Cộng 'borrowed_out' vào 'internal'
+  const processData = () => {
+    if (!data) return {};
+
+    // Deep copy data để tránh sửa đổi props gốc
+    const newData = JSON.parse(JSON.stringify(data));
+
+    // Bước 1: Duyệt qua tất cả các trạng thái có trong data
+    Object.keys(newData).forEach((statusKey) => {
+      const row = newData[statusKey];
+      if (row) {
+        // Lấy số lượng máy cho mượn
+        const borrowedOutCount = row["borrowed_out"] || 0;
+        // Cộng dồn vào cột nội bộ
+        row["internal"] = (row["internal"] || 0) + borrowedOutCount;
+        // (Tùy chọn) Reset cột borrowed_out về 0 để tránh tính toán sai nếu dùng lại
+        row["borrowed_out"] = 0;
+      }
+    });
+
+    // Bước 2: Tạo dữ liệu gộp cho hàng "Chưa sử dụng" (not_in_use)
+    newData["not_in_use"] = {};
+    const mergedStatuses = ["maintenance", "broken", "disabled"];
+
+    columns.forEach((col) => {
+      let sum = 0;
+      mergedStatuses.forEach((status) => {
+        if (newData[status]) {
+          sum += newData[status][col.key] || 0;
+        }
+      });
+      newData["not_in_use"][col.key] = sum;
+    });
+
+    return newData;
+  };
+
+  const processedData = processData();
+
+  // --- Logic kiểm tra Active ---
+  const isSelected = (rowKey, colKey) => {
+    if (!activeFilters) return false;
+    const { current_status, borrow_status } = activeFilters;
+    let isRowMatch = false;
+
+    if (rowKey === "ALL") {
+      isRowMatch =
+        current_status.length === 0 || current_status.includes("ALL");
+    } else if (rowKey === "not_in_use") {
+      const mergedStatuses = ["maintenance", "broken", "disabled"];
+      isRowMatch =
+        mergedStatuses.every((s) => current_status.includes(s)) &&
+        current_status.length === mergedStatuses.length;
+    } else {
+      isRowMatch =
+        current_status.includes(rowKey) && current_status.length === 1;
+    }
+
+    const isColMatch =
+      colKey === "ALL"
+        ? borrow_status.length === 0 || borrow_status.includes("ALL")
+        : colKey === "internal"
+        ? borrow_status.includes("internal") // Khi click Nội bộ, logic active vẫn giữ nguyên
+        : borrow_status.includes(colKey);
+
+    return isRowMatch && isColMatch;
+  };
+
+  const isRowActive = (rowKey) => {
+    if (!activeFilters) return false;
+    if (rowKey === "ALL")
+      return (
+        activeFilters.current_status.length === 0 ||
+        activeFilters.current_status.includes("ALL")
+      );
+    if (rowKey === "not_in_use") {
+      const mergedStatuses = ["maintenance", "broken", "disabled"];
+      return mergedStatuses.every((s) =>
+        activeFilters.current_status.includes(s)
+      );
+    }
+    return activeFilters.current_status.includes(rowKey);
+  };
+
+  const isColActive = (colKey) => {
+    if (!activeFilters) return false;
+    if (colKey === "ALL")
+      return (
+        activeFilters.borrow_status.length === 0 ||
+        activeFilters.borrow_status.includes("ALL")
+      );
+    return colKey === "internal"
+      ? activeFilters.borrow_status.includes("internal")
+      : activeFilters.borrow_status.includes(colKey);
+  };
+
+  // --- Tính toán tổng ---
+  const calculateRowTotal = (rowData) => {
+    if (!rowData) return 0;
+    return columns.reduce((sum, col) => sum + (rowData[col.key] || 0), 0);
+  };
+
+  const calculateColTotal = (colKey) => {
+    if (!processedData) return 0;
+    return rowConfig.reduce((sum, row) => {
+      if (row.key === "liquidation") return sum;
+      return sum + (processedData[row.key]?.[colKey] || 0);
+    }, 0);
+  };
+
+  const calculateGrandTotal = () => {
+    if (!processedData) return 0;
+    let total = 0;
+    rowConfig.forEach((row) => {
+      if (row.key === "liquidation") return;
+      total += calculateRowTotal(processedData[row.key]);
+    });
+    return total;
+  };
+
+  const TOTAL_COL_COLOR = "#667eea";
+  const TOTAL_COL_BG = "#ede7f6";
+  const TOTAL_ROW_COLOR = "#667eea";
+  const TOTAL_ROW_BG = "#ede7f6";
+
+  if (loading) {
+    return (
+      <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  // Helper render Row
+  const renderRow = (row, isSubRow = false) => {
+    const rowData = processedData[row.key] || {};
+    const rowTotal = calculateRowTotal(rowData);
+    const hasDataRow = rowTotal > 0;
+    const rowActive = isRowActive(row.key);
+
+    return (
+      <TableRow key={row.key} sx={{ "& > *": { borderBottom: "unset" } }}>
+        <TableCell
+          className="cell-first-col"
+          sx={{
+            cursor: "default",
+            color: row.color,
+            bgcolor: rowActive ? row.bg : "#fff",
+            boxShadow: rowActive ? `inset 3px 0 0 0 ${row.color}` : "none",
+            pl: isSubRow ? 4 : 2,
+            "&:hover": {
+              bgcolor: row.bg,
+              color: row.color,
+              boxShadow: `inset 3px 0 0 0 ${row.color}`,
+            },
+          }}
+        >
+          <Box sx={{ display: "flex", alignItems: "center" }}>
+            {row.hasChildren && (
+              <IconButton
+                aria-label="expand row"
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpenNotInUse(!openNotInUse);
+                }}
+                sx={{ mr: 0.5, p: 0 }}
+              >
+                {openNotInUse ? <KeyboardArrowUp /> : <KeyboardArrowDown />}
+              </IconButton>
+            )}
+            <Box component="span" sx={{ flexGrow: 1, fontWeight: 600 }}>
+              {row.label}
+            </Box>
+          </Box>
+        </TableCell>
+
+        {columns.map((col) => {
+          const value = rowData[col.key] || 0;
+          const hasDataCell = value > 0;
+          const cellSelected = isSelected(row.key, col.key);
+          return (
+            <TableCell
+              key={col.key}
+              onClick={() => onCellClick(row.key, col.key)}
+              sx={{
+                cursor: "pointer",
+                bgcolor: cellSelected
+                  ? alpha(row.color, 0.2)
+                  : hasDataCell
+                  ? row.bg
+                  : "transparent",
+                color: hasDataCell || cellSelected ? row.color : "#e0e0e0",
+                fontWeight: hasDataCell || cellSelected ? "bold" : "normal",
+                boxShadow: cellSelected
+                  ? `inset 0 0 0 2px ${row.color}`
+                  : "none",
+                "&:hover": {
+                  bgcolor:
+                    hasDataCell || cellSelected
+                      ? alpha(row.color, 0.25)
+                      : "#f5f5f5",
+                  boxShadow: `inset 0 0 0 2px ${row.color}`,
+                  color: hasDataCell || cellSelected ? row.color : "#757575",
+                },
+              }}
+            >
+              {value ? formatNumber(value) : "-"}
+            </TableCell>
+          );
+        })}
+
+        {(() => {
+          const cellSelected = isSelected(row.key, "ALL");
+          return (
+            <TableCell
+              onClick={() => onCellClick(row.key, "ALL")}
+              sx={{
+                cursor: "pointer",
+                fontWeight: "bold",
+                color: hasDataRow || cellSelected ? row.color : "#bdbdbd",
+                backgroundColor: cellSelected
+                  ? alpha(row.color, 0.2)
+                  : hasDataRow
+                  ? alpha(row.color, 0.08)
+                  : "transparent",
+                boxShadow: cellSelected
+                  ? `inset 0 0 0 2px ${row.color}`
+                  : "none",
+                "&:hover": {
+                  bgcolor: alpha(row.color, 0.2),
+                  boxShadow: `inset 0 0 0 2px ${row.color}`,
+                },
+              }}
+            >
+              {rowTotal ? formatNumber(rowTotal) : "-"}
+            </TableCell>
+          );
+        })()}
+      </TableRow>
+    );
+  };
+
+  return (
+    <Card
+      elevation={0}
+      sx={{
+        borderRadius: "20px",
+        border: "1px solid rgba(0, 0, 0, 0.05)",
+        overflow: "hidden",
+        height: "100%",
+        transition: "all 0.2s ease",
+        "&:hover": { boxShadow: "0 4px 12px rgba(0,0,0,0.05)" },
+      }}
+    >
+      <Box sx={{ p: 2, borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
+        <Typography variant="h6" fontWeight="bold">
+          Trạng thái chi tiết
+        </Typography>
+      </Box>
+      <TableContainer>
+        <Table
+          size="small"
+          sx={{
+            "& .MuiTableCell-root": {
+              borderBottom: "1px solid rgba(224, 224, 224, 0.4)",
+              textAlign: "center",
+              fontSize: "0.9rem",
+              transition: "all 0.2s ease-in-out",
+              position: "relative",
+            },
+            "& .MuiTableCell-head": {
+              backgroundColor: "#f9fafb",
+              fontWeight: 700,
+              color: "#637381",
+              py: 2,
+            },
+            "& .cell-first-col": {
+              textAlign: "left",
+              fontWeight: 600,
+              position: "sticky",
+              left: 0,
+              zIndex: 1,
+              borderRight: "1px solid rgba(0,0,0,0.05)",
+            },
+          }}
+        >
+          <TableHead>
+            <TableRow>
+              <TableCell className="cell-first-col" sx={{ minWidth: 180 }}>
+                Trạng thái chính
+              </TableCell>
+              {columns.map((col) => {
+                const active = isColActive(col.key);
+                return (
+                  <TableCell
+                    key={col.key}
+                    sx={{
+                      cursor: "default",
+                      color: active ? theme.palette.primary.main : "inherit",
+                      bgcolor: active ? "#f0f4f8" : "inherit",
+                      boxShadow: active
+                        ? `inset 0 -3px 0 0 ${theme.palette.primary.main}`
+                        : "none",
+                      "&:hover": {
+                        color: theme.palette.primary.main,
+                        bgcolor: "#f0f4f8",
+                        boxShadow: `inset 0 -3px 0 0 ${theme.palette.primary.main}`,
+                      },
+                    }}
+                  >
+                    {col.label}
+                  </TableCell>
+                );
+              })}
+              {(() => {
+                const active = isColActive("ALL");
+                return (
+                  <TableCell
+                    sx={{
+                      cursor: "default",
+                      fontWeight: "bold !important",
+                      // Cập nhật màu TÍM cho header TỔNG
+                      color: active
+                        ? `${TOTAL_COL_COLOR} !important`
+                        : `${TOTAL_COL_COLOR} !important`,
+                      backgroundColor: active
+                        ? `${TOTAL_COL_BG} !important`
+                        : "#f9fafb !important",
+                      boxShadow: active
+                        ? `inset 0 -3px 0 0 ${TOTAL_COL_COLOR}`
+                        : "none",
+                      "&:hover": {
+                        backgroundColor: TOTAL_COL_BG + " !important",
+                        boxShadow: `inset 0 -3px 0 0 ${TOTAL_COL_COLOR}`,
+                      },
+                    }}
+                  >
+                    Tổng
+                  </TableCell>
+                );
+              })()}
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {rowConfig.map((row) => (
+              <React.Fragment key={row.key}>
+                {renderRow(row)}
+                {row.key === "not_in_use" &&
+                  openNotInUse &&
+                  subRowConfig.map((subRow) => renderRow(subRow, true))}
+              </React.Fragment>
+            ))}
+
+            {/* --- CẬP NHẬT HÀNG TỔNG DƯỚI CÙNG --- */}
+            <TableRow sx={{ backgroundColor: "#fafafa" }}>
+              {(() => {
+                const active = isRowActive("ALL");
+                return (
+                  <TableCell
+                    className="cell-first-col"
+                    sx={{
+                      cursor: "default",
+                      fontWeight: "bold !important",
+                      // Cập nhật màu TÍM
+                      color: active
+                        ? `${TOTAL_ROW_COLOR} !important`
+                        : `${TOTAL_ROW_COLOR} !important`,
+                      backgroundColor: active
+                        ? `${TOTAL_ROW_BG} !important`
+                        : "#fafafa !important",
+                      boxShadow: active
+                        ? `inset 3px 0 0 0 ${TOTAL_ROW_COLOR}`
+                        : "none",
+                      "&:hover": {
+                        backgroundColor: TOTAL_ROW_BG + " !important",
+                        boxShadow: `inset 3px 0 0 0 ${TOTAL_ROW_COLOR}`,
+                      },
+                    }}
+                  >
+                    Tổng
+                  </TableCell>
+                );
+              })()}
+
+              {/* CÁC Ô TỔNG CỘT */}
+              {columns.map((col) => {
+                const colTotal = calculateColTotal(col.key);
+                const cellSelected = isSelected("ALL", col.key);
+                return (
+                  <TableCell
+                    key={col.key}
+                    onClick={() => onCellClick("ALL", col.key)}
+                    sx={{
+                      cursor: "pointer",
+                      fontWeight: "bold",
+                      // Cập nhật màu TÍM
+                      color:
+                        colTotal > 0 || cellSelected
+                          ? TOTAL_ROW_COLOR
+                          : "#bdbdbd",
+                      bgcolor: cellSelected ? TOTAL_ROW_BG : "transparent",
+                      boxShadow: cellSelected
+                        ? `inset 0 0 0 2px ${TOTAL_ROW_COLOR}`
+                        : "none",
+                      "&:hover": {
+                        bgcolor: TOTAL_ROW_BG,
+                        color: TOTAL_ROW_COLOR,
+                        boxShadow: `inset 0 0 0 2px ${TOTAL_ROW_COLOR}`,
+                      },
+                    }}
+                  >
+                    {colTotal ? formatNumber(colTotal) : "-"}
+                  </TableCell>
+                );
+              })}
+
+              {/* --- Ô GRAND TOTAL (GÓC DƯỚI PHẢI) --- */}
+              <TableCell
+                onClick={() => onCellClick("ALL", "ALL")}
+                sx={{
+                  // Cập nhật nền Tím nhạt và chữ Tím đậm
+                  backgroundColor: `${alpha(TOTAL_ROW_COLOR, 0.15)} !important`,
+                  color: `${TOTAL_ROW_COLOR} !important`,
+                  fontWeight: "bold",
+                  fontSize: "1.1rem !important", // Tăng kích thước chữ một chút
+                  cursor: "pointer",
+                  boxShadow: isSelected("ALL", "ALL")
+                    ? `inset 0 0 0 2px ${TOTAL_ROW_COLOR}`
+                    : "none",
+                  "&:hover": {
+                    filter: "brightness(0.95)",
+                    boxShadow: `inset 0 0 0 2px ${TOTAL_ROW_COLOR}`,
+                  },
+                }}
+              >
+                {calculateGrandTotal()
+                  ? formatNumber(calculateGrandTotal())
+                  : "-"}
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Card>
+  );
+};
 
 const MachineListPage = () => {
   const theme = useTheme();
@@ -196,6 +699,7 @@ const MachineListPage = () => {
     borrowed: 0,
     borrowed_return: 0,
     rented_return: 0,
+    pending_liquidation: 0,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -262,6 +766,10 @@ const MachineListPage = () => {
     current_status: [],
     borrow_status: [],
   });
+
+  // State cho matrix
+  const [matrixData, setMatrixData] = useState({});
+  const [matrixLoading, setMatrixLoading] = useState(false);
 
   const fetchMachines = async (searchQuery = "") => {
     try {
@@ -348,11 +856,67 @@ const MachineListPage = () => {
     }
   };
 
+  const fetchMatrixStats = async () => {
+    try {
+      setMatrixLoading(true);
+      const result = await api.machines.getMatrixStats();
+      if (result.success) {
+        setMatrixData(result.data);
+      }
+    } catch (err) {
+      console.error("Error fetching matrix stats:", err);
+    } finally {
+      setMatrixLoading(false);
+    }
+  };
+  const handleMatrixClick = (statusKey, sourceKey) => {
+    let newStatusFilter = [];
+    let newBorrowFilter = [];
+
+    // 1. Xử lý STATUS (Dòng)
+    if (statusKey === "ALL") {
+      newStatusFilter = [];
+    } else if (statusKey === "not_in_use") {
+      // Khi chọn "Chưa sử dụng", lấy cả 3 trạng thái con (bao gồm disabled/Cho mượn)
+      newStatusFilter = ["maintenance", "broken", "disabled"];
+    } else {
+      newStatusFilter = [statusKey];
+    }
+
+    // 2. Xử lý SOURCE (Cột)
+    if (sourceKey === "ALL") {
+      newBorrowFilter = [];
+    } else if (sourceKey === "internal") {
+      // <<< CẬP NHẬT: Khi chọn "Nội bộ", lấy cả máy Nội bộ VÀ máy Cho mượn (borrowed_out)
+      // Backend sẽ xử lý mảng này: 'internal' -> NULL, 'borrowed_out' -> 'borrowed_out'
+      newBorrowFilter = ["internal", "borrowed_out"];
+    } else {
+      newBorrowFilter = [sourceKey];
+    }
+
+    // 3. Cập nhật State Filters
+    setFilters((prev) => ({
+      ...prev,
+      current_status: newStatusFilter,
+      borrow_status: newBorrowFilter,
+    }));
+
+    setPage(1);
+    if (tableCardRef.current) {
+      const ref = tableCardRef.current;
+      ref.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  };
+
   useEffect(() => {
     // Tải danh sách máy và các thống kê
     fetchMachines(searchTerm);
     fetchStats();
     fetchTypeStats();
+    fetchMatrixStats();
 
     fetchFilterOptions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -407,6 +971,24 @@ const MachineListPage = () => {
     setPage(1); // Reset to first page when changing rows per page
   };
 
+  const handleGenerateCode = async () => {
+    // Chỉ chạy khi đang ở chế độ Tạo mới và có nhập Hãng SX
+    if (isCreateMode && editedData.manufacturer) {
+      try {
+        // Gọi API lấy mã tiếp theo
+        const result = await api.machines.getNextCode(editedData.manufacturer);
+        if (result.success && result.data.nextCode) {
+          setEditedData((prev) => ({
+            ...prev,
+            code_machine: result.data.nextCode,
+          }));
+        }
+      } catch (err) {
+        console.error("Failed to auto-generate code", err);
+      }
+    }
+  };
+
   const handleOpenDialog = async (uuid) => {
     try {
       setMachineHistory([]); // Đặt lại lịch sử
@@ -445,6 +1027,7 @@ const MachineListPage = () => {
       code_machine: "",
       serial_machine: "",
       RFID_machine: "",
+      NFC_machine: "",
       type_machine: "",
       model_machine: "",
       manufacturer: "",
@@ -779,6 +1362,7 @@ const MachineListPage = () => {
     "Model máy": "model_machine",
     "Hãng sản xuất": "manufacturer",
     RFID: "RFID_machine",
+    NFC: "NFC_machine",
     "Giá (VNĐ)": "price",
     "Ngày sử dụng (DD/MM/YYYY)": "date_of_use",
     "Tuổi thọ (năm)": "lifespan",
@@ -966,10 +1550,15 @@ const MachineListPage = () => {
       available: { bg: "#2e7d3222", color: "#2e7d32", label: "Sẵn sàng" },
       in_use: { bg: "#667eea22", color: "#667eea", label: "Đang sử dụng" },
       maintenance: { bg: "#ff980022", color: "#ff9800", label: "Bảo trì" },
-      rented: { bg: "#673ab722", color: "#673ab7", label: "Đang thuê" },
-      borrowed: { bg: "#03a9f422", color: "#03a9f4", label: "Đang mượn" },
+      rented: { bg: "#673ab722", color: "#673ab7", label: "Máy thuê" },
+      borrowed: { bg: "#03a9f422", color: "#03a9f4", label: "Máy mượn" },
       borrowed_out: { bg: "#00bcd422", color: "#00bcd4", label: "Cho mượn" },
       liquidation: { bg: "#f4433622", color: "#f44336", label: "Thanh lý" },
+      pending_liquidation: {
+        bg: "#ff572222",
+        color: "#ff5722",
+        label: "Chờ thanh lý",
+      },
       disabled: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Vô hiệu hóa" },
       broken: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Máy hư" },
       borrowed_return: {
@@ -1002,6 +1591,8 @@ const MachineListPage = () => {
         return <SwapHoriz />;
       case "liquidation":
         return <Cancel />;
+      case "pending_liquidation":
+        return <HourglassFull />;
       case "disabled":
         return <Cancel />;
       case "broken":
@@ -1017,15 +1608,12 @@ const MachineListPage = () => {
 
   const formatCurrency = (value) => {
     if (!value) return "-";
-    return new Intl.NumberFormat("vi-VN", {
-      style: "currency",
-      currency: "VND",
-    }).format(value);
+    return new Intl.NumberFormat("en-US").format(value) + " ₫";
   };
 
   const formatNumberVN = (value) => {
     if (!value && value !== 0) return "";
-    return new Intl.NumberFormat("vi-VN", {
+    return new Intl.NumberFormat("en-US", {
       minimumFractionDigits: 0,
       maximumFractionDigits: 2,
     }).format(value);
@@ -1033,8 +1621,7 @@ const MachineListPage = () => {
 
   const parseNumberVN = (value) => {
     if (!value) return "";
-    // Loại bỏ dấu chấm phân cách hàng nghìn và thay dấu phẩy thành dấu chấm
-    const cleanValue = value.replace(/\./g, "").replace(",", ".");
+    const cleanValue = value.replace(/,/g, "");
     return cleanValue;
   };
 
@@ -1186,6 +1773,11 @@ const MachineListPage = () => {
       boxShadow: "0 4px 12px rgba(0,0,0,0.05)", // Bóng mờ khi hover
     },
   };
+  const displayTotal =
+    (stats.total || 0) -
+    (stats.liquidation || 0) -
+    (stats.borrowed_return || 0) -
+    (stats.rented_return || 0);
   return (
     <>
       <NavigationBar />
@@ -1261,7 +1853,7 @@ const MachineListPage = () => {
                   fontWeight="bold"
                   color="#667eea"
                 >
-                  {stats.total}
+                  {formatNumber(displayTotal || 0)}
                 </Typography>
               </CardContent>
             </Card>
@@ -1270,9 +1862,9 @@ const MachineListPage = () => {
           {/* Cột phụ cho các thẻ còn lại */}
           <Grid size={{ xs: 12, md: 7, lg: 8 }}>
             <Grid container spacing={3}>
-              {/* --- HÀNG 1: TRẠNG THÁI CHÍNH (5 THẺ) --- */}
-              {/* Sẵn sàng */}
-              <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
+              {/* --- HÀNG 1 --- */}
+              {/* 1. Sẵn sàng */}
+              <Grid size={{ xs: 6 }}>
                 <Card
                   elevation={0}
                   onClick={() => handleStatusFilterClick(["available"], [])}
@@ -1291,16 +1883,17 @@ const MachineListPage = () => {
                       fontWeight="bold"
                       color="#2e7d32"
                     >
-                      {stats.available || 0}
+                      {formatNumber(stats.available || 0)}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      Sẵn sàng
+                      Có thể sử dụng
                     </Typography>
                   </CardContent>
                 </Card>
               </Grid>
-              {/* Đang sử dụng */}
-              <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
+
+              {/* 2. Đang sử dụng */}
+              <Grid size={{ xs: 6 }}>
                 <Card
                   elevation={0}
                   onClick={() => handleStatusFilterClick(["in_use"], [])}
@@ -1319,7 +1912,7 @@ const MachineListPage = () => {
                       fontWeight="bold"
                       color="#1976d2"
                     >
-                      {stats.in_use || 0}
+                      {formatNumber(stats.in_use || 0)}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       Đang sử dụng
@@ -1328,7 +1921,7 @@ const MachineListPage = () => {
                 </Card>
               </Grid>
               {/* Bảo trì */}
-              <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
+              {/* <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
                 <Card
                   elevation={0}
                   onClick={() => handleStatusFilterClick(["maintenance"], [])}
@@ -1354,9 +1947,9 @@ const MachineListPage = () => {
                     </Typography>
                   </CardContent>
                 </Card>
-              </Grid>
+              </Grid> */}
               {/* Thanh lý */}
-              <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
+              {/* <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
                 <Card
                   elevation={0}
                   onClick={() => handleStatusFilterClick(["liquidation"], [])}
@@ -1382,9 +1975,9 @@ const MachineListPage = () => {
                     </Typography>
                   </CardContent>
                 </Card>
-              </Grid>
+              </Grid> */}
               {/* Vô hiệu hóa / Bị hỏng */}
-              <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
+              {/* <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
                 <Card
                   elevation={0}
                   onClick={() =>
@@ -1416,21 +2009,94 @@ const MachineListPage = () => {
                       variant={isMobile ? "h5" : "h4"}
                       fontWeight="bold"
                       color="#9e9e9e"
+                    > */}
+              {/* {stats.disabled || 0}/ */}
+              {/* {stats.broken || 0}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary"> */}
+              {/* Vô hiệu hóa/ */}
+              {/* Máy hư
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>             */}
+
+              {/* --- HÀNG 2 --- */}
+              {/* 3. Chưa sử dụng (Gộp: Bảo trì + Máy hư + Vô hiệu hóa/Cho mượn) */}
+              <Grid size={{ xs: 6 }}>
+                <Card
+                  elevation={0}
+                  onClick={() =>
+                    handleStatusFilterClick(
+                      ["maintenance", "broken", "disabled"],
+                      []
+                    )
+                  }
+                  sx={{
+                    borderRadius: "20px",
+                    background: "#ff980011", // Màu cam nhạt
+                    border: "1px solid rgba(0, 0, 0, 0.05)",
+                    ...(isStatusFilterActive(
+                      ["maintenance", "broken", "disabled"],
+                      []
+                    )
+                      ? activeCardSx
+                      : inactiveCardSx),
+                  }}
+                >
+                  <CardContent sx={{ textAlign: "center", py: 3 }}>
+                    <Typography
+                      variant={isMobile ? "h5" : "h4"}
+                      fontWeight="bold"
+                      color="#ed6c02" // Màu cam đậm
                     >
-                      {/* {stats.disabled || 0}/ */}
-                      {stats.broken || 0}
+                      {/* Tổng hợp số lượng các trạng thái con */}
+                      {formatNumber(
+                        (Number(stats.maintenance) || 0) +
+                          (Number(stats.broken) || 0) +
+                          (Number(stats.borrowed_out) || 0)
+                      )}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      {/* Vô hiệu hóa/ */}
-                      Máy hư
+                      Chưa sử dụng
                     </Typography>
                   </CardContent>
                 </Card>
               </Grid>
 
-              {/* --- HÀNG 2: THUÊ, MƯỢN, CHO MƯỢN (5 THẺ) --- */}
+              {/* 4. Chờ thanh lý */}
+              <Grid size={{ xs: 6 }}>
+                <Card
+                  elevation={0}
+                  onClick={() =>
+                    handleStatusFilterClick(["pending_liquidation"], [])
+                  }
+                  sx={{
+                    borderRadius: "20px",
+                    background: "#ff572211",
+                    border: "1px solid rgba(0, 0, 0, 0.05)",
+                    ...(isStatusFilterActive(["pending_liquidation"], [])
+                      ? activeCardSx
+                      : inactiveCardSx),
+                  }}
+                >
+                  <CardContent sx={{ textAlign: "center", py: 3 }}>
+                    <Typography
+                      variant={isMobile ? "h5" : "h4"}
+                      fontWeight="bold"
+                      color="#ff5722"
+                    >
+                      {formatNumber(stats.pending_liquidation || 0)}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Chờ thanh lý
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+
               {/* Thuê */}
-              <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
+              {/* <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
                 <Card
                   elevation={0}
                   onClick={() => handleStatusFilterClick([], ["rented"])}
@@ -1456,9 +2122,9 @@ const MachineListPage = () => {
                     </Typography>
                   </CardContent>
                 </Card>
-              </Grid>
+              </Grid> */}
               {/* Đã trả (Máy thuê) */}
-              <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
+              {/* <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
                 <Card
                   elevation={0}
                   onClick={() =>
@@ -1486,9 +2152,9 @@ const MachineListPage = () => {
                     </Typography>
                   </CardContent>
                 </Card>
-              </Grid>
+              </Grid> */}
               {/* Mượn */}
-              <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
+              {/* <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
                 <Card
                   elevation={0}
                   onClick={() => handleStatusFilterClick([], ["borrowed"])}
@@ -1514,9 +2180,9 @@ const MachineListPage = () => {
                     </Typography>
                   </CardContent>
                 </Card>
-              </Grid>
+              </Grid> */}
               {/* Đã trả (Máy mượn) */}
-              <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
+              {/* <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
                 <Card
                   elevation={0}
                   onClick={() =>
@@ -1544,9 +2210,9 @@ const MachineListPage = () => {
                     </Typography>
                   </CardContent>
                 </Card>
-              </Grid>
+              </Grid> */}
               {/* Cho mượn (ĐÃ CHUYỂN LÊN) */}
-              <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
+              {/* <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
                 <Card
                   elevation={0}
                   onClick={() =>
@@ -1574,9 +2240,19 @@ const MachineListPage = () => {
                     </Typography>
                   </CardContent>
                 </Card>
-              </Grid>
+              </Grid> */}
             </Grid>
           </Grid>
+
+          <Grid size={12} sx={{ mt: 1 }}>
+            <StatusMatrixTable
+              data={matrixData}
+              loading={matrixLoading}
+              onCellClick={handleMatrixClick}
+              activeFilters={filters}
+            />
+          </Grid>
+
           {typeStats.length > 0 && (
             <Grid size={12} sx={{ mt: 3 }}>
               {" "}
@@ -1758,6 +2434,9 @@ const MachineListPage = () => {
                           <b>rfid:</b>... (Tìm theo RFID)
                         </li>
                         <li>
+                          <b>nfc:</b>... (Tìm theo NFC)
+                        </li>
+                        <li>
                           <b>seri:</b>... (Tìm theo Serial)
                         </li>
                         <li>
@@ -1907,6 +2586,7 @@ const MachineListPage = () => {
                     fetchStats();
                     fetchTypeStats();
                     fetchFilterOptions();
+                    fetchMatrixStats();
                   }}
                   sx={{
                     borderRadius: "12px",
@@ -2222,6 +2902,27 @@ const MachineListPage = () => {
                         </TableSortLabel>
                       </TableCell>
                     )}
+                    {columnVisibility.NFC_machine && (
+                      <TableCell
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: "0.95rem",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        <TableSortLabel
+                          active={sortConfig.key === "NFC_machine"}
+                          direction={
+                            sortConfig.key === "NFC_machine"
+                              ? sortConfig.direction
+                              : "asc"
+                          }
+                          onClick={() => handleSortRequest("NFC_machine")}
+                        >
+                          NFC
+                        </TableSortLabel>
+                      </TableCell>
+                    )}
                     {columnVisibility.name_category && (
                       <TableCell
                         sx={{
@@ -2461,7 +3162,7 @@ const MachineListPage = () => {
                           }
                           onClick={() => handleSortRequest("repair_cost")}
                         >
-                          Chi phí SC
+                          Chi phí sửa chữa
                         </TableSortLabel>
                       </TableCell>
                     )}
@@ -2559,6 +3260,11 @@ const MachineListPage = () => {
                           {columnVisibility.RFID_machine && (
                             <TableCell sx={{ whiteSpace: "nowrap" }}>
                               {machine.RFID_machine || "-"}
+                            </TableCell>
+                          )}
+                          {columnVisibility.NFC_machine && (
+                            <TableCell sx={{ whiteSpace: "nowrap" }}>
+                              {machine.NFC_machine || "-"}
                             </TableCell>
                           )}
                           {columnVisibility.name_category && (
@@ -2931,12 +3637,24 @@ const MachineListPage = () => {
                     onChange={(e) =>
                       handleInputChange("code_machine", e.target.value)
                     }
-                    disabled={!canCreateOrImport || !isCreateMode} // Bị khóa nếu là view-only và cơ điện xưởng HOẶC là chế độ xem chi tiết
+                    disabled={!canCreateOrImport || !isCreateMode}
                     sx={
                       !(isAdmin || canEdit) || !isCreateMode
                         ? DISABLED_VIEW_SX
                         : {}
                     }
+                    // THÊM: Nút refresh nhỏ ở cuối ô để tạo lại mã nếu cần
+                    InputProps={{
+                      endAdornment: isCreateMode && (
+                        <InputAdornment position="end">
+                          <Tooltip title="Tự động tạo mã theo Hãng SX">
+                            <IconButton onClick={handleGenerateCode} edge="end">
+                              <Refresh />
+                            </IconButton>
+                          </Tooltip>
+                        </InputAdornment>
+                      ),
+                    }}
                   />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
@@ -2965,6 +3683,18 @@ const MachineListPage = () => {
                       handleInputChange("RFID_machine", e.target.value)
                     }
                     disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
+                    sx={DISABLED_VIEW_SX}
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    fullWidth
+                    label="NFC"
+                    value={editedData.NFC_machine || ""}
+                    onChange={(e) =>
+                      handleInputChange("NFC_machine", e.target.value)
+                    }
+                    disabled={!canCreateOrImport}
                     sx={DISABLED_VIEW_SX}
                   />
                 </Grid>
@@ -3039,7 +3769,9 @@ const MachineListPage = () => {
                     onChange={(e) =>
                       handleInputChange("manufacturer", e.target.value)
                     }
-                    disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
+                    // THÊM: Sự kiện onBlur để tự động gọi API khi nhập xong
+                    onBlur={handleGenerateCode}
+                    disabled={!canCreateOrImport}
                     sx={DISABLED_VIEW_SX}
                   />
                 </Grid>
@@ -3061,6 +3793,9 @@ const MachineListPage = () => {
                       <MenuItem value="in_use">Đang sử dụng</MenuItem>
                       <MenuItem value="maintenance">Bảo trì</MenuItem>
                       <MenuItem value="liquidation">Thanh lý</MenuItem>
+                      <MenuItem value="pending_liquidation">
+                        Chờ thanh lý
+                      </MenuItem>
                       <MenuItem value="disabled">Vô hiệu hóa</MenuItem>
                       <MenuItem value="broken">Máy hư</MenuItem>
                     </Select>

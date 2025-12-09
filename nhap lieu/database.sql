@@ -113,6 +113,7 @@ create table if not exists tb_machine
     -- properties
     serial_machine varchar(30),
     RFID_machine varchar(30),
+    NFC_machine varchar(30),
     code_machine varchar(30), -- sẽ là mã barcode tham chiếu theo code loại máy
     type_machine text,
     model_machine text,
@@ -121,7 +122,7 @@ create table if not exists tb_machine
     date_of_use date, -- ngày sử dụng
     lifespan int, -- tuổi thọ
     repair_cost decimal(15, 0), -- chi phí sửa chữa
-    current_status enum('available', 'in_use', 'maintenance', 'liquidation', 'disabled', 'broken') default 'available',
+    current_status enum('available', 'in_use', 'maintenance', 'liquidation', 'disabled', 'broken', 'pending_liquidation') default 'available',
 	is_borrowed_or_rented_or_borrowed_out enum ('borrowed', 'rented', 'borrowed_out', 'borrowed_return', 'rented_return'),
     is_borrowed_or_rented_or_borrowed_out_name text,
 	is_borrowed_or_rented_or_borrowed_out_date date,
@@ -162,6 +163,8 @@ create table if not exists tb_machine_import
 	is_borrowed_or_rented_or_borrowed_out_return_date date,
     note text,
     attached_file text,
+    approval_flow json,
+    expansion_field json,
 
     -- key
     primary key (id_machine_import),
@@ -215,6 +218,8 @@ create table if not exists tb_machine_export
 	is_borrowed_or_rented_or_borrowed_out_return_date date,
     note text,
     attached_file text,
+    approval_flow json,
+    expansion_field json,
 
     -- key
     primary key (id_machine_export),
@@ -261,6 +266,8 @@ create table if not exists tb_machine_internal_transfer
     status enum('pending_confirmation', 'pending_approval', 'completed', 'cancelled') default 'pending_confirmation',
     note text,
     attached_file text,
+    approval_flow json,
+    expansion_field json,
 
     -- key
     primary key (id_machine_internal_transfer),

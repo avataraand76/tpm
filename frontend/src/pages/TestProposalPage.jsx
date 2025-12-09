@@ -1,4 +1,4 @@
-// frontend/src/pages/TicketManagementPage.jsx
+// frontend/src/pages/TestProposalPage.jsx
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
@@ -97,7 +97,7 @@ const requiredHeaders = [
   "Phân loại (Máy móc thiết bị/Phụ kiện)",
 ];
 
-const TicketManagementPage = () => {
+const TestProposalPage = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const { user, permissions } = useAuth();
@@ -115,15 +115,21 @@ const TicketManagementPage = () => {
   const hasImportExportTabs = isAdmin || isPhongCoDien || isViewOnly;
   const canCreateOrImportMachines = isAdmin || isPhongCoDien;
 
-  const [activeTab, setActiveTab] = useState(isCoDienXuong ? 2 : 0); // 0: Import, 1: Export, 2: Internal, 3: Update Location
+  // Tab state
+  const [activeTab, setActiveTab] = useState(isCoDienXuong ? 2 : 0); // 0: Import, 1: Export, 2: Internal
+
+  // Data states
   const [imports, setImports] = useState([]);
   const [exports, setExports] = useState([]);
   const [transfers, setTransfers] = useState([]);
+
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [statusFilter, setStatusFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
+
+  // Location Data
   const [filteredLocations, setFilteredLocations] = useState([]);
   const [locationLoading, setLocationLoading] = useState(false);
   const [externalLocations, setExternalLocations] = useState([]);
@@ -136,6 +142,7 @@ const TicketManagementPage = () => {
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [filesToUpload, setFilesToUpload] = useState([]);
+  const [hoveredRowUuid, setHoveredRowUuid] = useState(null);
 
   // Form states (for create/view dialog)
   const [formData, setFormData] = useState({
@@ -148,9 +155,12 @@ const TicketManagementPage = () => {
     is_borrowed_or_rented_or_borrowed_out_date: "",
     is_borrowed_or_rented_or_borrowed_out_return_date: "",
     attached_file: "",
+    receiver_name: "",
+    vehicle_number: "",
+    department_address: "",
   });
 
-  // States for machine search (used in both dialog and update tab)
+  // States for machine search
   const [searchMachineTerm, setSearchMachineTerm] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -158,7 +168,7 @@ const TicketManagementPage = () => {
   const [searchTotalPages, setSearchTotalPages] = useState(1);
   const SEARCH_LIMIT = 5;
 
-  // States for QR Scanner
+  // States for QR/RFID Scanner
   const [openScanDialog, setOpenScanDialog] = useState(false);
   const [openRfidDialog, setOpenRfidDialog] = useState(false);
   const [scannerApiParams, setScannerApiParams] = useState({});
@@ -173,6 +183,7 @@ const TicketManagementPage = () => {
 
   const [categoryOptions, setCategoryOptions] = useState([]);
 
+  // Create Machine Dialog State
   const [openCreateMachineDialog, setOpenCreateMachineDialog] = useState(false);
   const [newMachineData, setNewMachineData] = useState({
     code_machine: "",
@@ -191,6 +202,7 @@ const TicketManagementPage = () => {
     name_category: "",
   });
 
+  // Import Excel Dialog State
   const [openImportDialog, setOpenImportDialog] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -390,14 +402,14 @@ const TicketManagementPage = () => {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
   useEffect(() => {
     fetchExternalLocations();
-
     const fetchCategories = async () => {
       try {
-        const catRes = await api.categories.getAll(); // API này đã được sửa ở bước trước
+        const catRes = await api.categories.getAll();
         if (catRes.success) {
-          setCategoryOptions(catRes.data); // Data là [{ name_category: "..." }]
+          setCategoryOptions(catRes.data);
         }
       } catch (err) {
         console.error("Error fetching categories:", err);
@@ -419,18 +431,11 @@ const TicketManagementPage = () => {
   // --- Handlers ---
   const handleTabChange = (event, newValue) => {
     let logicalTabIndex;
-
     if (hasImportExportTabs) {
-      // Admin hoặc Phòng Cơ Điện: Index hiển thị = Index logic
-      // 0 -> 0 (Nhập), 1 -> 1 (Xuất), 2 -> 2 (Điều chuyển), 3 -> 3 (Cập nhật)
       logicalTabIndex = newValue;
     } else {
-      // Cơ Điện Xưởng: Index hiển thị bị lệch 2
-      // 0 -> 2 (Điều chuyển)
-      // 1 -> 3 (Cập nhật)
       logicalTabIndex = newValue + 2;
     }
-
     setActiveTab(logicalTabIndex);
     setPage(1);
     setStatusFilter("");
@@ -439,31 +444,21 @@ const TicketManagementPage = () => {
 
   const getMachineFiltersForDialog = () => {
     let filters = {};
-
-    // Chỉ áp dụng filter khi dialog đang mở
     if (openDialog) {
-      // Rule (k): Điều chuyển nội bộ
       if (dialogType === "internal") {
         filters.ticket_type = "internal";
-
-        // Yêu cầu 4: Lọc máy cho Cơ Điện Xưởng
         if (isCoDienXuong) {
           filters.filter_by_phongban_id = user.phongban_id;
         }
-      }
-      // Rules (a-j): Các loại phiếu Nhập/Xuất
-      else {
+      } else {
         const currentTicketType = formData.type;
         if (currentTicketType) {
           filters.ticket_type = currentTicketType;
         } else {
-          // <<< SỬA ĐỔI: Nếu chưa chọn loại, mặc định là 'purchased'
-          // để ngăn tìm thấy máy không hợp lệ (ví dụ: máy 'maintenance')
           filters.ticket_type = "purchased";
         }
       }
     }
-
     return filters;
   };
 
@@ -483,6 +478,7 @@ const TicketManagementPage = () => {
       searchMachines(value, 1, filters); // Gọi API
     }, 800);
   };
+
   const handleSearchPageChange = (event, value) => {
     setSearchPage(value);
     const filters = getMachineFiltersForDialog();
@@ -490,7 +486,6 @@ const TicketManagementPage = () => {
       searchMachines(searchMachineTerm, value, filters);
   };
 
-  // Helper for filtering locations in dialog
   const getLocationFilterForType = (type) => {
     if (
       [
@@ -515,7 +510,6 @@ const TicketManagementPage = () => {
     return null;
   };
 
-  // Handlers for Dialog (Create/View Ticket)
   const handleOpenDialog = async (mode, type, ticket = null) => {
     setDialogMode(mode);
     setDialogType(type);
@@ -675,12 +669,10 @@ const TicketManagementPage = () => {
     }
   };
 
-  // Handlers for selecting/removing machines in Dialog
   const handleSelectMachine = (machine) => {
     const isSelected = formData.machines.some(
       (m) => m.uuid_machine === machine.uuid_machine
     );
-
     if (isSelected) {
       showNotification(
         "warning",
@@ -700,7 +692,6 @@ const TicketManagementPage = () => {
         ...m,
         note: "",
       }));
-
       return {
         ...prev,
         machines: [...prev.machines, ...newMachinesWithNote],
@@ -732,7 +723,14 @@ const TicketManagementPage = () => {
     try {
       // 1. Validate machines
       const machinesToSend = formData.machines
-        .map((m) => ({ uuid_machine: m.uuid_machine, note: m.note }))
+        .map((m) => ({
+          uuid_machine: m.uuid_machine,
+          note: m.note,
+          type_machine: m.type_machine,
+          model_machine: m.model_machine,
+          serial_machine: m.serial_machine,
+          code_machine: m.code_machine,
+        }))
         .filter((m) => m.uuid_machine);
       if (machinesToSend.length === 0) {
         showNotification(
@@ -759,60 +757,56 @@ const TicketManagementPage = () => {
 
       // 3. Create FormData object
       const data = new FormData();
+      const catStr = dialogType; // 'import', 'export', 'internal'
 
-      // 4. Append text/JSON data
-      data.append("note", formData.note);
-      data.append("machines", JSON.stringify(machinesToSend));
-      data.append("to_location_uuid", formData.to_location_uuid);
+      // 4. Append required fields for Test Proposal API
+      data.append("category", catStr);
+      data.append("type", formData.type);
       data.append("date", formData.date);
+      data.append("note", formData.note);
+      data.append("to_location_uuid", formData.to_location_uuid);
+      data.append("machines", JSON.stringify(machinesToSend));
 
-      let successMessage = "";
-      let apiCall;
-
-      if (dialogType === "internal") {
-        data.append("transfer_date", formData.date); // Server.js dùng transfer_date
-        apiCall = api.internal_transfers.create(data);
-        successMessage = "Tạo phiếu điều chuyển thành công";
-      } else {
-        // Append borrow/rent info
+      // Append extra fields for borrow/rent
+      if (formData.is_borrowed_or_rented_or_borrowed_out_name)
         data.append(
           "is_borrowed_or_rented_or_borrowed_out_name",
-          formData.is_borrowed_or_rented_or_borrowed_out_name || ""
+          formData.is_borrowed_or_rented_or_borrowed_out_name
         );
+      if (formData.is_borrowed_or_rented_or_borrowed_out_date)
         data.append(
           "is_borrowed_or_rented_or_borrowed_out_date",
-          formData.is_borrowed_or_rented_or_borrowed_out_date || ""
+          formData.is_borrowed_or_rented_or_borrowed_out_date
         );
+      if (formData.is_borrowed_or_rented_or_borrowed_out_return_date)
         data.append(
           "is_borrowed_or_rented_or_borrowed_out_return_date",
           formData.is_borrowed_or_rented_or_borrowed_out_return_date || ""
         );
 
-        if (dialogType === "import") {
-          data.append("import_type", formData.type);
-          data.append("import_date", formData.date);
-          apiCall = api.imports.create(data);
-          successMessage = "Tạo phiếu nhập thành công";
-        } else {
-          data.append("export_type", formData.type);
-          data.append("export_date", formData.date);
-          apiCall = api.exports.create(data);
-          successMessage = "Tạo phiếu xuất thành công";
-        }
+      if (dialogType === "export") {
+        data.append("receiver_name", formData.receiver_name || "");
+        data.append("vehicle_number", formData.vehicle_number || "");
+        data.append("department_address", formData.department_address || "");
       }
 
       // 5. Append files
-      filesToUpload.forEach((file) => {
-        data.append("attachments", file); // Tên field 'attachments' phải khớp với server.js
-      });
+      filesToUpload.forEach((f) => data.append("attachments", f));
 
       // 6. Make API call
-      await apiCall;
-      showNotification("success", "Thành công", successMessage);
+      // const res = await api.test_proposals.create(data);
+      await api.test_proposals.create(data);
+
+      showNotification(
+        "success",
+        "Thành công",
+        // `Đã tạo phiếu! ID Local: ${res.data.local_uuid}`
+        `Đã tạo phiếu thành công!`
+      );
       handleCloseDialog();
-      fetchData();
+      fetchData(); // Reload (dù không có dữ liệu nhưng để reset form)
     } catch (error) {
-      console.error("Error creating ticket:", error);
+      console.error("Error creating test proposal:", error);
       showNotification(
         "error",
         "Thao tác thất bại",
@@ -823,73 +817,12 @@ const TicketManagementPage = () => {
     }
   };
 
-  // Handler for updating ticket status (Approve/Cancel)
-  const handleUpdateStatus = async (uuid, status, type) => {
-    try {
-      if (type === "import") {
-        await api.imports.updateStatus(uuid, status);
-      } else if (type === "export") {
-        await api.exports.updateStatus(uuid, status);
-      } else if (type === "internal") {
-        if (status === "cancelled") {
-          await api.internal_transfers.cancel(uuid);
-        } else {
-          console.warn("Chỉ có thể Hủy phiếu từ hàm này");
-          return;
-        }
-      }
-      showNotification(
-        "success",
-        "Thành công",
-        "Cập nhật trạng thái thành công"
-      );
-      fetchData();
-      handleCloseDialog();
-    } catch (error) {
-      console.error("Error updating status:", error);
-      showNotification("error", "Thất bại", "Lỗi khi cập nhật trạng thái");
-    }
-  };
-
-  const handleConfirmTicket = async (uuid) => {
-    try {
-      await api.internal_transfers.confirm(uuid);
-      showNotification("success", "Thành công", "Xác nhận phiếu thành công");
-      fetchData();
-      handleCloseDialog();
-    } catch (error) {
-      console.error("Error confirming ticket:", error);
-      showNotification(
-        "error",
-        "Thất bại",
-        error.response?.data?.message || "Lỗi khi xác nhận phiếu"
-      );
-    }
-  };
-
-  const handleApproveTicket = async (uuid) => {
-    try {
-      await api.internal_transfers.approve(uuid);
-      showNotification("success", "Thành công", "Duyệt phiếu thành công");
-      fetchData();
-      handleCloseDialog();
-    } catch (error) {
-      console.error("Error approving ticket:", error);
-      showNotification(
-        "error",
-        "Thất bại",
-        error.response?.data?.message || "Lỗi khi duyệt phiếu"
-      );
-    }
-  };
-
-  // Handler for closing notification
   const handleCloseNotification = (event, reason) => {
     if (reason === "clickaway") return;
     setNotification({ ...notification, open: false });
   };
 
-  // <<< THÊM MỚI: Handlers cho Dialog Tạo Máy Mới (từ MachineListPage)
+  // --- Create Machine Logic ---
   const validateMachineData = () => {
     const errors = [];
     if (
@@ -944,7 +877,6 @@ const TicketManagementPage = () => {
   };
 
   const handleGenerateCodeForNewMachine = async () => {
-    // Chỉ chạy khi có nhập Hãng SX
     if (newMachineData.manufacturer) {
       try {
         const result = await api.machines.getNextCode(
@@ -973,13 +905,9 @@ const TicketManagementPage = () => {
         );
         return;
       }
-
-      // 1. Create new machine
       const result = await api.machines.create(newMachineData);
       if (result.success) {
-        // 2. Add machine to ticket
         handleSelectMachine(result.data);
-
         showNotification(
           "success",
           "Tạo máy thành công!",
@@ -1004,9 +932,8 @@ const TicketManagementPage = () => {
       );
     }
   };
-  // >>> KẾT THÚC THÊM MỚI
 
-  // <<< THÊM MỚI: Handlers cho Dialog Import Excel (từ MachineListPage)
+  // --- Import Excel Logic ---
   const handleOpenImportDialog = () => {
     setImportFile(null);
     setFileName("");
@@ -1038,7 +965,6 @@ const TicketManagementPage = () => {
       );
       return;
     }
-
     setIsImporting(true);
     setImportResults(null);
 
@@ -1061,7 +987,6 @@ const TicketManagementPage = () => {
         const missingHeaders = requiredHeaders.filter(
           (h) => !headersInFile.includes(h)
         );
-
         if (missingHeaders.length > 0) {
           showNotification(
             "error",
@@ -1124,11 +1049,9 @@ const TicketManagementPage = () => {
           return newRow;
         });
 
-        // Gửi dữ liệu lên backend
         const result = await api.machines.batchImport({
           machines: machinesToImport,
         });
-
         if (result.success) {
           setImportResults(result.data);
           const errorCount = result.data.errorCount;
@@ -1137,49 +1060,41 @@ const TicketManagementPage = () => {
             "Hoàn tất import",
             `Thành công: ${result.data.successCount}, Thất bại: ${errorCount}`
           );
-
           if (result.data.successes && result.data.successes.length > 0) {
-            // Logic tự động thêm máy vào phiếu
             let addedCount = 0;
             for (const newMachine of result.data.successes) {
               if (newMachine.serial) {
                 try {
-                  // Dùng api.machines.getBySerial để lấy full data (bao gồm uuid)
                   const machineData = await api.machines.getBySerial(
                     newMachine.serial,
-                    { ticket_type: "purchased" } // Giả định là máy mới
+                    { ticket_type: "purchased" }
                   );
                   if (machineData.success) {
                     handleSelectMachine(machineData.data);
                     addedCount++;
                   }
                 } catch (findErr) {
-                  console.error("Lỗi khi tự động tìm máy vừa import:", findErr);
+                  console.error("Lỗi tìm máy:", findErr);
                 }
               }
             }
-            if (addedCount > 0) {
+            if (addedCount > 0)
               showNotification(
                 "info",
                 "Đã thêm máy",
                 `Đã tự động thêm ${addedCount} máy vào phiếu.`
               );
-            }
           }
         } else {
           showNotification(
             "error",
             "Lỗi import",
-            result.message || "Lỗi không xác định từ server"
+            result.message || "Lỗi không xác định"
           );
         }
       } catch (err) {
-        console.error("Error parsing or importing file:", err);
-        showNotification(
-          "error",
-          "Lỗi xử lý file",
-          err.response?.data?.message || err.message || "Không thể đọc file"
-        );
+        console.error("Error parsing file:", err);
+        showNotification("error", "Lỗi xử lý file", err.message);
       } finally {
         setIsImporting(false);
       }
@@ -1249,45 +1164,291 @@ const TicketManagementPage = () => {
         item.uuid_machine_internal_transfer;
       const date = item.import_date || item.export_date || item.transfer_date;
       const type = item.import_type || item.export_type || "internal";
+
+      // --- Helper vẽ luồng duyệt chi tiết (Full Name + MaNV) ---
+      const renderDetailedFlow = (flow) => {
+        if (!flow || flow.length === 0)
+          return (
+            <Typography variant="caption" color="text.secondary">
+              Chưa có cấu hình luồng duyệt
+            </Typography>
+          );
+
+        // 1. Gom nhóm theo step_flow
+        const groupedSteps = flow.reduce((acc, curr) => {
+          const step = curr.step_flow ?? 0;
+          if (!acc[step]) acc[step] = [];
+          acc[step].push(curr);
+          return acc;
+        }, {});
+
+        // Lấy danh sách các bước và sắp xếp tăng dần
+        const sortedStepKeys = Object.keys(groupedSteps).sort(
+          (a, b) => Number(a) - Number(b)
+        );
+
+        return (
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              flexWrap: "nowrap",
+              gap: 2,
+              py: 1,
+              overflowX: "auto",
+            }}
+          >
+            <Typography
+              variant="body2"
+              sx={{ fontWeight: 700, mr: 1, whiteSpace: "nowrap" }}
+            >
+              <WifiTethering
+                sx={{ fontSize: 16, verticalAlign: "text-top", mr: 0.5 }}
+              />
+              Luồng duyệt
+            </Typography>
+
+            {sortedStepKeys.map((stepKey, groupIndex) => {
+              const group = groupedSteps[stepKey];
+              const isLastGroup = groupIndex === sortedStepKeys.length - 1;
+
+              return (
+                <React.Fragment key={stepKey}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 1,
+                      justifyContent: "center",
+                    }}
+                  >
+                    {group.map((step, idx) => {
+                      // Logic màu sắc
+                      const statusText = step.status_text || "Đang chờ duyệt";
+                      const statusLower = statusText.toLowerCase();
+
+                      const isApproved =
+                        statusLower.includes("đã duyệt") ||
+                        statusLower.includes("đồng ý");
+                      const isRejected =
+                        statusLower.includes("hủy") ||
+                        statusLower.includes("từ chối");
+                      const isForwarded = step.is_forward === 1;
+
+                      const isSkipped = statusLower.includes("đồng cấp");
+
+                      let statusColor = "#ff9800";
+                      let bgColor = "#fff3e0";
+                      let borderColor = "#ffcc80";
+                      let opacity = 1;
+
+                      if (isApproved) {
+                        statusColor = "#2e7d32";
+                        bgColor = "#e8f5e9";
+                        borderColor = "#a5d6a7";
+                      } else if (isRejected) {
+                        statusColor = "#d32f2f";
+                        bgColor = "#ffebee";
+                        borderColor = "#ef9a9a";
+                      } else if (isSkipped) {
+                        statusColor = "#9e9e9e";
+                        bgColor = "#f5f5f5";
+                        borderColor = "#e0e0e0";
+                        opacity = 0.7;
+                      }
+
+                      return (
+                        <Box
+                          key={idx}
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            opacity: opacity,
+                          }}
+                        >
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 1.5,
+                              px: 2,
+                              py: 0.5,
+                              borderRadius: "20px",
+                              backgroundColor: bgColor,
+                              border: `1px solid ${
+                                step.isFinalFlow ? "#FFD700" : borderColor
+                              }`,
+                              boxShadow: step.isFinalFlow
+                                ? "0 0 5px rgba(255, 215, 0, 0.5)"
+                                : "none",
+                              minWidth: "200px",
+                            }}
+                          >
+                            <Avatar
+                              sx={{
+                                width: 22,
+                                height: 22,
+                                fontSize: "0.7rem",
+                                bgcolor: statusColor,
+                                color: "#fff",
+                                fontWeight: "bold",
+                              }}
+                            >
+                              {isSkipped ? "-" : Number(stepKey) + 1}
+                            </Avatar>
+                            <Box>
+                              <Box
+                                sx={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 1,
+                                }}
+                              >
+                                <Typography
+                                  variant="body2"
+                                  sx={{
+                                    fontWeight: 600,
+                                    fontSize: "0.85rem",
+                                    color: isSkipped
+                                      ? "text.secondary"
+                                      : "text.primary",
+                                  }}
+                                >
+                                  {step.ten_nv}
+                                </Typography>
+                                {isForwarded && (
+                                  <Chip
+                                    label="Chuyển tiếp"
+                                    size="small"
+                                    variant="outlined"
+                                    sx={{
+                                      height: 16,
+                                      fontSize: "0.6rem",
+                                      borderColor: "#9e9e9e",
+                                      color: "#616161",
+                                      backgroundColor: "#ffffff80",
+                                    }}
+                                  />
+                                )}
+                              </Box>
+
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  display: "block",
+                                  lineHeight: 1,
+                                  color: "text.secondary",
+                                }}
+                              >
+                                {step.ma_nv} •{" "}
+                                <span
+                                  style={{
+                                    color: statusColor,
+                                    fontStyle: "italic",
+                                    fontWeight: "bold",
+                                  }}
+                                >
+                                  {statusText}
+                                </span>
+                              </Typography>
+                            </Box>
+                          </Box>
+                        </Box>
+                      );
+                    })}
+                  </Box>
+                  {!isLastGroup && (
+                    <Box
+                      sx={{
+                        mx: 0.5,
+                        width: 20,
+                        height: 2,
+                        bgcolor: "#bdbdbd",
+                        flexShrink: 0,
+                      }}
+                    />
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </Box>
+        );
+      };
+
+      const isHovered = hoveredRowUuid === uuid;
+      const hoverBackgroundColor = "rgba(0, 0, 0, 0.04)";
       return (
-        <TableRow
-          key={uuid}
-          hover
-          onClick={() =>
-            handleOpenDialog(
-              "view",
-              activeTab === 0
-                ? "import"
-                : activeTab === 1
-                ? "export"
-                : "internal",
-              item
-            )
-          }
-          sx={{ cursor: "pointer" }}
-        >
-          <TableCell>{formatDate(date)}</TableCell>
-          <TableCell>{getTypeLabel(type)}</TableCell>
-          {activeTab === 2 ? (
-            <TableCell colSpan={2}>{item.to_location_name || "-"}</TableCell>
-          ) : (
-            <TableCell colSpan={2}>{item.to_location_name || "-"}</TableCell>
-          )}
-          <TableCell align="center">{item.machine_count || 0}</TableCell>
-          <TableCell>
-            <Chip
-              label={getStatusLabel(item.status)}
-              color={getStatusColor(item.status)}
-              size="small"
-            />
-          </TableCell>
-          <TableCell>{item.note || "-"}</TableCell>
-        </TableRow>
+        <React.Fragment key={uuid}>
+          {/* HÀNG 1: THÔNG TIN CHUNG */}
+          <TableRow
+            onMouseEnter={() => setHoveredRowUuid(uuid)}
+            onMouseLeave={() => setHoveredRowUuid(null)}
+            onClick={() =>
+              handleOpenDialog(
+                "view",
+                activeTab === 0
+                  ? "import"
+                  : activeTab === 1
+                  ? "export"
+                  : "internal",
+                item
+              )
+            }
+            sx={{
+              cursor: "pointer",
+              backgroundColor: isHovered ? hoverBackgroundColor : "inherit",
+              "& td": { borderBottom: "none", pb: 0.5 },
+            }}
+          >
+            <TableCell>{formatDate(date)}</TableCell>
+            <TableCell>{getTypeLabel(type)}</TableCell>
+            {activeTab === 2 ? (
+              <TableCell colSpan={2}>{item.to_location_name || "-"}</TableCell>
+            ) : (
+              <TableCell colSpan={2}>{item.to_location_name || "-"}</TableCell>
+            )}
+            <TableCell align="center">{item.machine_count || 0}</TableCell>
+            <TableCell>
+              <Chip
+                label={getStatusLabel(item.status)}
+                color={getStatusColor(item.status)}
+                size="small"
+              />
+            </TableCell>
+            <TableCell>{item.note || "-"}</TableCell>
+          </TableRow>
+
+          {/* HÀNG 2: LUỒNG DUYỆT CHI TIẾT */}
+          <TableRow
+            onMouseEnter={() => setHoveredRowUuid(uuid)}
+            onMouseLeave={() => setHoveredRowUuid(null)}
+            onClick={() =>
+              handleOpenDialog(
+                "view",
+                activeTab === 0
+                  ? "import"
+                  : activeTab === 1
+                  ? "export"
+                  : "internal",
+                item
+              )
+            }
+            sx={{
+              cursor: "pointer",
+              backgroundColor: isHovered
+                ? hoverBackgroundColor
+                : "rgba(249, 250, 251, 0.4)",
+            }}
+          >
+            <TableCell colSpan={7} sx={{ pt: 0.5, pb: 2 }}>
+              {renderDetailedFlow(item.approval_flow)}
+            </TableCell>
+          </TableRow>
+        </React.Fragment>
       );
     });
   };
 
-  // --- JSX ---
   return (
     <>
       <NavigationBar />
@@ -1317,7 +1478,7 @@ const TicketManagementPage = () => {
                   textTransform: "uppercase",
                 }}
               >
-                Quản lý phiếu 🐧🐧🐧
+                Quản lý phiếu
               </Typography>
               <Typography
                 variant={isMobile ? "body1" : "h6"}
@@ -1389,6 +1550,7 @@ const TicketManagementPage = () => {
                   iconPosition="start"
                 />
               </Tabs>
+
               {activeTab === 2 ? (
                 <Stack
                   direction={{ xs: "column", sm: "row" }}
@@ -1413,7 +1575,7 @@ const TicketManagementPage = () => {
                         width: { xs: "100%", sm: "auto" },
                       }}
                     >
-                      Tạo phiếu điều chuyển 🐧🐧🐧
+                      Tạo phiếu điều chuyển
                     </Button>
                   )}
 
@@ -1467,7 +1629,7 @@ const TicketManagementPage = () => {
                         width: { xs: "100%", sm: "auto" },
                       }}
                     >
-                      Tạo phiếu {activeTab === 0 ? "nhập" : "xuất"} 🐧🐧🐧
+                      Tạo phiếu {activeTab === 0 ? "nhập" : "xuất"}
                     </Button>
                   )}
                   <Button
@@ -1601,6 +1763,7 @@ const TicketManagementPage = () => {
                 </Grid>
               )}
             </Grid>
+
             <TableContainer
               component={Paper}
               elevation={0}
@@ -1666,7 +1829,7 @@ const TicketManagementPage = () => {
           </CardContent>
         </Card>
 
-        {/* Create/View Ticket Dialog */}
+        {/* Dialog Create/View Ticket */}
         <Dialog
           open={openDialog}
           onClose={handleCloseDialog}
@@ -1698,7 +1861,7 @@ const TicketManagementPage = () => {
                         : dialogType === "export"
                         ? "xuất"
                         : "điều chuyển"
-                    } 🐧🐧🐧`
+                    }`
                   : "Chi tiết phiếu"}
               </Typography>
               {dialogMode === "view" && selectedTicket && (
@@ -1912,6 +2075,62 @@ const TicketManagementPage = () => {
                           </CardContent>
                         </Card>
                       )}
+                      {dialogType === "export" && (
+                        <Card
+                          variant="outlined"
+                          sx={{ borderRadius: "12px", mb: 2 }}
+                        >
+                          <CardContent>
+                            <Typography variant="h6" gutterBottom>
+                              Thông tin bổ sung
+                            </Typography>
+                            <Stack spacing={2}>
+                              <TextField
+                                fullWidth
+                                label="Họ tên người nhận"
+                                value={formData.receiver_name}
+                                onChange={(e) =>
+                                  handleFormChange(
+                                    "receiver_name",
+                                    e.target.value
+                                  )
+                                }
+                                disabled={dialogMode === "view"}
+                              />
+
+                              <Stack
+                                direction={{ xs: "column", sm: "row" }}
+                                spacing={2}
+                              >
+                                <TextField
+                                  fullWidth
+                                  label="Số xe"
+                                  value={formData.vehicle_number}
+                                  onChange={(e) =>
+                                    handleFormChange(
+                                      "vehicle_number",
+                                      e.target.value
+                                    )
+                                  }
+                                  disabled={dialogMode === "view"}
+                                />
+                                <TextField
+                                  fullWidth
+                                  label="Địa chỉ (Bộ phận)"
+                                  value={formData.department_address}
+                                  onChange={(e) =>
+                                    handleFormChange(
+                                      "department_address",
+                                      e.target.value
+                                    )
+                                  }
+                                  disabled={dialogMode === "view"}
+                                />
+                              </Stack>
+                            </Stack>
+                          </CardContent>
+                        </Card>
+                      )}
                       <TextField
                         fullWidth
                         type="date"
@@ -1991,6 +2210,7 @@ const TicketManagementPage = () => {
                             : {}
                         }
                       />
+
                       {dialogMode === "create" && (
                         <Card variant="outlined" sx={{ borderRadius: "12px" }}>
                           <CardContent>
@@ -2690,6 +2910,266 @@ const TicketManagementPage = () => {
                           </Typography>
                         </Alert>
                       )}
+                      {dialogMode === "view" &&
+                        selectedTicket?.approval_flow &&
+                        selectedTicket.approval_flow.length > 0 && (
+                          <Card
+                            variant="outlined"
+                            sx={{ borderRadius: "12px", mt: 2, mb: 2 }}
+                          >
+                            <CardContent>
+                              <Typography
+                                variant="h6"
+                                gutterBottom
+                                sx={{
+                                  fontWeight: 600,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 1,
+                                }}
+                              >
+                                <WifiTethering
+                                  sx={{ transform: "rotate(90deg)" }}
+                                />{" "}
+                                Quy trình duyệt
+                              </Typography>
+
+                              {/* Container chính: Scroll ngang nếu quá dài */}
+                              <Box
+                                sx={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  flexWrap: "nowrap", // Không xuống dòng để giữ flow ngang
+                                  gap: 2,
+                                  mt: 2,
+                                  overflowX: "auto",
+                                  pb: 1, // Padding bottom để scrollbar không che content
+                                }}
+                              >
+                                {(() => {
+                                  // 1. Gom nhóm các bước duyệt theo step_flow
+                                  const groupedSteps =
+                                    selectedTicket.approval_flow.reduce(
+                                      (acc, curr) => {
+                                        const step = curr.step_flow ?? 0;
+                                        if (!acc[step]) acc[step] = [];
+                                        acc[step].push(curr);
+                                        return acc;
+                                      },
+                                      {}
+                                    );
+
+                                  // 2. Sắp xếp key để hiển thị theo thứ tự: Cấp 1 -> Cấp 2...
+                                  const sortedStepKeys = Object.keys(
+                                    groupedSteps
+                                  ).sort((a, b) => Number(a) - Number(b));
+
+                                  return sortedStepKeys.map(
+                                    (stepKey, groupIndex) => {
+                                      const group = groupedSteps[stepKey];
+                                      const isLastGroup =
+                                        groupIndex ===
+                                        sortedStepKeys.length - 1;
+
+                                      return (
+                                        <React.Fragment key={stepKey}>
+                                          {/* Cột chứa các người duyệt trong cùng 1 cấp (xếp dọc) */}
+                                          <Box
+                                            sx={{
+                                              display: "flex",
+                                              flexDirection: "column",
+                                              gap: 1.5,
+                                              justifyContent: "center",
+                                            }}
+                                          >
+                                            {group.map((step, index) => {
+                                              // --- LOGIC MÀU SẮC & TRẠNG THÁI ---
+                                              const statusText =
+                                                step.status_text ||
+                                                "Đang chờ duyệt";
+                                              const statusLower =
+                                                statusText.toLowerCase();
+
+                                              const isApproved =
+                                                statusLower.includes(
+                                                  "đã duyệt"
+                                                ) ||
+                                                statusLower.includes("đồng ý");
+                                              const isRejected =
+                                                statusLower.includes("hủy") ||
+                                                statusLower.includes("từ chối");
+                                              const isForwarded =
+                                                step.is_forward === 1;
+                                              const isSkipped =
+                                                statusLower.includes(
+                                                  "đồng cấp"
+                                                );
+
+                                              // Màu mặc định (Chờ duyệt - Cam)
+                                              let statusColor = "#ff9800";
+                                              let bgColor = "#fff3e0";
+                                              let borderColor = "#ffcc80";
+                                              let opacity = 1;
+
+                                              if (isApproved) {
+                                                // Xanh lá
+                                                statusColor = "#2e7d32";
+                                                bgColor = "#e8f5e9";
+                                                borderColor = "#a5d6a7";
+                                              } else if (isRejected) {
+                                                // Đỏ
+                                                statusColor = "#d32f2f";
+                                                bgColor = "#ffebee";
+                                                borderColor = "#ef9a9a";
+                                              } else if (isSkipped) {
+                                                // Xám (Đồng cấp đã duyệt)
+                                                statusColor = "#757575";
+                                                bgColor = "#f5f5f5";
+                                                borderColor = "#e0e0e0";
+                                                opacity = 0.7;
+                                              }
+
+                                              return (
+                                                <Box
+                                                  key={index}
+                                                  sx={{
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    opacity: opacity,
+                                                  }}
+                                                >
+                                                  <Box
+                                                    sx={{
+                                                      display: "flex",
+                                                      alignItems: "center",
+                                                      gap: 1.5,
+                                                      px: 2.5,
+                                                      py: 1,
+                                                      borderRadius: "24px",
+                                                      backgroundColor: bgColor,
+                                                      border: `1px solid ${
+                                                        step.isFinalFlow
+                                                          ? "#FFD700"
+                                                          : borderColor
+                                                      }`,
+                                                      boxShadow:
+                                                        step.isFinalFlow &&
+                                                        !isSkipped
+                                                          ? "0 0 8px rgba(255, 215, 0, 0.6)"
+                                                          : "none",
+                                                      minWidth: "240px",
+                                                      transition:
+                                                        "transform 0.2s",
+                                                      "&:hover": {
+                                                        transform: isSkipped
+                                                          ? "none"
+                                                          : "translateY(-2px)",
+                                                      },
+                                                    }}
+                                                  >
+                                                    <Avatar
+                                                      sx={{
+                                                        width: 30,
+                                                        height: 30,
+                                                        fontSize: "0.9rem",
+                                                        bgcolor: statusColor,
+                                                        color: "#fff",
+                                                        fontWeight: "bold",
+                                                      }}
+                                                    >
+                                                      {isSkipped
+                                                        ? "-"
+                                                        : Number(stepKey) + 1}
+                                                    </Avatar>
+
+                                                    <Box>
+                                                      <Box
+                                                        sx={{
+                                                          display: "flex",
+                                                          alignItems: "center",
+                                                          gap: 1,
+                                                        }}
+                                                      >
+                                                        <Typography
+                                                          variant="body2"
+                                                          sx={{
+                                                            fontWeight: 700,
+                                                            fontSize: "0.95rem",
+                                                            color: isSkipped
+                                                              ? "text.secondary"
+                                                              : "text.primary",
+                                                          }}
+                                                        >
+                                                          {step.ten_nv}
+                                                        </Typography>
+                                                        {isForwarded && (
+                                                          <Chip
+                                                            label="Chuyển tiếp"
+                                                            size="small"
+                                                            sx={{
+                                                              height: 20,
+                                                              fontSize:
+                                                                "0.65rem",
+                                                              backgroundColor:
+                                                                "#eeeeee",
+                                                              color: "#fd3333",
+                                                              border:
+                                                                "1px solid #bdbdbd",
+                                                            }}
+                                                          />
+                                                        )}
+                                                      </Box>
+
+                                                      <Typography
+                                                        variant="caption"
+                                                        sx={{
+                                                          display: "block",
+                                                          lineHeight: 1.2,
+                                                          fontSize: "0.8rem",
+                                                          mt: 0.5,
+                                                          color:
+                                                            "text.secondary",
+                                                        }}
+                                                      >
+                                                        {step.ma_nv} •{" "}
+                                                        <span
+                                                          style={{
+                                                            color: statusColor,
+                                                            fontStyle: "italic",
+                                                            fontWeight: "bold",
+                                                          }}
+                                                        >
+                                                          {statusText}
+                                                        </span>
+                                                      </Typography>
+                                                    </Box>
+                                                  </Box>
+                                                </Box>
+                                              );
+                                            })}
+                                          </Box>
+
+                                          {/* Mũi tên nối giữa các cấp (trừ cấp cuối) */}
+                                          {!isLastGroup && (
+                                            <Box
+                                              sx={{
+                                                mx: 1,
+                                                minWidth: 20,
+                                                height: 2,
+                                                bgcolor: "#bdbdbd",
+                                                flexShrink: 0,
+                                              }}
+                                            />
+                                          )}
+                                        </React.Fragment>
+                                      );
+                                    }
+                                  );
+                                })()}
+                              </Box>
+                            </CardContent>
+                          </Card>
+                        )}
                     </>
                   );
                 })()}
@@ -2704,218 +3184,8 @@ const TicketManagementPage = () => {
               gap: 2,
             }}
           >
-            <Box
-              sx={{
-                display: "flex",
-                gap: 2,
-                width: { xs: "100%", sm: "auto" },
-                flexDirection: { xs: "column", sm: "row" },
-              }}
-            >
-              {dialogMode === "view" &&
-              selectedTicket?.status &&
-              dialogType === "import" ? (
-                <>
-                  {/* Nút Duyệt (Chỉ Admin) */}
-                  {isAdmin && selectedTicket.status === "pending" && (
-                    <Button
-                      variant="contained"
-                      color="success"
-                      onClick={() =>
-                        handleUpdateStatus(
-                          selectedTicket.uuid_machine_import,
-                          "completed",
-                          "import"
-                        )
-                      }
-                      disabled={loading}
-                      sx={{
-                        borderRadius: "12px",
-                        px: 3,
-                        width: { xs: "100%", sm: "auto" },
-                      }}
-                    >
-                      {loading ? <CircularProgress size={24} /> : "Duyệt phiếu"}
-                    </Button>
-                  )}
-                  {/* Nút Hủy (Admin hoặc Người tạo) */}
-                  {(isAdmin || selectedTicket.is_creator) &&
-                    selectedTicket.status === "pending" && (
-                      <Button
-                        variant="contained"
-                        color="error"
-                        onClick={() =>
-                          handleUpdateStatus(
-                            selectedTicket.uuid_machine_import,
-                            "cancelled",
-                            "import"
-                          )
-                        }
-                        disabled={loading}
-                        sx={{
-                          borderRadius: "12px",
-                          px: 3,
-                          width: { xs: "100%", sm: "auto" },
-                        }}
-                      >
-                        {loading ? <CircularProgress size={24} /> : "Hủy phiếu"}
-                      </Button>
-                    )}
-                </>
-              ) : dialogMode === "view" &&
-                selectedTicket?.status &&
-                dialogType === "export" ? (
-                <>
-                  {/* Nút Duyệt (Chỉ Admin) */}
-                  {isAdmin && selectedTicket.status === "pending" && (
-                    <Button
-                      variant="contained"
-                      color="success"
-                      onClick={() =>
-                        handleUpdateStatus(
-                          selectedTicket.uuid_machine_export,
-                          "completed",
-                          "export"
-                        )
-                      }
-                      disabled={loading}
-                      sx={{
-                        borderRadius: "12px",
-                        px: 3,
-                        width: { xs: "100%", sm: "auto" },
-                      }}
-                    >
-                      {loading ? <CircularProgress size={24} /> : "Duyệt phiếu"}
-                    </Button>
-                  )}
-                  {/* Nút Hủy (Admin hoặc Người tạo) */}
-                  {(isAdmin || selectedTicket.is_creator) &&
-                    selectedTicket.status === "pending" && (
-                      <Button
-                        variant="contained"
-                        color="error"
-                        onClick={() =>
-                          handleUpdateStatus(
-                            selectedTicket.uuid_machine_export,
-                            "cancelled",
-                            "export"
-                          )
-                        }
-                        disabled={loading}
-                        sx={{
-                          borderRadius: "12px",
-                          px: 3,
-                          width: { xs: "100%", sm: "auto" },
-                        }}
-                      >
-                        {loading ? <CircularProgress size={24} /> : "Hủy phiếu"}
-                      </Button>
-                    )}
-                </>
-              ) : dialogMode === "view" &&
-                selectedTicket?.status &&
-                dialogType === "internal" ? (
-                <>
-                  {(() => {
-                    const ticket = selectedTicket;
-                    const uuid = ticket.uuid_machine_internal_transfer;
-
-                    // === SỬA TẠI ĐÂY: Dùng cờ từ Backend ===
-                    // Backend đã tính toán sẵn logic:
-                    // 1. Trạng thái là pending_confirmation
-                    // 2. User thuộc phòng ban đích
-                    // 3. User không phải người tạo
-                    const canConfirm = ticket.can_confirm;
-                    // ========================================
-
-                    // Admin duyệt phiếu khi đã xác nhận
-                    const canApprove =
-                      ticket.status === "pending_approval" && isAdmin;
-
-                    // Admin hoặc Người tạo có thể hủy
-                    // Backend trả về is_creator, hoặc so sánh thủ công nếu backend chưa trả
-                    const isCreator =
-                      ticket.is_creator || user.id === ticket.created_by;
-
-                    const canCancel =
-                      (ticket.status === "pending_confirmation" ||
-                        ticket.status === "pending_approval") &&
-                      (isAdmin || isCreator);
-
-                    return (
-                      <>
-                        {/* Nút Xác nhận (User 2) */}
-                        {canConfirm && (
-                          <Button
-                            variant="contained"
-                            color="primary"
-                            onClick={() => handleConfirmTicket(uuid)}
-                            disabled={loading}
-                            sx={{
-                              borderRadius: "12px",
-                              px: 3,
-                              width: { xs: "100%", sm: "auto" },
-                            }}
-                          >
-                            {loading ? (
-                              <CircularProgress size={24} />
-                            ) : (
-                              "Xác nhận"
-                            )}
-                          </Button>
-                        )}
-
-                        {/* Nút Duyệt (Admin) */}
-                        {canApprove && (
-                          <Button
-                            variant="contained"
-                            color="success"
-                            onClick={() => handleApproveTicket(uuid)}
-                            disabled={loading}
-                            sx={{
-                              borderRadius: "12px",
-                              px: 3,
-                              width: { xs: "100%", sm: "auto" },
-                            }}
-                          >
-                            {loading ? (
-                              <CircularProgress size={24} />
-                            ) : (
-                              "Duyệt phiếu"
-                            )}
-                          </Button>
-                        )}
-
-                        {/* Nút Hủy (Admin hoặc Creator) */}
-                        {canCancel && (
-                          <Button
-                            variant="contained"
-                            color="error"
-                            onClick={() =>
-                              handleUpdateStatus(uuid, "cancelled", "internal")
-                            }
-                            disabled={loading}
-                            sx={{
-                              borderRadius: "12px",
-                              px: 3,
-                              width: { xs: "100%", sm: "auto" },
-                            }}
-                          >
-                            {loading ? (
-                              <CircularProgress size={24} />
-                            ) : (
-                              "Hủy phiếu"
-                            )}
-                          </Button>
-                        )}
-                      </>
-                    );
-                  })()}
-                </>
-              ) : (
-                <Box sx={{ width: "1px" }} /> // Placeholder
-              )}
-            </Box>
+            <Box sx={{ width: "1px" }} />{" "}
+            {/* Placeholder - no action buttons for view mode */}
             <Box
               sx={{
                 display: "flex",
@@ -2948,7 +3218,7 @@ const TicketManagementPage = () => {
                     width: { xs: "100%", sm: "auto" },
                   }}
                 >
-                  {loading ? <CircularProgress size={24} /> : "Tạo phiếu"}
+                  {loading ? <CircularProgress size={24} /> : "Tạo Phiếu"}
                 </Button>
               )}
             </Box>
@@ -3616,4 +3886,4 @@ const TicketManagementPage = () => {
   );
 };
 
-export default TicketManagementPage;
+export default TestProposalPage;
