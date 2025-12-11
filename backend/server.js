@@ -1401,58 +1401,43 @@ app.get("/api/machines/search", authenticateToken, async (req, res) => {
 app.get("/api/machines/next-code", authenticateToken, async (req, res) => {
   try {
     const { prefix } = req.query;
+    if (!prefix) return res.json({ success: true, nextCode: "" });
 
-    if (!prefix) {
-      return res.json({ success: true, nextCode: "" });
-    }
-
-    // 1. Chuẩn hóa prefix: Viết hoa, bỏ khoảng trắng thừa, bỏ ký tự đặc biệt
-    // Ví dụ: "Naomoto " -> "NAOMOTO"
     const cleanPrefix = prefix
       .trim()
       .toUpperCase()
       .replace(/[^A-Z0-9]/g, "");
 
-    if (!cleanPrefix) {
-      return res.json({ success: true, nextCode: "" });
-    }
-
-    // 2. Tìm mã máy lớn nhất đang bắt đầu bằng prefix này trong DB
-    // Chúng ta tìm các mã có dạng: PREFIXXXXXX (ví dụ NAOMOTO00001)
+    // Lấy tất cả mã để tìm số lớn nhất
     const [rows] = await tpmConnection.query(
-      `
-      SELECT code_machine 
-      FROM tb_machine 
-      WHERE code_machine LIKE CONCAT(?, '%')
-      AND code_machine REGEXP CONCAT('^', ?, '[0-9]+$')
-      ORDER BY LENGTH(code_machine) DESC, code_machine DESC
-      LIMIT 1
-      `,
-      [cleanPrefix, cleanPrefix]
+      `SELECT code_machine FROM tb_machine WHERE code_machine LIKE CONCAT(?, '%')`,
+      [cleanPrefix]
     );
 
-    let nextSeq = 1;
+    let maxSeq = 0;
 
-    if (rows.length > 0) {
-      const currentCode = rows[0].code_machine;
-      // Cắt bỏ phần prefix để lấy số đuôi
-      const numberPart = currentCode.replace(cleanPrefix, "");
-      const currentSeq = parseInt(numberPart, 10);
-
-      if (!isNaN(currentSeq)) {
-        nextSeq = currentSeq + 1;
+    rows.forEach((row) => {
+      const code = row.code_machine;
+      if (code.startsWith(cleanPrefix)) {
+        const numberPart = code.slice(cleanPrefix.length);
+        // Chỉ lấy phần số để so sánh toán học
+        if (/^\d+$/.test(numberPart)) {
+          const num = parseInt(numberPart, 10);
+          if (num > maxSeq) {
+            maxSeq = num;
+          }
+        }
       }
-    }
+    });
 
-    // 3. Format số thành 5 chữ số (00001)
+    const nextSeq = maxSeq + 1;
+
+    // --- SỬA TẠI ĐÂY: CỐ ĐỊNH 5 SỐ ---
+    // Luôn luôn padStart(5, "0") bất kể DB đang lưu 3 số hay 4 số
     const seqString = String(nextSeq).padStart(5, "0");
     const nextCode = `${cleanPrefix}${seqString}`;
 
-    res.json({
-      success: true,
-      message: "Generated next code successfully",
-      data: { nextCode },
-    });
+    res.json({ success: true, message: "OK", data: { nextCode } });
   } catch (error) {
     console.error("Error generating next code:", error);
     res.status(500).json({
@@ -2474,14 +2459,13 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
 app.post("/api/machines/batch-import", authenticateToken, async (req, res) => {
   const connection = await tpmConnection.getConnection();
   try {
-    const { machines } = req.body; // Expect an array of machine objects
+    const { machines } = req.body;
     const userId = req.user.id;
 
     if (!machines || !Array.isArray(machines) || machines.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "No machine data provided",
-      });
+      return res
+        .status(400)
+        .json({ success: false, message: "No machine data provided" });
     }
 
     await connection.beginTransaction();
@@ -2490,196 +2474,272 @@ app.post("/api/machines/batch-import", authenticateToken, async (req, res) => {
     const successes = [];
     const machinesToInsert = [];
 
-    // --- 1. Lấy tất cả code và serial từ file ---
-    const codesInFile = machines.map((m) => m.code_machine).filter(Boolean);
-    const serialsInFile = machines.map((m) => m.serial_machine).filter(Boolean);
+    // --- BƯỚC 0: TIỀN XỬ LÝ DỮ LIỆU (GÁN DEFAULT CATEGORY) ---
+    // Duyệt qua tất cả các máy, nếu thiếu phân loại thì gán mặc định
+    machines.forEach((m) => {
+      if (!m.name_category || m.name_category.toString().trim() === "") {
+        m.name_category = "Máy móc thiết bị";
+      }
+    });
 
-    // 1. Lấy tất cả TÊN category duy nhất từ file
+    // --- BƯỚC 1: KIỂM TRA TRÙNG LẶP SERIAL TRONG NỘI BỘ FILE EXCEL ---
+    const serialSeenMap = new Map();
+    const duplicateIndices = new Set();
+
+    for (let i = 0; i < machines.length; i++) {
+      const line = i + 2;
+      const serial = machines[i].serial_machine
+        ? String(machines[i].serial_machine).trim()
+        : null;
+
+      if (serial) {
+        if (serialSeenMap.has(serial)) {
+          duplicateIndices.add(i);
+          errors.push({
+            line,
+            serial: serial,
+            message: `Serial trùng lặp với dòng ${serialSeenMap.get(
+              serial
+            )} trong cùng file Excel`,
+          });
+        } else {
+          serialSeenMap.set(serial, line);
+        }
+      }
+    }
+
+    // --- BƯỚC 2: KIỂM TRA TRÙNG LẶP SERIAL VỚI DATABASE ---
+    const allUniqueSerials = Array.from(serialSeenMap.keys());
+    const existingSerialsSet = new Set();
+    if (allUniqueSerials.length > 0) {
+      const [rows] = await connection.query(
+        "SELECT serial_machine FROM tb_machine WHERE serial_machine IN (?)",
+        [allUniqueSerials]
+      );
+      rows.forEach((r) => existingSerialsSet.add(r.serial_machine));
+    }
+
+    // --- BƯỚC 3: CHUẨN BỊ DỮ LIỆU (LOOKUP CATEGORY & SEQUENCE) ---
+
+    // 3.1 Lookup Category (Lúc này tất cả máy đều đã có name_category rồi)
     const categoryNamesInFile = [
       ...new Set(machines.map((m) => m.name_category).filter(Boolean)),
     ];
+
     let categoryMap = new Map();
     if (categoryNamesInFile.length > 0) {
-      // 2. Tra cứu 1 lần duy nhất
       const [categories] = await connection.query(
         "SELECT id_category, name_category FROM tb_category WHERE name_category IN (?)",
         [categoryNamesInFile]
       );
-      // 3. Tạo Map: {"Máy móc thiết bị": 1, "Phụ kiện": 2}
       categoryMap = new Map(
         categories.map((c) => [c.name_category, c.id_category])
       );
     }
 
-    // --- 2. Kiểm tra trùng lặp trong DB ---
-    let existingCodes = new Set();
-    let existingSerials = new Set();
+    const sequenceCache = new Map();
 
-    if (codesInFile.length > 0) {
-      const [codeRows] = await connection.query(
-        "SELECT code_machine FROM tb_machine WHERE code_machine IN (?)",
-        [codesInFile]
-      );
-      existingCodes = new Set(codeRows.map((r) => r.code_machine));
-    }
-
-    if (serialsInFile.length > 0) {
-      const [serialRows] = await connection.query(
-        "SELECT serial_machine FROM tb_machine WHERE serial_machine IN (?)",
-        [serialsInFile]
-      );
-      existingSerials = new Set(serialRows.map((r) => r.serial_machine));
-    }
-
-    // --- 3. Kiểm tra trùng lặp trong file (nội bộ) ---
-    const codesInThisBatch = new Set();
-    const serialsInThisBatch = new Set();
-
-    // --- 4. Lặp qua để xác thực ---
+    // --- BƯỚC 4: XỬ LÝ TỪNG DÒNG ---
     for (let i = 0; i < machines.length; i++) {
-      const machine = machines[i];
-      const line = i + 2; // Giả sử dòng 1 là header
+      if (duplicateIndices.has(i)) continue;
 
-      // Bắt buộc
-      if (
-        !machine.code_machine ||
-        !machine.serial_machine ||
-        !machine.type_machine ||
-        !machine.name_category
-      ) {
+      const machine = machines[i];
+      const line = i + 2;
+      const serial = machine.serial_machine
+        ? String(machine.serial_machine).trim()
+        : "";
+
+      // A. Validate dữ liệu cơ bản (Đã bỏ check name_category vì đã gán default)
+      if (!serial || !machine.type_machine) {
         errors.push({
           line,
-          code: machine.code_machine || "N/A",
-          serial: machine.serial_machine || "N/A",
-          message:
-            "Thiếu thông tin bắt buộc (Mã máy, Serial, Loại máy, Phân loại)",
+          code: machine.code_machine,
+          serial: serial,
+          message: "Thiếu thông tin bắt buộc (Serial, Loại máy)",
         });
         continue;
       }
 
-      // Tra cứu ID category từ map đã tạo
+      // B. Check trùng DB
+      if (existingSerialsSet.has(serial)) {
+        errors.push({
+          line,
+          code: machine.code_machine,
+          serial: serial,
+          message: `Serial "${serial}" đã tồn tại trên hệ thống`,
+        });
+        continue;
+      }
+
+      // C. Check Category (Tìm ID từ Tên)
       const id_category = categoryMap.get(machine.name_category);
       if (!id_category) {
+        // Trường hợp hãn hữu: DB chưa có loại "Máy móc thiết bị"
         errors.push({
           line,
           code: machine.code_machine,
-          serial: machine.serial_machine,
-          message: `Phân loại "${machine.name_category}" không tồn tại trong Cơ sở dữ liệu`,
+          serial: serial,
+          message: `Phân loại "${machine.name_category}" không tồn tại trong hệ thống. Vui lòng tạo trước.`,
         });
         continue;
       }
-      // Gán ID đã tra cứu vào object machine để dùng khi INSERT
       machine.id_category_looked_up = id_category;
 
-      // Check DB duplicates
-      if (existingCodes.has(machine.code_machine)) {
-        errors.push({
-          line,
-          code: machine.code_machine,
-          serial: machine.serial_machine,
-          message: `Mã máy "${machine.code_machine}" đã tồn tại trong Cơ sở dữ liệu`,
-        });
-        continue;
-      }
-      if (existingSerials.has(machine.serial_machine)) {
-        errors.push({
-          line,
-          code: machine.code_machine,
-          serial: machine.serial_machine,
-          message: `Serial "${machine.serial_machine}" đã tồn tại trong Cơ sở dữ liệu`,
-        });
-        continue;
-      }
+      // D. XỬ LÝ SINH MÃ MÁY TỰ ĐỘNG
+      if (
+        !machine.code_machine ||
+        machine.code_machine.toString().trim() === ""
+      ) {
+        if (!machine.manufacturer) {
+          errors.push({
+            line,
+            serial: serial,
+            message:
+              "Không có Mã máy và cũng không có Hãng SX để tạo mã tự động",
+          });
+          continue;
+        }
 
-      // Check in-file duplicates
-      if (codesInThisBatch.has(machine.code_machine)) {
-        errors.push({
-          line,
-          code: machine.code_machine,
-          serial: machine.serial_machine,
-          message: `Mã máy "${machine.code_machine}" bị trùng lặp trong file`,
-        });
-        continue;
-      }
-      if (serialsInThisBatch.has(machine.serial_machine)) {
-        errors.push({
-          line,
-          code: machine.code_machine,
-          serial: machine.serial_machine,
-          message: `Serial "${machine.serial_machine}" bị trùng lặp trong file`,
-        });
-        continue;
-      }
+        const prefix = machine.manufacturer
+          .trim()
+          .toUpperCase()
+          .replace(/[^A-Z0-9]/g, "");
 
-      codesInThisBatch.add(machine.code_machine);
-      serialsInThisBatch.add(machine.serial_machine);
-      machinesToInsert.push(machine);
-    }
+        let nextSeq = 1;
+        // 1. Lấy số thứ tự tiếp theo
+        if (sequenceCache.has(prefix)) {
+          nextSeq = sequenceCache.get(prefix); // Lấy trực tiếp số tiếp theo từ cache
+        } else {
+          // Query DB tìm max
+          const [rows] = await connection.query(
+            `SELECT code_machine FROM tb_machine WHERE code_machine LIKE CONCAT(?, '%')`,
+            [prefix]
+          );
 
-    // --- 5. Chèn những máy hợp lệ ---
-    if (machinesToInsert.length > 0) {
-      for (const machine of machinesToInsert) {
-        let formattedDate = machine.date_of_use;
-        if (machine.date_of_use) {
-          // Logic định dạng ngày từ Excel (Excel có thể trả về số)
-          if (typeof machine.date_of_use === "number") {
-            // Excel date serial number to JS Date
-            const jsDate = new Date(
-              Math.round((machine.date_of_use - 25569) * 86400 * 1000)
-            );
-            formattedDate = jsDate.toISOString().split("T")[0];
-          } else {
-            // Thử parse string
-            const dateObj = new Date(machine.date_of_use);
-            if (!isNaN(dateObj.getTime())) {
-              const year = dateObj.getFullYear();
-              const month = String(dateObj.getMonth() + 1).padStart(2, "0");
-              const day = String(dateObj.getDate()).padStart(2, "0");
-              formattedDate = `${year}-${month}-${day}`;
-            } else {
-              formattedDate = null; // Hoặc giữ nguyên giá trị nếu không parse được
+          let maxSeqInDb = 0;
+          rows.forEach((row) => {
+            const code = row.code_machine;
+            if (code.startsWith(prefix)) {
+              const numberPart = code.slice(prefix.length);
+              if (/^\d+$/.test(numberPart)) {
+                const num = parseInt(numberPart, 10);
+                if (num > maxSeqInDb) {
+                  maxSeqInDb = num;
+                }
+              }
+            }
+          });
+          nextSeq = maxSeqInDb + 1;
+        }
+
+        // 2. Format mã: CỐ ĐỊNH 5 SỐ
+        const seqString = String(nextSeq).padStart(5, "0");
+        machine.code_machine = `${prefix}${seqString}`;
+
+        // 3. Cập nhật cache: Chỉ cần lưu số tiếp theo (đã +1) cho vòng lặp sau
+        sequenceCache.set(prefix, nextSeq + 1);
+      } else {
+        const providedCode = machine.code_machine.toString().trim();
+        machine.code_machine = providedCode;
+
+        if (machine.manufacturer) {
+          const prefix = machine.manufacturer
+            .trim()
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, "");
+          if (providedCode.startsWith(prefix)) {
+            const numberPart = providedCode.replace(prefix, "");
+            if (/^\d+$/.test(numberPart)) {
+              const manualSeq = parseInt(numberPart, 10);
+
+              // Lấy giá trị cache hiện tại (nếu có)
+              let currentNextSeq = 1;
+              if (sequenceCache.has(prefix)) {
+                currentNextSeq = sequenceCache.get(prefix);
+              }
+
+              // Nếu mã tay nhập (manualSeq) >= số dự kiến tiếp theo
+              // Thì cập nhật số tiếp theo phải là manualSeq + 1
+              if (manualSeq >= currentNextSeq) {
+                sequenceCache.set(prefix, manualSeq + 1);
+              }
             }
           }
         }
 
-        await connection.query(
-          `
-          INSERT INTO tb_machine 
-            (code_machine, serial_machine, RFID_machine, NFC_machine, type_machine, model_machine, manufacturer, 
-             price, date_of_use, lifespan, repair_cost, note, current_status, id_category,
-             created_by, updated_by)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `,
-          [
-            machine.code_machine,
-            machine.serial_machine,
-            machine.RFID_machine || null,
-            machine.NFC_machine || null,
-            machine.type_machine || null,
-            machine.model_machine || null,
-            machine.manufacturer || null,
-            machine.price || null,
-            formattedDate || null,
-            machine.lifespan || null,
-            machine.repair_cost || null,
-            machine.note || null,
-            machine.current_status || "available",
-            machine.id_category_looked_up,
-            userId, // created_by
-            userId, // updated_by
-          ]
+        const [codeExist] = await connection.query(
+          "SELECT id_machine FROM tb_machine WHERE code_machine = ?",
+          [providedCode]
         );
-        successes.push({
-          code: machine.code_machine,
-          serial: machine.serial_machine,
-          type: machine.type_machine,
-          model: machine.model_machine,
-        });
+        if (codeExist.length > 0) {
+          errors.push({
+            line,
+            serial: serial,
+            code: providedCode,
+            message: `Mã máy "${providedCode}" đã tồn tại trên hệ thống`,
+          });
+          continue;
+        }
       }
+
+      // E. Xử lý Date
+      let formattedDate = null;
+      if (machine.date_of_use) {
+        if (typeof machine.date_of_use === "number") {
+          const jsDate = new Date(
+            Math.round((machine.date_of_use - 25569) * 86400 * 1000)
+          );
+          formattedDate = jsDate.toISOString().split("T")[0];
+        } else {
+          const dateObj = new Date(machine.date_of_use);
+          if (!isNaN(dateObj.getTime())) {
+            const year = dateObj.getFullYear();
+            const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+            const day = String(dateObj.getDate()).padStart(2, "0");
+            formattedDate = `${year}-${month}-${day}`;
+          }
+        }
+      }
+      machine.formattedDate = formattedDate;
+
+      machinesToInsert.push(machine);
     }
 
-    // Nếu có lỗi nhưng không có máy nào được chèn, vẫn commit (vì không thay đổi DB)
-    // Nếu có máy được chèn, commit
+    // --- BƯỚC 5: INSERT VÀO DATABASE ---
+    for (const m of machinesToInsert) {
+      await connection.query(
+        `INSERT INTO tb_machine 
+          (code_machine, serial_machine, RFID_machine, NFC_machine, type_machine, model_machine, manufacturer, 
+           price, date_of_use, lifespan, repair_cost, note, current_status, id_category,
+           created_by, updated_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          m.code_machine,
+          m.serial_machine,
+          m.RFID_machine || null,
+          m.NFC_machine || null,
+          m.type_machine || null,
+          m.model_machine || null,
+          m.manufacturer || null,
+          m.price || null,
+          m.formattedDate || null,
+          m.lifespan || null,
+          m.repair_cost || null,
+          m.note || null,
+          "available",
+          m.id_category_looked_up,
+          userId,
+          userId,
+        ]
+      );
+      successes.push({
+        code: m.code_machine,
+        serial: m.serial_machine,
+        type: m.type_machine,
+        model: m.model_machine,
+      });
+    }
+
     await connection.commit();
 
     res.status(201).json({

@@ -1368,15 +1368,9 @@ const MachineListPage = () => {
     "Tuổi thọ (năm)": "lifespan",
     "Chi phí sửa chữa (VNĐ)": "repair_cost",
     "Ghi chú": "note",
-    "Phân loại (Máy móc thiết bị/Phụ kiện)": "name_category",
   };
   // Lấy danh sách các cột bắt buộc (sẽ dùng để tô màu)
-  const requiredHeaders = [
-    "Mã máy",
-    "Serial",
-    "Loại máy",
-    "Phân loại (Máy móc thiết bị/Phụ kiện)",
-  ];
+  const requiredHeaders = ["Serial", "Loại máy"];
 
   const handleOpenImportDialog = () => {
     setImportFile(null);
@@ -1583,6 +1577,7 @@ const MachineListPage = () => {
         // --- Chuyển đổi dữ liệu sang định dạng backend ---
         const machinesToImport = json.map((row) => {
           const newRow = {};
+          newRow.name_category = "Máy móc thiết bị";
 
           // Dịch từ Tiếng Việt -> Tiếng Anh
           for (const vietnameseHeader in excelHeaderMapping) {
@@ -4373,22 +4368,15 @@ const MachineListPage = () => {
               </Typography>
               <Typography variant="body2" gutterBottom>
                 2. Các cột <strong>bắt buộc</strong> (được tô vàng trong file
-                mẫu): <strong>Mã máy</strong>, <strong>Serial</strong>,{" "}
-                <strong>Loại máy</strong>,{" "}
-                <strong>Phân loại (Máy móc thiết bị/Phụ kiện)</strong>.
+                mẫu): <strong>Serial</strong>, <strong>Loại máy</strong>
               </Typography>
               <Typography variant="body2" gutterBottom>
-                3. Cột <strong>Phân loại</strong>: Nhập "
-                <strong>Máy móc thiết bị</strong>" hoặc "
-                <strong>Phụ kiện</strong>".
-              </Typography>
-              <Typography variant="body2" gutterBottom>
-                4. Cột <strong>Ngày sử dụng</strong>: Nhập định dạng{" "}
+                3. Cột <strong>Ngày sử dụng</strong>: Nhập định dạng{" "}
                 <strong>DD/MM/YYYY</strong> (ví dụ: 31/10/2025).
               </Typography>
               <Typography variant="body2">
-                5. Hệ thống sẽ kiểm tra trùng lặp <strong>Mã máy</strong> và{" "}
-                <strong>Serial</strong> đã có trong CSDL.
+                4. Hệ thống sẽ kiểm tra trùng lặp <strong>Serial</strong> đã có
+                trong CSDL.
               </Typography>
 
               <Box sx={{ mt: 1 }}>
