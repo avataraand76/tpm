@@ -213,17 +213,17 @@ const TestProposalPage = () => {
 
   // Config statuses
   const STATUS_CONFIG = {
-    available: { bg: "#2e7d3222", color: "#2e7d32", label: "Sẵn sàng" },
+    available: { bg: "#2e7d3222", color: "#2e7d32", label: "Có thể sử dụng" },
     in_use: { bg: "#667eea22", color: "#667eea", label: "Đang sử dụng" },
     maintenance: { bg: "#ff980022", color: "#ff9800", label: "Bảo trì" },
     broken: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Máy hư" },
-    rented: { bg: "#673ab722", color: "#673ab7", label: "Đang thuê" },
+    rented: { bg: "#673ab722", color: "#673ab7", label: "Máy thuê" },
     rented_return: {
       bg: "#673ab722",
       color: "#673ab7",
       label: "Đã trả (máy thuê)",
     },
-    borrowed: { bg: "#03a9f422", color: "#03a9f4", label: "Đang mượn" },
+    borrowed: { bg: "#03a9f422", color: "#03a9f4", label: "Máy mượn" },
     borrowed_return: {
       bg: "#03a9f422",
       color: "#03a9f4",
@@ -585,6 +585,32 @@ const TestProposalPage = () => {
 
         await fetchLocations(filter);
 
+        let expansionData = [];
+        try {
+          if (typeof ticketDetails.expansion_field === "string") {
+            expansionData = JSON.parse(ticketDetails.expansion_field);
+          } else if (Array.isArray(ticketDetails.expansion_field)) {
+            expansionData = ticketDetails.expansion_field;
+          }
+        } catch (e) {
+          console.error("Error parsing expansion field:", e);
+        }
+
+        // Helper để lấy giá trị từ mảng expansion: [{ "Key": "Value" }]
+        const getExpansionValue = (keyName) => {
+          if (!expansionData || expansionData.length === 0) return "";
+          // Tìm object có key chứa keyName (case-insensitive, có thể có dấu :)
+          const foundItem = expansionData.find((item) => {
+            const key = Object.keys(item)[0];
+            return key.toLowerCase().includes(keyName.toLowerCase());
+          });
+          if (foundItem) {
+            const key = Object.keys(foundItem)[0];
+            return foundItem[key] || "";
+          }
+          return "";
+        };
+
         setFormData({
           to_location_uuid: ticketDetails.to_location_uuid || "",
           type: ticketType || "",
@@ -614,6 +640,9 @@ const TestProposalPage = () => {
                   .split("T")[0]
               : "",
           attached_file: ticketDetails.attached_file || "",
+          receiver_name: getExpansionValue("Họ tên người nhận") || "",
+          vehicle_number: getExpansionValue("Số xe") || "",
+          department_address: getExpansionValue("Địa chỉ") || "",
         });
       } catch (error) {
         console.error("Error fetching ticket details:", error);
@@ -1323,9 +1352,9 @@ const TestProposalPage = () => {
                                     variant="outlined"
                                     sx={{
                                       height: 16,
-                                      fontSize: "0.6rem",
+                                      fontSize: "0.8rem",
                                       borderColor: "#9e9e9e",
-                                      color: "#616161",
+                                      color: "#fd3333",
                                       backgroundColor: "#ffffff80",
                                     }}
                                   />
@@ -1974,7 +2003,7 @@ const TestProposalPage = () => {
                         <Card variant="outlined" sx={{ borderRadius: "12px" }}>
                           <CardContent>
                             <Typography variant="h6" gutterBottom>
-                              Thông tin bổ sung
+                              Thông tin đơn vị (mượn/thuê/cho mượn)
                             </Typography>
                             <Stack spacing={2}>
                               <Autocomplete
@@ -2096,6 +2125,7 @@ const TestProposalPage = () => {
                                   )
                                 }
                                 disabled={dialogMode === "view"}
+                                sx={DISABLED_VIEW_SX}
                               />
 
                               <Stack
@@ -2113,6 +2143,7 @@ const TestProposalPage = () => {
                                     )
                                   }
                                   disabled={dialogMode === "view"}
+                                  sx={DISABLED_VIEW_SX}
                                 />
                                 <TextField
                                   fullWidth
@@ -2125,6 +2156,7 @@ const TestProposalPage = () => {
                                     )
                                   }
                                   disabled={dialogMode === "view"}
+                                  sx={DISABLED_VIEW_SX}
                                 />
                               </Stack>
                             </Stack>
@@ -2449,6 +2481,23 @@ const TestProposalPage = () => {
                                               m.uuid_machine ===
                                               machine.uuid_machine
                                           );
+                                        let borrowLabel = "";
+                                        if (
+                                          machine.is_borrowed_or_rented_or_borrowed_out
+                                        ) {
+                                          borrowLabel = getMachineStatusLabel(
+                                            machine.is_borrowed_or_rented_or_borrowed_out
+                                          );
+                                          if (
+                                            machine.is_borrowed_or_rented_or_borrowed_out ===
+                                            "borrowed"
+                                          ) {
+                                            borrowLabel =
+                                              machine.is_borrowed_or_rented_or_borrowed_out_return_date
+                                                ? "Máy mượn ngắn hạn"
+                                                : "Máy mượn dài hạn";
+                                          }
+                                        }
                                         return (
                                           <TableRow
                                             key={machine.uuid_machine}
@@ -2514,9 +2563,7 @@ const TestProposalPage = () => {
                                                   />
                                                   {machine.is_borrowed_or_rented_or_borrowed_out && (
                                                     <Chip
-                                                      label={getMachineStatusLabel(
-                                                        machine.is_borrowed_or_rented_or_borrowed_out
-                                                      )}
+                                                      label={borrowLabel}
                                                       size="small"
                                                       sx={{
                                                         ml: 0.5,
@@ -2586,115 +2633,132 @@ const TestProposalPage = () => {
                                   {formData.machines.length} máy):{" "}
                                 </Typography>
                                 <Stack spacing={2}>
-                                  {formData.machines.map((machine) => (
-                                    <Paper
-                                      key={machine.uuid_machine}
-                                      variant="outlined"
-                                      sx={{ p: 2, borderRadius: "12px" }}
-                                    >
-                                      <Stack
-                                        direction="row"
-                                        spacing={2}
-                                        alignItems="center"
+                                  {formData.machines.map((machine) => {
+                                    let borrowLabel = "";
+                                    if (
+                                      machine.is_borrowed_or_rented_or_borrowed_out
+                                    ) {
+                                      borrowLabel = getMachineStatusLabel(
+                                        machine.is_borrowed_or_rented_or_borrowed_out
+                                      );
+                                      if (
+                                        machine.is_borrowed_or_rented_or_borrowed_out ===
+                                        "borrowed"
+                                      ) {
+                                        borrowLabel =
+                                          machine.is_borrowed_or_rented_or_borrowed_out_return_date
+                                            ? "Máy mượn ngắn hạn"
+                                            : "Máy mượn dài hạn";
+                                      }
+                                    }
+                                    return (
+                                      <Paper
+                                        key={machine.uuid_machine}
+                                        variant="outlined"
+                                        sx={{ p: 2, borderRadius: "12px" }}
                                       >
-                                        <Box sx={{ flexGrow: 1 }}>
-                                          <Stack spacing={0.5}>
-                                            <Stack
-                                              direction="row"
-                                              alignItems="center"
-                                              spacing={1}
-                                              flexWrap="wrap"
-                                            >
-                                              <Typography
-                                                variant="body2"
-                                                sx={{ fontWeight: 600 }}
+                                        <Stack
+                                          direction="row"
+                                          spacing={2}
+                                          alignItems="center"
+                                        >
+                                          <Box sx={{ flexGrow: 1 }}>
+                                            <Stack spacing={0.5}>
+                                              <Stack
+                                                direction="row"
+                                                alignItems="center"
+                                                spacing={1}
+                                                flexWrap="wrap"
                                               >
-                                                {machine.code_machine} -{" "}
-                                                {machine.type_machine} -{" "}
-                                                {machine.model_machine}
-                                              </Typography>
-                                              <Chip
-                                                label={getMachineStatusLabel(
-                                                  machine.current_status
-                                                )}
-                                                size="small"
-                                                sx={{
-                                                  ml: 1,
-                                                  height: 20,
-                                                  fontSize: "0.75rem",
-                                                  background: getStatusInfo(
-                                                    machine.current_status
-                                                  ).bg,
-                                                  color: getStatusInfo(
-                                                    machine.current_status
-                                                  ).color,
-                                                  fontWeight: 600,
-                                                  borderRadius: "8px",
-                                                }}
-                                              />
-                                              {machine.is_borrowed_or_rented_or_borrowed_out && (
+                                                <Typography
+                                                  variant="body2"
+                                                  sx={{ fontWeight: 600 }}
+                                                >
+                                                  {machine.code_machine} -{" "}
+                                                  {machine.type_machine} -{" "}
+                                                  {machine.model_machine}
+                                                </Typography>
                                                 <Chip
                                                   label={getMachineStatusLabel(
-                                                    machine.is_borrowed_or_rented_or_borrowed_out
+                                                    machine.current_status
                                                   )}
                                                   size="small"
                                                   sx={{
-                                                    ml: 0.5,
+                                                    ml: 1,
                                                     height: 20,
                                                     fontSize: "0.75rem",
                                                     background: getStatusInfo(
-                                                      machine.is_borrowed_or_rented_or_borrowed_out
+                                                      machine.current_status
                                                     ).bg,
                                                     color: getStatusInfo(
-                                                      machine.is_borrowed_or_rented_or_borrowed_out
+                                                      machine.current_status
                                                     ).color,
                                                     fontWeight: 600,
                                                     borderRadius: "8px",
                                                   }}
                                                 />
-                                              )}
+                                                {machine.is_borrowed_or_rented_or_borrowed_out && (
+                                                  <Chip
+                                                    label={borrowLabel}
+                                                    size="small"
+                                                    sx={{
+                                                      ml: 0.5,
+                                                      height: 20,
+                                                      fontSize: "0.75rem",
+                                                      background: getStatusInfo(
+                                                        machine.is_borrowed_or_rented_or_borrowed_out
+                                                      ).bg,
+                                                      color: getStatusInfo(
+                                                        machine.is_borrowed_or_rented_or_borrowed_out
+                                                      ).color,
+                                                      fontWeight: 600,
+                                                      borderRadius: "8px",
+                                                    }}
+                                                  />
+                                                )}
+                                              </Stack>
+                                              <Typography
+                                                variant="caption"
+                                                color="text.secondary"
+                                              >
+                                                Serial:{" "}
+                                                {machine.serial_machine ||
+                                                  "Máy mới"}{" "}
+                                                | Vị trí hiện tại:{" "}
+                                                {machine.name_location ||
+                                                  "Chưa xác định"}
+                                              </Typography>
                                             </Stack>
-                                            <Typography
-                                              variant="caption"
-                                              color="text.secondary"
-                                            >
-                                              Serial:{" "}
-                                              {machine.serial_machine ||
-                                                "Máy mới"}{" "}
-                                              | Vị trí hiện tại:{" "}
-                                              {machine.name_location ||
-                                                "Chưa xác định"}
-                                            </Typography>
-                                          </Stack>
-                                        </Box>
-                                        <IconButton
+                                          </Box>
+                                          <IconButton
+                                            size="small"
+                                            color="error"
+                                            onClick={() =>
+                                              handleRemoveSelectedMachine(
+                                                machine.uuid_machine
+                                              )
+                                            }
+                                          >
+                                            <Delete fontSize="small" />
+                                          </IconButton>
+                                        </Stack>
+                                        <TextField
+                                          fullWidth
                                           size="small"
-                                          color="error"
-                                          onClick={() =>
-                                            handleRemoveSelectedMachine(
-                                              machine.uuid_machine
+                                          label="Ghi chú riêng cho máy (Tùy chọn)"
+                                          value={machine.note || ""}
+                                          onChange={(e) =>
+                                            handleUpdateMachineNote(
+                                              machine.uuid_machine,
+                                              e.target.value
                                             )
                                           }
-                                        >
-                                          <Delete fontSize="small" />
-                                        </IconButton>
-                                      </Stack>
-                                      <TextField
-                                        fullWidth
-                                        size="small"
-                                        label="Ghi chú riêng cho máy (Tùy chọn)"
-                                        value={machine.note || ""}
-                                        onChange={(e) =>
-                                          handleUpdateMachineNote(
-                                            machine.uuid_machine,
-                                            e.target.value
-                                          )
-                                        }
-                                        disabled={dialogMode === "view"}
-                                        sx={{ mt: 1 }}
-                                      />
-                                    </Paper>
-                                  ))}
+                                          disabled={dialogMode === "view"}
+                                          sx={{ mt: 1 }}
+                                        />
+                                      </Paper>
+                                    );
+                                  })}
                                 </Stack>
                               </Box>
                             )}
@@ -3106,15 +3170,16 @@ const TestProposalPage = () => {
                                                           <Chip
                                                             label="Chuyển tiếp"
                                                             size="small"
+                                                            variant="outlined"
                                                             sx={{
                                                               height: 20,
                                                               fontSize:
-                                                                "0.65rem",
-                                                              backgroundColor:
-                                                                "#eeeeee",
+                                                                "0.8rem",
+                                                              borderColor:
+                                                                "#9e9e9e",
                                                               color: "#fd3333",
-                                                              border:
-                                                                "1px solid #bdbdbd",
+                                                              backgroundColor:
+                                                                "#ffffff80",
                                                             }}
                                                           />
                                                         )}
@@ -3435,7 +3500,7 @@ const TestProposalPage = () => {
                       )
                     }
                   >
-                    <MenuItem value="available">Sẵn sàng</MenuItem>
+                    <MenuItem value="available">Có thể sử dụng</MenuItem>
                     <MenuItem value="in_use">Đang sử dụng</MenuItem>
                     <MenuItem value="maintenance">Bảo trì</MenuItem>
                     <MenuItem value="liquidation">Thanh lý</MenuItem>

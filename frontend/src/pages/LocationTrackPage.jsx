@@ -598,7 +598,7 @@ const LocationTrackPage = () => {
 
   // ĐỊNH NGHĨA CONFIG TRẠNG THÁI (ĐỒNG BỘ VỚI TicketManagementPage.jsx)
   const STATUS_CONFIG = {
-    available: { bg: "#2e7d3222", color: "#2e7d32", label: "Sẵn sàng" },
+    available: { bg: "#2e7d3222", color: "#2e7d32", label: "Có thể sử dụng" },
     in_use: { bg: "#667eea22", color: "#667eea", label: "Đang sử dụng" },
     maintenance: { bg: "#ff980022", color: "#ff9800", label: "Bảo trì" },
     rented: { bg: "#673ab722", color: "#673ab7", label: "Máy thuê" },
@@ -1205,7 +1205,7 @@ const LocationTrackPage = () => {
         <Grid size={{ xs: 12, sm: 6, md: 9 }}>
           <Grid container spacing={2}>
             {/* --- HÀNG 1 --- */}
-            {/* 1. Sẵn sàng */}
+            {/* 1. Có thể sử dụng */}
             <Grid size={{ xs: 6 }}>
               <Card
                 elevation={0}
@@ -1622,7 +1622,7 @@ const LocationTrackPage = () => {
                                 variant="body1"
                                 sx={{
                                   whiteSpace: "nowrap",
-                                  textTransform: "uppercase",
+                                  // textTransform: "uppercase",
                                   overflow: "hidden",
                                   textOverflow: "ellipsis",
                                   mr: 1,
@@ -1850,12 +1850,35 @@ const LocationTrackPage = () => {
                 <TableBody>
                   {machinesAtLocation.map((machine) => {
                     const statusInfo = getStatusInfo(machine.current_status);
-                    const borrowStatusInfo =
-                      machine.is_borrowed_or_rented_or_borrowed_out
-                        ? getStatusInfo(
-                            machine.is_borrowed_or_rented_or_borrowed_out
-                          )
-                        : null;
+                    let borrowStatusInfo = null;
+                    if (machine.is_borrowed_or_rented_or_borrowed_out) {
+                      // 1. Lấy thông tin màu sắc/label gốc từ cấu hình
+                      borrowStatusInfo = getStatusInfo(
+                        machine.is_borrowed_or_rented_or_borrowed_out
+                      );
+
+                      // 2. Kiểm tra nếu là trạng thái "borrowed" (Mượn)
+                      if (
+                        machine.is_borrowed_or_rented_or_borrowed_out ===
+                        "borrowed"
+                      ) {
+                        if (
+                          machine.is_borrowed_or_rented_or_borrowed_out_return_date
+                        ) {
+                          // Có ngày trả -> Mượn ngắn hạn
+                          borrowStatusInfo = {
+                            ...borrowStatusInfo,
+                            label: "Máy mượn ngắn hạn",
+                          };
+                        } else {
+                          // Không có ngày trả -> Mượn dài hạn
+                          borrowStatusInfo = {
+                            ...borrowStatusInfo,
+                            label: "Máy mượn dài hạn",
+                          };
+                        }
+                      }
+                    }
                     return (
                       <TableRow
                         key={machine.uuid_machine}

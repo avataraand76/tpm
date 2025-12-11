@@ -2713,13 +2713,20 @@ app.get("/api/departments", authenticateToken, async (req, res) => {
     const [departments] = await tpmConnection.query(
       `
       SELECT 
-        uuid_department, 
-        name_department,
-        COUNT(ml.id_machine) AS machine_count
+        td.uuid_department, 
+        td.name_department,
+        COUNT(CASE 
+          WHEN m.id_machine IS NOT NULL 
+               AND m.current_status != 'liquidation'
+               AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))
+          THEN 1 
+          ELSE NULL 
+        END) AS machine_count
       FROM tb_department td
       LEFT JOIN tb_location tl ON tl.id_department = td.id_department
       LEFT JOIN tb_machine_location ml ON ml.id_location = tl.id_location
-      GROUP BY td.id_department, td.name_department
+      LEFT JOIN tb_machine m ON m.id_machine = ml.id_machine
+      GROUP BY td.id_department, td.name_department, td.uuid_department
       ORDER BY td.id_department ASC
       `
     );
@@ -2752,10 +2759,17 @@ app.get("/api/locations", authenticateToken, async (req, res) => {
         tl.name_location,
         td.name_department,
         td.uuid_department,
-        COUNT(ml.id_machine) AS machine_count
+        COUNT(CASE 
+          WHEN m.id_machine IS NOT NULL 
+               AND m.current_status != 'liquidation'
+               AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))
+          THEN 1 
+          ELSE NULL 
+        END) AS machine_count
       FROM tb_location tl
       LEFT JOIN tb_department td ON td.id_department = tl.id_department
       LEFT JOIN tb_machine_location ml ON ml.id_location = tl.id_location
+      LEFT JOIN tb_machine m ON m.id_machine = ml.id_machine
     `;
     let params = [];
     let whereConditions = [];
@@ -3222,6 +3236,7 @@ app.get("/api/imports/:uuid", authenticateToken, async (req, res) => {
         i.note,
         i.attached_file,
         i.approval_flow,
+        i.expansion_field,
         i.created_at,
         i.updated_at,
         i.created_by,
@@ -3909,6 +3924,7 @@ app.get("/api/exports/:uuid", authenticateToken, async (req, res) => {
         e.note,
         e.attached_file,
         e.approval_flow,
+        e.expansion_field,
         e.created_at,
         e.updated_at,
         e.created_by,
@@ -4545,6 +4561,7 @@ app.get(
           t.note,
           t.attached_file,
           t.approval_flow,
+          t.expansion_field,
           t.created_at,
           t.updated_at,
           t.created_by,
@@ -6505,17 +6522,17 @@ app.put("/api/admin/users/permissions", async (req, res) => {
 // Helper: Map loại phiếu sang tên proposal
 const getProposalName = (type, specificType) => {
   const mapping = {
-    purchased: "Nhập mua mới",
-    maintenance_return: "Nhập sau bảo trì",
-    rented: "Nhập thuê",
-    borrowed: "Nhập mượn",
-    borrowed_out_return: "Nhập trả (máy cho mượn)",
-    liquidation: "Xuất thanh lý",
-    maintenance: "Xuất bảo trì",
-    borrowed_out: "Xuất cho mượn",
-    rented_return: "Xuất trả (máy thuê)",
-    borrowed_return: "Xuất trả (máy mượn)",
-    internal: "Điều chuyển",
+    purchased: "Nhập máy móc thiết bị móc mới",
+    maintenance_return: "Nhập máy móc thiết bị sau bảo trì",
+    rented: "Nhập thuê máy móc thiết bị",
+    borrowed: "Nhập mượn máy móc thiết bị",
+    borrowed_out_return: "Nhập trả máy móc thiết bị (máy cho mượn)",
+    liquidation: "Xuất thanh lý máy móc thiết bị",
+    maintenance: "Xuất bảo trì máy móc thiết bị",
+    borrowed_out: "Xuất cho mượn máy móc thiết bị",
+    rented_return: "Xuất trả máy móc thiết bị (máy thuê)",
+    borrowed_return: "Xuất trả máy móc thiết bị(máy mượn)",
+    internal: "Điều chuyển máy móc thiết bị",
   };
   // Nếu là điều chuyển, specificType sẽ null hoặc không khớp key, ta trả về "Điều chuyển"
   if (type === "internal") return "Điều chuyển";
@@ -6994,17 +7011,61 @@ app.post(
       }
 
       // --- 6. GỬI SANG EXTERNAL API ---
-      // ... (Giữ nguyên logic gửi API) ...
-      const tableRows = machines.map((m, index) => [
-        index + 1,
-        m.type_machine || "",
-        m.model_machine || "",
+      // A. Nhóm các máy theo Type + Model
+      const groupedMachines = {};
+
+      machines.forEach((m) => {
+        const key = `${m.type_machine || ""}|${m.model_machine || ""}`;
+
+        if (!groupedMachines[key]) {
+          groupedMachines[key] = {
+            name: m.type_machine || "",
+            model: m.model_machine || "",
+            unit: "Máy",
+            count: 0,
+            serials: [],
+            notes: [],
+          };
+        }
+
+        groupedMachines[key].count += 1;
+        if (m.serial_machine) {
+          groupedMachines[key].serials.push(m.serial_machine);
+        }
+        if (m.note) {
+          groupedMachines[key].notes.push(m.note);
+        }
+      });
+
+      // B. Tạo rows từ dữ liệu đã nhóm
+      const tableRows = Object.values(groupedMachines).map((group, index) => {
+        const serialsString = group.serials.join(", ");
+        const notesString = [...new Set(group.notes)].join("; "); // Gộp note và bỏ trùng lặp
+
+        return [
+          index + 1, // STT
+          group.name, // Tên thiết bị
+          group.model, // Model
+          group.unit, // ĐVT
+          group.count, // Số lượng yêu cầu
+          group.count, // Số lượng thực xuất
+          serialsString, // Serial
+          notesString, // Ghi chú
+        ];
+      });
+
+      // C. Thêm dòng Tổng
+      const totalMachines = machines.length;
+      tableRows.push([
+        "",
+        "Tổng",
+        "",
         "Máy",
-        "1",
-        m.serial_machine || "",
-        m.note || "",
+        totalMachines,
+        totalMachines,
+        "",
+        "",
       ]);
-      tableRows.push(["", "Tổng", "", "Máy", machines.length, "", ""]);
 
       const externalPayload = {
         uid_proposal_type: targetUidProposalType,
@@ -7023,11 +7084,12 @@ app.post(
             "Tên thiết bị",
             "Model",
             "ĐVT",
-            "Số lượng",
+            "SL Yêu cầu",
+            "SL Thực xuất",
             "Serial",
             "Ghi chú",
           ],
-          columnWidths: [0.7, 2.0, 3.0, 1.2, 1.2, 2.0, 3.0],
+          columnWidths: [2.0, 3.0, 4.0, 2.0, 2.0, 2.0, 4.0, 5.0],
           rows: tableRows,
         },
         ...(expansionField.length > 0 && { expansion_field: expansionField }),

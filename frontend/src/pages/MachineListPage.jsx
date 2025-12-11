@@ -1401,6 +1401,133 @@ const MachineListPage = () => {
     event.target.value = null;
   };
 
+  const handleExportExcel = async () => {
+    try {
+      // 1. Hiển thị loading (bạn có thể tạo state exportLoading riêng nếu muốn)
+      setLoading(true);
+
+      // 2. Chuẩn bị params giống hệt lúc fetch danh sách, nhưng bỏ phân trang (limit lớn)
+      const apiParams = {
+        page: 1,
+        limit: 1000000, // Lấy số lượng lớn để đảm bảo hết dữ liệu
+        search: searchTerm,
+      };
+
+      // Map các bộ lọc hiện tại vào params
+      Object.keys(filters).forEach((key) => {
+        if (filters[key] && filters[key].length > 0) {
+          if (key === "borrow_status") {
+            apiParams["is_borrowed_or_rented_or_borrowed_out"] = filters[key];
+          } else {
+            apiParams[key] = filters[key];
+          }
+        }
+      });
+
+      // 3. Gọi API lấy dữ liệu
+      const result = await api.machines.getAll(apiParams);
+
+      if (result.success && result.data.length > 0) {
+        // 4. Format dữ liệu cho Excel
+        const excelData = result.data.map((item, index) => {
+          // Logic lấy tên trạng thái chính
+          const statusInfo = getStatusColor(item.current_status);
+
+          // Logic lấy tên trạng thái mượn/thuê (giống hiển thị trên bảng)
+          let borrowStatusText = "";
+          if (item.is_borrowed_or_rented_or_borrowed_out) {
+            if (item.is_borrowed_or_rented_or_borrowed_out === "borrowed") {
+              if (item.is_borrowed_or_rented_or_borrowed_out_return_date) {
+                borrowStatusText = "Máy mượn ngắn hạn";
+              } else {
+                borrowStatusText = "Máy mượn dài hạn";
+              }
+            } else if (
+              item.is_borrowed_or_rented_or_borrowed_out === "rented"
+            ) {
+              borrowStatusText = "Máy thuê";
+            } else if (
+              item.is_borrowed_or_rented_or_borrowed_out === "borrowed_out"
+            ) {
+              borrowStatusText = "Cho mượn";
+            } else {
+              // Các trạng thái trả về
+              const bInfo = getStatusColor(
+                item.is_borrowed_or_rented_or_borrowed_out
+              );
+              borrowStatusText = bInfo.label;
+            }
+          }
+
+          return {
+            STT: index + 1,
+            "Mã máy": item.code_machine || "",
+            "Loại máy": item.type_machine || "",
+            Model: item.model_machine || "",
+            "Hãng SX": item.manufacturer || "",
+            Serial: item.serial_machine || "",
+            RFID: item.RFID_machine || "",
+            NFC: item.NFC_machine || "",
+            // "Phân loại": item.name_category || "",
+            "Vị trí hiện tại": item.name_location || "",
+            "Trạng thái (chính)": statusInfo.label || "",
+            "Trạng thái (mượn/thuê)": borrowStatusText,
+            "Đơn vị (mượn/thuê)":
+              item.is_borrowed_or_rented_or_borrowed_out_name || "",
+            "Ngày (mượn/thuê)": formatDate(
+              item.is_borrowed_or_rented_or_borrowed_out_date
+            ),
+            "Ngày trả (mượn/thuê)": formatDate(
+              item.is_borrowed_or_rented_or_borrowed_out_return_date
+            ),
+            "Giá (VNĐ)": item.price || 0,
+            "Tuổi thọ (năm)": item.lifespan || "",
+            "Chi phí sửa chữa": item.repair_cost || 0,
+            "Ngày sử dụng": formatDate(item.date_of_use),
+            "Ghi chú": item.note || "",
+          };
+        });
+
+        // 5. Tạo Worksheet và Workbook
+        const worksheet = XLSX.utils.json_to_sheet(excelData);
+
+        // (Tùy chọn) Auto-width cho các cột
+        const wscols = Object.keys(excelData[0]).map(() => ({ wch: 20 }));
+        worksheet["!cols"] = wscols;
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "DanhSachMay");
+
+        // 6. Xuất file
+        XLSX.writeFile(
+          workbook,
+          `DanhSachMayMoc_${new Date().toISOString().slice(0, 10)}.xlsx`
+        );
+
+        showNotification(
+          "success",
+          "Xuất Excel thành công",
+          `Đã xuất ${excelData.length} dòng dữ liệu.`
+        );
+      } else {
+        showNotification(
+          "warning",
+          "Không có dữ liệu",
+          "Bộ lọc hiện tại không tìm thấy máy nào để xuất."
+        );
+      }
+    } catch (err) {
+      console.error("Export Error:", err);
+      showNotification(
+        "error",
+        "Lỗi xuất Excel",
+        "Đã xảy ra lỗi trong quá trình xuất file."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleImport = async () => {
     if (!importFile) {
       showNotification(
@@ -1547,7 +1674,7 @@ const MachineListPage = () => {
 
   const getStatusColor = (status) => {
     const statusColors = {
-      available: { bg: "#2e7d3222", color: "#2e7d32", label: "Sẵn sàng" },
+      available: { bg: "#2e7d3222", color: "#2e7d32", label: "Có thể sử dụng" },
       in_use: { bg: "#667eea22", color: "#667eea", label: "Đang sử dụng" },
       maintenance: { bg: "#ff980022", color: "#ff9800", label: "Bảo trì" },
       rented: { bg: "#673ab722", color: "#673ab7", label: "Máy thuê" },
@@ -1863,7 +1990,7 @@ const MachineListPage = () => {
           <Grid size={{ xs: 12, md: 7, lg: 8 }}>
             <Grid container spacing={3}>
               {/* --- HÀNG 1 --- */}
-              {/* 1. Sẵn sàng */}
+              {/* 1. Có thể sử dụng */}
               <Grid size={{ xs: 6 }}>
                 <Card
                   elevation={0}
@@ -2293,7 +2420,7 @@ const MachineListPage = () => {
                                   variant="body1"
                                   sx={{
                                     whiteSpace: "nowrap",
-                                    textTransform: "uppercase",
+                                    // textTransform: "uppercase",
                                     overflow: "hidden",
                                     textOverflow: "ellipsis",
                                     mr: 1, // Thêm khoảng cách
@@ -2559,7 +2686,26 @@ const MachineListPage = () => {
                     Thêm máy
                   </Button>
                 )}
-                {/* <<< KẾT THÚC THAY ĐỔI >>> */}
+
+                <Button
+                  variant="outlined"
+                  startIcon={<Download />} // Import Download icon từ @mui/icons-material
+                  onClick={handleExportExcel}
+                  sx={{
+                    borderRadius: "12px",
+                    px: 3,
+                    py: 1.5,
+                    color: "#1976d2", // Màu xanh dương hoặc màu tùy chọn
+                    borderColor: "#1976d2",
+                    width: { xs: "100%", sm: "auto" },
+                    "&:hover": {
+                      borderColor: "#1565c0",
+                      bgcolor: "rgba(25, 118, 210, 0.04)",
+                    },
+                  }}
+                >
+                  Xuất Excel DS Máy
+                </Button>
 
                 {/* Column Visibility Button */}
                 <Button
@@ -3310,9 +3456,46 @@ const MachineListPage = () => {
                             <TableCell>
                               {machine.is_borrowed_or_rented_or_borrowed_out
                                 ? (() => {
-                                    const borrowStatusInfo = getStatusColor(
+                                    let borrowStatusInfo = getStatusColor(
                                       machine.is_borrowed_or_rented_or_borrowed_out
                                     );
+
+                                    if (
+                                      machine.is_borrowed_or_rented_or_borrowed_out ===
+                                      "borrowed"
+                                    ) {
+                                      if (
+                                        machine.is_borrowed_or_rented_or_borrowed_out_return_date
+                                      ) {
+                                        borrowStatusInfo = {
+                                          ...borrowStatusInfo,
+                                          label: "Máy mượn ngắn hạn",
+                                        };
+                                      } else {
+                                        borrowStatusInfo = {
+                                          ...borrowStatusInfo,
+                                          label: "Máy mượn dài hạn",
+                                        };
+                                      }
+                                    }
+                                    // if (
+                                    //   machine.is_borrowed_or_rented_or_borrowed_out ===
+                                    //   "borrowed_out"
+                                    // ) {
+                                    //   if (
+                                    //     machine.is_borrowed_or_rented_or_borrowed_out_return_date
+                                    //   ) {
+                                    //     borrowStatusInfo = {
+                                    //       ...borrowStatusInfo,
+                                    //       label: "Máy cho mượn ngắn hạn",
+                                    //     };
+                                    //   } else {
+                                    //     borrowStatusInfo = {
+                                    //       ...borrowStatusInfo,
+                                    //       label: "Máy cho mượn dài hạn",
+                                    //     };
+                                    //   }
+                                    // }
                                     return (
                                       <Chip
                                         icon={getStatusIcon(
@@ -3789,7 +3972,7 @@ const MachineListPage = () => {
                         handleInputChange("current_status", e.target.value)
                       }
                     >
-                      <MenuItem value="available">Sẵn sàng</MenuItem>
+                      <MenuItem value="available">Có thể sử dụng</MenuItem>
                       <MenuItem value="in_use">Đang sử dụng</MenuItem>
                       <MenuItem value="maintenance">Bảo trì</MenuItem>
                       <MenuItem value="liquidation">Thanh lý</MenuItem>
