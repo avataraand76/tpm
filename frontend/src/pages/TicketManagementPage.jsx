@@ -213,6 +213,11 @@ const TicketManagementPage = () => {
     },
     borrowed_out: { bg: "#00bcd422", color: "#00bcd4", label: "Cho mượn" },
     liquidation: { bg: "#f4433622", color: "#f44336", label: "Thanh lý" },
+    pending_liquidation: {
+      bg: "#ff572222",
+      color: "#ff5722",
+      label: "Chờ thanh lý",
+    },
     disabled: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Vô hiệu hóa" },
     pending: { bg: "#ff980022", color: "#ff9800", label: "Chờ xử lý" },
     completed: { bg: "#2e7d3222", color: "#2e7d32", label: "Đã duyệt" },
@@ -541,6 +546,7 @@ const TicketManagementPage = () => {
       is_borrowed_or_rented_or_borrowed_out_date: "",
       is_borrowed_or_rented_or_borrowed_out_return_date: "",
       attached_file: "",
+      target_status: "available",
     };
 
     if (mode === "create") {
@@ -614,6 +620,7 @@ const TicketManagementPage = () => {
                   .split("T")[0]
               : "",
           attached_file: ticketDetails.attached_file || "",
+          target_status: ticketDetails.target_status || "available",
         });
       } catch (error) {
         console.error("Error fetching ticket details:", error);
@@ -764,7 +771,8 @@ const TicketManagementPage = () => {
       let apiCall;
 
       if (dialogType === "internal") {
-        data.append("transfer_date", formData.date); // Server.js dùng transfer_date
+        data.append("transfer_date", formData.date);
+        data.append("target_status", formData.target_status || "available");
         apiCall = api.internal_transfers.create(data);
         successMessage = "Tạo phiếu điều chuyển thành công";
       } else {
@@ -1986,6 +1994,138 @@ const TicketManagementPage = () => {
                             : {}
                         }
                       />
+
+                      {dialogType === "internal" &&
+                        formData.to_location_uuid &&
+                        filteredLocations
+                          .find(
+                            (l) => l.uuid_location === formData.to_location_uuid
+                          )
+                          ?.name_location?.toLowerCase()
+                          .includes("kho") && (
+                          <Box
+                            sx={{
+                              mt: 2,
+                              p: 2,
+                              borderRadius: "12px",
+                              border: "1px dashed #bdbdbd",
+                              backgroundColor: "#fafafa",
+                            }}
+                          >
+                            <Typography
+                              variant="subtitle2"
+                              sx={{
+                                mb: 1.5,
+                                fontWeight: 600,
+                                color: "text.secondary",
+                              }}
+                            >
+                              Chọn trạng thái máy:
+                            </Typography>
+
+                            <Stack
+                              direction={{ xs: "column", sm: "row" }}
+                              spacing={2}
+                            >
+                              {[
+                                {
+                                  value: "available",
+                                  label: "Có thể sử dụng",
+                                  color: STATUS_CONFIG.available.color,
+                                  bg: STATUS_CONFIG.available.bg,
+                                  icon: <CheckCircleOutline />,
+                                },
+                                {
+                                  value: "broken",
+                                  label: "Máy hư",
+                                  color: STATUS_CONFIG.broken.color,
+                                  bg: STATUS_CONFIG.broken.bg,
+                                  icon: <ErrorOutline />,
+                                },
+                                {
+                                  value: "pending_liquidation",
+                                  label: "Chờ thanh lý",
+                                  color:
+                                    STATUS_CONFIG.pending_liquidation.color,
+                                  bg: STATUS_CONFIG.pending_liquidation.bg,
+                                  icon: <Autorenew />,
+                                },
+                              ].map((option) => {
+                                const isSelected =
+                                  (formData.target_status || "available") ===
+                                  option.value;
+
+                                return (
+                                  <Button
+                                    key={option.value}
+                                    variant={
+                                      isSelected ? "contained" : "outlined"
+                                    }
+                                    startIcon={option.icon}
+                                    onClick={() =>
+                                      handleFormChange(
+                                        "target_status",
+                                        option.value
+                                      )
+                                    }
+                                    disabled={dialogMode === "view"}
+                                    sx={{
+                                      flex: 1,
+                                      borderRadius: "10px",
+                                      textTransform: "none",
+                                      fontWeight: isSelected ? 700 : 500,
+                                      transition: "all 0.3s ease",
+
+                                      // --- TRẠNG THÁI ĐƯỢC CHỌN ---
+                                      ...(isSelected && {
+                                        backgroundColor:
+                                          option.color + " !important",
+                                        color: "#fff",
+                                        boxShadow: `0 4px 12px ${option.color}66`,
+                                        border: `1px solid ${option.color}`,
+                                        transform: "translateY(-2px)",
+                                      }),
+
+                                      // --- TRẠNG THÁI KHÔNG CHỌN ---
+                                      ...(!isSelected && {
+                                        borderColor: "#e0e0e0",
+                                        color: "text.secondary",
+                                        backgroundColor: "#fff",
+                                        "&:hover": {
+                                          borderColor: option.color,
+                                          color: option.color,
+                                          backgroundColor: option.bg,
+                                        },
+                                      }),
+
+                                      // --- TRẠNG THÁI DISABLED (VIEW MODE) ---
+                                      ...(dialogMode === "view" && {
+                                        opacity: isSelected ? 1 : 0.5,
+                                        boxShadow: "none",
+                                        transform: "none",
+                                      }),
+                                    }}
+                                  >
+                                    {option.label}
+                                  </Button>
+                                );
+                              })}
+                            </Stack>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              sx={{
+                                mt: 1,
+                                display: "block",
+                                fontStyle: "italic",
+                              }}
+                            >
+                              * Các máy trong phiếu sẽ được cập nhật sang trạng
+                              thái này sau khi duyệt.
+                            </Typography>
+                          </Box>
+                        )}
+
                       {dialogMode === "create" && (
                         <Card variant="outlined" sx={{ borderRadius: "12px" }}>
                           <CardContent>

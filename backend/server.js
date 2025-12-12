@@ -1995,9 +1995,9 @@ const getMachineFilterConditions = (ticket_type) => {
 
     // f. xuất thanh lý (chỉ hiện trường hợp 1,2,5)
     case "liquidation":
-      where = `(m.current_status IN ('available', 'in_use', 'broken') AND m.is_borrowed_or_rented_or_borrowed_out IS NULL)`;
+      where = `(m.current_status IN ('available', 'in_use', 'broken', 'pending_liquidation') AND m.is_borrowed_or_rented_or_borrowed_out IS NULL)`;
       message =
-        "Chỉ nhận những máy có trạng thái 'Sẵn sàng', 'Đang sử dụng', 'Máy hư' (không mượn/thuê).";
+        "Chỉ nhận những máy có trạng thái 'Sẵn sàng', 'Đang sử dụng', 'Máy hư', 'Chờ thanh lý' (không mượn/thuê).";
       break;
 
     // g. xuất bảo trì (chỉ hiện trường hợp 1,2,5)
@@ -2031,11 +2031,11 @@ const getMachineFilterConditions = (ticket_type) => {
     // k. điều chuyển nội bộ (chỉ hiện trường hợp 1,2,5,7,8,9,10,11,12)
     case "internal":
       where = `(
-        m.current_status IN ('available', 'in_use', 'broken') AND 
+        m.current_status IN ('available', 'in_use', 'broken', 'pending_liquidation') AND 
         (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out IN ('borrowed', 'rented'))
       )`;
       message =
-        "Chỉ nhận những máy có trạng thái 'Sẵn sàng', 'Đang sử dụng', 'Máy hư' (bao gồm cả máy đang mượn/thuê).";
+        "Chỉ nhận những máy có trạng thái 'Sẵn sàng', 'Đang sử dụng', 'Máy hư', 'Chờ thanh lý' (bao gồm cả máy đang mượn/thuê).";
       break;
 
     // Mặc định (nếu ticket_type không xác định, ví dụ: scanner mở trước khi chọn loại phiếu)
@@ -4626,6 +4626,7 @@ app.get(
           t.updated_at,
           t.created_by,
           t.confirmed_at,
+          t.target_status,
           loc_to.uuid_location as to_location_uuid,
           loc_to.name_location as to_location_name,
           td.uuid_department AS to_location_department_uuid,
@@ -4756,7 +4757,7 @@ app.post(
     try {
       await connection.beginTransaction();
 
-      const { to_location_uuid, transfer_date, note } = req.body;
+      const { to_location_uuid, transfer_date, note, target_status } = req.body;
       const machines = JSON.parse(req.body.machines || "[]");
       const userPhongBanId = req.user.phongban_id; // Lấy phòng ban của User 1
       const userId = req.user.id;
@@ -4833,8 +4834,8 @@ app.post(
       const [transferResult] = await connection.query(
         `
         INSERT INTO tb_machine_internal_transfer
-          (to_location_id, transfer_date, status, note, created_by, updated_by, attached_file)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+          (to_location_id, transfer_date, status, note, created_by, updated_by, attached_file, target_status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
           to_location_id,
@@ -4844,6 +4845,7 @@ app.post(
           userId,
           userId,
           attachedFileString || null,
+          target_status || null,
         ]
       );
       const transferId = transferResult.insertId;
@@ -5210,9 +5212,21 @@ const handleInternalTransferApproval = async (
   ticketId,
   toLocationId,
   toLocationName, // Cần tên vị trí đến
-  userId
+  userId,
+  forcedTargetStatus = null
 ) => {
-  // 1. Lấy tất cả máy móc trong phiếu
+  let targetStatus = forcedTargetStatus;
+
+  if (!targetStatus) {
+    // 1. Lấy thông tin target_status từ phiếu
+    const [ticketInfo] = await connection.query(
+      `SELECT target_status FROM tb_machine_internal_transfer WHERE id_machine_internal_transfer = ?`,
+      [ticketId]
+    );
+    targetStatus = ticketInfo[0]?.target_status;
+  }
+
+  // 2. Lấy tất cả máy móc trong phiếu
   const [details] = await connection.query(
     `SELECT id_machine FROM tb_machine_internal_transfer_detail WHERE id_machine_internal_transfer = ?`,
     [ticketId]
@@ -5223,13 +5237,24 @@ const handleInternalTransferApproval = async (
     return;
   }
 
-  // 2. Xác định trạng thái mới
-  const newMachineStatus =
-    toLocationName && toLocationName.toLowerCase().includes("kho")
-      ? "available"
-      : "in_use";
+  // 3. Xác định trạng thái mới
+  let newMachineStatus = "in_use"; // Mặc định nếu ra xưởng
 
-  // 3. Lặp qua từng máy để cập nhật
+  if (toLocationName && toLocationName.toLowerCase().includes("kho")) {
+    // Nếu vào KHO:
+    if (targetStatus && targetStatus.trim() !== "") {
+      // Nếu có targetStatus (vd: pending_liquidation), DÙNG NGAY
+      newMachineStatus = targetStatus;
+    } else {
+      // Nếu không có, mới fallback về available
+      newMachineStatus = "available";
+    }
+  } else {
+    // Nếu ra XƯỞNG
+    newMachineStatus = "in_use";
+  }
+
+  // 4. Lặp qua từng máy để cập nhật
   for (const detail of details) {
     const idMachine = detail.id_machine;
     const idToLocation = toLocationId;
@@ -5254,7 +5279,6 @@ const handleInternalTransferApproval = async (
       );
     }
 
-    // <<< START: SỬA LỖI LOGIC TẠI ĐÂY >>>
     // c. Cập nhật/Thêm vào tb_machine_location
     if (currentLocResult.length === 0) {
       // INSERT nếu máy chưa có vị trí
@@ -5287,7 +5311,6 @@ const handleInternalTransferApproval = async (
         [userId, idMachine]
       );
     }
-    // <<< END: SỬA LỖI LOGIC >>>
 
     // d. Cập nhật trạng thái máy (tb_machine)
     await connection.query(
@@ -6669,6 +6692,7 @@ app.post(
         receiver_name, // Họ tên người nhận
         vehicle_number, // Số xe
         department_address, // Địa chỉ (bộ phận)
+        target_status,
       } = req.body;
 
       const machines = JSON.parse(machinesJson || "[]");
@@ -6725,25 +6749,14 @@ app.post(
         approvalFlowForDB = [
           {
             // ma_nv: "06264",
-            ma_nv: "10107",
+            ma_nv: "09802",
             step_flow: 0,
-            isFinalFlow: 0,
+            isFinalFlow: 1,
             status_text: "Đang chờ duyệt",
             is_forward: 0,
             display_name: "Trưởng phòng Cơ điện",
             is_flow: 1,
             indexOf: 1,
-          },
-          {
-            // ma_nv: "00039",
-            ma_nv: "09802",
-            step_flow: 1,
-            isFinalFlow: 1,
-            status_text: "Đang chờ duyệt",
-            is_forward: 0,
-            display_name: "Trưởng phòng Lean",
-            is_flow: 1,
-            indexOf: 2,
           },
         ];
       } else if (category === "export") {
@@ -6804,7 +6817,7 @@ app.post(
               is_forward: 0,
               display_name: "Trưởng phòng Cơ điện",
               is_flow: 1,
-              indexOf: 3,
+              indexOf: 1,
             },
           ];
         } else {
@@ -7040,7 +7053,9 @@ app.post(
         }
       } else if (category === "internal") {
         const [resTransfer] = await connection.query(
-          `INSERT INTO tb_machine_internal_transfer (to_location_id, transfer_date, status, note, created_by, updated_by, attached_file, approval_flow) VALUES (?, ?, 'pending_confirmation', ?, ?, ?, ?, ?)`,
+          `INSERT INTO tb_machine_internal_transfer (
+             to_location_id, transfer_date, status, note, created_by, updated_by, attached_file, approval_flow, target_status
+           ) VALUES (?, ?, 'pending_confirmation', ?, ?, ?, ?, ?, ?)`,
           [
             to_location_id,
             dateFormatted,
@@ -7049,6 +7064,7 @@ app.post(
             userId,
             attachedFileString,
             approvalFlowJson,
+            target_status || null,
           ]
         );
         ticketId = resTransfer.insertId;
@@ -7133,7 +7149,8 @@ app.post(
         name_proposal_reality: proposalName,
         id_department: id_department_str,
         uid_reference_success:
-          "https://sveffmachine.vietlonghung.com.vn/api/tpm/api/test-proposals/callback",
+          // "https://sveffmachine.vietlonghung.com.vn/api/tpm/api/test-proposals/callback",
+          "http://192.168.1.61:8081/api/test-proposals/callback",
         id_reference_outside: newTicketUuid,
         group_people_flow: approvalFlowForExternal,
         attacted_file:
@@ -7161,7 +7178,8 @@ app.post(
           JSON.stringify(externalPayload, null, 2)
         );
         const externalResponse = await axios.post(
-          "https://servertienich.vietlonghung.com.vn/api/fw/create-proposal-reality-outdoor",
+          // "https://servertienich.vietlonghung.com.vn/api/fw/create-proposal-reality-outdoor",
+          "http://192.168.0.35:16002/api/fw/create-proposal-reality-outdoor",
           externalPayload
         );
         console.log("External API Response:", externalResponse.data);
@@ -7241,7 +7259,7 @@ app.post("/api/test-proposals/callback", async (req, res) => {
       } else {
         // Kiểm tra Internal
         const [internalCheck] = await connection.query(
-          "SELECT id_machine_internal_transfer, approval_flow, created_by, to_location_id FROM tb_machine_internal_transfer WHERE uuid_machine_internal_transfer = ?",
+          "SELECT id_machine_internal_transfer, approval_flow, created_by, to_location_id, target_status FROM tb_machine_internal_transfer WHERE uuid_machine_internal_transfer = ?",
           [id_refer]
         );
         if (internalCheck.length > 0) {
@@ -7375,7 +7393,8 @@ app.post("/api/test-proposals/callback", async (req, res) => {
           ticketId,
           ticketInfo.to_location_id,
           locationName,
-          updaterId
+          updaterId,
+          ticketInfo.target_status
         );
       } else {
         await updateMachineLocationAndStatus(
