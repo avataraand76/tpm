@@ -7180,6 +7180,26 @@ app.post(
         "",
       ]);
 
+      let idGroupNotification = null;
+      if (category === "internal" && to_location_name) {
+        const locNameLower = to_location_name.toLowerCase();
+
+        // Nhóm Xưởng 1, 2, 3 -> Gửi cho 00024
+        if (
+          locNameLower.includes("xưởng 1") ||
+          locNameLower.includes("xưởng 2") ||
+          locNameLower.includes("xưởng 3")
+        ) {
+          // idGroupNotification = ["00024"];
+          idGroupNotification = ["10107"];
+        }
+        // Nhóm Xưởng 4 -> Gửi cho 09802
+        else if (locNameLower.includes("xưởng 4")) {
+          // idGroupNotification = ["02722"];
+          idGroupNotification = ["09802"];
+        }
+      }
+
       const externalPayload = {
         uid_proposal_type: targetUidProposalType,
         ma_nv: ma_nv_login,
@@ -7207,6 +7227,9 @@ app.post(
           rows: tableRows,
         },
         ...(expansionField.length > 0 && { expansion_field: expansionField }),
+        ...(idGroupNotification && {
+          id_group_people_notification_outside: idGroupNotification,
+        }),
       };
 
       try {
