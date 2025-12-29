@@ -6761,11 +6761,12 @@ app.post(
       let dest_phongban_id = null;
       let to_location_id = null;
       let to_location_name = ""; // Khai báo biến để lưu tên vị trí
+      let to_department_name = "";
 
       if (to_location_uuid) {
         // CẬP NHẬT QUERY ĐỂ LẤY name_location
         const [locRes] = await connection.query(
-          `SELECT tl.id_location, tl.name_location, td.id_phong_ban 
+          `SELECT tl.id_location, tl.name_location, td.id_phong_ban, td.name_department
            FROM tb_location tl 
            LEFT JOIN tb_department td ON tl.id_department = td.id_department 
            WHERE tl.uuid_location = ?`,
@@ -6775,6 +6776,7 @@ app.post(
           to_location_id = locRes[0].id_location;
           to_location_name = locRes[0].name_location; // Lấy tên vị trí
           dest_phongban_id = locRes[0].id_phong_ban;
+          to_department_name = locRes[0].name_department;
         } else {
           throw new Error("Vị trí không tồn tại");
         }
@@ -7181,20 +7183,20 @@ app.post(
       ]);
 
       let idGroupNotification = null;
-      if (category === "internal" && to_location_name) {
-        const locNameLower = to_location_name.toLowerCase();
+      if (category === "internal" && to_department_name) {
+        const deptNameLower = to_department_name.toLowerCase();
 
-        // Nhóm Xưởng 1, 2, 3 -> Gửi cho 00024
+        // Nhóm Xưởng 1, 2, 3 -> Gửi cho 00024 (Theo yêu cầu của bạn)
         if (
-          locNameLower.includes("xưởng 1") ||
-          locNameLower.includes("xưởng 2") ||
-          locNameLower.includes("xưởng 3")
+          deptNameLower.includes("xưởng 1") ||
+          deptNameLower.includes("xưởng 2") ||
+          deptNameLower.includes("xưởng 3")
         ) {
           // idGroupNotification = ["00024"];
           idGroupNotification = ["10107"];
         }
         // Nhóm Xưởng 4 -> Gửi cho 09802
-        else if (locNameLower.includes("xưởng 4")) {
+        else if (deptNameLower.includes("xưởng 4")) {
           // idGroupNotification = ["02722"];
           idGroupNotification = ["09802"];
         }
