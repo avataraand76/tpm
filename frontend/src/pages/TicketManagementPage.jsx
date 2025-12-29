@@ -165,8 +165,6 @@ const TicketManagementPage = () => {
     message: "",
   });
 
-  const [categoryOptions, setCategoryOptions] = useState([]);
-
   const [openCreateMachineDialog, setOpenCreateMachineDialog] = useState(false);
   const [newMachineData, setNewMachineData] = useState({
     code_machine: "",
@@ -184,6 +182,10 @@ const TicketManagementPage = () => {
     current_status: "available",
     name_category: "",
   });
+
+  // State for autocomplete options
+  const [typeOptions, setTypeOptions] = useState([]);
+  const [manufacturerOptions, setManufacturerOptions] = useState([]);
 
   const [openImportDialog, setOpenImportDialog] = useState(false);
   const [importFile, setImportFile] = useState(null);
@@ -391,23 +393,6 @@ const TicketManagementPage = () => {
   }, [fetchData]);
   useEffect(() => {
     fetchExternalLocations();
-
-    const fetchCategories = async () => {
-      try {
-        const catRes = await api.categories.getAll(); // API này đã được sửa ở bước trước
-        if (catRes.success) {
-          setCategoryOptions(catRes.data); // Data là [{ name_category: "..." }]
-        }
-      } catch (err) {
-        console.error("Error fetching categories:", err);
-        showNotification(
-          "error",
-          "Lỗi tải Phân loại",
-          "Không thể tải danh sách phân loại."
-        );
-      }
-    };
-    fetchCategories();
   }, [fetchExternalLocations, showNotification]);
 
   useEffect(() => {
@@ -917,7 +902,20 @@ const TicketManagementPage = () => {
     return errors;
   };
 
-  const handleOpenCreateMachineDialog = () => {
+  const fetchFilterOptions = async () => {
+    try {
+      const [typeRes, manuRes] = await Promise.all([
+        api.machines.getDistinctValues({ field: "type_machine" }),
+        api.machines.getDistinctValues({ field: "manufacturer" }),
+      ]);
+      if (typeRes.success) setTypeOptions(typeRes.data);
+      if (manuRes.success) setManufacturerOptions(manuRes.data);
+    } catch (err) {
+      console.error("Error fetching filter options:", err);
+    }
+  };
+
+  const handleOpenCreateMachineDialog = async () => {
     setNewMachineData({
       code_machine: "",
       serial_machine: "",
@@ -932,8 +930,10 @@ const TicketManagementPage = () => {
       repair_cost: "",
       note: "",
       current_status: "available",
-      name_category: "",
+      name_category: "Máy móc thiết bị",
     });
+    // Fetch filter options when opening dialog
+    await fetchFilterOptions();
     setOpenCreateMachineDialog(true);
   };
 
@@ -3244,48 +3244,30 @@ const TicketManagementPage = () => {
                 />
               </Grid>
               <Grid size={{ xs: 12, sm: 6 }}>
-                <FormControl
+                <TextField
                   fullWidth
-                  disabled={!canCreateOrImportMachines}
-                  required
-                >
-                  <InputLabel>Phân loại</InputLabel>
-                  <Select
-                    name="name_category"
-                    value={newMachineData.name_category || ""}
-                    label="Phân loại"
-                    onChange={(e) =>
-                      handleCreateMachineInputChange(
-                        "name_category",
-                        e.target.value
-                      )
-                    }
-                  >
-                    {categoryOptions.map((category) => (
-                      <MenuItem
-                        key={category.name_category}
-                        value={category.name_category}
-                      >
-                        {category.name_category}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                  label="Phân loại"
+                  value="Máy móc thiết bị"
+                  disabled={true}
+                  sx={DISABLED_VIEW_SX}
+                />
               </Grid>
 
               <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  fullWidth
-                  label="Loại máy"
-                  required
+                <Autocomplete
+                  freeSolo
+                  options={typeOptions}
                   value={newMachineData.type_machine || ""}
-                  onChange={(e) =>
+                  onInputChange={(event, newInputValue) => {
                     handleCreateMachineInputChange(
                       "type_machine",
-                      e.target.value
-                    )
-                  }
+                      newInputValue
+                    );
+                  }}
                   disabled={!canCreateOrImportMachines}
+                  renderInput={(params) => (
+                    <TextField {...params} label="Loại máy" required />
+                  )}
                 />
               </Grid>
               <Grid size={{ xs: 12, sm: 6 }}>
@@ -3304,19 +3286,21 @@ const TicketManagementPage = () => {
               </Grid>
 
               <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  fullWidth
-                  label="Hãng sản xuất"
+                <Autocomplete
+                  freeSolo
+                  options={manufacturerOptions}
                   value={newMachineData.manufacturer || ""}
-                  onChange={(e) =>
+                  onInputChange={(event, newInputValue) => {
                     handleCreateMachineInputChange(
                       "manufacturer",
-                      e.target.value
-                    )
-                  }
-                  // THÊM MỚI: Sự kiện onBlur
+                      newInputValue
+                    );
+                  }}
                   onBlur={handleGenerateCodeForNewMachine}
                   disabled={!canCreateOrImportMachines}
+                  renderInput={(params) => (
+                    <TextField {...params} label="Hãng sản xuất" />
+                  )}
                 />
               </Grid>
               <Grid size={{ xs: 12, sm: 6 }}>

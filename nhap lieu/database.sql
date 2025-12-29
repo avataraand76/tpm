@@ -427,6 +427,97 @@ create table if not exists tb_machine_request_detail
     updated_by bigint default '0'
 );
 
+-- MARK: inventory check phiếu kiểm kê
+create table if not exists tb_inventory_check
+(
+    -- primary
+    id_inventory_check bigint not null auto_increment,
+    uuid_inventory_check varchar(36) not null unique default (UUID()),
+    
+    -- properties
+    check_date date,
+    status enum('draft', 'pending', 'completed', 'cancelled') default 'draft',
+    note text,
+    expansion_field json,
+    approval_flow json,
+
+    -- key
+    primary key (id_inventory_check),
+
+    -- timestamp
+    created_at timestamp default current_timestamp,
+    created_by bigint default '0',
+    updated_at timestamp default current_timestamp on update current_timestamp,
+    updated_by bigint default '0'
+);
+
+-- MARK: inventory check detail chi tiết kiểm kê (theo từng vị trí)
+create table if not exists tb_inventory_check_detail
+(
+    -- foreign
+    id_inventory_check bigint,
+    id_department bigint,
+
+    -- properties
+    is_completed boolean default false, -- Đã kiểm xong vị trí này chưa
+    -- Lưu danh sách máy quét được dưới dạng JSON scanned_result nếu lệch vị trí thì đánh dấu
+    -- VD: 
+    /*
+    {
+        "location_name": "Chuyền 1",
+        "location_uuid": "02c448bd-c367-11f0-93ae-00163e484474",
+        "scanned_machine": [
+            {
+                "uuid": "123e4567-e89b-12d3-a456-426614174000", 
+                "name": "type_machine - model_machine", 
+                "serial": "1234567890", 
+                "RFID": "1234567890", 
+                "NFC": "1234567890", 
+                "mislocation": "0" // 0: không lệch vị trí, 1: lệch vị trí
+            },
+            {
+                "uuid": "123e4567-e89b-12d3-a456-426614174001", 
+                "name": "type_machine - model_machine", 
+                "serial": "1234567890", 
+                "RFID": "1234567890", 
+                "NFC": "1234567890", 
+                "mislocation": "1" // 0: không lệch vị trí, 1: lệch vị trí
+            }
+        ],
+        "location_name": "Chuyền 2",
+        "location_uuid": "02c448bd-c367-11f0-93ae-00163e484474",
+        "scanned_machine": [
+            {
+                "uuid": "123e4567-e89b-12d3-a456-426614174000", 
+                "name": "type_machine - model_machine", 
+                "serial": "1234567890", 
+                "RFID": "1234567890", 
+                "NFC": "1234567890", 
+                "mislocation": "0" // 0: không lệch vị trí, 1: lệch vị trí
+            },
+            {
+                "uuid": "123e4567-e89b-12d3-a456-426614174001", 
+                "name": "type_machine - model_machine", 
+                "serial": "1234567890", 
+                "RFID": "1234567890", 
+                "NFC": "1234567890", 
+                "mislocation": "1" // 0: không lệch vị trí, 1: lệch vị trí
+            }
+        ],
+    }
+    */
+    scanned_result json, 
+
+    -- key
+    unique (id_inventory_check, id_department),
+    
+    -- timestamp
+    created_at timestamp default current_timestamp,
+    created_by bigint default '0',
+    updated_at timestamp default current_timestamp on update current_timestamp,
+    updated_by bigint default '0'
+);
+
 -- MARK: insert data
 insert into tb_category (name_category) values ('Máy móc thiết bị'), ('Phụ kiện');
 

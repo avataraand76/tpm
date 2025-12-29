@@ -90,14 +90,6 @@ export const api = {
     },
   },
 
-  // MARK: CATEGORIES
-  categories: {
-    getAll: async () => {
-      const response = await httpConnect.get("/api/categories");
-      return response.data;
-    },
-  },
-
   // MARK: MACHINES
   machines: {
     getAll: async (params = {}) => {
@@ -469,6 +461,55 @@ export const api = {
       // data là FormData chứa file và text
       const response = await httpConnect.post(
         "/api/test-proposals/create",
+        data
+      );
+      return response.data;
+    },
+  },
+
+  // MARK: INVENTORY CHECK
+  inventory: {
+    getAll: async (params = {}) => {
+      const response = await httpConnect.get("/api/inventory-checks", {
+        params,
+      });
+      return response.data;
+    },
+    getById: async (uuid) => {
+      const response = await httpConnect.get(`/api/inventory-checks/${uuid}`);
+      return response.data;
+    },
+    create: async (data) => {
+      // data: { check_date, note, department_uuids: [] }
+      const response = await httpConnect.post("/api/inventory-checks", data);
+      return response.data;
+    },
+    scanLocation: async (uuid, data) => {
+      // data: { department_uuid, location_uuid, scanned_machines: [...] }
+      const response = await httpConnect.post(
+        `/api/inventory-checks/${uuid}/scan`,
+        data
+      );
+      return response.data;
+    },
+    submit: async (uuid) => {
+      const response = await httpConnect.put(
+        `/api/inventory-checks/${uuid}/submit`
+      );
+      return response.data;
+    },
+    updateScannedResult: async (uuid, data) => {
+      // data: { department_uuid, scanned_result: [...] }
+      const response = await httpConnect.put(
+        `/api/inventory-checks/${uuid}/update-scanned`,
+        data
+      );
+      return response.data;
+    },
+    addDepartments: async (uuid, data) => {
+      // data: { department_uuids: [] }
+      const response = await httpConnect.post(
+        `/api/inventory-checks/${uuid}/add-departments`,
         data
       );
       return response.data;

@@ -602,7 +602,17 @@ const LocationTrackPage = () => {
     in_use: { bg: "#667eea22", color: "#667eea", label: "Đang sử dụng" },
     maintenance: { bg: "#ff980022", color: "#ff9800", label: "Bảo trì" },
     rented: { bg: "#673ab722", color: "#673ab7", label: "Máy thuê" },
+    rented_return: {
+      bg: "#673ab722",
+      color: "#673ab7",
+      label: "Đã trả (Máy Thuê)",
+    },
     borrowed: { bg: "#03a9f422", color: "#03a9f4", label: "Máy mượn" },
+    borrowed_return: {
+      bg: "#03a9f422",
+      color: "#03a9f4",
+      label: "Đã trả (Máy Mượn)",
+    },
     borrowed_out: { bg: "#00bcd422", color: "#00bcd4", label: "Cho mượn" },
     liquidation: { bg: "#f4433622", color: "#f44336", label: "Thanh lý" },
     pending_liquidation: {
@@ -610,7 +620,7 @@ const LocationTrackPage = () => {
       color: "#ff5722",
       label: "Chờ thanh lý",
     },
-    disabled: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Vô hiệu hóa" },
+    disabled: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Chưa sử dụng" },
   };
 
   const getStatusInfo = (statusKey) => {
@@ -1348,7 +1358,7 @@ const LocationTrackPage = () => {
             {/* {stats.broken || 0}
                   </Typography>
                   <Typography variant="caption" color="text.secondary"> */}
-            {/* Vô hiệu hóa/ */}
+            {/* Chưa sử dụng/ */}
             {/* Máy hư
                   </Typography>
                 </CardContent>
@@ -1356,7 +1366,7 @@ const LocationTrackPage = () => {
             </Grid> */}
 
             {/* --- HÀNG 2 --- */}
-            {/* 3. Chưa sử dụng (Bảo trì + Hư + Vô hiệu hóa/Cho mượn) */}
+            {/* 3. Chưa sử dụng (Bảo trì + Hư + Chưa sử dụng/Cho mượn) */}
             <Grid size={{ xs: 6 }}>
               <Card
                 elevation={0}

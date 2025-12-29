@@ -131,6 +131,7 @@ const AdminPage = () => {
   const [loadingUserPermissions, setLoadingUserPermissions] = useState(false);
   const [selectedUserPermissions, setSelectedUserPermissions] = useState({});
   const [savingPermissions, setSavingPermissions] = useState(false);
+  const [expandedAccordions, setExpandedAccordions] = useState({});
 
   // States for Dialog
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -303,6 +304,19 @@ const AdminPage = () => {
     if (mode === "edit" && type === "location") {
       if (parent) {
         finalItem.uuid_department = parent.uuid_department;
+        // Giữ accordion mở khi edit location
+        setExpandedAccordions((prev) => ({
+          ...prev,
+          [parent.uuid_department]: true,
+        }));
+      }
+    } else if (mode === "edit" && type === "department") {
+      // Giữ accordion mở khi edit department
+      if (item && item.uuid_department) {
+        setExpandedAccordions((prev) => ({
+          ...prev,
+          [item.uuid_department]: true,
+        }));
       }
     } else if (mode === "create" && type === "department") {
       finalItem = { type: "department" };
@@ -320,6 +334,11 @@ const AdminPage = () => {
       type: "location",
       uuid_department: department.uuid_department,
     });
+    // Mở accordion của department này
+    setExpandedAccordions((prev) => ({
+      ...prev,
+      [department.uuid_department]: true,
+    }));
     setDialogOpen(true);
   };
 
@@ -339,6 +358,7 @@ const AdminPage = () => {
       const { type, ...data } = currentItem;
       let apiCall;
       let successMessage = "";
+      let keepAccordionOpen = null;
 
       if (type === "department") {
         if (dialogMode === "create") {
@@ -347,15 +367,18 @@ const AdminPage = () => {
         } else {
           apiCall = api.admin.updateDepartment(data.uuid_department, data);
           successMessage = "Cập nhật đơn vị thành công";
+          keepAccordionOpen = data.uuid_department;
         }
       } else if (type === "location") {
         if (dialogMode === "create") {
           apiCall = api.admin.createLocation(data);
           successMessage = "Tạo vị trí thành công";
+          keepAccordionOpen = data.uuid_department;
         } else {
           const updateData = { name_location: data.name_location };
           apiCall = api.admin.updateLocation(data.uuid_location, updateData);
           successMessage = "Cập nhật vị trí thành công";
+          keepAccordionOpen = data.uuid_department;
         }
       } else if (type === "category") {
         if (dialogMode === "create") {
@@ -369,6 +392,15 @@ const AdminPage = () => {
 
       await apiCall;
       showNotification("success", "Thành công", successMessage);
+
+      // Giữ accordion mở nếu đang thao tác với location hoặc edit department
+      if (keepAccordionOpen) {
+        setExpandedAccordions((prev) => ({
+          ...prev,
+          [keepAccordionOpen]: true,
+        }));
+      }
+
       fetchData();
       handleCloseDialog();
     } catch (error) {
@@ -567,6 +599,15 @@ const AdminPage = () => {
                     <Accordion
                       key={dept.uuid_department}
                       elevation={0}
+                      expanded={
+                        expandedAccordions[dept.uuid_department] || false
+                      }
+                      onChange={(e, isExpanded) =>
+                        setExpandedAccordions((prev) => ({
+                          ...prev,
+                          [dept.uuid_department]: isExpanded,
+                        }))
+                      }
                       sx={{
                         border: "1px solid rgba(0,0,0,0.08)",
                         borderRadius: "12px !important",

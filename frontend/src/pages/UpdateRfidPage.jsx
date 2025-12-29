@@ -161,8 +161,8 @@ const UpdateRfidPage = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
-  // Dãy Serial (Input)
-  const [serialInput, setSerialInput] = useState("");
+  // Dãy Serial/NFC (Input)
+  const [identifierInput, setIdentifierInput] = useState("");
   // Dãy RFID (Input)
   const [rfidInput, setRfidInput] = useState("");
 
@@ -173,6 +173,7 @@ const UpdateRfidPage = () => {
   const filteredData = processedData.filter((row) => {
     if (filterStatus === "all") return true;
     if (filterStatus === "duplicate") return row.isDuplicateSerial;
+    if (filterStatus === "duplicateRfid") return row.isDuplicateRfid;
     if (filterStatus === "notFound") return row.notFound;
     if (row.notFound) return false;
     if (filterStatus === "diff") return row.newRfid !== row.currentRfid;
@@ -194,8 +195,9 @@ const UpdateRfidPage = () => {
   const tableContainerRef = useRef(null);
 
   // Hàm xử lý prefix (MAY-, PHUKIEN-)
-  const cleanSerial = (s) => {
+  const cleanInputCode = (s) => {
     const upper = s.trim().toUpperCase();
+    // Nếu bạn muốn giữ logic cắt MAY-/PHUKIEN- cho Serial
     if (upper.startsWith("MAY-") || upper.startsWith("PHUKIEN-")) {
       return upper.split("-").slice(1).join("-");
     }
@@ -219,7 +221,7 @@ const UpdateRfidPage = () => {
 
   // Bước 1: Ghép cặp & Kiểm tra
   const handlePairAndCheck = async () => {
-    if (!serialInput) {
+    if (!identifierInput) {
       showNotification("warning", "Thiếu Serial", "Vui lòng nhập Serial.");
       return;
     }
@@ -232,38 +234,44 @@ const UpdateRfidPage = () => {
     setProcessedData([]);
 
     // 1. Tách Serial
-    const serialsToProcess = serialInput
+    const codesToProcess = identifierInput
       .split("\n")
-      .map(cleanSerial)
+      .map(cleanInputCode)
       .filter(Boolean);
 
     // Tách RFID
     const rfidsToProcess = rfidInput.split("\n").map(cleanRfid).filter(Boolean);
 
-    if (serialsToProcess.length === 0) {
+    if (codesToProcess.length === 0) {
       setLoadingCheck(false);
       return;
     }
 
     // Kiểm tra khớp số lượng
-    if (serialsToProcess.length !== rfidsToProcess.length) {
+    if (codesToProcess.length !== rfidsToProcess.length) {
       setLoadingCheck(false);
       showNotification(
         "error",
         "Lỗi số lượng",
-        `Số lượng Serial (${serialsToProcess.length}) không khớp với số lượng RFID mới (${rfidsToProcess.length}). Vui lòng kiểm tra lại.`
+        `Số lượng Serial (${codesToProcess.length}) không khớp với số lượng RFID mới (${rfidsToProcess.length}). Vui lòng kiểm tra lại.`
       );
       return;
     }
 
-    const serialCounts = serialsToProcess.reduce((acc, curr) => {
+    const codeCounts = codesToProcess.reduce((acc, curr) => {
+      acc[curr] = (acc[curr] || 0) + 1;
+      return acc;
+    }, {});
+
+    // Đếm số lần xuất hiện của mỗi RFID
+    const rfidCounts = rfidsToProcess.reduce((acc, curr) => {
       acc[curr] = (acc[curr] || 0) + 1;
       return acc;
     }, {});
 
     try {
       // 2. Gọi API kiểm tra (Chỉ gửi danh sách unique lên server để tối ưu)
-      const uniqueSerials = [...new Set(serialsToProcess)];
+      const uniqueSerials = [...new Set(codesToProcess)];
       const result = await api.machines.batchCheckSerials({
         serials: uniqueSerials,
       });
@@ -273,40 +281,50 @@ const UpdateRfidPage = () => {
       }
 
       // 3. Tạo Map để tra cứu
-      const machineMap = new Map(result.data.map((m) => [m.serial_machine, m]));
+      const machinesFound = result.data;
 
       // 4. Xử lý kết quả trả về theo đúng thứ tự đã nhập
       const dataForTable = [];
 
       // Lặp theo mảng Serial và ghép cặp với RFID
-      for (let i = 0; i < serialsToProcess.length; i++) {
-        const serial = serialsToProcess[i];
+      for (let i = 0; i < codesToProcess.length; i++) {
+        const inputCode = codesToProcess[i];
         const newRfid = rfidsToProcess[i];
-        const machine = machineMap.get(serial);
+        const machine = machinesFound.find(
+          (m) => m.serial_machine === inputCode || m.NFC_machine === inputCode
+        );
 
         // Kiểm tra xem serial này có bị trùng trong danh sách nhập vào không
-        const isDuplicate = serialCounts[serial] > 1;
+        const isDuplicateSerial = codeCounts[inputCode] > 1;
+        // Kiểm tra xem RFID này có bị trùng trong danh sách nhập vào không
+        const isDuplicateRfid = rfidCounts[newRfid] > 1;
 
         if (machine) {
           // Tìm thấy
           dataForTable.push({
             serial: machine.serial_machine,
+            inputType: machine.serial_machine === inputCode ? "Serial" : "NFC",
+            inputVal: inputCode,
             name: `${machine.type_machine || ""} - ${
               machine.model_machine || ""
             }`,
             currentRfid: machine.RFID_machine || "(Chưa có)",
             newRfid: newRfid,
             notFound: false,
-            isDuplicateSerial: isDuplicate,
+            isDuplicateSerial: isDuplicateSerial,
+            isDuplicateRfid: isDuplicateRfid,
           });
         } else {
           dataForTable.push({
-            serial: serial,
+            serial: inputCode,
+            inputType: "N/A",
+            inputVal: inputCode,
             name: "(Serial không tìm thấy)",
             currentRfid: "(Serial không tìm thấy)",
             newRfid: newRfid,
             notFound: true,
-            isDuplicateSerial: isDuplicate,
+            isDuplicateSerial: isDuplicateSerial,
+            isDuplicateRfid: isDuplicateRfid,
           });
         }
       }
@@ -315,18 +333,26 @@ const UpdateRfidPage = () => {
       setProcessedData(dataForTable);
 
       // Thông báo: Nếu có trùng lặp thì cảnh báo nhẹ
-      const hasDuplicates = dataForTable.some((d) => d.isDuplicateSerial);
-      if (hasDuplicates) {
+      const hasDuplicateSerials = dataForTable.some((d) => d.isDuplicateSerial);
+      const hasDuplicateRfids = dataForTable.some((d) => d.isDuplicateRfid);
+
+      if (hasDuplicateSerials || hasDuplicateRfids) {
+        const warnings = [];
+        if (hasDuplicateSerials) warnings.push("Serial trùng lặp");
+        if (hasDuplicateRfids) warnings.push("RFID trùng lặp");
+
         showNotification(
           "warning",
           "Kiểm tra hoàn tất (Có trùng lặp)",
-          `Đã xử lý ${serialsToProcess.length} dòng. Phát hiện Serial trùng lặp (màu cam).`
+          `Đã xử lý ${codesToProcess.length} dòng. Phát hiện: ${warnings.join(
+            ", "
+          )}.`
         );
       } else {
         showNotification(
           "success",
           "Ghép cặp & Kiểm tra hoàn tất",
-          `Đã xử lý ${serialsToProcess.length} cặp Serial-RFID.`
+          `Đã xử lý ${codesToProcess.length} cặp Serial-RFID.`
         );
       }
 
@@ -418,7 +444,7 @@ const UpdateRfidPage = () => {
 
   // Hàm xóa (reset) form
   const handleClear = () => {
-    setSerialInput("");
+    setIdentifierInput("");
     setRfidInput("");
     setProcessedData([]);
   };
@@ -430,23 +456,34 @@ const UpdateRfidPage = () => {
         acc.duplicateCount++;
       }
 
-      // 2. Đếm Serial không tìm thấy
+      // 2. Đếm RFID bị trùng (Đếm tổng số dòng bị đánh dấu trùng)
+      if (row.isDuplicateRfid) {
+        acc.duplicateRfidCount++;
+      }
+
+      // 3. Đếm Serial không tìm thấy
       if (row.notFound) {
         acc.notFoundCount++;
       }
       // Nếu tìm thấy thì mới so sánh RFID
       else {
         if (row.newRfid === row.currentRfid) {
-          // 3. RFID Mới GIỐNG RFID Cũ
+          // 4. RFID Mới GIỐNG RFID Cũ
           acc.sameRfidCount++;
         } else {
-          // 4. RFID Mới KHÁC RFID Cũ (Cần cập nhật)
+          // 5. RFID Mới KHÁC RFID Cũ (Cần cập nhật)
           acc.diffRfidCount++;
         }
       }
       return acc;
     },
-    { diffRfidCount: 0, sameRfidCount: 0, notFoundCount: 0, duplicateCount: 0 }
+    {
+      diffRfidCount: 0,
+      sameRfidCount: 0,
+      notFoundCount: 0,
+      duplicateCount: 0,
+      duplicateRfidCount: 0,
+    }
   );
 
   return (
@@ -504,14 +541,14 @@ const UpdateRfidPage = () => {
               {/* CỘT SERIAL INPUT */}
               <Grid size={{ xs: 12, md: 5 }}>
                 <Typography variant="h6" gutterBottom>
-                  Bước 1: Nhập Dãy Serial
+                  Bước 1: Nhập Serial hoặc NFC
                 </Typography>
 
                 <LinedTextarea
                   rows={isMobile ? 10 : 15} // Tăng chiều cao
-                  placeholder="Dán Serial (mỗi serial 1 dòng)"
-                  value={serialInput}
-                  onChange={(e) => setSerialInput(e.target.value)}
+                  placeholder="Dán Serial hoặc NFC (mỗi mã 1 dòng)"
+                  value={identifierInput}
+                  onChange={(e) => setIdentifierInput(e.target.value)}
                 />
                 <Typography
                   variant="caption"
@@ -764,7 +801,7 @@ const UpdateRfidPage = () => {
                       color="warning.main"
                       fontWeight="bold"
                     >
-                      Serial bị trùng
+                      Serial/NFC bị trùng
                     </Typography>
                     <Typography
                       variant="h5"
@@ -772,6 +809,39 @@ const UpdateRfidPage = () => {
                       fontWeight="bold"
                     >
                       {stats.duplicateCount}
+                    </Typography>
+                  </Paper>
+
+                  {/* Thẻ: RFID Trùng */}
+                  <Paper
+                    variant="outlined"
+                    onClick={() => setFilterStatus("duplicateRfid")}
+                    sx={{
+                      p: 1.5,
+                      flex: 1,
+                      cursor: "pointer",
+                      borderColor: "error.main",
+                      bgcolor:
+                        filterStatus === "duplicateRfid"
+                          ? "rgba(211, 47, 47, 0.15)"
+                          : "rgba(211, 47, 47, 0.04)",
+                      borderWidth: filterStatus === "duplicateRfid" ? 2 : 1,
+                      transition: "all 0.2s",
+                    }}
+                  >
+                    <Typography
+                      variant="subtitle2"
+                      color="error.main"
+                      fontWeight="bold"
+                    >
+                      RFID bị trùng
+                    </Typography>
+                    <Typography
+                      variant="h5"
+                      color="error.main"
+                      fontWeight="bold"
+                    >
+                      {stats.duplicateRfidCount}
                     </Typography>
                   </Paper>
                 </Stack>
@@ -804,7 +874,16 @@ const UpdateRfidPage = () => {
                             padding: "10px",
                           }}
                         >
-                          Serial
+                          Input (Serial/NFC)
+                        </TableCell>
+                        <TableCell
+                          sx={{
+                            fontWeight: 600,
+                            fontSize: "0.95rem",
+                            padding: "10px",
+                          }}
+                        >
+                          Serial Gốc
                         </TableCell>
                         <TableCell
                           sx={{
@@ -850,6 +929,15 @@ const UpdateRfidPage = () => {
                             />
                           );
                           rfidColor = "text.secondary";
+                        } else if (row.isDuplicateRfid) {
+                          // RFID trùng: Dấu cảnh báo
+                          statusIcon = (
+                            <ErrorOutline
+                              color="error"
+                              sx={{ fontSize: "1.1rem" }}
+                            />
+                          );
+                          rfidColor = "error.main";
                         } else if (row.currentRfid === row.newRfid) {
                           // Trùng khớp: Dấu tick
                           statusIcon = (
@@ -877,11 +965,15 @@ const UpdateRfidPage = () => {
                               "&:last-child td, &:last-child th": { border: 0 },
                               backgroundColor: row.notFound
                                 ? "rgba(255, 0, 0, 0.05)" // Màu đỏ nhạt
+                                : row.isDuplicateRfid
+                                ? "rgba(211, 47, 47, 0.05)" // Màu đỏ nhạt cho RFID trùng
                                 : "inherit",
                               transition: "all 0.2s ease",
                               "&:hover": {
                                 bgcolor: row.notFound
                                   ? "rgba(255, 0, 0, 0.1)"
+                                  : row.isDuplicateRfid
+                                  ? "rgba(211, 47, 47, 0.1)"
                                   : "rgba(102, 126, 234, 0.03)",
                               },
                             }}
@@ -899,9 +991,19 @@ const UpdateRfidPage = () => {
                                   : "text.primary",
                               }}
                             >
-                              {row.serial}
+                              {row.inputType} - {row.inputVal}
                               {/* (Tuỳ chọn) Nếu muốn hiện thêm chữ thì bỏ comment dòng dưới */}
                               {row.isDuplicateSerial && " (Trùng)"}
+                            </TableCell>
+                            <TableCell
+                              sx={{
+                                padding: "8px 10px",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {row.notFound
+                                ? "(Serial không tìm thấy)"
+                                : row.serial}
                             </TableCell>
                             <TableCell
                               sx={{
@@ -942,6 +1044,7 @@ const UpdateRfidPage = () => {
                                   }}
                                 >
                                   {row.newRfid}
+                                  {row.isDuplicateRfid && " (Trùng)"}
                                 </Typography>
                               </Stack>
                             </TableCell>

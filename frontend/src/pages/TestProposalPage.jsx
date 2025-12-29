@@ -48,6 +48,9 @@ import {
   ListItem,
   ListItemIcon,
   ListItemText,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from "@mui/material";
 import {
   Add,
@@ -64,6 +67,11 @@ import {
   Save,
   CheckCircleOutline,
   ErrorOutline,
+  FactCheck,
+  PlaylistAddCheck,
+  Assessment,
+  ExpandMore,
+  EditNote,
 } from "@mui/icons-material";
 import * as XLSX from "xlsx-js-style";
 import NavigationBar from "../components/NavigationBar";
@@ -72,6 +80,248 @@ import MachineQRScanner from "../components/MachineQRScanner";
 import FileUploadComponent from "../components/FileUploadComponent";
 import RfidScannerDialog from "../components/RfidScannerDialog";
 import { useAuth } from "../hooks/useAuth";
+
+// Component con để hiển thị từng vị trí kiểm kê (Accordion + Filter)
+const InventoryLocationItem = ({
+  location,
+  snapshotCount,
+  canEdit,
+  onRemoveMachine,
+}) => {
+  const [filter, setFilter] = useState("all"); // 'all', 'same', 'diff'
+
+  // 1. Phân loại máy
+  const allMachines = location.scanned_machine || [];
+  const sameDeptMachines = allMachines.filter((m) => m.misdepartment !== "1");
+  const diffDeptMachines = allMachines.filter((m) => m.misdepartment === "1");
+
+  // 2. Tính toán chỉ số
+  const countSystem = snapshotCount || 0;
+  const countActualTotal = allMachines.length;
+  const countSame = sameDeptMachines.length;
+  const countDiff = diffDeptMachines.length;
+  const countGap = countSystem - countActualTotal; // Chênh lệch = Sổ sách - Tổng thực tế
+
+  // 3. Lọc danh sách hiển thị
+  const displayedMachines =
+    filter === "all"
+      ? allMachines
+      : filter === "same"
+      ? sameDeptMachines
+      : diffDeptMachines;
+
+  return (
+    <Accordion
+      defaultExpanded
+      sx={{
+        borderRadius: "12px",
+        overflow: "hidden",
+        mb: 2,
+        border: "1px solid #e0e0e0",
+      }}
+      elevation={0}
+    >
+      <AccordionSummary expandIcon={<ExpandMore />}>
+        <Stack
+          direction={{ xs: "column", md: "row" }}
+          alignItems={{ xs: "flex-start", md: "center" }}
+          spacing={2}
+          sx={{ width: "100%", pr: 2 }}
+        >
+          {/* Tên vị trí */}
+          <Typography
+            variant="subtitle1"
+            sx={{ fontWeight: 700, minWidth: "200px" }}
+          >
+            📍 {location.location_name}
+          </Typography>
+
+          {/* Các Chips Thống kê */}
+          <Stack direction="row" spacing={1} flexWrap="wrap" gap={1}>
+            <Tooltip title="Số lượng trên sổ sách">
+              <Chip
+                label={`Sổ sách: ${countSystem}`}
+                size="small"
+                sx={{
+                  bgcolor: "#e3f2fd",
+                  color: "#1565c0",
+                  fontWeight: 600,
+                  border: "1px solid #bbdefb",
+                }}
+              />
+            </Tooltip>
+
+            <Tooltip title="Thực tế (Thuộc đơn vị này)">
+              <Chip
+                label={`Cùng ĐV: ${countSame}`}
+                size="small"
+                sx={{
+                  bgcolor: "#e8f5e9",
+                  color: "#2e7d32",
+                  fontWeight: 600,
+                  border: "1px solid #c8e6c9",
+                }}
+              />
+            </Tooltip>
+
+            <Tooltip title="Thực tế (Thuộc đơn vị khác)">
+              <Chip
+                label={`Khác ĐV: ${countDiff}`}
+                size="small"
+                sx={{
+                  bgcolor: countDiff > 0 ? "#fff3e0" : "#f5f5f5",
+                  color: countDiff > 0 ? "#ed6c02" : "#bdbdbd",
+                  fontWeight: 600,
+                  border:
+                    countDiff > 0 ? "1px solid #ffe0b2" : "1px solid #e0e0e0",
+                }}
+              />
+            </Tooltip>
+
+            <Tooltip title="Chênh lệch (Sổ sách - Thực tế)">
+              <Chip
+                label={`Chênh lệch: ${countGap}`}
+                size="small"
+                sx={{
+                  bgcolor: countGap !== 0 ? "#ffebee" : "#f5f5f5",
+                  color: countGap !== 0 ? "#d32f2f" : "#bdbdbd",
+                  fontWeight: 600,
+                  border:
+                    countGap !== 0 ? "1px solid #ffcdd2" : "1px solid #e0e0e0",
+                }}
+              />
+            </Tooltip>
+          </Stack>
+        </Stack>
+      </AccordionSummary>
+
+      <AccordionDetails sx={{ bgcolor: "#fafafa", p: 2 }}>
+        {/* Bộ lọc */}
+        <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+          <Button
+            size="small"
+            variant={filter === "all" ? "contained" : "outlined"}
+            onClick={() => setFilter("all")}
+            sx={{ borderRadius: "8px", textTransform: "none" }}
+          >
+            Tất cả ({countActualTotal})
+          </Button>
+          <Button
+            size="small"
+            variant={filter === "same" ? "contained" : "outlined"}
+            color="success"
+            onClick={() => setFilter("same")}
+            sx={{ borderRadius: "8px", textTransform: "none" }}
+          >
+            Cùng ĐV ({countSame})
+          </Button>
+          <Button
+            size="small"
+            variant={filter === "diff" ? "contained" : "outlined"}
+            color="warning"
+            onClick={() => setFilter("diff")}
+            sx={{ borderRadius: "8px", textTransform: "none" }}
+          >
+            Khác ĐV ({countDiff})
+          </Button>
+        </Stack>
+
+        {/* Bảng dữ liệu */}
+        <TableContainer
+          component={Paper}
+          elevation={0}
+          sx={{ border: "1px solid #e0e0e0", maxHeight: 300 }}
+        >
+          <Table size="small" stickyHeader>
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 600 }}>Tên máy</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Serial</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Vị trí hiện tại</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Trạng thái</TableCell>
+                {canEdit && (
+                  <TableCell align="center" sx={{ fontWeight: 600 }}>
+                    Xóa
+                  </TableCell>
+                )}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {displayedMachines.length > 0 ? (
+                displayedMachines.map((machine, idx) => {
+                  const isMisDept = machine.misdepartment === "1";
+                  const isMisLoc = machine.mislocation === "1";
+
+                  return (
+                    <TableRow key={idx} hover>
+                      <TableCell>{machine.name || "-"}</TableCell>
+                      <TableCell>{machine.serial || "-"}</TableCell>
+                      <TableCell>{machine.current_location || "-"}</TableCell>
+                      <TableCell>
+                        <Stack direction="row" spacing={1}>
+                          {isMisDept ? (
+                            <Chip
+                              label="Khác ĐV"
+                              size="small"
+                              color="warning"
+                              variant="outlined"
+                            />
+                          ) : (
+                            <Chip
+                              label="Cùng ĐV"
+                              size="small"
+                              color="success"
+                              variant="outlined"
+                            />
+                          )}
+                          {isMisLoc && (
+                            <Chip
+                              label="Sai vị trí"
+                              size="small"
+                              color="error"
+                              variant="outlined"
+                            />
+                          )}
+                        </Stack>
+                      </TableCell>
+
+                      {canEdit && (
+                        <TableCell align="center">
+                          <IconButton
+                            size="small"
+                            color="error"
+                            onClick={() =>
+                              onRemoveMachine(
+                                location.location_uuid,
+                                machine.uuid
+                              )
+                            }
+                          >
+                            <Delete fontSize="small" />
+                          </IconButton>
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  );
+                })
+              ) : (
+                <TableRow>
+                  <TableCell
+                    colSpan={6}
+                    align="center"
+                    sx={{ py: 2, color: "text.secondary" }}
+                  >
+                    Không có máy nào trong bộ lọc này
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </AccordionDetails>
+    </Accordion>
+  );
+};
 
 const excelHeaderMapping = {
   // Vietnamese Header : English JSON Key
@@ -109,13 +359,19 @@ const TestProposalPage = () => {
   const hasImportExportTabs = isAdmin || isPhongCoDien || isViewOnly;
   const canCreateOrImportMachines = isAdmin || isPhongCoDien;
 
+  // Phân quyền cho Kiểm kê
+  const canViewInventoryTab =
+    isAdmin || isPhongCoDien || isCoDienXuong || isViewOnly;
+  const canCreateInventory = isAdmin || isPhongCoDien;
+
   // Tab state
-  const [activeTab, setActiveTab] = useState(isCoDienXuong ? 2 : 0); // 0: Import, 1: Export, 2: Internal
+  const [activeTab, setActiveTab] = useState(isCoDienXuong ? 2 : 0); // 0: Import, 1: Export, 2: Internal, 3: Inventory
 
   // Data states
   const [imports, setImports] = useState([]);
   const [exports, setExports] = useState([]);
   const [transfers, setTransfers] = useState([]);
+  const [inventories, setInventories] = useState([]);
 
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
@@ -175,8 +431,6 @@ const TestProposalPage = () => {
     message: "",
   });
 
-  const [categoryOptions, setCategoryOptions] = useState([]);
-
   // Create Machine Dialog State
   const [openCreateMachineDialog, setOpenCreateMachineDialog] = useState(false);
   const [newMachineData, setNewMachineData] = useState({
@@ -196,6 +450,10 @@ const TestProposalPage = () => {
     name_category: "",
   });
 
+  // State for autocomplete options
+  const [typeOptions, setTypeOptions] = useState([]);
+  const [manufacturerOptions, setManufacturerOptions] = useState([]);
+
   // Import Excel Dialog State
   const [openImportDialog, setOpenImportDialog] = useState(false);
   const [importFile, setImportFile] = useState(null);
@@ -204,6 +462,18 @@ const TestProposalPage = () => {
   const [fileName, setFileName] = useState("");
   const searchTimeoutRef = useRef(null);
   const searchInputRef = useRef(null);
+
+  // Inventory Scan Dialog State
+  const [openInventoryScanDialog, setOpenInventoryScanDialog] = useState(false);
+  const [inventoryScannedList, setInventoryScannedList] = useState([]);
+
+  // Inventory Department Detail State
+  const [currentDepartment, setCurrentDepartment] = useState(null);
+  const [selectedLocationForScan, setSelectedLocationForScan] = useState(null);
+  const [scannedLocationsList, setScannedLocationsList] = useState([]);
+  const [departmentLocations, setDepartmentLocations] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [departmentLoading, setDepartmentLoading] = useState(false);
 
   // Config statuses
   const STATUS_CONFIG = {
@@ -230,7 +500,7 @@ const TestProposalPage = () => {
       color: "#ff5722",
       label: "Chờ thanh lý",
     },
-    disabled: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Vô hiệu hóa" },
+    disabled: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Chưa sử dụng" },
     pending: { bg: "#ff980022", color: "#ff9800", label: "Chờ xử lý" },
     completed: { bg: "#2e7d3222", color: "#2e7d32", label: "Đã duyệt" },
     cancelled: { bg: "#f4433622", color: "#f44336", label: "Đã hủy" },
@@ -322,6 +592,26 @@ const TestProposalPage = () => {
     [showNotification]
   );
 
+  const fetchDepartments = useCallback(async () => {
+    setDepartmentLoading(true);
+    try {
+      const response = await api.departments.getAll();
+      // Lọc bỏ các đơn vị bên ngoài (external)
+      const internalDepartments = response.data.filter(
+        (dept) =>
+          dept.type !== "external" &&
+          dept.name_department !== "Đơn vị bên ngoài"
+      );
+      setDepartments(internalDepartments);
+    } catch (error) {
+      console.error("Error fetching departments:", error);
+      showNotification("error", "Tải thất bại", "Lỗi khi tải danh sách đơn vị");
+      setDepartments([]);
+    } finally {
+      setDepartmentLoading(false);
+    }
+  }, [showNotification]);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -340,6 +630,11 @@ const TestProposalPage = () => {
         delete params.export_type;
         response = await api.internal_transfers.getAll(params);
         setTransfers(response.data);
+      } else if (activeTab === 3) {
+        delete params.import_type;
+        delete params.export_type;
+        response = await api.inventory.getAll(params);
+        setInventories(response.data);
       }
       setTotalPages(response.pagination.totalPages);
     } catch (error) {
@@ -404,28 +699,19 @@ const TestProposalPage = () => {
 
   useEffect(() => {
     fetchExternalLocations();
-    const fetchCategories = async () => {
-      try {
-        const catRes = await api.categories.getAll();
-        if (catRes.success) {
-          setCategoryOptions(catRes.data);
-        }
-      } catch (err) {
-        console.error("Error fetching categories:", err);
-        showNotification(
-          "error",
-          "Lỗi tải Phân loại",
-          "Không thể tải danh sách phân loại."
-        );
-      }
-    };
-    fetchCategories();
   }, [fetchExternalLocations, showNotification]);
 
   useEffect(() => {
     setScannerApiParams(getMachineFiltersForDialog());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openDialog, dialogType, formData.type, isCoDienXuong]);
+
+  // Set scanner params for inventory dialog
+  useEffect(() => {
+    if (openInventoryScanDialog) {
+      setScannerApiParams({ ticket_type: "inventory" });
+    }
+  }, [openInventoryScanDialog]);
 
   // --- Handlers ---
   const handleTabChange = (event, newValue) => {
@@ -541,15 +827,51 @@ const TestProposalPage = () => {
       is_borrowed_or_rented_or_borrowed_out_return_date: "",
       attached_file: "",
       target_status: "available",
+      department_uuids: [],
+      inventoryDetails: [],
     };
 
-    if (mode === "create") {
+    if (mode === "create" && type === "inventory") {
+      setSelectedTicket(null);
+      setFormData(initialFormData);
+      await fetchDepartments();
+    } else if (mode === "create") {
       setSelectedTicket(null);
       setFormData(initialFormData);
       if (type === "internal") {
         await fetchLocations("internal");
       } else {
         await fetchLocations();
+      }
+    } else if (mode === "view" && type === "inventory" && ticket) {
+      setSelectedTicket(ticket);
+      setDetailLoading(true);
+      setFormData(initialFormData);
+      try {
+        const response = await api.inventory.getById(
+          ticket.uuid_inventory_check
+        );
+        const ticketDetails = response.data.inventory;
+        setSelectedTicket(ticketDetails);
+
+        setFormData({
+          ...initialFormData,
+          date: ticketDetails.check_date
+            ? new Date(ticketDetails.check_date).toISOString().split("T")[0]
+            : "",
+          note: ticketDetails.note || "",
+          inventoryDetails: response.data.details || [],
+        });
+      } catch (error) {
+        console.error("Error fetching inventory details:", error);
+        showNotification(
+          "error",
+          "Tải thất bại",
+          "Lỗi khi tải chi tiết phiếu kiểm kê"
+        );
+        handleCloseDialog();
+      } finally {
+        setDetailLoading(false);
       }
     } else if (mode === "view" && ticket) {
       setSelectedTicket(ticket);
@@ -717,28 +1039,367 @@ const TestProposalPage = () => {
     }
   };
   const handleAddMachinesFromRfid = (machinesToAdd) => {
-    setFormData((prev) => {
-      const newMachinesWithNote = machinesToAdd.map((m) => ({
-        ...m,
-        note: "",
-      }));
-      return {
-        ...prev,
-        machines: [...prev.machines, ...newMachinesWithNote],
-      };
-    });
+    if (openInventoryScanDialog) {
+      const validMachines = [];
+      const duplicatesInCurrent = [];
+      const duplicatesInCurrentDept = [];
+      const duplicatesInOtherDept = [];
+
+      machinesToAdd.forEach((machine) => {
+        // 1. Kiểm tra trùng trong danh sách tạm
+        const existsInCurrent = inventoryScannedList.some(
+          (m) => m.uuid_machine === machine.uuid_machine
+        );
+        if (existsInCurrent) {
+          duplicatesInCurrent.push(machine.code_machine);
+          return;
+        }
+
+        // 2. Kiểm tra trùng ở chuyền khác trong ĐƠN VỊ HIỆN TẠI
+        const foundInOther = scannedLocationsList.find((loc) =>
+          loc.scanned_machine?.some((m) => m.uuid === machine.uuid_machine)
+        );
+
+        // 3. Kiểm tra trùng ở ĐƠN VỊ KHÁC
+        const foundInOtherDept = formData.inventoryDetails?.find((dept) => {
+          if (dept.id_department === currentDepartment?.id_department) {
+            return false;
+          }
+          let scannedArr = [];
+          try {
+            const parsed =
+              typeof dept.scanned_result === "string"
+                ? JSON.parse(dept.scanned_result)
+                : dept.scanned_result;
+
+            if (Array.isArray(parsed)) {
+              scannedArr = parsed;
+            } else {
+              scannedArr = parsed?.locations || [];
+            }
+          } catch {
+            scannedArr = [];
+          }
+          // Thêm optional chaining (?.) cho an toàn
+          return scannedArr?.some((loc) =>
+            loc.scanned_machine?.some((m) => m.uuid === machine.uuid_machine)
+          );
+        });
+
+        if (foundInOtherDept) {
+          let locationName = "";
+          try {
+            const parsed =
+              typeof foundInOtherDept.scanned_result === "string"
+                ? JSON.parse(foundInOtherDept.scanned_result)
+                : foundInOtherDept.scanned_result;
+
+            const scannedArr = Array.isArray(parsed)
+              ? parsed
+              : parsed?.locations || [];
+
+            const foundLoc = scannedArr.find((loc) =>
+              loc.scanned_machine?.some((m) => m.uuid === machine.uuid_machine)
+            );
+            locationName = foundLoc?.location_name || "không rõ";
+          } catch {
+            locationName = "không rõ";
+          }
+          duplicatesInOtherDept.push({
+            code: machine.code_machine,
+            location: locationName,
+            department: foundInOtherDept.name_department,
+          });
+          return;
+        }
+
+        // Thêm thông tin vị trí trùng (nếu có trong cùng đơn vị)
+        if (foundInOther) {
+          duplicatesInCurrentDept.push({
+            code: machine.code_machine,
+            location: foundInOther.location_name,
+            department: currentDepartment?.name_department,
+          });
+          validMachines.push({
+            ...machine,
+            isDuplicateInCurrentDept: true,
+            duplicateLocationName: foundInOther.location_name,
+          });
+        } else {
+          validMachines.push(machine);
+        }
+      });
+
+      // Hiển thị thông báo
+      if (duplicatesInCurrent.length > 0) {
+        showNotification(
+          "warning",
+          "Có máy đã được quét ở chuyền này",
+          `${
+            duplicatesInCurrent.length
+          } máy đã có trong danh sách: ${duplicatesInCurrent.join(", ")}`
+        );
+      }
+      if (duplicatesInCurrentDept.length > 0) {
+        const details = duplicatesInCurrentDept
+          .map((d) => `${d.code} (tại ${d.location})`)
+          .join(", ");
+        showNotification(
+          "warning",
+          "Có máy đã được quét ở vị trí khác trong đơn vị này",
+          `${duplicatesInCurrentDept.length} máy: ${details}. Bạn không thể lưu kết quả cho đến khi xóa các máy này khỏi danh sách.`
+        );
+      }
+      if (duplicatesInOtherDept.length > 0) {
+        const details = duplicatesInOtherDept
+          .map((d) => `${d.code} (${d.department} - ${d.location})`)
+          .join(", ");
+        showNotification(
+          "error",
+          "Có máy đã được quét ở đơn vị khác",
+          `${duplicatesInOtherDept.length} máy: ${details}`
+        );
+      }
+      if (validMachines.length > 0) {
+        showNotification(
+          "success",
+          "Đã thêm máy",
+          `Đã thêm ${validMachines.length} máy vào danh sách`
+        );
+      }
+
+      // Thêm máy hợp lệ (bao gồm cả máy trùng trong cùng đơn vị)
+      setInventoryScannedList((prev) => [...prev, ...validMachines]);
+    } else {
+      setFormData((prev) => {
+        const newMachinesWithNote = machinesToAdd.map((m) => ({
+          ...m,
+          note: "",
+        }));
+        return {
+          ...prev,
+          machines: [...prev.machines, ...newMachinesWithNote],
+        };
+      });
+    }
   };
   const handleAddMachineFromScanner = (machine) => {
-    setFormData((prev) => ({
-      ...prev,
-      machines: [...prev.machines, { ...machine, note: "" }],
-    }));
+    if (openInventoryScanDialog) {
+      // Kiểm tra máy đã quét trong chuyền hiện tại (danh sách tạm)
+      const existsInCurrentList = inventoryScannedList.some(
+        (m) => m.uuid_machine === machine.uuid_machine
+      );
+      if (existsInCurrentList) {
+        showNotification(
+          "warning",
+          "Máy đã có trong danh sách",
+          `Máy "${machine.code_machine}" đã được quét ở chuyền này rồi.`
+        );
+        return;
+      }
+
+      // Kiểm tra máy đã quét ở chuyền khác trong ĐƠN VỊ HIỆN TẠI
+      const foundInOtherLocation = scannedLocationsList.find((loc) =>
+        loc.scanned_machine?.some((m) => m.uuid === machine.uuid_machine)
+      );
+
+      // Kiểm tra máy đã quét ở ĐƠN VỊ KHÁC (trong toàn bộ phiếu kiểm kê)
+      const foundInOtherDepartment = formData.inventoryDetails?.find((dept) => {
+        if (dept.id_department === currentDepartment?.id_department) {
+          return false; // Bỏ qua đơn vị hiện tại (đã check ở trên)
+        }
+        let scannedArr = [];
+        try {
+          const parsed =
+            typeof dept.scanned_result === "string"
+              ? JSON.parse(dept.scanned_result)
+              : dept.scanned_result;
+
+          if (Array.isArray(parsed)) {
+            scannedArr = parsed;
+          } else {
+            scannedArr = parsed?.locations || [];
+          }
+        } catch {
+          scannedArr = [];
+        }
+        // Kiểm tra xem có máy nào trùng không
+        return scannedArr?.some((loc) =>
+          loc.scanned_machine?.some((m) => m.uuid === machine.uuid_machine)
+        );
+      });
+
+      if (foundInOtherDepartment) {
+        // Tìm vị trí cụ thể
+        let locationName = "";
+        try {
+          const parsed =
+            typeof foundInOtherDepartment.scanned_result === "string"
+              ? JSON.parse(foundInOtherDepartment.scanned_result)
+              : foundInOtherDepartment.scanned_result;
+
+          const scannedArr = Array.isArray(parsed)
+            ? parsed
+            : parsed?.locations || [];
+
+          const foundLoc = scannedArr.find((loc) =>
+            loc.scanned_machine?.some((m) => m.uuid === machine.uuid_machine)
+          );
+          locationName = foundLoc?.location_name || "không rõ";
+        } catch {
+          locationName = "không rõ";
+        }
+
+        showNotification(
+          "error",
+          "Máy đã được quét ở đơn vị khác",
+          `Máy "${machine.code_machine}" đã được quét tại "${locationName}" thuộc đơn vị "${foundInOtherDepartment.name_department}". Vui lòng xóa khỏi đơn vị đó trước.`
+        );
+        return;
+      }
+
+      // Thêm vào danh sách với thông tin vị trí trùng (nếu có)
+      const machineWithDuplicateInfo = {
+        ...machine,
+        isDuplicateInCurrentDept: !!foundInOtherLocation,
+        duplicateLocationName: foundInOtherLocation?.location_name || null,
+      };
+
+      setInventoryScannedList((prev) => [...prev, machineWithDuplicateInfo]);
+
+      // Hiển thị cảnh báo nếu trùng
+      if (foundInOtherLocation) {
+        showNotification(
+          "warning",
+          "Cảnh báo: Máy đã được quét ở vị trí khác",
+          `Máy "${machine.code_machine}" đã được quét tại "${foundInOtherLocation.location_name}". Bạn không thể lưu kết quả cho đến khi xóa máy này khỏi danh sách.`
+        );
+      }
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        machines: [...prev.machines, { ...machine, note: "" }],
+      }));
+    }
   };
   const handleRemoveSelectedMachine = (uuid_machine) =>
     setFormData((prev) => ({
       ...prev,
       machines: prev.machines.filter((m) => m.uuid_machine !== uuid_machine),
     }));
+
+  const handleRemoveInventoryScannedMachine = (uuid_machine) =>
+    setInventoryScannedList((prev) =>
+      prev.filter((m) => m.uuid_machine !== uuid_machine)
+    );
+
+  // Xóa máy khỏi danh sách đã lưu (scannedLocationsList)
+  const handleRemoveSavedMachine = async (locationUuid, machineUuid) => {
+    if (!currentDepartment || !selectedTicket) return;
+
+    try {
+      setLoading(true);
+
+      // Tìm vị trí trong danh sách
+      const updatedLocationsList = scannedLocationsList.map((loc) => {
+        if (loc.location_uuid === locationUuid) {
+          return {
+            ...loc,
+            scanned_machine: loc.scanned_machine.filter(
+              (m) => m.uuid !== machineUuid
+            ),
+          };
+        }
+        return loc;
+      });
+
+      // Gọi API để cập nhật lại DB
+      await api.inventory.updateScannedResult(
+        selectedTicket.uuid_inventory_check,
+        {
+          department_uuid: currentDepartment.uuid_department,
+          scanned_result: updatedLocationsList,
+        }
+      );
+
+      // showNotification(
+      //   "success",
+      //   "Đã xóa",
+      //   "Đã xóa máy khỏi danh sách kiểm kê"
+      // );
+
+      // Cập nhật state local
+      setScannedLocationsList(updatedLocationsList);
+
+      // Refresh lại data từ server
+      const response = await api.inventory.getById(
+        selectedTicket.uuid_inventory_check
+      );
+      const ticketDetails = response.data.inventory;
+      setSelectedTicket(ticketDetails);
+      setFormData((prev) => ({
+        ...prev,
+        inventoryDetails: response.data.details || [],
+      }));
+
+      // Update lại currentDepartment
+      const updatedDept = response.data.details.find(
+        (d) => d.id_department === currentDepartment.id_department
+      );
+      if (updatedDept) {
+        let updatedScannedList = [];
+        try {
+          const parsed =
+            typeof updatedDept.scanned_result === "string"
+              ? JSON.parse(updatedDept.scanned_result)
+              : updatedDept.scanned_result;
+
+          updatedScannedList = Array.isArray(parsed)
+            ? parsed
+            : parsed?.locations || [];
+        } catch {
+          updatedScannedList = [];
+        }
+        setScannedLocationsList(updatedScannedList);
+        setCurrentDepartment(updatedDept);
+      }
+
+      // ✅ KIỂM TRA LẠI CÁC MÁY TRONG DANH SÁCH TẠM (inventoryScannedList)
+      // Nếu máy vừa xóa trùng với máy nào đó trong danh sách tạm, thì bỏ flag duplicate
+      if (inventoryScannedList.length > 0) {
+        const refreshedList = inventoryScannedList.map((machine) => {
+          // Nếu máy này đang bị đánh dấu duplicate
+          if (machine.isDuplicateInCurrentDept) {
+            // Kiểm tra lại xem nó có còn trùng với vị trí nào khác không
+            const stillDuplicate = updatedLocationsList.some((loc) =>
+              loc.scanned_machine?.some((m) => m.uuid === machine.uuid_machine)
+            );
+
+            if (!stillDuplicate) {
+              // Không còn trùng nữa -> bỏ flag
+              const {
+                isDuplicateInCurrentDept: _isDup,
+                duplicateLocationName: _dupLoc,
+                ...rest
+              } = machine;
+              return rest;
+            }
+          }
+          return machine;
+        });
+        setInventoryScannedList(refreshedList);
+      }
+    } catch (error) {
+      console.error("Error removing machine:", error);
+      showNotification(
+        "error",
+        "Xóa thất bại",
+        error.response?.data?.message || "Lỗi khi xóa máy"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
   const handleUpdateMachineNote = (uuid_machine, note) =>
     setFormData((prev) => ({
       ...prev,
@@ -856,6 +1517,245 @@ const TestProposalPage = () => {
     setNotification({ ...notification, open: false });
   };
 
+  // --- Inventory Handlers ---
+  const handleCloseInventoryScan = () => {
+    setOpenInventoryScanDialog(false);
+    setCurrentDepartment(null);
+    setSelectedLocationForScan(null);
+    setInventoryScannedList([]);
+    setScannedLocationsList([]);
+  };
+
+  // Helper: Kiểm tra quyền chỉnh sửa trong đơn vị kiểm kê
+  const canEditInventoryDepartment = (dept) => {
+    if (!dept) return false;
+
+    // Admin và Phòng Cơ điện có full quyền
+    if (isAdmin || isPhongCoDien) return true;
+    // Người tạo phiếu có quyền
+    if (selectedTicket?.created_by === user?.id) return true;
+    // Cơ điện xưởng chỉ có quyền với đơn vị của mình
+    // So sánh id_phong_ban (từ bảng tb_department) với phongban_id của user
+    if (
+      isCoDienXuong &&
+      Number(dept.id_phong_ban) === Number(user?.phongban_id)
+    )
+      return true;
+    return false;
+  };
+
+  const handleOpenDepartmentDetail = async (dept) => {
+    setCurrentDepartment(dept);
+
+    // Parse kết quả đã quét
+    let scannedList = [];
+    try {
+      const parsed =
+        typeof dept.scanned_result === "string"
+          ? JSON.parse(dept.scanned_result)
+          : dept.scanned_result;
+
+      if (Array.isArray(parsed)) {
+        scannedList = parsed;
+      } else {
+        scannedList = parsed?.locations || [];
+      }
+    } catch {
+      scannedList = [];
+    }
+    setScannedLocationsList(scannedList);
+
+    // Load danh sách vị trí thuộc đơn vị này để user chọn thêm
+    setDetailLoading(true);
+    try {
+      const res = await api.locations.getAll({
+        department_uuid: dept.uuid_department,
+      });
+      setDepartmentLocations(res.data);
+    } catch (error) {
+      console.error(error);
+      showNotification("error", "Tải thất bại", "Lỗi khi tải danh sách vị trí");
+    }
+    setDetailLoading(false);
+
+    // Mở Dialog UI cho Department
+    setOpenInventoryScanDialog(true);
+  };
+
+  const handleInventoryScanComplete = async () => {
+    if (!currentDepartment || !selectedLocationForScan || !selectedTicket)
+      return;
+
+    try {
+      setLoading(true);
+      await api.inventory.scanLocation(selectedTicket.uuid_inventory_check, {
+        department_uuid: currentDepartment.uuid_department,
+        location_uuid: selectedLocationForScan.uuid_location,
+        scanned_machines: inventoryScannedList,
+      });
+
+      showNotification(
+        "success",
+        "Đã lưu",
+        `Đã lưu kết quả cho ${selectedLocationForScan.name_location}`
+      );
+
+      // Refresh lại data
+      const response = await api.inventory.getById(
+        selectedTicket.uuid_inventory_check
+      );
+      const ticketDetails = response.data.inventory;
+      setSelectedTicket(ticketDetails);
+      setFormData((prev) => ({
+        ...prev,
+        inventoryDetails: response.data.details || [],
+      }));
+
+      // Update lại state local để UI cập nhật ngay
+      const updatedDept = response.data.details.find(
+        (d) => d.id_department === currentDepartment.id_department
+      );
+      if (updatedDept) {
+        let updatedScannedList = [];
+        try {
+          const parsed =
+            typeof updatedDept.scanned_result === "string"
+              ? JSON.parse(updatedDept.scanned_result)
+              : updatedDept.scanned_result;
+
+          updatedScannedList = Array.isArray(parsed)
+            ? parsed
+            : parsed?.locations || [];
+        } catch {
+          updatedScannedList = [];
+        }
+        setScannedLocationsList(updatedScannedList);
+        setCurrentDepartment(updatedDept);
+      }
+
+      setInventoryScannedList([]);
+      setOpenScanDialog(false);
+      setOpenRfidDialog(false);
+    } catch (error) {
+      console.error("Error saving inventory scan:", error);
+      showNotification(
+        "error",
+        "Lưu thất bại",
+        error.response?.data?.message || "Lỗi khi lưu kết quả kiểm kê"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleInventorySubmit = async () => {
+    if (!selectedTicket) return;
+
+    try {
+      setLoading(true);
+      await api.inventory.submit(selectedTicket.uuid_inventory_check);
+      showNotification(
+        "success",
+        "Đã gửi duyệt",
+        "Phiếu kiểm kê đã được gửi duyệt"
+      );
+      handleCloseDialog();
+      fetchData();
+    } catch (error) {
+      console.error("Error submitting inventory:", error);
+      showNotification(
+        "error",
+        "Gửi duyệt thất bại",
+        error.response?.data?.message || "Lỗi khi gửi duyệt phiếu kiểm kê"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateInventory = async () => {
+    if (!formData.department_uuids || formData.department_uuids.length === 0) {
+      showNotification(
+        "error",
+        "Lỗi nhập liệu",
+        "Vui lòng chọn ít nhất một đơn vị kiểm kê"
+      );
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await api.inventory.create({
+        check_date: formData.date,
+        note: formData.note,
+        department_uuids: formData.department_uuids,
+      });
+
+      showNotification("success", "Thành công", "Đã tạo phiếu kiểm kê");
+      handleCloseDialog();
+      fetchData();
+    } catch (error) {
+      console.error("Error creating inventory:", error);
+      showNotification(
+        "error",
+        "Tạo thất bại",
+        error.response?.data?.message || "Lỗi khi tạo phiếu kiểm kê"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddDepartmentsToInventory = async () => {
+    if (
+      !formData.selectedNewDepartments ||
+      formData.selectedNewDepartments.length === 0
+    ) {
+      showNotification(
+        "error",
+        "Lỗi nhập liệu",
+        "Vui lòng chọn ít nhất một đơn vị để thêm"
+      );
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await api.inventory.addDepartments(selectedTicket.uuid_inventory_check, {
+        department_uuids: formData.selectedNewDepartments,
+      });
+
+      showNotification(
+        "success",
+        "Thành công",
+        `Đã thêm ${formData.selectedNewDepartments.length} đơn vị vào phiếu kiểm kê`
+      );
+
+      // Refresh lại data
+      const response = await api.inventory.getById(
+        selectedTicket.uuid_inventory_check
+      );
+      const ticketDetails = response.data.inventory;
+      setSelectedTicket(ticketDetails);
+      setFormData((prev) => ({
+        ...prev,
+        inventoryDetails: response.data.details || [],
+        showAddDepartmentDialog: false,
+        selectedNewDepartments: [],
+        availableDepartments: [],
+      }));
+    } catch (error) {
+      console.error("Error adding departments:", error);
+      showNotification(
+        "error",
+        "Thêm thất bại",
+        error.response?.data?.message || "Lỗi khi thêm đơn vị vào phiếu kiểm kê"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // --- Create Machine Logic ---
   const validateMachineData = () => {
     const errors = [];
@@ -882,7 +1782,20 @@ const TestProposalPage = () => {
     return errors;
   };
 
-  const handleOpenCreateMachineDialog = () => {
+  const fetchFilterOptions = async () => {
+    try {
+      const [typeRes, manuRes] = await Promise.all([
+        api.machines.getDistinctValues({ field: "type_machine" }),
+        api.machines.getDistinctValues({ field: "manufacturer" }),
+      ]);
+      if (typeRes.success) setTypeOptions(typeRes.data);
+      if (manuRes.success) setManufacturerOptions(manuRes.data);
+    } catch (err) {
+      console.error("Error fetching filter options:", err);
+    }
+  };
+
+  const handleOpenCreateMachineDialog = async () => {
     setNewMachineData({
       code_machine: "",
       serial_machine: "",
@@ -897,8 +1810,10 @@ const TestProposalPage = () => {
       repair_cost: "",
       note: "",
       current_status: "available",
-      name_category: "",
+      name_category: "Máy móc thiết bị",
     });
+    // Fetch filter options when opening dialog
+    await fetchFilterOptions();
     setOpenCreateMachineDialog(true);
   };
 
@@ -1140,6 +2055,7 @@ const TestProposalPage = () => {
   // --- Render Helpers ---
   const getStatusColor = (status) =>
     ({
+      draft: "primary",
       pending: "warning",
       pending_confirmation: "warning",
       pending_approval: "warning",
@@ -1148,6 +2064,7 @@ const TestProposalPage = () => {
     }[status] || "default");
   const getStatusLabel = (status) =>
     ({
+      draft: "Nháp (đang kiểm)",
       pending: "Chờ duyệt",
       pending_confirmation: "Chờ xác nhận",
       pending_approval: "Chờ duyệt",
@@ -1170,10 +2087,226 @@ const TestProposalPage = () => {
       rented_return: "Xuất trả (máy thuê)",
     }[type] || type);
 
-  // Render Table Content for Tabs 0, 1, 2
+  // --- Helper vẽ luồng duyệt chi tiết (Full Name + MaNV) ---
+  const renderDetailedFlow = (flow) => {
+    if (!flow || flow.length === 0)
+      return (
+        <Typography variant="caption" color="text.secondary">
+          Chưa có cấu hình luồng duyệt
+        </Typography>
+      );
+
+    // 1. Gom nhóm theo step_flow
+    const groupedSteps = flow.reduce((acc, curr) => {
+      const step = curr.step_flow ?? 0;
+      if (!acc[step]) acc[step] = [];
+      acc[step].push(curr);
+      return acc;
+    }, {});
+
+    // Lấy danh sách các bước và sắp xếp tăng dần
+    const sortedStepKeys = Object.keys(groupedSteps).sort(
+      (a, b) => Number(a) - Number(b)
+    );
+
+    return (
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          flexWrap: "nowrap",
+          gap: 2,
+          py: 1,
+          overflowX: "auto",
+        }}
+      >
+        <Typography
+          variant="body2"
+          sx={{ fontWeight: 700, mr: 1, whiteSpace: "nowrap" }}
+        >
+          <WifiTethering
+            sx={{ fontSize: 16, verticalAlign: "text-top", mr: 0.5 }}
+          />
+          Luồng duyệt
+        </Typography>
+
+        {sortedStepKeys.map((stepKey, groupIndex) => {
+          const group = groupedSteps[stepKey];
+          const isLastGroup = groupIndex === sortedStepKeys.length - 1;
+
+          return (
+            <React.Fragment key={stepKey}>
+              <Box
+                sx={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 1,
+                  justifyContent: "center",
+                }}
+              >
+                {group.map((step, idx) => {
+                  // Logic màu sắc
+                  const statusText = step.status_text || "Đang chờ duyệt";
+                  const statusLower = statusText.toLowerCase();
+
+                  const isApproved =
+                    statusLower.includes("đã duyệt") ||
+                    statusLower.includes("đồng ý");
+                  const isRejected =
+                    statusLower.includes("hủy") ||
+                    statusLower.includes("từ chối");
+                  const isForwarded = step.is_forward === 1;
+
+                  const isSkipped = statusLower.includes("đồng cấp");
+
+                  let statusColor = "#ff9800";
+                  let bgColor = "#fff3e0";
+                  let borderColor = "#ffcc80";
+                  let opacity = 1;
+
+                  if (isApproved) {
+                    statusColor = "#2e7d32";
+                    bgColor = "#e8f5e9";
+                    borderColor = "#a5d6a7";
+                  } else if (isRejected) {
+                    statusColor = "#d32f2f";
+                    bgColor = "#ffebee";
+                    borderColor = "#ef9a9a";
+                  } else if (isSkipped) {
+                    statusColor = "#9e9e9e";
+                    bgColor = "#f5f5f5";
+                    borderColor = "#e0e0e0";
+                    opacity = 0.7;
+                  }
+
+                  return (
+                    <Box
+                      key={idx}
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        opacity: opacity,
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 1.5,
+                          px: 2,
+                          py: 0.5,
+                          borderRadius: "20px",
+                          backgroundColor: bgColor,
+                          border: `1px solid ${
+                            step.isFinalFlow ? "#FFD700" : borderColor
+                          }`,
+                          boxShadow: step.isFinalFlow
+                            ? "0 0 5px rgba(255, 215, 0, 0.5)"
+                            : "none",
+                          minWidth: "200px",
+                        }}
+                      >
+                        <Avatar
+                          sx={{
+                            width: 22,
+                            height: 22,
+                            fontSize: "0.7rem",
+                            bgcolor: statusColor,
+                            color: "#fff",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          {isSkipped ? "-" : Number(stepKey) + 1}
+                        </Avatar>
+                        <Box>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 1,
+                            }}
+                          >
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                fontWeight: 600,
+                                fontSize: "0.85rem",
+                                color: isSkipped
+                                  ? "text.secondary"
+                                  : "text.primary",
+                              }}
+                            >
+                              {step.ten_nv}
+                            </Typography>
+                            {isForwarded && (
+                              <Chip
+                                label="Chuyển tiếp"
+                                size="small"
+                                variant="outlined"
+                                sx={{
+                                  height: 16,
+                                  fontSize: "0.8rem",
+                                  borderColor: "#9e9e9e",
+                                  color: "#fd3333",
+                                  backgroundColor: "#ffffff80",
+                                }}
+                              />
+                            )}
+                          </Box>
+
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              display: "block",
+                              lineHeight: 1,
+                              color: "text.secondary",
+                            }}
+                          >
+                            {step.ma_nv} •{" "}
+                            <span
+                              style={{
+                                color: statusColor,
+                                fontStyle: "italic",
+                                fontWeight: "bold",
+                              }}
+                            >
+                              {statusText}
+                            </span>
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </Box>
+                  );
+                })}
+              </Box>
+              {!isLastGroup && (
+                <Box
+                  sx={{
+                    mx: 0.5,
+                    width: 20,
+                    height: 2,
+                    bgcolor: "#bdbdbd",
+                    flexShrink: 0,
+                  }}
+                />
+              )}
+            </React.Fragment>
+          );
+        })}
+      </Box>
+    );
+  };
+
+  // Render Table Content for Tabs 0, 1, 2, 3
   const renderTableContent = () => {
     const data =
-      activeTab === 0 ? imports : activeTab === 1 ? exports : transfers;
+      activeTab === 0
+        ? imports
+        : activeTab === 1
+        ? exports
+        : activeTab === 2
+        ? transfers
+        : inventories;
     if (loading)
       return (
         <TableRow>
@@ -1192,6 +2325,99 @@ const TestProposalPage = () => {
           </TableCell>
         </TableRow>
       );
+
+    // Render Inventory Tab
+    if (activeTab === 3) {
+      return inventories.map((item) => {
+        const isHovered = hoveredRowUuid === item.uuid_inventory_check;
+        const hoverBackgroundColor = "rgba(0, 0, 0, 0.04)";
+
+        return (
+          <React.Fragment key={item.uuid_inventory_check}>
+            {/* HÀNG 1: THÔNG TIN CHUNG */}
+            <TableRow
+              onMouseEnter={() => setHoveredRowUuid(item.uuid_inventory_check)}
+              onMouseLeave={() => setHoveredRowUuid(null)}
+              onClick={() => handleOpenDialog("view", "inventory", item)}
+              sx={{
+                cursor: "pointer",
+                backgroundColor: isHovered ? hoverBackgroundColor : "inherit",
+                "& td": { borderBottom: "none", pb: 0.5 },
+              }}
+            >
+              <TableCell>{formatDate(item.check_date)}</TableCell>
+              <TableCell>Kiểm kê định kỳ</TableCell>
+              <TableCell colSpan={2}>
+                <Stack direction="column" spacing={0.5}>
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <Typography variant="body2">
+                      {item.completed_department_count || 0} /{" "}
+                      {item.department_count || 0} đơn vị
+                    </Typography>
+                    <Box
+                      sx={{
+                        width: 100,
+                        height: 6,
+                        bgcolor: "#e0e0e0",
+                        borderRadius: 1,
+                        overflow: "hidden",
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          width: `${
+                            item.department_count > 0
+                              ? ((item.completed_department_count || 0) /
+                                  item.department_count) *
+                                100
+                              : 0
+                          }%`,
+                          height: "100%",
+                          bgcolor: "#2e7d32",
+                          transition: "width 0.3s ease",
+                        }}
+                      />
+                    </Box>
+                  </Stack>
+                  {item.department_names && (
+                    <Typography variant="caption" color="text.secondary">
+                      {item.department_names}
+                    </Typography>
+                  )}
+                </Stack>
+              </TableCell>
+              <TableCell>
+                <Chip
+                  label={getStatusLabel(item.status)}
+                  color={getStatusColor(item.status)}
+                  size="small"
+                />
+              </TableCell>
+              <TableCell>{item.note || "-"}</TableCell>
+            </TableRow>
+
+            {/* HÀNG 2: LUỒNG DUYỆT CHI TIẾT */}
+            <TableRow
+              onMouseEnter={() => setHoveredRowUuid(item.uuid_inventory_check)}
+              onMouseLeave={() => setHoveredRowUuid(null)}
+              onClick={() => handleOpenDialog("view", "inventory", item)}
+              sx={{
+                cursor: "pointer",
+                backgroundColor: isHovered
+                  ? hoverBackgroundColor
+                  : "rgba(249, 250, 251, 0.4)",
+              }}
+            >
+              <TableCell colSpan={7} sx={{ pt: 0.5, pb: 2 }}>
+                {renderDetailedFlow(item.approval_flow)}
+              </TableCell>
+            </TableRow>
+          </React.Fragment>
+        );
+      });
+    }
+
+    // Render Import/Export/Internal Tabs
     return data.map((item) => {
       const uuid =
         item.uuid_machine_import ||
@@ -1199,216 +2425,6 @@ const TestProposalPage = () => {
         item.uuid_machine_internal_transfer;
       const date = item.import_date || item.export_date || item.transfer_date;
       const type = item.import_type || item.export_type || "internal";
-
-      // --- Helper vẽ luồng duyệt chi tiết (Full Name + MaNV) ---
-      const renderDetailedFlow = (flow) => {
-        if (!flow || flow.length === 0)
-          return (
-            <Typography variant="caption" color="text.secondary">
-              Chưa có cấu hình luồng duyệt
-            </Typography>
-          );
-
-        // 1. Gom nhóm theo step_flow
-        const groupedSteps = flow.reduce((acc, curr) => {
-          const step = curr.step_flow ?? 0;
-          if (!acc[step]) acc[step] = [];
-          acc[step].push(curr);
-          return acc;
-        }, {});
-
-        // Lấy danh sách các bước và sắp xếp tăng dần
-        const sortedStepKeys = Object.keys(groupedSteps).sort(
-          (a, b) => Number(a) - Number(b)
-        );
-
-        return (
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              flexWrap: "nowrap",
-              gap: 2,
-              py: 1,
-              overflowX: "auto",
-            }}
-          >
-            <Typography
-              variant="body2"
-              sx={{ fontWeight: 700, mr: 1, whiteSpace: "nowrap" }}
-            >
-              <WifiTethering
-                sx={{ fontSize: 16, verticalAlign: "text-top", mr: 0.5 }}
-              />
-              Luồng duyệt
-            </Typography>
-
-            {sortedStepKeys.map((stepKey, groupIndex) => {
-              const group = groupedSteps[stepKey];
-              const isLastGroup = groupIndex === sortedStepKeys.length - 1;
-
-              return (
-                <React.Fragment key={stepKey}>
-                  <Box
-                    sx={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 1,
-                      justifyContent: "center",
-                    }}
-                  >
-                    {group.map((step, idx) => {
-                      // Logic màu sắc
-                      const statusText = step.status_text || "Đang chờ duyệt";
-                      const statusLower = statusText.toLowerCase();
-
-                      const isApproved =
-                        statusLower.includes("đã duyệt") ||
-                        statusLower.includes("đồng ý");
-                      const isRejected =
-                        statusLower.includes("hủy") ||
-                        statusLower.includes("từ chối");
-                      const isForwarded = step.is_forward === 1;
-
-                      const isSkipped = statusLower.includes("đồng cấp");
-
-                      let statusColor = "#ff9800";
-                      let bgColor = "#fff3e0";
-                      let borderColor = "#ffcc80";
-                      let opacity = 1;
-
-                      if (isApproved) {
-                        statusColor = "#2e7d32";
-                        bgColor = "#e8f5e9";
-                        borderColor = "#a5d6a7";
-                      } else if (isRejected) {
-                        statusColor = "#d32f2f";
-                        bgColor = "#ffebee";
-                        borderColor = "#ef9a9a";
-                      } else if (isSkipped) {
-                        statusColor = "#9e9e9e";
-                        bgColor = "#f5f5f5";
-                        borderColor = "#e0e0e0";
-                        opacity = 0.7;
-                      }
-
-                      return (
-                        <Box
-                          key={idx}
-                          sx={{
-                            display: "flex",
-                            alignItems: "center",
-                            opacity: opacity,
-                          }}
-                        >
-                          <Box
-                            sx={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 1.5,
-                              px: 2,
-                              py: 0.5,
-                              borderRadius: "20px",
-                              backgroundColor: bgColor,
-                              border: `1px solid ${
-                                step.isFinalFlow ? "#FFD700" : borderColor
-                              }`,
-                              boxShadow: step.isFinalFlow
-                                ? "0 0 5px rgba(255, 215, 0, 0.5)"
-                                : "none",
-                              minWidth: "200px",
-                            }}
-                          >
-                            <Avatar
-                              sx={{
-                                width: 22,
-                                height: 22,
-                                fontSize: "0.7rem",
-                                bgcolor: statusColor,
-                                color: "#fff",
-                                fontWeight: "bold",
-                              }}
-                            >
-                              {isSkipped ? "-" : Number(stepKey) + 1}
-                            </Avatar>
-                            <Box>
-                              <Box
-                                sx={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 1,
-                                }}
-                              >
-                                <Typography
-                                  variant="body2"
-                                  sx={{
-                                    fontWeight: 600,
-                                    fontSize: "0.85rem",
-                                    color: isSkipped
-                                      ? "text.secondary"
-                                      : "text.primary",
-                                  }}
-                                >
-                                  {step.ten_nv}
-                                </Typography>
-                                {isForwarded && (
-                                  <Chip
-                                    label="Chuyển tiếp"
-                                    size="small"
-                                    variant="outlined"
-                                    sx={{
-                                      height: 16,
-                                      fontSize: "0.8rem",
-                                      borderColor: "#9e9e9e",
-                                      color: "#fd3333",
-                                      backgroundColor: "#ffffff80",
-                                    }}
-                                  />
-                                )}
-                              </Box>
-
-                              <Typography
-                                variant="caption"
-                                sx={{
-                                  display: "block",
-                                  lineHeight: 1,
-                                  color: "text.secondary",
-                                }}
-                              >
-                                {step.ma_nv} •{" "}
-                                <span
-                                  style={{
-                                    color: statusColor,
-                                    fontStyle: "italic",
-                                    fontWeight: "bold",
-                                  }}
-                                >
-                                  {statusText}
-                                </span>
-                              </Typography>
-                            </Box>
-                          </Box>
-                        </Box>
-                      );
-                    })}
-                  </Box>
-                  {!isLastGroup && (
-                    <Box
-                      sx={{
-                        mx: 0.5,
-                        width: 20,
-                        height: 2,
-                        bgcolor: "#bdbdbd",
-                        flexShrink: 0,
-                      }}
-                    />
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </Box>
-        );
-      };
 
       const isHovered = hoveredRowUuid === uuid;
       const hoverBackgroundColor = "rgba(0, 0, 0, 0.04)";
@@ -1584,9 +2600,63 @@ const TestProposalPage = () => {
                   label="Điều chuyển / Cập nhật vị trí"
                   iconPosition="start"
                 />
+                {canViewInventoryTab && (
+                  <Tab
+                    icon={<FactCheck />}
+                    label="Kiểm kê"
+                    iconPosition="start"
+                  />
+                )}
               </Tabs>
 
-              {activeTab === 2 ? (
+              {activeTab === 3 ? (
+                <Stack
+                  direction={{ xs: "column", sm: "row" }}
+                  spacing={2}
+                  sx={{ width: { xs: "100%", md: "auto" } }}
+                >
+                  {canCreateInventory && (
+                    <Button
+                      variant="contained"
+                      startIcon={<Add />}
+                      onClick={() => handleOpenDialog("create", "inventory")}
+                      sx={{
+                        borderRadius: "12px",
+                        background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                        px: 4,
+                        py: 1.5,
+                        "&:hover": {
+                          transform: "translateY(-2px)",
+                          boxShadow: "0 8px 25px rgba(46, 125, 50, 0.3)",
+                        },
+                        transition: "all 0.3s ease",
+                        width: { xs: "100%", sm: "auto" },
+                      }}
+                    >
+                      Tạo phiếu kiểm kê
+                    </Button>
+                  )}
+                  <Button
+                    variant="contained"
+                    startIcon={<Refresh />}
+                    onClick={fetchData}
+                    sx={{
+                      borderRadius: "12px",
+                      background: "linear-gradient(45deg, #667eea, #764ba2)",
+                      px: 3,
+                      py: 1.5,
+                      "&:hover": {
+                        transform: "translateY(-2px)",
+                        boxShadow: "0 8px 25px rgba(102, 126, 234, 0.3)",
+                      },
+                      transition: "all 0.3s ease",
+                      width: { xs: "100%", sm: "auto" },
+                    }}
+                  >
+                    Làm mới
+                  </Button>
+                </Stack>
+              ) : activeTab === 2 ? (
                 <Stack
                   direction={{ xs: "column", sm: "row" }}
                   spacing={2}
@@ -1688,9 +2758,14 @@ const TestProposalPage = () => {
               )}
             </Box>
 
-            {/* Content for Tabs 0, 1, 2 (Filters, Table, Pagination) */}
+            {/* Content for Tabs 0, 1, 2, 3 (Filters, Table, Pagination) */}
             <Grid container spacing={2} sx={{ mb: 3 }}>
-              <Grid size={{ xs: 12, md: activeTab === 2 ? 12 : 6 }}>
+              <Grid
+                size={{
+                  xs: 12,
+                  md: activeTab === 2 || activeTab === 3 ? 12 : 6,
+                }}
+              >
                 <TextField
                   fullWidth
                   select
@@ -1703,7 +2778,25 @@ const TestProposalPage = () => {
                 >
                   <MenuItem value="">Tất cả</MenuItem>
 
-                  {activeTab === 2
+                  {activeTab === 3
+                    ? [
+                        <MenuItem key="draft" value="draft">
+                          Nháp (đang kiểm)
+                        </MenuItem>,
+                        <MenuItem
+                          key="pending_approval"
+                          value="pending_approval"
+                        >
+                          Chờ duyệt
+                        </MenuItem>,
+                        <MenuItem key="completed" value="completed">
+                          Đã duyệt
+                        </MenuItem>,
+                        <MenuItem key="cancelled" value="cancelled">
+                          Đã hủy
+                        </MenuItem>,
+                      ]
+                    : activeTab === 2
                     ? [
                         <MenuItem
                           key="pending_confirmation"
@@ -1737,7 +2830,7 @@ const TestProposalPage = () => {
                       ]}
                 </TextField>
               </Grid>
-              {activeTab !== 2 && (
+              {activeTab !== 2 && activeTab !== 3 && (
                 <Grid size={{ xs: 12, md: 6 }}>
                   <TextField
                     fullWidth
@@ -1825,6 +2918,13 @@ const TestProposalPage = () => {
                       >
                         Đến vị trí
                       </TableCell>
+                    ) : activeTab === 3 ? (
+                      <TableCell
+                        sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
+                        colSpan={2}
+                      >
+                        Vị trí kiểm kê
+                      </TableCell>
                     ) : (
                       <TableCell
                         sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
@@ -1833,12 +2933,14 @@ const TestProposalPage = () => {
                         {activeTab === 0 ? "Nhập vào" : "Xuất đến"}
                       </TableCell>
                     )}
-                    <TableCell
-                      sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
-                      align="center"
-                    >
-                      Số lượng máy
-                    </TableCell>
+                    {activeTab !== 3 ? (
+                      <TableCell
+                        sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
+                        align="center"
+                      >
+                        Số lượng máy
+                      </TableCell>
+                    ) : null}
                     <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
                       Trạng thái
                     </TableCell>
@@ -1895,6 +2997,8 @@ const TestProposalPage = () => {
                         ? "nhập"
                         : dialogType === "export"
                         ? "xuất"
+                        : dialogType === "inventory"
+                        ? "kiểm kê"
                         : "điều chuyển"
                     }`
                   : "Chi tiết phiếu"}
@@ -1936,73 +3040,1079 @@ const TestProposalPage = () => {
 
                   return (
                     <>
-                      {dialogType !== "internal" && (
-                        <TextField
-                          fullWidth
-                          select
-                          label={`Loại ${
-                            dialogType === "import" ? "nhập" : "xuất"
-                          }`}
-                          value={formData.type}
-                          onChange={(e) =>
-                            handleFormChange("type", e.target.value)
-                          }
-                          disabled={dialogMode === "view"}
-                          required
-                          sx={DISABLED_VIEW_SX}
-                        >
-                          {dialogType === "import"
-                            ? [
-                                <MenuItem key="purchased" value="purchased">
-                                  Nhập mua mới
-                                </MenuItem>,
-                                <MenuItem
-                                  key="maintenance_return"
-                                  value="maintenance_return"
+                      {/* --- PHẦN RIÊNG CHO PHIẾU KIỂM KÊ (INVENTORY) --- */}
+                      {dialogType === "inventory" ? (
+                        <>
+                          <TextField
+                            fullWidth
+                            type="date"
+                            label="Ngày kiểm kê"
+                            value={formData.date}
+                            onChange={(e) =>
+                              handleFormChange("date", e.target.value)
+                            }
+                            disabled={dialogMode === "view"}
+                            required
+                            InputLabelProps={{ shrink: true }}
+                            sx={DISABLED_VIEW_SX}
+                          />
+
+                          {dialogMode === "create" && (
+                            <Box>
+                              <Stack
+                                direction="row"
+                                spacing={1}
+                                sx={{ mb: 1 }}
+                                alignItems="center"
+                              >
+                                <Button
+                                  size="small"
+                                  variant="contained"
+                                  onClick={() => {
+                                    setFormData({
+                                      ...formData,
+                                      department_uuids: departments.map(
+                                        (d) => d.uuid_department
+                                      ),
+                                    });
+                                  }}
+                                  sx={{
+                                    borderRadius: "8px",
+                                    textTransform: "none",
+                                  }}
                                 >
-                                  Nhập sau bảo trì
-                                </MenuItem>,
-                                <MenuItem key="rented" value="rented">
-                                  Nhập thuê
-                                </MenuItem>,
-                                <MenuItem key="borrowed" value="borrowed">
-                                  Nhập mượn
-                                </MenuItem>,
-                                <MenuItem
-                                  key="borrowed_out_return"
-                                  value="borrowed_out_return"
+                                  Chọn tất cả
+                                </Button>
+                                <Button
+                                  size="small"
+                                  variant="contained"
+                                  onClick={() => {
+                                    setFormData({
+                                      ...formData,
+                                      department_uuids: [],
+                                    });
+                                  }}
+                                  sx={{
+                                    borderRadius: "8px",
+                                    textTransform: "none",
+                                  }}
                                 >
-                                  Nhập trả (máy cho mượn)
-                                </MenuItem>,
-                              ]
-                            : [
-                                <MenuItem key="liquidation" value="liquidation">
-                                  Xuất thanh lý
-                                </MenuItem>,
-                                <MenuItem key="maintenance" value="maintenance">
-                                  Xuất bảo trì
-                                </MenuItem>,
-                                <MenuItem
-                                  key="borrowed_out"
-                                  value="borrowed_out"
+                                  Bỏ chọn tất cả
+                                </Button>
+                              </Stack>
+                              <Autocomplete
+                                multiple
+                                fullWidth
+                                options={departments}
+                                getOptionLabel={(option) =>
+                                  option.name_department || ""
+                                }
+                                onChange={(event, newValue) => {
+                                  setFormData({
+                                    ...formData,
+                                    department_uuids: newValue.map(
+                                      (d) => d.uuid_department
+                                    ),
+                                  });
+                                }}
+                                value={departments.filter((dept) =>
+                                  formData.department_uuids?.includes(
+                                    dept.uuid_department
+                                  )
+                                )}
+                                loading={departmentLoading}
+                                disableCloseOnSelect
+                                renderInput={(params) => (
+                                  <TextField
+                                    {...params}
+                                    label="Chọn các đơn vị kiểm kê"
+                                    required
+                                    sx={{
+                                      "& .MuiOutlinedInput-root": {
+                                        borderRadius: "12px",
+                                      },
+                                    }}
+                                    InputProps={{
+                                      ...params.InputProps,
+                                      endAdornment: (
+                                        <>
+                                          {departmentLoading ? (
+                                            <CircularProgress
+                                              color="inherit"
+                                              size={20}
+                                            />
+                                          ) : null}
+                                          {params.InputProps.endAdornment}
+                                        </>
+                                      ),
+                                    }}
+                                  />
+                                )}
+                              />
+                            </Box>
+                          )}
+
+                          {dialogMode === "view" &&
+                            formData.inventoryDetails &&
+                            formData.inventoryDetails.length > 0 && (
+                              <Card
+                                variant="outlined"
+                                sx={{ borderRadius: "12px", mt: 2 }}
+                              >
+                                <CardContent>
+                                  <Stack
+                                    direction="row"
+                                    justifyContent="space-between"
+                                    alignItems="center"
+                                    sx={{ mb: 2 }}
+                                  >
+                                    <Typography
+                                      variant="h6"
+                                      sx={{ fontWeight: 600 }}
+                                    >
+                                      Chi tiết kiểm kê (
+                                      {formData.inventoryDetails.length} đơn vị)
+                                    </Typography>
+                                    {selectedTicket?.status === "draft" &&
+                                      (isAdmin ||
+                                        isPhongCoDien ||
+                                        selectedTicket?.created_by ===
+                                          user?.id) && (
+                                        <Button
+                                          variant="contained"
+                                          startIcon={<Add />}
+                                          onClick={async () => {
+                                            await fetchDepartments();
+                                            // Lọc ra các đơn vị chưa có trong phiếu (và không phải external)
+                                            const existingDeptIds =
+                                              formData.inventoryDetails.map(
+                                                (d) => d.id_department
+                                              );
+                                            const availableDepts =
+                                              departments.filter(
+                                                (dept) =>
+                                                  !existingDeptIds.includes(
+                                                    dept.id_department
+                                                  ) &&
+                                                  dept.type !== "external" &&
+                                                  dept.name_department !==
+                                                    "Đơn vị bên ngoài"
+                                              );
+
+                                            if (availableDepts.length === 0) {
+                                              showNotification(
+                                                "info",
+                                                "Không có đơn vị",
+                                                "Tất cả đơn vị đã được thêm vào phiếu kiểm kê này."
+                                              );
+                                              return;
+                                            }
+
+                                            // Mở dialog chọn đơn vị
+                                            setFormData((prev) => ({
+                                              ...prev,
+                                              showAddDepartmentDialog: true,
+                                              availableDepartments:
+                                                availableDepts,
+                                              selectedNewDepartments: [],
+                                            }));
+                                          }}
+                                          sx={{
+                                            borderRadius: "12px",
+                                            textTransform: "none",
+                                          }}
+                                        >
+                                          Thêm đơn vị
+                                        </Button>
+                                      )}
+                                  </Stack>
+                                  <TableContainer sx={{ maxHeight: 400 }}>
+                                    <Table size="small" stickyHeader>
+                                      <TableHead>
+                                        <TableRow>
+                                          <TableCell sx={{ fontWeight: 600 }}>
+                                            Đơn vị
+                                          </TableCell>
+                                          <TableCell sx={{ fontWeight: 600 }}>
+                                            Trạng thái
+                                          </TableCell>
+                                          <TableCell sx={{ fontWeight: 600 }}>
+                                            Kết quả
+                                          </TableCell>
+                                          <TableCell
+                                            align="center"
+                                            sx={{ fontWeight: 600 }}
+                                          >
+                                            Hành động
+                                          </TableCell>
+                                        </TableRow>
+                                      </TableHead>
+                                      <TableBody>
+                                        {formData.inventoryDetails.map(
+                                          (dept) => {
+                                            // Calculate summary stats from dept.scanned_result array
+                                            let scannedArr = [];
+                                            try {
+                                              const parsed =
+                                                typeof dept.scanned_result ===
+                                                "string"
+                                                  ? JSON.parse(
+                                                      dept.scanned_result
+                                                    )
+                                                  : dept.scanned_result;
+                                              scannedArr = Array.isArray(parsed)
+                                                ? parsed
+                                                : parsed?.locations || [];
+                                            } catch {
+                                              scannedArr = [];
+                                            }
+                                            const totalMachines =
+                                              scannedArr.reduce(
+                                                (acc, loc) =>
+                                                  acc +
+                                                  (loc.scanned_machine
+                                                    ?.length || 0),
+                                                0
+                                              );
+                                            const totalMis = scannedArr.reduce(
+                                              (acc, loc) =>
+                                                acc +
+                                                (loc.scanned_machine?.filter(
+                                                  (m) => m.mislocation === "1"
+                                                ).length || 0),
+                                              0
+                                            );
+                                            const scannedLocationsCount =
+                                              scannedArr.length;
+                                            const totalLocationsCount =
+                                              dept.total_locations || 0;
+
+                                            return (
+                                              <TableRow
+                                                key={dept.uuid_department}
+                                              >
+                                                <TableCell
+                                                  sx={{ fontWeight: 600 }}
+                                                >
+                                                  {dept.name_department}
+                                                </TableCell>
+                                                <TableCell>
+                                                  {scannedArr.length > 0 ? (
+                                                    <Chip
+                                                      label="Đã kiểm"
+                                                      color="success"
+                                                      size="small"
+                                                    />
+                                                  ) : (
+                                                    <Chip
+                                                      label="Chưa kiểm"
+                                                      color="default"
+                                                      size="small"
+                                                    />
+                                                  )}
+                                                </TableCell>
+                                                <TableCell>
+                                                  <Stack
+                                                    spacing={1}
+                                                    alignItems="flex-start"
+                                                  >
+                                                    {/* Dòng thông tin chính */}
+                                                    <Typography
+                                                      variant="caption"
+                                                      sx={{
+                                                        whiteSpace: "nowrap",
+                                                      }}
+                                                    >
+                                                      Đã kiểm:{" "}
+                                                      <b>
+                                                        {scannedLocationsCount}/
+                                                        {totalLocationsCount}
+                                                      </b>
+                                                    </Typography>
+
+                                                    {/* Các thẻ thông số */}
+                                                    <Stack
+                                                      direction="row"
+                                                      spacing={0.5}
+                                                    >
+                                                      <Chip
+                                                        label={`Máy: ${totalMachines}`}
+                                                        // size="small"
+                                                        variant="outlined"
+                                                        sx={{
+                                                          fontSize: "12px",
+                                                          height: "20px",
+                                                        }}
+                                                      />
+                                                      <Chip
+                                                        label={`Sai vị trí: ${totalMis}`}
+                                                        // size="small"
+                                                        color={
+                                                          totalMis > 0
+                                                            ? "error"
+                                                            : "default"
+                                                        } // Đỏ nếu có lỗi
+                                                        sx={{
+                                                          fontSize: "12px",
+                                                          height: "20px",
+                                                        }}
+                                                      />
+                                                    </Stack>
+                                                  </Stack>
+                                                </TableCell>
+                                                <TableCell align="center">
+                                                  <Button
+                                                    size="small"
+                                                    variant="contained"
+                                                    color="info"
+                                                    onClick={() =>
+                                                      handleOpenDepartmentDetail(
+                                                        dept
+                                                      )
+                                                    }
+                                                    sx={{
+                                                      borderRadius: "20px",
+                                                      textTransform: "none",
+                                                    }}
+                                                  >
+                                                    <EditNote />
+                                                  </Button>
+                                                </TableCell>
+                                              </TableRow>
+                                            );
+                                          }
+                                        )}
+                                      </TableBody>
+                                    </Table>
+                                  </TableContainer>
+                                </CardContent>
+                              </Card>
+                            )}
+
+                          {dialogMode === "view" &&
+                            formData.inventoryDetails &&
+                            formData.inventoryDetails.length > 0 && (
+                              <Card
+                                variant="outlined"
+                                sx={{
+                                  borderRadius: "12px",
+                                  mt: 2,
+                                  border: "1px solid #e0e0e0",
+                                  backgroundColor: "#f8f9fa",
+                                }}
+                              >
+                                <CardContent>
+                                  <Stack
+                                    direction="row"
+                                    alignItems="center"
+                                    spacing={2}
+                                    sx={{ mb: 2 }}
+                                  >
+                                    <Avatar
+                                      sx={{
+                                        width: 40,
+                                        height: 40,
+                                        background:
+                                          "linear-gradient(45deg, #ff9800, #ff5722)",
+                                      }}
+                                    >
+                                      <Assessment sx={{ fontSize: 24 }} />
+                                    </Avatar>
+                                    <Box>
+                                      <Typography
+                                        variant="h6"
+                                        sx={{
+                                          fontWeight: 700,
+                                          color: "#ff5722",
+                                        }}
+                                      >
+                                        Thống kê kết quả kiểm kê
+                                      </Typography>
+                                      <Typography
+                                        variant="caption"
+                                        color="text.secondary"
+                                      >
+                                        Thông số trong đợt kiểm kê
+                                      </Typography>
+                                    </Box>
+                                  </Stack>
+
+                                  <TableContainer
+                                    component={Paper}
+                                    elevation={0}
+                                    sx={{
+                                      border: "1px solid #e0e0e0",
+                                      borderRadius: "8px",
+                                    }}
+                                  >
+                                    <Table size="small">
+                                      <TableHead>
+                                        <TableRow sx={{ bgcolor: "#eeeeee" }}>
+                                          <TableCell
+                                            sx={{ fontWeight: "bold" }}
+                                          >
+                                            Đơn vị
+                                          </TableCell>
+                                          <TableCell
+                                            sx={{ fontWeight: "bold" }}
+                                            align="center"
+                                          >
+                                            Vị trí đã kiểm
+                                          </TableCell>
+                                          <TableCell
+                                            sx={{
+                                              fontWeight: "bold",
+                                              color: "#1565c0",
+                                            }}
+                                            align="center"
+                                          >
+                                            Sổ sách (Trước kiểm kê)
+                                          </TableCell>
+
+                                          {/* CỘT MỚI: Cùng ĐV */}
+                                          <TableCell
+                                            sx={{
+                                              fontWeight: "bold",
+                                              color: "#2e7d32",
+                                            }}
+                                            align="center"
+                                          >
+                                            Thực tế (Cùng ĐV)
+                                          </TableCell>
+
+                                          {/* CỘT MỚI: Khác ĐV */}
+                                          <TableCell
+                                            sx={{
+                                              fontWeight: "bold",
+                                              color: "#ed6c02",
+                                            }}
+                                            align="center"
+                                          >
+                                            Thực tế (Khác ĐV)
+                                          </TableCell>
+
+                                          <TableCell
+                                            sx={{
+                                              fontWeight: "bold",
+                                              color: "#d32f2f",
+                                            }}
+                                            align="center"
+                                          >
+                                            Chênh lệch
+                                          </TableCell>
+                                        </TableRow>
+                                      </TableHead>
+                                      <TableBody>
+                                        {(() => {
+                                          let totalCheckedLocs = 0;
+                                          let grandTotalLocs = 0;
+                                          let grandTotalSystem = 0;
+
+                                          // Biến tổng cộng mới
+                                          let grandTotalCorrectDept = 0; // Tổng máy đúng đơn vị
+                                          let grandTotalMisDept = 0; // Tổng máy khác đơn vị
+
+                                          let grandTotalDiff = 0;
+
+                                          const rows =
+                                            formData.inventoryDetails.map(
+                                              (dept) => {
+                                                let scannedArr = [];
+                                                let systemSnapshot = 0;
+
+                                                try {
+                                                  const parsed =
+                                                    typeof dept.scanned_result ===
+                                                    "string"
+                                                      ? JSON.parse(
+                                                          dept.scanned_result
+                                                        )
+                                                      : dept.scanned_result;
+
+                                                  if (Array.isArray(parsed)) {
+                                                    scannedArr = parsed;
+                                                    systemSnapshot =
+                                                      dept.total_machines_system ||
+                                                      0;
+                                                  } else if (
+                                                    parsed &&
+                                                    parsed.locations
+                                                  ) {
+                                                    scannedArr =
+                                                      parsed.locations;
+                                                    systemSnapshot =
+                                                      parsed.snapshot_count ||
+                                                      0;
+                                                  } else {
+                                                    scannedArr = [];
+                                                    systemSnapshot =
+                                                      dept.total_machines_system ||
+                                                      0;
+                                                  }
+                                                } catch {
+                                                  scannedArr = [];
+                                                  systemSnapshot =
+                                                    dept.total_machines_system ||
+                                                    0;
+                                                }
+
+                                                const checkedCount =
+                                                  scannedArr.length;
+                                                const totalLocs =
+                                                  dept.total_locations || 0;
+
+                                                // --- LOGIC TÍNH TOÁN CŨNG GIỐNG BÊN TRONG ---
+                                                let correctDeptCount = 0;
+                                                let misDeptCount = 0;
+
+                                                scannedArr.forEach((loc) => {
+                                                  if (
+                                                    loc.scanned_machine &&
+                                                    Array.isArray(
+                                                      loc.scanned_machine
+                                                    )
+                                                  ) {
+                                                    loc.scanned_machine.forEach(
+                                                      (m) => {
+                                                        if (
+                                                          m.misdepartment ===
+                                                          "1"
+                                                        ) {
+                                                          misDeptCount++;
+                                                        } else {
+                                                          correctDeptCount++;
+                                                        }
+                                                      }
+                                                    );
+                                                  }
+                                                });
+
+                                                const totalScanned =
+                                                  correctDeptCount +
+                                                  misDeptCount;
+                                                const diff =
+                                                  systemSnapshot - totalScanned;
+
+                                                totalCheckedLocs +=
+                                                  checkedCount;
+                                                grandTotalLocs += totalLocs;
+                                                grandTotalSystem +=
+                                                  systemSnapshot;
+
+                                                // Cộng dồn tổng
+                                                grandTotalCorrectDept +=
+                                                  correctDeptCount;
+                                                grandTotalMisDept +=
+                                                  misDeptCount;
+
+                                                grandTotalDiff += diff;
+
+                                                return {
+                                                  id: dept.id_department,
+                                                  name: dept.name_department,
+                                                  progress: `${checkedCount}/${totalLocs}`,
+                                                  isFull:
+                                                    checkedCount >= totalLocs &&
+                                                    totalLocs > 0,
+                                                  system: systemSnapshot,
+                                                  scanned: totalScanned, // Tổng số quét được
+                                                  correctDept: correctDeptCount, // Trong đơn vị
+                                                  misDept: misDeptCount, // Khác đơn vị
+                                                  diff: diff,
+                                                };
+                                              }
+                                            );
+
+                                          return (
+                                            <>
+                                              {rows.map((row) => (
+                                                <TableRow key={row.id} hover>
+                                                  <TableCell
+                                                    sx={{
+                                                      fontWeight: 600,
+                                                      color: "#333",
+                                                    }}
+                                                  >
+                                                    {row.name}
+                                                  </TableCell>
+
+                                                  <TableCell
+                                                    align="center"
+                                                    sx={{
+                                                      fontWeight: 600,
+                                                      color: row.isFull
+                                                        ? "#2e7d32"
+                                                        : "#ed6c02",
+                                                    }}
+                                                  >
+                                                    {row.progress}
+                                                  </TableCell>
+
+                                                  <TableCell
+                                                    align="center"
+                                                    sx={{
+                                                      fontWeight: 600,
+                                                      color: "#1565c0",
+                                                    }}
+                                                  >
+                                                    {new Intl.NumberFormat(
+                                                      "en-US"
+                                                    ).format(row.system)}
+                                                  </TableCell>
+
+                                                  {/* CỘT CÙNG ĐV */}
+                                                  <TableCell
+                                                    align="center"
+                                                    sx={{
+                                                      color: "#2e7d32",
+                                                      fontWeight: 600,
+                                                    }}
+                                                  >
+                                                    {new Intl.NumberFormat(
+                                                      "en-US"
+                                                    ).format(row.correctDept)}
+                                                  </TableCell>
+
+                                                  {/* CỘT KHÁC ĐV */}
+                                                  <TableCell
+                                                    align="center"
+                                                    sx={{
+                                                      color: "#ed6c02",
+                                                      fontWeight: 600,
+                                                    }}
+                                                  >
+                                                    {new Intl.NumberFormat(
+                                                      "en-US"
+                                                    ).format(row.misDept)}
+                                                  </TableCell>
+
+                                                  <TableCell
+                                                    align="center"
+                                                    sx={{
+                                                      fontWeight: "bold",
+                                                      color:
+                                                        row.diff !== 0
+                                                          ? "#d32f2f"
+                                                          : "#bdbdbd",
+                                                    }}
+                                                  >
+                                                    {new Intl.NumberFormat(
+                                                      "en-US"
+                                                    ).format(row.diff)}
+                                                  </TableCell>
+                                                </TableRow>
+                                              ))}
+
+                                              {/* --- HÀNG TỔNG CỘNG --- */}
+                                              <TableRow
+                                                sx={{
+                                                  bgcolor: "#e3f2fd",
+                                                  borderTop:
+                                                    "2px solid #90caf9",
+                                                }}
+                                              >
+                                                <TableCell
+                                                  sx={{
+                                                    fontWeight: "bold",
+                                                    textTransform: "uppercase",
+                                                  }}
+                                                >
+                                                  TỔNG CỘNG
+                                                </TableCell>
+                                                <TableCell
+                                                  align="center"
+                                                  sx={{ fontWeight: "bold" }}
+                                                >
+                                                  {totalCheckedLocs}/
+                                                  {grandTotalLocs}
+                                                </TableCell>
+                                                <TableCell
+                                                  align="center"
+                                                  sx={{
+                                                    fontWeight: "bold",
+                                                    color: "#1565c0",
+                                                    fontSize: "1rem",
+                                                  }}
+                                                >
+                                                  {new Intl.NumberFormat(
+                                                    "en-US"
+                                                  ).format(grandTotalSystem)}
+                                                </TableCell>
+
+                                                <TableCell
+                                                  align="center"
+                                                  sx={{
+                                                    fontWeight: "bold",
+                                                    color: "#2e7d32",
+                                                    fontSize: "1rem",
+                                                  }}
+                                                >
+                                                  {new Intl.NumberFormat(
+                                                    "en-US"
+                                                  ).format(
+                                                    grandTotalCorrectDept
+                                                  )}
+                                                </TableCell>
+
+                                                <TableCell
+                                                  align="center"
+                                                  sx={{
+                                                    fontWeight: "bold",
+                                                    color: "#ed6c02",
+                                                    fontSize: "1rem",
+                                                  }}
+                                                >
+                                                  {new Intl.NumberFormat(
+                                                    "en-US"
+                                                  ).format(grandTotalMisDept)}
+                                                </TableCell>
+
+                                                <TableCell
+                                                  align="center"
+                                                  sx={{
+                                                    fontWeight: "bold",
+                                                    color: "#d32f2f",
+                                                    fontSize: "1rem",
+                                                  }}
+                                                >
+                                                  {new Intl.NumberFormat(
+                                                    "en-US"
+                                                  ).format(grandTotalDiff)}
+                                                </TableCell>
+                                              </TableRow>
+                                            </>
+                                          );
+                                        })()}
+                                      </TableBody>
+                                    </Table>
+                                  </TableContainer>
+                                </CardContent>
+                              </Card>
+                            )}
+
+                          {/* Bảng máy sai vị trí (chỉ hiển thị trong dialog view) */}
+                          {dialogMode === "view" &&
+                            formData.inventoryDetails &&
+                            formData.inventoryDetails.length > 0 &&
+                            (() => {
+                              // Tính toán danh sách máy sai vị trí từ phiếu hiện tại
+                              const mislocationMachines = [];
+
+                              formData.inventoryDetails.forEach((dept) => {
+                                let scannedArr = [];
+                                try {
+                                  const parsed =
+                                    typeof dept.scanned_result === "string"
+                                      ? JSON.parse(dept.scanned_result)
+                                      : dept.scanned_result;
+
+                                  if (Array.isArray(parsed)) {
+                                    scannedArr = parsed;
+                                  } else {
+                                    // Nếu là object { snapshot_count, locations } thì lấy locations
+                                    scannedArr = parsed?.locations || [];
+                                  }
+                                } catch {
+                                  scannedArr = [];
+                                }
+
+                                if (Array.isArray(scannedArr)) {
+                                  scannedArr.forEach((loc) => {
+                                    if (
+                                      loc.scanned_machine &&
+                                      Array.isArray(loc.scanned_machine)
+                                    ) {
+                                      loc.scanned_machine.forEach((machine) => {
+                                        if (machine.mislocation === "1") {
+                                          mislocationMachines.push({
+                                            ...machine,
+                                            expected_location:
+                                              loc.location_name,
+                                            department_name:
+                                              dept.name_department,
+                                          });
+                                        }
+                                      });
+                                    }
+                                  });
+                                }
+                              });
+
+                              if (mislocationMachines.length === 0) {
+                                return null;
+                              }
+
+                              return (
+                                <Card
+                                  variant="outlined"
+                                  sx={{
+                                    borderRadius: "12px",
+                                    mt: 2,
+                                    border: "2px solid rgba(255, 87, 34, 0.3)",
+                                  }}
                                 >
-                                  Xuất cho mượn
-                                </MenuItem>,
-                                <MenuItem
-                                  key="rented_return"
-                                  value="rented_return"
-                                >
-                                  Xuất trả (máy thuê)
-                                </MenuItem>,
-                                <MenuItem
-                                  key="borrowed_return"
-                                  value="borrowed_return"
-                                >
-                                  Xuất trả (máy mượn)
-                                </MenuItem>,
-                              ]}
-                        </TextField>
+                                  <CardContent>
+                                    <Stack
+                                      direction="row"
+                                      alignItems="center"
+                                      spacing={2}
+                                      sx={{ mb: 2 }}
+                                    >
+                                      <Avatar
+                                        sx={{
+                                          width: 40,
+                                          height: 40,
+                                          background:
+                                            "linear-gradient(45deg, #ff9800, #ff5722)",
+                                        }}
+                                      >
+                                        <ErrorOutline sx={{ fontSize: 24 }} />
+                                      </Avatar>
+                                      <Box>
+                                        <Typography
+                                          variant="h6"
+                                          sx={{
+                                            fontWeight: 700,
+                                            color: "#ff5722",
+                                          }}
+                                        >
+                                          Máy sai vị trí (
+                                          {mislocationMachines.length})
+                                        </Typography>
+                                        <Typography
+                                          variant="caption"
+                                          color="text.secondary"
+                                        >
+                                          Danh sách máy được quét không đúng vị
+                                          trí
+                                        </Typography>
+                                      </Box>
+                                    </Stack>
+
+                                    <TableContainer
+                                      component={Paper}
+                                      elevation={0}
+                                      sx={{
+                                        borderRadius: "12px",
+                                        border:
+                                          "1px solid rgba(255, 87, 34, 0.2)",
+                                        maxHeight: 400,
+                                      }}
+                                    >
+                                      <Table size="small">
+                                        <TableHead>
+                                          <TableRow
+                                            sx={{
+                                              backgroundColor:
+                                                "rgba(255, 87, 34, 0.05)",
+                                            }}
+                                          >
+                                            {/* <TableCell
+                                              sx={{
+                                                fontWeight: 600,
+                                                whiteSpace: "nowrap",
+                                              }}
+                                            >
+                                              Mã máy
+                                            </TableCell> */}
+                                            <TableCell
+                                              sx={{
+                                                fontWeight: 600,
+                                                whiteSpace: "nowrap",
+                                              }}
+                                            >
+                                              Tên máy
+                                            </TableCell>
+                                            <TableCell
+                                              sx={{
+                                                fontWeight: 600,
+                                                whiteSpace: "nowrap",
+                                              }}
+                                            >
+                                              Serial
+                                            </TableCell>
+                                            <TableCell
+                                              sx={{
+                                                fontWeight: 600,
+                                                whiteSpace: "nowrap",
+                                              }}
+                                            >
+                                              Vị trí hiện tại
+                                            </TableCell>
+                                            <TableCell
+                                              sx={{
+                                                fontWeight: 600,
+                                                whiteSpace: "nowrap",
+                                              }}
+                                            >
+                                              Vị trí quét được
+                                            </TableCell>
+                                            <TableCell
+                                              sx={{
+                                                fontWeight: 600,
+                                                whiteSpace: "nowrap",
+                                              }}
+                                            >
+                                              Đơn vị
+                                            </TableCell>
+                                          </TableRow>
+                                        </TableHead>
+                                        <TableBody>
+                                          {mislocationMachines.map(
+                                            (machine, index) => (
+                                              <TableRow
+                                                key={index}
+                                                sx={{
+                                                  backgroundColor:
+                                                    "rgba(255, 152, 0, 0.05)",
+                                                  "&:hover": {
+                                                    backgroundColor:
+                                                      "rgba(255, 152, 0, 0.1)",
+                                                  },
+                                                }}
+                                              >
+                                                {/* <TableCell
+                                                  sx={{ fontWeight: 600 }}
+                                                >
+                                                  {machine.code || "-"}
+                                                </TableCell> */}
+                                                <TableCell>
+                                                  {machine.name || "-"}
+                                                </TableCell>
+                                                <TableCell>
+                                                  {machine.serial || "-"}
+                                                </TableCell>
+                                                <TableCell>
+                                                  <Chip
+                                                    label={
+                                                      machine.current_location ||
+                                                      "-"
+                                                    }
+                                                    size="small"
+                                                    sx={{
+                                                      backgroundColor:
+                                                        "#e3f2fd",
+                                                      color: "#1976d2",
+                                                      fontWeight: 600,
+                                                    }}
+                                                  />
+                                                </TableCell>
+                                                <TableCell>
+                                                  <Chip
+                                                    label={
+                                                      machine.expected_location ||
+                                                      "-"
+                                                    }
+                                                    size="small"
+                                                    color="warning"
+                                                    sx={{ fontWeight: 600 }}
+                                                  />
+                                                </TableCell>
+                                                <TableCell>
+                                                  {machine.department_name ||
+                                                    "-"}
+                                                </TableCell>
+                                              </TableRow>
+                                            )
+                                          )}
+                                        </TableBody>
+                                      </Table>
+                                    </TableContainer>
+                                  </CardContent>
+                                </Card>
+                              );
+                            })()}
+
+                          <TextField
+                            fullWidth
+                            multiline
+                            rows={4}
+                            label="Ghi chú"
+                            value={formData.note}
+                            onChange={(e) =>
+                              handleFormChange("note", e.target.value)
+                            }
+                            disabled={dialogMode === "view"}
+                            sx={DISABLED_VIEW_SX}
+                          />
+                        </>
+                      ) : (
+                        // --- PHẦN SELECT LOẠI PHIẾU (CHO IMPORT/EXPORT) ---
+                        dialogType !== "internal" && (
+                          <TextField
+                            fullWidth
+                            select
+                            label={`Loại ${
+                              dialogType === "import" ? "nhập" : "xuất"
+                            }`}
+                            value={formData.type}
+                            onChange={(e) =>
+                              handleFormChange("type", e.target.value)
+                            }
+                            disabled={dialogMode === "view"}
+                            required
+                            sx={DISABLED_VIEW_SX}
+                          >
+                            {dialogType === "import"
+                              ? [
+                                  <MenuItem key="purchased" value="purchased">
+                                    Nhập mua mới
+                                  </MenuItem>,
+                                  <MenuItem
+                                    key="maintenance_return"
+                                    value="maintenance_return"
+                                  >
+                                    Nhập sau bảo trì
+                                  </MenuItem>,
+                                  <MenuItem key="rented" value="rented">
+                                    Nhập thuê
+                                  </MenuItem>,
+                                  <MenuItem key="borrowed" value="borrowed">
+                                    Nhập mượn
+                                  </MenuItem>,
+                                  <MenuItem
+                                    key="borrowed_out_return"
+                                    value="borrowed_out_return"
+                                  >
+                                    Nhập trả (máy cho mượn)
+                                  </MenuItem>,
+                                ]
+                              : [
+                                  <MenuItem
+                                    key="liquidation"
+                                    value="liquidation"
+                                  >
+                                    Xuất thanh lý
+                                  </MenuItem>,
+                                  <MenuItem
+                                    key="maintenance"
+                                    value="maintenance"
+                                  >
+                                    Xuất bảo trì
+                                  </MenuItem>,
+                                  <MenuItem
+                                    key="borrowed_out"
+                                    value="borrowed_out"
+                                  >
+                                    Xuất cho mượn
+                                  </MenuItem>,
+                                  <MenuItem
+                                    key="rented_return"
+                                    value="rented_return"
+                                  >
+                                    Xuất trả (máy thuê)
+                                  </MenuItem>,
+                                  <MenuItem
+                                    key="borrowed_return"
+                                    value="borrowed_return"
+                                  >
+                                    Xuất trả (máy mượn)
+                                  </MenuItem>,
+                                ]}
+                          </TextField>
+                        )
                       )}
+                      {/* --- CÁC FIELD CHUNG (Mượn/Thuê) --- */}
                       {["borrowed", "rented", "borrowed_out"].includes(
                         formData.type
                       ) && (
@@ -2110,6 +4220,7 @@ const TestProposalPage = () => {
                           </CardContent>
                         </Card>
                       )}
+                      {/* --- CÁC FIELD CHUNG (Thông tin xuất) --- */}
                       {dialogType === "export" && (
                         <Card
                           variant="outlined"
@@ -2169,85 +4280,96 @@ const TestProposalPage = () => {
                           </CardContent>
                         </Card>
                       )}
-                      <TextField
-                        fullWidth
-                        type="date"
-                        label={
-                          dialogType === "internal"
-                            ? "Ngày điều chuyển"
-                            : "Ngày Tạo phiếu"
-                        }
-                        value={formData.date}
-                        onChange={(e) =>
-                          handleFormChange("date", e.target.value)
-                        }
-                        disabled={isFormDisabled || dialogMode === "view"}
-                        required
-                        InputLabelProps={{ shrink: true }}
-                        sx={DISABLED_VIEW_SX}
-                      />
-                      <Autocomplete
-                        fullWidth
-                        options={filteredLocations}
-                        getOptionLabel={(option) => option.name_location || ""}
-                        onChange={(event, newValue) =>
-                          handleFormChange(
-                            "to_location_uuid",
-                            newValue ? newValue.uuid_location : ""
-                          )
-                        }
-                        value={
-                          filteredLocations.find(
-                            (loc) =>
-                              loc.uuid_location === formData.to_location_uuid
-                          ) || null
-                        }
-                        disabled={
-                          isFormDisabled ||
-                          dialogMode === "view" ||
-                          locationLoading ||
-                          formData.type === "borrowed_out"
-                        }
-                        loading={locationLoading}
-                        renderInput={(params) => (
+
+                      {/* --- ẨN CÁC FIELD DƯ THỪA KHI LÀ INVENTORY --- */}
+                      {dialogType !== "inventory" && (
+                        <>
                           <TextField
-                            {...params}
+                            fullWidth
+                            type="date"
                             label={
-                              dialogType === "import"
-                                ? "Nhập vào"
-                                : dialogType === "export"
-                                ? "Xuất đến"
-                                : "Đến vị trí"
+                              dialogType === "internal"
+                                ? "Ngày điều chuyển"
+                                : "Ngày Tạo phiếu"
                             }
+                            value={formData.date}
+                            onChange={(e) =>
+                              handleFormChange("date", e.target.value)
+                            }
+                            disabled={isFormDisabled || dialogMode === "view"}
                             required
-                            sx={{
-                              "& .MuiOutlinedInput-root": {
-                                borderRadius: "12px",
-                              },
-                            }}
-                            InputProps={{
-                              ...params.InputProps,
-                              endAdornment: (
-                                <>
-                                  {locationLoading ? (
-                                    <CircularProgress
-                                      color="inherit"
-                                      size={20}
-                                    />
-                                  ) : null}
-                                  {params.InputProps.endAdornment}
-                                </>
-                              ),
-                            }}
+                            InputLabelProps={{ shrink: true }}
+                            sx={DISABLED_VIEW_SX}
                           />
-                        )}
-                        sx={
-                          formData.type === "borrowed_out" ||
-                          dialogMode === "view"
-                            ? DISABLED_VIEW_SX
-                            : {}
-                        }
-                      />
+                          <Autocomplete
+                            fullWidth
+                            options={filteredLocations}
+                            getOptionLabel={(option) =>
+                              option.name_location || ""
+                            }
+                            onChange={(event, newValue) =>
+                              handleFormChange(
+                                "to_location_uuid",
+                                newValue ? newValue.uuid_location : ""
+                              )
+                            }
+                            value={
+                              filteredLocations.find(
+                                (loc) =>
+                                  loc.uuid_location ===
+                                  formData.to_location_uuid
+                              ) || null
+                            }
+                            disabled={
+                              isFormDisabled ||
+                              dialogMode === "view" ||
+                              locationLoading ||
+                              formData.type === "borrowed_out"
+                            }
+                            loading={locationLoading}
+                            renderInput={(params) => (
+                              <TextField
+                                {...params}
+                                label={
+                                  dialogType === "import"
+                                    ? "Nhập vào"
+                                    : dialogType === "export"
+                                    ? "Xuất đến"
+                                    : "Đến vị trí"
+                                }
+                                required
+                                sx={{
+                                  "& .MuiOutlinedInput-root": {
+                                    borderRadius: "12px",
+                                  },
+                                }}
+                                InputProps={{
+                                  ...params.InputProps,
+                                  endAdornment: (
+                                    <>
+                                      {locationLoading ? (
+                                        <CircularProgress
+                                          color="inherit"
+                                          size={20}
+                                        />
+                                      ) : null}
+                                      {params.InputProps.endAdornment}
+                                    </>
+                                  ),
+                                }}
+                              />
+                            )}
+                            sx={
+                              formData.type === "borrowed_out" ||
+                              dialogMode === "view"
+                                ? DISABLED_VIEW_SX
+                                : {}
+                            }
+                          />
+                        </>
+                      )}
+
+                      {/* --- LOGIC TRẠNG THÁI (INTERNAL) - Giữ nguyên --- */}
                       {dialogType === "internal" &&
                         formData.to_location_uuid &&
                         filteredLocations
@@ -2379,290 +4501,453 @@ const TestProposalPage = () => {
                           </Box>
                         )}
 
-                      {dialogMode === "create" && (
-                        <Card variant="outlined" sx={{ borderRadius: "12px" }}>
-                          <CardContent>
-                            <Typography variant="h6" gutterBottom>
-                              Chọn máy móc ({formData.machines.length})
-                            </Typography>
+                      {/* --- CHỌN MÁY MÓC (CREATE IMPORT/EXPORT/INTERNAL) --- */}
+                      {/* ẨN KHI LÀ INVENTORY */}
+                      {dialogMode === "create" &&
+                        dialogType !== "inventory" && (
+                          <Card
+                            variant="outlined"
+                            sx={{ borderRadius: "12px" }}
+                          >
+                            <CardContent>
+                              <Typography variant="h6" gutterBottom>
+                                Chọn máy móc ({formData.machines.length})
+                              </Typography>
 
-                            {isSpecialImport ? (
-                              <Stack
-                                direction={{ xs: "column", sm: "row" }}
-                                spacing={2}
-                                sx={{ mb: 2 }}
-                              >
-                                <Button
-                                  variant="outlined"
-                                  startIcon={<QrCode2 />}
-                                  onClick={() => setOpenScanDialog(true)}
-                                  disabled={isFormDisabled}
-                                  sx={{
-                                    borderRadius: "12px",
-                                    py: 1,
-                                    borderColor: "#2e7d32",
-                                    color: "#2e7d32",
-                                    "&:hover": {
-                                      borderColor: "#4caf50",
-                                      bgcolor: "#2e7d3211",
-                                    },
-                                  }}
+                              {isSpecialImport ? (
+                                <Stack
+                                  direction={{ xs: "column", sm: "row" }}
+                                  spacing={2}
+                                  sx={{ mb: 2 }}
                                 >
-                                  Quét Mã QR
-                                </Button>
-                                <Button
-                                  variant="outlined"
-                                  startIcon={<WifiTethering />}
-                                  onClick={() => setOpenRfidDialog(true)}
-                                  disabled={isFormDisabled}
-                                  sx={{
-                                    borderRadius: "12px",
-                                    py: 1,
-                                    borderColor: "#2e7d32",
-                                    color: "#2e7d32",
-                                    "&:hover": {
-                                      borderColor: "#4caf50",
-                                      bgcolor: "#2e7d3211",
-                                    },
-                                  }}
-                                >
-                                  Quét RFID/NFC
-                                </Button>
-                                <Button
-                                  variant="outlined"
-                                  startIcon={<Add />}
-                                  onClick={handleOpenCreateMachineDialog}
-                                  disabled={isFormDisabled}
-                                  sx={{
-                                    borderRadius: "12px",
-                                    py: 1,
-                                    borderColor: "#2e7d32",
-                                    color: "#2e7d32",
-                                    "&:hover": {
-                                      borderColor: "#4caf50",
-                                      bgcolor: "#2e7d3211",
-                                    },
-                                  }}
-                                >
-                                  Thêm máy mới
-                                </Button>
-                                <Button
-                                  variant="outlined"
-                                  startIcon={<FileUpload />}
-                                  onClick={handleOpenImportDialog}
-                                  disabled={isFormDisabled}
-                                  sx={{
-                                    borderRadius: "12px",
-                                    py: 1,
-                                    borderColor: "#2e7d32",
-                                    color: "#2e7d32",
-                                    "&:hover": {
-                                      borderColor: "#4caf50",
-                                      bgcolor: "#2e7d3211",
-                                    },
-                                  }}
-                                >
-                                  Nhập Excel
-                                </Button>
-                              </Stack>
-                            ) : (
-                              <Stack
-                                direction={{ xs: "column", sm: "row" }}
-                                spacing={2}
-                                sx={{ mb: 2, flexWrap: "wrap" }}
-                              >
-                                <Button
-                                  variant="outlined"
-                                  startIcon={<QrCode2 />}
-                                  onClick={() => setOpenScanDialog(true)}
-                                  disabled={isFormDisabled}
-                                  sx={{
-                                    borderRadius: "12px",
-                                    py: 1,
-                                    borderColor: "#2e7d32",
-                                    color: "#2e7d32",
-                                    "&:hover": {
-                                      borderColor: "#4caf50",
-                                      bgcolor: "#2e7d3211",
-                                    },
-                                  }}
-                                >
-                                  Quét Mã QR
-                                </Button>
-                                <Button
-                                  variant="outlined"
-                                  startIcon={<WifiTethering />}
-                                  onClick={() => setOpenRfidDialog(true)}
-                                  disabled={isFormDisabled}
-                                  sx={{
-                                    borderRadius: "12px",
-                                    py: 1,
-                                    borderColor: "#2e7d32",
-                                    color: "#2e7d32",
-                                    "&:hover": {
-                                      borderColor: "#4caf50",
-                                      bgcolor: "#2e7d3211",
-                                    },
-                                  }}
-                                >
-                                  Quét RFID/NFC
-                                </Button>
-                              </Stack>
-                            )}
-
-                            <Tooltip
-                              arrow
-                              placement="top-start"
-                              title={
-                                <Box sx={{ p: 1 }}>
-                                  <Typography
-                                    variant="subtitle2"
-                                    fontWeight="bold"
-                                    sx={{ mb: 1 }}
-                                  >
-                                    Mẹo tìm kiếm nâng cao:
-                                  </Typography>
-                                  <ul
-                                    style={{
-                                      margin: 0,
-                                      paddingLeft: "1.2rem",
-                                      fontSize: "0.85rem",
-                                      lineHeight: "1.5",
+                                  {/* <Button
+                                    variant="outlined"
+                                    startIcon={<QrCode2 />}
+                                    onClick={() => setOpenScanDialog(true)}
+                                    disabled={isFormDisabled}
+                                    sx={{
+                                      borderRadius: "12px",
+                                      py: 1,
+                                      borderColor: "#2e7d32",
+                                      color: "#2e7d32",
+                                      "&:hover": {
+                                        borderColor: "#4caf50",
+                                        bgcolor: "#2e7d3211",
+                                      },
                                     }}
                                   >
-                                    <li>Nhập thường: Tìm tất cả thông tin</li>
-                                    <li>
-                                      <b>loai:</b>... (Tìm theo Loại)
-                                    </li>
-                                    <li>
-                                      <b>model:</b>... (Tìm theo Model)
-                                    </li>
-                                    <li>
-                                      <b>rfid:</b>... (Tìm theo RFID)
-                                    </li>
-                                    <li>
-                                      <b>nfc:</b>... (Tìm theo NFC)
-                                    </li>
-                                    <li>
-                                      <b>seri:</b>... (Tìm theo Serial)
-                                    </li>
-                                    <li>
-                                      <b>hang:</b>... (Tìm theo Hãng SX)
-                                    </li>
-                                    <li>
-                                      <b>ma:</b>... (Tìm theo Mã máy)
-                                    </li>
-                                  </ul>
-                                </Box>
-                              }
-                            >
-                              <TextField
-                                fullWidth
-                                placeholder="Tìm kiếm máy"
-                                defaultValue=""
-                                inputRef={searchInputRef}
-                                onChange={handleSearchChange}
-                                disabled={isFormDisabled}
-                                sx={{
-                                  mb: 2,
-                                  "& .MuiOutlinedInput-root": {
-                                    borderRadius: "12px",
-                                  },
-                                }}
-                                InputProps={{
-                                  startAdornment: (
-                                    <InputAdornment position="start">
-                                      <Search />
-                                    </InputAdornment>
-                                  ),
-                                  endAdornment: (
-                                    <InputAdornment position="end">
-                                      {searchLoading ? (
-                                        <CircularProgress size={20} />
-                                      ) : (
-                                        /* Nút Xóa Input */
-                                        <IconButton
-                                          onClick={() => {
-                                            if (searchInputRef.current) {
-                                              searchInputRef.current.value = "";
-                                              searchInputRef.current.focus();
-                                            }
-                                            setSearchMachineTerm("");
-                                            setSearchResults([]); // Xóa kết quả tìm kiếm
-                                          }}
-                                          edge="end"
-                                          size="small"
-                                          sx={{ color: "text.secondary" }}
-                                        >
-                                          <Close fontSize="small" />
-                                        </IconButton>
-                                      )}
-                                    </InputAdornment>
-                                  ),
-                                }}
-                              />
-                            </Tooltip>
-                            {searchResults.length > 0 && (
-                              <>
-                                <Paper
-                                  elevation={3}
-                                  sx={{ maxHeight: 300, overflow: "auto" }}
+                                    Quét Mã QR
+                                  </Button> */}
+                                  <Button
+                                    variant="outlined"
+                                    startIcon={<WifiTethering />}
+                                    onClick={() => setOpenRfidDialog(true)}
+                                    disabled={isFormDisabled}
+                                    sx={{
+                                      borderRadius: "12px",
+                                      py: 1,
+                                      borderColor: "#2e7d32",
+                                      color: "#2e7d32",
+                                      "&:hover": {
+                                        borderColor: "#4caf50",
+                                        bgcolor: "#2e7d3211",
+                                      },
+                                    }}
+                                  >
+                                    Quét RFID/NFC
+                                  </Button>
+                                  <Button
+                                    variant="outlined"
+                                    startIcon={<Add />}
+                                    onClick={handleOpenCreateMachineDialog}
+                                    disabled={isFormDisabled}
+                                    sx={{
+                                      borderRadius: "12px",
+                                      py: 1,
+                                      borderColor: "#2e7d32",
+                                      color: "#2e7d32",
+                                      "&:hover": {
+                                        borderColor: "#4caf50",
+                                        bgcolor: "#2e7d3211",
+                                      },
+                                    }}
+                                  >
+                                    Thêm máy mới
+                                  </Button>
+                                  <Button
+                                    variant="outlined"
+                                    startIcon={<FileUpload />}
+                                    onClick={handleOpenImportDialog}
+                                    disabled={isFormDisabled}
+                                    sx={{
+                                      borderRadius: "12px",
+                                      py: 1,
+                                      borderColor: "#2e7d32",
+                                      color: "#2e7d32",
+                                      "&:hover": {
+                                        borderColor: "#4caf50",
+                                        bgcolor: "#2e7d3211",
+                                      },
+                                    }}
+                                  >
+                                    Nhập Excel
+                                  </Button>
+                                </Stack>
+                              ) : (
+                                <Stack
+                                  direction={{ xs: "column", sm: "row" }}
+                                  spacing={2}
+                                  sx={{ mb: 2, flexWrap: "wrap" }}
                                 >
-                                  <Table size="small">
-                                    <TableBody>
-                                      {searchResults.map((machine) => {
-                                        const isSelected =
-                                          formData.machines.some(
-                                            (m) =>
-                                              m.uuid_machine ===
-                                              machine.uuid_machine
-                                          );
-                                        let borrowLabel = "";
-                                        if (
-                                          machine.is_borrowed_or_rented_or_borrowed_out
-                                        ) {
-                                          borrowLabel = getMachineStatusLabel(
-                                            machine.is_borrowed_or_rented_or_borrowed_out
-                                          );
-                                          if (
-                                            machine.is_borrowed_or_rented_or_borrowed_out ===
-                                            "borrowed"
-                                          ) {
-                                            borrowLabel =
-                                              machine.is_borrowed_or_rented_or_borrowed_out_return_date
-                                                ? "Máy mượn ngắn hạn"
-                                                : "Máy mượn dài hạn";
-                                          }
-                                        }
-                                        return (
-                                          <TableRow
-                                            key={machine.uuid_machine}
-                                            hover
-                                            onClick={() =>
-                                              handleSelectMachine(machine)
-                                            }
-                                            sx={{
-                                              cursor: "pointer",
-                                              backgroundColor: isSelected
-                                                ? "rgba(102, 126, 234, 0.1)"
-                                                : "inherit",
-                                            }}
-                                          >
-                                            <TableCell padding="checkbox">
-                                              <Tooltip
-                                                title={
-                                                  isSelected
-                                                    ? "Đã chọn"
-                                                    : "Chọn"
-                                                }
+                                  {/* <Button
+                                    variant="outlined"
+                                    startIcon={<QrCode2 />}
+                                    onClick={() => setOpenScanDialog(true)}
+                                    disabled={isFormDisabled}
+                                    sx={{
+                                      borderRadius: "12px",
+                                      py: 1,
+                                      borderColor: "#2e7d32",
+                                      color: "#2e7d32",
+                                      "&:hover": {
+                                        borderColor: "#4caf50",
+                                        bgcolor: "#2e7d3211",
+                                      },
+                                    }}
+                                  >
+                                    Quét Mã QR
+                                  </Button> */}
+                                  <Button
+                                    variant="outlined"
+                                    startIcon={<WifiTethering />}
+                                    onClick={() => setOpenRfidDialog(true)}
+                                    disabled={isFormDisabled}
+                                    sx={{
+                                      borderRadius: "12px",
+                                      py: 1,
+                                      borderColor: "#2e7d32",
+                                      color: "#2e7d32",
+                                      "&:hover": {
+                                        borderColor: "#4caf50",
+                                        bgcolor: "#2e7d3211",
+                                      },
+                                    }}
+                                  >
+                                    Quét RFID/NFC
+                                  </Button>
+                                </Stack>
+                              )}
+
+                              {dialogType !== "export" && (
+                                <>
+                                  <Tooltip
+                                    arrow
+                                    placement="top-start"
+                                    title={
+                                      <Box sx={{ p: 1 }}>
+                                        <Typography
+                                          variant="subtitle2"
+                                          fontWeight="bold"
+                                          sx={{ mb: 1 }}
+                                        >
+                                          Mẹo tìm kiếm nâng cao:
+                                        </Typography>
+                                        <ul
+                                          style={{
+                                            margin: 0,
+                                            paddingLeft: "1.2rem",
+                                            fontSize: "0.85rem",
+                                            lineHeight: "1.5",
+                                          }}
+                                        >
+                                          <li>
+                                            Nhập thường: Tìm tất cả thông tin
+                                          </li>
+                                          <li>
+                                            <b>loai:</b>... (Tìm theo Loại)
+                                          </li>
+                                          <li>
+                                            <b>model:</b>... (Tìm theo Model)
+                                          </li>
+                                          <li>
+                                            <b>rfid:</b>... (Tìm theo RFID)
+                                          </li>
+                                          <li>
+                                            <b>nfc:</b>... (Tìm theo NFC)
+                                          </li>
+                                          <li>
+                                            <b>seri:</b>... (Tìm theo Serial)
+                                          </li>
+                                          <li>
+                                            <b>hang:</b>... (Tìm theo Hãng SX)
+                                          </li>
+                                          <li>
+                                            <b>ma:</b>... (Tìm theo Mã máy)
+                                          </li>
+                                        </ul>
+                                      </Box>
+                                    }
+                                  >
+                                    <TextField
+                                      fullWidth
+                                      placeholder="Tìm kiếm máy"
+                                      defaultValue=""
+                                      inputRef={searchInputRef}
+                                      onChange={handleSearchChange}
+                                      disabled={isFormDisabled}
+                                      sx={{
+                                        mb: 2,
+                                        "& .MuiOutlinedInput-root": {
+                                          borderRadius: "12px",
+                                        },
+                                      }}
+                                      InputProps={{
+                                        startAdornment: (
+                                          <InputAdornment position="start">
+                                            <Search />
+                                          </InputAdornment>
+                                        ),
+                                        endAdornment: (
+                                          <InputAdornment position="end">
+                                            {searchLoading ? (
+                                              <CircularProgress size={20} />
+                                            ) : (
+                                              <IconButton
+                                                onClick={() => {
+                                                  if (searchInputRef.current) {
+                                                    searchInputRef.current.value =
+                                                      "";
+                                                    searchInputRef.current.focus();
+                                                  }
+                                                  setSearchMachineTerm("");
+                                                  setSearchResults([]); // Xóa kết quả tìm kiếm
+                                                }}
+                                                edge="end"
+                                                size="small"
+                                                sx={{ color: "text.secondary" }}
                                               >
-                                                <Checkbox
-                                                  checked={isSelected}
-                                                  size="small"
-                                                />
-                                              </Tooltip>
-                                            </TableCell>
-                                            <TableCell>
+                                                <Close fontSize="small" />
+                                              </IconButton>
+                                            )}
+                                          </InputAdornment>
+                                        ),
+                                      }}
+                                    />
+                                  </Tooltip>
+                                  {searchResults.length > 0 && (
+                                    <>
+                                      <Paper
+                                        elevation={3}
+                                        sx={{
+                                          maxHeight: 300,
+                                          overflow: "auto",
+                                        }}
+                                      >
+                                        <Table size="small">
+                                          <TableBody>
+                                            {searchResults.map((machine) => {
+                                              const isSelected =
+                                                formData.machines.some(
+                                                  (m) =>
+                                                    m.uuid_machine ===
+                                                    machine.uuid_machine
+                                                );
+                                              let borrowLabel = "";
+                                              if (
+                                                machine.is_borrowed_or_rented_or_borrowed_out
+                                              ) {
+                                                borrowLabel =
+                                                  getMachineStatusLabel(
+                                                    machine.is_borrowed_or_rented_or_borrowed_out
+                                                  );
+                                                if (
+                                                  machine.is_borrowed_or_rented_or_borrowed_out ===
+                                                  "borrowed"
+                                                ) {
+                                                  borrowLabel =
+                                                    machine.is_borrowed_or_rented_or_borrowed_out_return_date
+                                                      ? "Máy mượn ngắn hạn"
+                                                      : "Máy mượn dài hạn";
+                                                }
+                                              }
+                                              return (
+                                                <TableRow
+                                                  key={machine.uuid_machine}
+                                                  hover
+                                                  onClick={() =>
+                                                    handleSelectMachine(machine)
+                                                  }
+                                                  sx={{
+                                                    cursor: "pointer",
+                                                    backgroundColor: isSelected
+                                                      ? "rgba(102, 126, 234, 0.1)"
+                                                      : "inherit",
+                                                  }}
+                                                >
+                                                  <TableCell padding="checkbox">
+                                                    <Tooltip
+                                                      title={
+                                                        isSelected
+                                                          ? "Đã chọn"
+                                                          : "Chọn"
+                                                      }
+                                                    >
+                                                      <Checkbox
+                                                        checked={isSelected}
+                                                        size="small"
+                                                      />
+                                                    </Tooltip>
+                                                  </TableCell>
+                                                  <TableCell>
+                                                    <Stack spacing={0.5}>
+                                                      <Stack
+                                                        direction="row"
+                                                        alignItems="center"
+                                                        spacing={1}
+                                                        flexWrap="wrap"
+                                                      >
+                                                        <Typography
+                                                          variant="body2"
+                                                          sx={{
+                                                            fontWeight: 600,
+                                                          }}
+                                                        >
+                                                          {machine.code_machine}{" "}
+                                                          -{" "}
+                                                          {machine.type_machine}{" "}
+                                                          -{" "}
+                                                          {
+                                                            machine.model_machine
+                                                          }
+                                                        </Typography>
+                                                        <Chip
+                                                          label={getMachineStatusLabel(
+                                                            machine.current_status
+                                                          )}
+                                                          size="small"
+                                                          sx={{
+                                                            ml: 1,
+                                                            height: 20,
+                                                            fontSize: "0.75rem",
+                                                            background:
+                                                              getStatusInfo(
+                                                                machine.current_status
+                                                              ).bg,
+                                                            color:
+                                                              getStatusInfo(
+                                                                machine.current_status
+                                                              ).color,
+                                                            fontWeight: 600,
+                                                            borderRadius: "8px",
+                                                          }}
+                                                        />
+                                                        {machine.is_borrowed_or_rented_or_borrowed_out && (
+                                                          <Chip
+                                                            label={borrowLabel}
+                                                            size="small"
+                                                            sx={{
+                                                              ml: 0.5,
+                                                              height: 20,
+                                                              fontSize:
+                                                                "0.75rem",
+                                                              background:
+                                                                getStatusInfo(
+                                                                  machine.is_borrowed_or_rented_or_borrowed_out
+                                                                ).bg,
+                                                              color:
+                                                                getStatusInfo(
+                                                                  machine.is_borrowed_or_rented_or_borrowed_out
+                                                                ).color,
+                                                              fontWeight: 600,
+                                                              borderRadius:
+                                                                "8px",
+                                                            }}
+                                                          />
+                                                        )}
+                                                      </Stack>
+                                                      <Typography
+                                                        variant="caption"
+                                                        color="text.secondary"
+                                                      >
+                                                        Serial:{" "}
+                                                        {machine.serial_machine ||
+                                                          "N/A"}{" "}
+                                                        | Vị trí:{" "}
+                                                        {machine.name_location ||
+                                                          "Chưa xác định"}
+                                                      </Typography>
+                                                    </Stack>
+                                                  </TableCell>
+                                                </TableRow>
+                                              );
+                                            })}
+                                          </TableBody>
+                                        </Table>
+                                      </Paper>
+                                      {searchTotalPages > 1 && (
+                                        <Box
+                                          sx={{
+                                            display: "flex",
+                                            justifyContent: "center",
+                                            mt: 1,
+                                            mb: 2,
+                                          }}
+                                        >
+                                          <Pagination
+                                            count={searchTotalPages}
+                                            page={searchPage}
+                                            onChange={handleSearchPageChange}
+                                            size="small"
+                                            color="primary"
+                                            showFirstButton
+                                            showLastButton
+                                          />
+                                        </Box>
+                                      )}
+                                    </>
+                                  )}
+                                </>
+                              )}
+                              {formData.machines.length > 0 && (
+                                <Box sx={{ mt: 2 }}>
+                                  <Typography
+                                    variant="subtitle1"
+                                    sx={{ fontWeight: 600, mb: 1 }}
+                                  >
+                                    Danh sách máy sẽ thêm (
+                                    {formData.machines.length} máy):{" "}
+                                  </Typography>
+                                  <Stack spacing={2}>
+                                    {formData.machines.map((machine) => {
+                                      let borrowLabel = "";
+                                      if (
+                                        machine.is_borrowed_or_rented_or_borrowed_out
+                                      ) {
+                                        borrowLabel = getMachineStatusLabel(
+                                          machine.is_borrowed_or_rented_or_borrowed_out
+                                        );
+                                        if (
+                                          machine.is_borrowed_or_rented_or_borrowed_out ===
+                                          "borrowed"
+                                        ) {
+                                          borrowLabel =
+                                            machine.is_borrowed_or_rented_or_borrowed_out_return_date
+                                              ? "Máy mượn ngắn hạn"
+                                              : "Máy mượn dài hạn";
+                                        }
+                                      }
+                                      return (
+                                        <Paper
+                                          key={machine.uuid_machine}
+                                          variant="outlined"
+                                          sx={{ p: 2, borderRadius: "12px" }}
+                                        >
+                                          <Stack
+                                            direction="row"
+                                            spacing={2}
+                                            alignItems="center"
+                                          >
+                                            <Box sx={{ flexGrow: 1 }}>
                                               <Stack spacing={0.5}>
                                                 <Stack
                                                   direction="row"
@@ -2724,202 +5009,78 @@ const TestProposalPage = () => {
                                                 >
                                                   Serial:{" "}
                                                   {machine.serial_machine ||
-                                                    "N/A"}{" "}
-                                                  | Vị trí:{" "}
+                                                    "Máy mới"}{" "}
+                                                  | Vị trí hiện tại:{" "}
                                                   {machine.name_location ||
                                                     "Chưa xác định"}
                                                 </Typography>
                                               </Stack>
-                                            </TableCell>
-                                          </TableRow>
-                                        );
-                                      })}
-                                    </TableBody>
-                                  </Table>
-                                </Paper>
-                                {searchTotalPages > 1 && (
-                                  <Box
-                                    sx={{
-                                      display: "flex",
-                                      justifyContent: "center",
-                                      mt: 1,
-                                      mb: 2,
-                                    }}
-                                  >
-                                    <Pagination
-                                      count={searchTotalPages}
-                                      page={searchPage}
-                                      onChange={handleSearchPageChange}
-                                      size="small"
-                                      color="primary"
-                                      showFirstButton
-                                      showLastButton
-                                    />
-                                  </Box>
-                                )}
-                              </>
-                            )}
-                            {formData.machines.length > 0 && (
-                              <Box sx={{ mt: 2 }}>
-                                <Typography
-                                  variant="subtitle1"
-                                  sx={{ fontWeight: 600, mb: 1 }}
-                                >
-                                  Danh sách máy sẽ thêm (
-                                  {formData.machines.length} máy):{" "}
-                                </Typography>
-                                <Stack spacing={2}>
-                                  {formData.machines.map((machine) => {
-                                    let borrowLabel = "";
-                                    if (
-                                      machine.is_borrowed_or_rented_or_borrowed_out
-                                    ) {
-                                      borrowLabel = getMachineStatusLabel(
-                                        machine.is_borrowed_or_rented_or_borrowed_out
-                                      );
-                                      if (
-                                        machine.is_borrowed_or_rented_or_borrowed_out ===
-                                        "borrowed"
-                                      ) {
-                                        borrowLabel =
-                                          machine.is_borrowed_or_rented_or_borrowed_out_return_date
-                                            ? "Máy mượn ngắn hạn"
-                                            : "Máy mượn dài hạn";
-                                      }
-                                    }
-                                    return (
-                                      <Paper
-                                        key={machine.uuid_machine}
-                                        variant="outlined"
-                                        sx={{ p: 2, borderRadius: "12px" }}
-                                      >
-                                        <Stack
-                                          direction="row"
-                                          spacing={2}
-                                          alignItems="center"
-                                        >
-                                          <Box sx={{ flexGrow: 1 }}>
-                                            <Stack spacing={0.5}>
-                                              <Stack
-                                                direction="row"
-                                                alignItems="center"
-                                                spacing={1}
-                                                flexWrap="wrap"
-                                              >
-                                                <Typography
-                                                  variant="body2"
-                                                  sx={{ fontWeight: 600 }}
-                                                >
-                                                  {machine.code_machine} -{" "}
-                                                  {machine.type_machine} -{" "}
-                                                  {machine.model_machine}
-                                                </Typography>
-                                                <Chip
-                                                  label={getMachineStatusLabel(
-                                                    machine.current_status
-                                                  )}
-                                                  size="small"
-                                                  sx={{
-                                                    ml: 1,
-                                                    height: 20,
-                                                    fontSize: "0.75rem",
-                                                    background: getStatusInfo(
-                                                      machine.current_status
-                                                    ).bg,
-                                                    color: getStatusInfo(
-                                                      machine.current_status
-                                                    ).color,
-                                                    fontWeight: 600,
-                                                    borderRadius: "8px",
-                                                  }}
-                                                />
-                                                {machine.is_borrowed_or_rented_or_borrowed_out && (
-                                                  <Chip
-                                                    label={borrowLabel}
-                                                    size="small"
-                                                    sx={{
-                                                      ml: 0.5,
-                                                      height: 20,
-                                                      fontSize: "0.75rem",
-                                                      background: getStatusInfo(
-                                                        machine.is_borrowed_or_rented_or_borrowed_out
-                                                      ).bg,
-                                                      color: getStatusInfo(
-                                                        machine.is_borrowed_or_rented_or_borrowed_out
-                                                      ).color,
-                                                      fontWeight: 600,
-                                                      borderRadius: "8px",
-                                                    }}
-                                                  />
-                                                )}
-                                              </Stack>
-                                              <Typography
-                                                variant="caption"
-                                                color="text.secondary"
-                                              >
-                                                Serial:{" "}
-                                                {machine.serial_machine ||
-                                                  "Máy mới"}{" "}
-                                                | Vị trí hiện tại:{" "}
-                                                {machine.name_location ||
-                                                  "Chưa xác định"}
-                                              </Typography>
-                                            </Stack>
-                                          </Box>
-                                          <IconButton
+                                            </Box>
+                                            <IconButton
+                                              size="small"
+                                              color="error"
+                                              onClick={() =>
+                                                handleRemoveSelectedMachine(
+                                                  machine.uuid_machine
+                                                )
+                                              }
+                                            >
+                                              <Delete fontSize="small" />
+                                            </IconButton>
+                                          </Stack>
+                                          <TextField
+                                            fullWidth
                                             size="small"
-                                            color="error"
-                                            onClick={() =>
-                                              handleRemoveSelectedMachine(
-                                                machine.uuid_machine
+                                            label="Ghi chú riêng cho máy (Tùy chọn)"
+                                            value={machine.note || ""}
+                                            onChange={(e) =>
+                                              handleUpdateMachineNote(
+                                                machine.uuid_machine,
+                                                e.target.value
                                               )
                                             }
-                                          >
-                                            <Delete fontSize="small" />
-                                          </IconButton>
-                                        </Stack>
-                                        <TextField
-                                          fullWidth
-                                          size="small"
-                                          label="Ghi chú riêng cho máy (Tùy chọn)"
-                                          value={machine.note || ""}
-                                          onChange={(e) =>
-                                            handleUpdateMachineNote(
-                                              machine.uuid_machine,
-                                              e.target.value
-                                            )
-                                          }
-                                          disabled={dialogMode === "view"}
-                                          sx={{ mt: 1 }}
-                                        />
-                                      </Paper>
-                                    );
-                                  })}
-                                </Stack>
-                              </Box>
-                            )}
-                          </CardContent>
-                        </Card>
+                                            disabled={dialogMode === "view"}
+                                            sx={{ mt: 1 }}
+                                          />
+                                        </Paper>
+                                      );
+                                    })}
+                                  </Stack>
+                                </Box>
+                              )}
+                            </CardContent>
+                          </Card>
+                        )}
+
+                      {/* --- GHI CHÚ & FILE ĐÍNH KÈM (CHUNG CHO IMPORT/EXPORT) --- */}
+                      {/* ẨN KHI LÀ INVENTORY (Vì Inventory đã có Ghi chú riêng ở trên) */}
+                      {dialogType !== "inventory" && (
+                        <>
+                          <TextField
+                            fullWidth
+                            multiline
+                            rows={4}
+                            label="Ghi chú"
+                            value={formData.note}
+                            onChange={(e) =>
+                              handleFormChange("note", e.target.value)
+                            }
+                            disabled={isFormDisabled || dialogMode === "view"}
+                            sx={DISABLED_VIEW_SX}
+                          />
+                          <FileUploadComponent
+                            onFilesChange={setFilesToUpload}
+                            existingFiles={formData.attached_file}
+                            disabled={dialogMode === "view"}
+                            showNotification={showNotification}
+                          />
+                        </>
                       )}
-                      <TextField
-                        fullWidth
-                        multiline
-                        rows={4}
-                        label="Ghi chú"
-                        value={formData.note}
-                        onChange={(e) =>
-                          handleFormChange("note", e.target.value)
-                        }
-                        disabled={isFormDisabled || dialogMode === "view"}
-                        sx={DISABLED_VIEW_SX}
-                      />
-                      <FileUploadComponent
-                        onFilesChange={setFilesToUpload}
-                        existingFiles={formData.attached_file}
-                        disabled={dialogMode === "view"}
-                        showNotification={showNotification}
-                      />
+
+                      {/* --- DANH SÁCH MÁY MÓC (VIEW IMPORT/EXPORT/INTERNAL) --- */}
+                      {/* ẨN KHI LÀ INVENTORY (Vì Inventory dùng Table Location) */}
                       {dialogMode === "view" &&
+                        dialogType !== "inventory" &&
                         formData.machines.length > 0 && (
                           <Card
                             variant="outlined"
@@ -3085,15 +5246,19 @@ const TestProposalPage = () => {
                             </CardContent>
                           </Card>
                         )}
+
+                      {/* --- THÔNG TIN NGƯỜI TẠO & LUỒNG DUYỆT (HIỂN THỊ CHUNG) --- */}
+                      {/* Giữ lại cho tất cả các loại phiếu để xem trạng thái */}
                       {dialogMode === "view" && selectedTicket && (
                         <Alert severity="info" sx={{ borderRadius: "12px" }}>
                           <Typography variant="body2">
                             <strong>Người tạo:</strong>{" "}
-                            {formData.machines.length > 0 &&
-                            formData.creator_ma_nv
-                              ? `${formData.creator_ma_nv}: ${
-                                  formData.creator_ten_nv || "(Không có tên)"
-                                }`
+                            {selectedTicket.creator_ma_nv &&
+                            selectedTicket.creator_ten_nv
+                              ? `${selectedTicket.creator_ma_nv}: ${selectedTicket.creator_ten_nv}`
+                              : formData.creator_ma_nv &&
+                                formData.creator_ten_nv
+                              ? `${formData.creator_ma_nv}: ${formData.creator_ten_nv}`
                               : selectedTicket.created_by || "Không rõ"}
                           </Typography>
                           <Typography variant="body2">
@@ -3407,7 +5572,27 @@ const TestProposalPage = () => {
               >
                 Đóng
               </Button>
-              {dialogMode === "create" && (
+              {dialogMode === "create" && dialogType === "inventory" && (
+                <Button
+                  variant="contained"
+                  onClick={handleCreateInventory}
+                  disabled={loading}
+                  startIcon={<FactCheck />}
+                  sx={{
+                    borderRadius: "12px",
+                    background: "linear-gradient(45deg, #667eea, #764ba2)",
+                    px: 3,
+                    width: { xs: "100%", sm: "auto" },
+                  }}
+                >
+                  {loading ? (
+                    <CircularProgress size={24} />
+                  ) : (
+                    "Tạo Phiếu Kiểm Kê"
+                  )}
+                </Button>
+              )}
+              {dialogMode === "create" && dialogType !== "inventory" && (
                 <Button
                   variant="contained"
                   onClick={handleSubmit}
@@ -3422,6 +5607,32 @@ const TestProposalPage = () => {
                   {loading ? <CircularProgress size={24} /> : "Tạo Phiếu"}
                 </Button>
               )}
+              {dialogMode === "view" &&
+                dialogType === "inventory" &&
+                selectedTicket?.status === "draft" &&
+                formData.inventoryDetails?.every((loc) => loc.is_completed) &&
+                (isAdmin ||
+                  isPhongCoDien ||
+                  selectedTicket?.created_by === user?.id) && (
+                  <Button
+                    variant="contained"
+                    onClick={handleInventorySubmit}
+                    disabled={loading}
+                    startIcon={<PlaylistAddCheck />}
+                    sx={{
+                      borderRadius: "12px",
+                      background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                      px: 3,
+                      width: { xs: "100%", sm: "auto" },
+                    }}
+                  >
+                    {loading ? (
+                      <CircularProgress size={24} />
+                    ) : (
+                      "Đóng phiếu & Gửi duyệt"
+                    )}
+                  </Button>
+                )}
             </Box>
           </DialogActions>
         </Dialog>
@@ -3533,7 +5744,7 @@ const TestProposalPage = () => {
                   disabled={!canCreateOrImportMachines}
                 />
               </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
+              {/* <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField
                   fullWidth
                   label="NFC"
@@ -3546,50 +5757,32 @@ const TestProposalPage = () => {
                   }
                   disabled={!canCreateOrImportMachines}
                 />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <FormControl
-                  fullWidth
-                  disabled={!canCreateOrImportMachines}
-                  required
-                >
-                  <InputLabel>Phân loại</InputLabel>
-                  <Select
-                    name="name_category"
-                    value={newMachineData.name_category || ""}
-                    label="Phân loại"
-                    onChange={(e) =>
-                      handleCreateMachineInputChange(
-                        "name_category",
-                        e.target.value
-                      )
-                    }
-                  >
-                    {categoryOptions.map((category) => (
-                      <MenuItem
-                        key={category.name_category}
-                        value={category.name_category}
-                      >
-                        {category.name_category}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-
+              </Grid> */}
               <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField
                   fullWidth
-                  label="Loại máy"
-                  required
+                  label="Phân loại"
+                  value="Máy móc thiết bị"
+                  disabled={true}
+                  sx={DISABLED_VIEW_SX}
+                />
+              </Grid>
+
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <Autocomplete
+                  freeSolo
+                  options={typeOptions}
                   value={newMachineData.type_machine || ""}
-                  onChange={(e) =>
+                  onInputChange={(event, newInputValue) => {
                     handleCreateMachineInputChange(
                       "type_machine",
-                      e.target.value
-                    )
-                  }
+                      newInputValue
+                    );
+                  }}
                   disabled={!canCreateOrImportMachines}
+                  renderInput={(params) => (
+                    <TextField {...params} label="Loại máy" required />
+                  )}
                 />
               </Grid>
               <Grid size={{ xs: 12, sm: 6 }}>
@@ -3608,19 +5801,21 @@ const TestProposalPage = () => {
               </Grid>
 
               <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  fullWidth
-                  label="Hãng sản xuất"
+                <Autocomplete
+                  freeSolo
+                  options={manufacturerOptions}
                   value={newMachineData.manufacturer || ""}
-                  onChange={(e) =>
+                  onInputChange={(event, newInputValue) => {
                     handleCreateMachineInputChange(
                       "manufacturer",
-                      e.target.value
-                    )
-                  }
-                  // THÊM MỚI: Sự kiện onBlur
+                      newInputValue
+                    );
+                  }}
                   onBlur={handleGenerateCodeForNewMachine}
                   disabled={!canCreateOrImportMachines}
+                  renderInput={(params) => (
+                    <TextField {...params} label="Hãng sản xuất" />
+                  )}
                 />
               </Grid>
               <Grid size={{ xs: 12, sm: 6 }}>
@@ -3637,11 +5832,11 @@ const TestProposalPage = () => {
                     }
                   >
                     <MenuItem value="available">Có thể sử dụng</MenuItem>
-                    <MenuItem value="in_use">Đang sử dụng</MenuItem>
+                    {/* <MenuItem value="in_use">Đang sử dụng</MenuItem>
                     <MenuItem value="maintenance">Bảo trì</MenuItem>
                     <MenuItem value="liquidation">Thanh lý</MenuItem>
-                    <MenuItem value="disabled">Vô hiệu hóa</MenuItem>
-                    <MenuItem value="broken">Máy hư</MenuItem>
+                    <MenuItem value="disabled">Chưa sử dụng</MenuItem>
+                    <MenuItem value="broken">Máy hư</MenuItem> */}
                   </Select>
                 </FormControl>
               </Grid>
@@ -4044,8 +6239,900 @@ const TestProposalPage = () => {
           onAddMachines={handleAddMachinesFromRfid}
           apiParams={scannerApiParams}
           showNotification={showNotification}
-          selectedMachineUuids={formData.machines.map((m) => m.uuid_machine)}
+          selectedMachineUuids={
+            openInventoryScanDialog
+              ? inventoryScannedList.map((m) => m.uuid_machine)
+              : formData.machines.map((m) => m.uuid_machine)
+          }
+          isInventoryMode={openInventoryScanDialog}
         />
+
+        {/* Inventory Department Detail Dialog */}
+        <Dialog
+          open={openInventoryScanDialog}
+          onClose={handleCloseInventoryScan}
+          maxWidth="lg"
+          fullWidth
+          fullScreen={isMobile}
+          PaperProps={{ sx: { borderRadius: isMobile ? 0 : "20px" } }}
+        >
+          <DialogTitle
+            sx={{
+              background: "linear-gradient(45deg, #ff9800, #ff5722)",
+              color: "white",
+              fontWeight: 700,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              <Typography
+                component="span"
+                variant={isMobile ? "h6" : "h5"}
+                sx={{ fontWeight: 700 }}
+              >
+                Kiểm kê: {currentDepartment?.name_department}
+              </Typography>
+            </Box>
+            <IconButton
+              onClick={handleCloseInventoryScan}
+              sx={{ color: "white" }}
+            >
+              <Close />
+            </IconButton>
+          </DialogTitle>
+          <DialogContent sx={{ mt: 3 }}>
+            <Stack spacing={3}>
+              {/* Vùng chọn vị trí để quét mới */}
+              {selectedTicket?.status === "draft" &&
+                canEditInventoryDepartment(currentDepartment) && (
+                  <Card
+                    variant="outlined"
+                    sx={{ p: 2, bgcolor: "#f5f5f5", borderRadius: "12px" }}
+                  >
+                    <Typography
+                      variant="h6"
+                      gutterBottom
+                      sx={{ fontWeight: 600 }}
+                    >
+                      Thêm vị trí kiểm kê
+                    </Typography>
+                    <Stack
+                      direction={isMobile ? "column" : "row"}
+                      spacing={2}
+                      alignItems="center"
+                    >
+                      <Autocomplete
+                        fullWidth
+                        options={departmentLocations}
+                        getOptionLabel={(opt) => opt.name_location}
+                        onChange={(e, val) => setSelectedLocationForScan(val)}
+                        value={selectedLocationForScan}
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            label="Chọn vị trí để kiểm"
+                            size="small"
+                          />
+                        )}
+                        sx={{ flex: 1 }}
+                      />
+                      {/* <Button
+                        variant="outlined"
+                        startIcon={<QrCode2 />}
+                        onClick={() => setOpenScanDialog(true)}
+                        disabled={!selectedLocationForScan}
+                        sx={{ borderRadius: "12px", minWidth: "120px" }}
+                      >
+                        Quét Mã QR
+                      </Button> */}
+                      <Button
+                        variant="outlined"
+                        startIcon={<WifiTethering />}
+                        onClick={() => setOpenRfidDialog(true)}
+                        disabled={!selectedLocationForScan}
+                        sx={{ borderRadius: "12px", minWidth: "120px" }}
+                      >
+                        Quét RFID/NFC
+                      </Button>
+                    </Stack>
+
+                    {/* List máy đang quét tạm (chưa lưu) */}
+                    {inventoryScannedList.length > 0 && (
+                      <Box sx={{ mt: 2 }}>
+                        <Typography variant="subtitle2" gutterBottom>
+                          Đang quét: {inventoryScannedList.length} máy tại{" "}
+                          {selectedLocationForScan?.name_location}
+                        </Typography>
+                        <TableContainer
+                          component={Paper}
+                          variant="outlined"
+                          sx={{
+                            borderRadius: "12px",
+                            mb: 2,
+                            maxHeight: 400,
+                            overflow: "auto",
+                          }}
+                        >
+                          <Table size="small" stickyHeader>
+                            <TableHead>
+                              <TableRow>
+                                {/* <TableCell sx={{ fontWeight: 600 }}>
+                                  Mã máy
+                                </TableCell> */}
+                                <TableCell sx={{ fontWeight: 600 }}>
+                                  Tên máy
+                                </TableCell>
+                                <TableCell sx={{ fontWeight: 600 }}>
+                                  Serial
+                                </TableCell>
+                                <TableCell sx={{ fontWeight: 600 }}>
+                                  RFID
+                                </TableCell>
+                                {/* <TableCell sx={{ fontWeight: 600 }}>
+                                  NFC
+                                </TableCell> */}
+                                <TableCell sx={{ fontWeight: 600 }}>
+                                  Vị trí hiện tại
+                                </TableCell>
+                                <TableCell sx={{ fontWeight: 600 }}>
+                                  Trạng thái
+                                </TableCell>
+                                <TableCell
+                                  sx={{ fontWeight: 600 }}
+                                  align="center"
+                                >
+                                  Xóa
+                                </TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {inventoryScannedList.map((machine, index) => {
+                                const isMislocation =
+                                  machine.uuid_location !==
+                                  selectedLocationForScan?.uuid_location;
+                                const isDuplicate =
+                                  machine.isDuplicateInCurrentDept;
+                                const machineName =
+                                  machine.type_machine && machine.model_machine
+                                    ? `${machine.type_machine} - ${machine.model_machine}`
+                                    : machine.type_machine ||
+                                      machine.model_machine ||
+                                      "-";
+                                return (
+                                  <TableRow
+                                    key={index}
+                                    sx={{
+                                      backgroundColor: isDuplicate
+                                        ? "#ffebee"
+                                        : isMislocation
+                                        ? "#fff3e0"
+                                        : "inherit",
+                                    }}
+                                  >
+                                    {/* <TableCell>
+                                      {machine.code_machine}
+                                    </TableCell> */}
+                                    <TableCell>{machineName}</TableCell>
+                                    <TableCell>
+                                      {machine.serial_machine}
+                                    </TableCell>
+                                    <TableCell>
+                                      {machine.RFID_machine || "-"}
+                                    </TableCell>
+                                    {/* <TableCell>
+                                      {machine.NFC_machine || "-"}
+                                    </TableCell> */}
+                                    <TableCell>
+                                      {machine.name_location || "-"}
+                                    </TableCell>
+                                    <TableCell>
+                                      <Stack direction="column" spacing={0.5}>
+                                        {isDuplicate ? (
+                                          <>
+                                            <Chip
+                                              label={`Đã quét tại ${machine.duplicateLocationName}`}
+                                              color="error"
+                                              size="small"
+                                            />
+                                            {isMislocation && (
+                                              <Chip
+                                                label="Sai vị trí"
+                                                color="warning"
+                                                size="small"
+                                              />
+                                            )}
+                                          </>
+                                        ) : isMislocation ? (
+                                          <Chip
+                                            label="Sai vị trí"
+                                            color="warning"
+                                            size="small"
+                                          />
+                                        ) : (
+                                          <Chip
+                                            label="Đúng vị trí"
+                                            color="success"
+                                            size="small"
+                                          />
+                                        )}
+                                      </Stack>
+                                    </TableCell>
+                                    <TableCell align="center">
+                                      <IconButton
+                                        size="small"
+                                        color="error"
+                                        onClick={() =>
+                                          handleRemoveInventoryScannedMachine(
+                                            machine.uuid_machine
+                                          )
+                                        }
+                                      >
+                                        <Delete fontSize="small" />
+                                      </IconButton>
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                        <Button
+                          onClick={handleInventoryScanComplete}
+                          variant="contained"
+                          color="success"
+                          startIcon={<Save />}
+                          disabled={
+                            loading ||
+                            inventoryScannedList.some(
+                              (m) => m.isDuplicateInCurrentDept
+                            )
+                          }
+                          sx={{ borderRadius: "12px" }}
+                        >
+                          {loading ? (
+                            <CircularProgress size={24} />
+                          ) : (
+                            "Lưu kết quả"
+                          )}
+                        </Button>
+                        {inventoryScannedList.some(
+                          (m) => m.isDuplicateInCurrentDept
+                        ) && (
+                          <Alert
+                            severity="error"
+                            sx={{ mt: 2, borderRadius: "12px" }}
+                          >
+                            <AlertTitle>Không thể lưu kết quả</AlertTitle>
+                            Có máy đã được quét ở vị trí khác trong đơn vị này.
+                            Vui lòng xóa các máy có chip đỏ "Đã quét tại..."
+                            khỏi danh sách trước khi lưu.
+                          </Alert>
+                        )}
+                      </Box>
+                    )}
+                  </Card>
+                )}
+
+              {currentDepartment && (
+                <Card
+                  variant="outlined"
+                  sx={{
+                    borderRadius: "12px",
+                    bgcolor: "#fff",
+                    border: "1px solid #e0e0e0", // Viền giống bên ngoài
+                  }}
+                >
+                  <Box
+                    sx={{
+                      p: 2,
+                      borderBottom: "1px solid #e0e0e0",
+                      bgcolor: "#f8f9fa",
+                    }}
+                  >
+                    <Stack direction="row" alignItems="center" spacing={2}>
+                      {/* Avatar icon giống bên ngoài */}
+                      <Avatar
+                        sx={{
+                          width: 40,
+                          height: 40,
+                          background:
+                            "linear-gradient(45deg, #ff9800, #ff5722)",
+                        }}
+                      >
+                        <Assessment sx={{ fontSize: 24 }} />
+                      </Avatar>
+                      <Box>
+                        <Typography
+                          variant="h6"
+                          sx={{ fontWeight: 700, color: "#ff5722" }}
+                        >
+                          Thống kê theo vị trí
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Chi tiết từng vị trí trong đơn vị
+                        </Typography>
+                      </Box>
+                    </Stack>
+                  </Box>
+
+                  <TableContainer
+                    component={Paper}
+                    elevation={0}
+                    sx={{
+                      border: "none",
+                      maxHeight: 300,
+                    }}
+                  >
+                    <Table size="small" stickyHeader>
+                      <TableHead>
+                        {/* HEADER: CHIA RÕ 2 CỘT THỰC TẾ, KHÔNG MERGE */}
+                        <TableRow sx={{ bgcolor: "#eeeeee" }}>
+                          <TableCell
+                            sx={{ fontWeight: "bold", bgcolor: "#eeeeee" }}
+                          >
+                            Vị trí
+                          </TableCell>
+                          <TableCell
+                            align="center"
+                            sx={{ fontWeight: "bold", bgcolor: "#eeeeee" }}
+                          >
+                            Trạng thái
+                          </TableCell>
+                          <TableCell
+                            align="center"
+                            sx={{
+                              fontWeight: "bold",
+                              bgcolor: "#eeeeee",
+                              color: "#1565c0",
+                            }}
+                          >
+                            Sổ sách (Trước kiểm)
+                          </TableCell>
+
+                          {/* Cột 1: Thực tế Cùng ĐV */}
+                          <TableCell
+                            align="center"
+                            sx={{
+                              fontWeight: "bold",
+                              bgcolor: "#eeeeee",
+                              color: "#2e7d32",
+                            }}
+                          >
+                            Thực tế (Cùng ĐV)
+                          </TableCell>
+
+                          {/* Cột 2: Thực tế Khác ĐV */}
+                          <TableCell
+                            align="center"
+                            sx={{
+                              fontWeight: "bold",
+                              bgcolor: "#eeeeee",
+                              color: "#ed6c02",
+                            }}
+                          >
+                            Thực tế (Khác ĐV)
+                          </TableCell>
+
+                          <TableCell
+                            align="center"
+                            sx={{
+                              fontWeight: "bold",
+                              bgcolor: "#eeeeee",
+                              color: "#d32f2f",
+                            }}
+                          >
+                            Chênh lệch
+                          </TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {(() => {
+                          // 1. Lấy dữ liệu snapshot từ currentDepartment
+                          let snapshots = {};
+                          let scannedData = [];
+
+                          try {
+                            const parsed =
+                              typeof currentDepartment.scanned_result ===
+                              "string"
+                                ? JSON.parse(currentDepartment.scanned_result)
+                                : currentDepartment.scanned_result;
+
+                            snapshots = parsed?.location_snapshots || {};
+                            scannedData = Array.isArray(parsed)
+                              ? parsed
+                              : parsed?.locations || [];
+                          } catch (e) {
+                            console.error(e);
+                          }
+
+                          // 2. Tạo danh sách tất cả các vị trí
+                          const allLocations =
+                            departmentLocations.length > 0
+                              ? departmentLocations
+                              : Object.keys(snapshots).map((uuid) => ({
+                                  uuid_location: uuid,
+                                  name_location: "Đang tải...",
+                                }));
+
+                          // Các biến tổng
+                          let grandTotalSystem = 0;
+                          let grandTotalCorrect = 0;
+                          let grandTotalMisDept = 0;
+                          let grandTotalDiff = 0;
+                          let totalCheckedCount = 0;
+
+                          const rows = allLocations.map((loc) => {
+                            const systemCount =
+                              snapshots[loc.uuid_location] || 0;
+
+                            // Tìm trong scannedData
+                            const scannedLoc = scannedData.find(
+                              (s) => s.location_uuid === loc.uuid_location
+                            );
+
+                            // Logic đếm số lượng Correct vs MisDept
+                            let correctCount = 0;
+                            let misDeptCount = 0;
+
+                            if (scannedLoc && scannedLoc.scanned_machine) {
+                              scannedLoc.scanned_machine.forEach((m) => {
+                                if (m.misdepartment === "1") {
+                                  misDeptCount++;
+                                } else {
+                                  correctCount++;
+                                }
+                              });
+                            }
+
+                            const totalActual = correctCount + misDeptCount;
+                            const isScanned = !!scannedLoc;
+                            const diff = systemCount - totalActual;
+
+                            // Cập nhật tổng
+                            grandTotalSystem += systemCount;
+                            if (isScanned) {
+                              grandTotalCorrect += correctCount;
+                              grandTotalMisDept += misDeptCount;
+                              totalCheckedCount++;
+                            }
+                            grandTotalDiff += diff;
+
+                            return {
+                              name: loc.name_location,
+                              system: systemCount,
+                              correct: correctCount,
+                              misDept: misDeptCount,
+                              diff: diff,
+                              isScanned: isScanned,
+                            };
+                          });
+
+                          return (
+                            <>
+                              {rows.map((row, idx) => (
+                                <TableRow key={idx} hover>
+                                  <TableCell
+                                    sx={{ fontWeight: 600, color: "#333" }}
+                                  >
+                                    {row.name}
+                                  </TableCell>
+
+                                  <TableCell align="center">
+                                    {row.isScanned ? (
+                                      <Typography
+                                        variant="caption"
+                                        sx={{
+                                          color: "#2e7d32",
+                                          fontWeight: "bold",
+                                        }}
+                                      >
+                                        Đã kiểm
+                                      </Typography>
+                                    ) : (
+                                      <Typography
+                                        variant="caption"
+                                        sx={{
+                                          color: "#ed6c02",
+                                          fontWeight: "bold",
+                                        }}
+                                      >
+                                        Chưa kiểm
+                                      </Typography>
+                                    )}
+                                  </TableCell>
+
+                                  <TableCell
+                                    align="center"
+                                    sx={{ color: "#1565c0", fontWeight: 600 }}
+                                  >
+                                    {new Intl.NumberFormat("en-US").format(
+                                      row.system
+                                    )}
+                                  </TableCell>
+
+                                  {/* CỘT CÙNG ĐV */}
+                                  <TableCell
+                                    align="center"
+                                    sx={{ color: "#2e7d32", fontWeight: 600 }}
+                                  >
+                                    {row.isScanned
+                                      ? new Intl.NumberFormat("en-US").format(
+                                          row.correct
+                                        )
+                                      : "0"}
+                                  </TableCell>
+
+                                  {/* CỘT KHÁC ĐV */}
+                                  <TableCell
+                                    align="center"
+                                    sx={{
+                                      color:
+                                        row.misDept > 0 ? "#ed6c02" : "#bdbdbd",
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    {row.isScanned
+                                      ? new Intl.NumberFormat("en-US").format(
+                                          row.misDept
+                                        )
+                                      : "0"}
+                                  </TableCell>
+
+                                  <TableCell
+                                    align="center"
+                                    sx={{
+                                      fontWeight: "bold",
+                                      color:
+                                        row.diff !== 0 ? "#d32f2f" : "#bdbdbd",
+                                    }}
+                                  >
+                                    {row.isScanned
+                                      ? new Intl.NumberFormat("en-US").format(
+                                          row.diff
+                                        )
+                                      : `${new Intl.NumberFormat(
+                                          "en-US"
+                                        ).format(row.system)}`}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+
+                              {/* HÀNG TỔNG CỘNG */}
+                              <TableRow
+                                sx={{
+                                  bgcolor: "#e3f2fd",
+                                  borderTop: "2px solid #90caf9",
+                                }}
+                              >
+                                <TableCell
+                                  sx={{
+                                    fontWeight: "bold",
+                                    textTransform: "uppercase",
+                                  }}
+                                >
+                                  TỔNG CỘNG
+                                </TableCell>
+                                <TableCell
+                                  align="center"
+                                  sx={{ fontWeight: "bold" }}
+                                >
+                                  {totalCheckedCount}/{rows.length}
+                                </TableCell>
+                                <TableCell
+                                  align="center"
+                                  sx={{
+                                    fontWeight: "bold",
+                                    color: "#1565c0",
+                                    fontSize: "1rem",
+                                  }}
+                                >
+                                  {new Intl.NumberFormat("en-US").format(
+                                    grandTotalSystem
+                                  )}
+                                </TableCell>
+                                <TableCell
+                                  align="center"
+                                  sx={{
+                                    fontWeight: "bold",
+                                    color: "#2e7d32",
+                                    fontSize: "1rem",
+                                  }}
+                                >
+                                  {new Intl.NumberFormat("en-US").format(
+                                    grandTotalCorrect
+                                  )}
+                                </TableCell>
+                                <TableCell
+                                  align="center"
+                                  sx={{
+                                    fontWeight: "bold",
+                                    color: "#ed6c02",
+                                    fontSize: "1rem",
+                                  }}
+                                >
+                                  {new Intl.NumberFormat("en-US").format(
+                                    grandTotalMisDept
+                                  )}
+                                </TableCell>
+                                <TableCell
+                                  align="center"
+                                  sx={{
+                                    fontWeight: "bold",
+                                    color: "#d32f2f",
+                                    fontSize: "1rem",
+                                  }}
+                                >
+                                  {new Intl.NumberFormat("en-US").format(
+                                    grandTotalDiff
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            </>
+                          );
+                        })()}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </Card>
+              )}
+
+              {/* Danh sách các vị trí ĐÃ LƯU trong Đơn vị này */}
+              {(() => {
+                // 1. Lấy Snapshot Map để biết số lượng sổ sách của từng vị trí
+                let locationSnapshots = {};
+                try {
+                  if (currentDepartment?.scanned_result) {
+                    const parsed =
+                      typeof currentDepartment.scanned_result === "string"
+                        ? JSON.parse(currentDepartment.scanned_result)
+                        : currentDepartment.scanned_result;
+                    locationSnapshots = parsed?.location_snapshots || {};
+                  }
+                } catch (e) {
+                  console.error(e);
+                }
+
+                // 2. Lọc ra các vị trí có máy đã quét
+                const locationsWithMachines = scannedLocationsList.filter(
+                  (loc) => loc.scanned_machine && loc.scanned_machine.length > 0
+                );
+
+                const totalMachines = locationsWithMachines.reduce(
+                  (total, loc) => total + (loc.scanned_machine?.length || 0),
+                  0
+                );
+
+                return (
+                  <>
+                    <Divider sx={{ my: 3 }} />
+                    <Stack
+                      direction="row"
+                      justifyContent="space-between"
+                      alignItems="center"
+                      sx={{ mb: 2 }}
+                    >
+                      <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                        Các vị trí đã kiểm ({locationsWithMachines.length} vị
+                        trí - {totalMachines} máy)
+                      </Typography>
+                    </Stack>
+
+                    {locationsWithMachines.length === 0 ? (
+                      <Alert severity="info" sx={{ borderRadius: "12px" }}>
+                        Chưa có vị trí nào được kiểm kê trong đơn vị này.
+                      </Alert>
+                    ) : (
+                      <Box>
+                        {locationsWithMachines.map((loc, idx) => {
+                          // Lấy snapshot count cho vị trí này
+                          const snapshotCount =
+                            locationSnapshots[loc.location_uuid] || 0;
+
+                          return (
+                            <InventoryLocationItem
+                              key={idx}
+                              location={loc}
+                              snapshotCount={snapshotCount}
+                              canEdit={
+                                selectedTicket?.status === "draft" &&
+                                canEditInventoryDepartment(currentDepartment)
+                              }
+                              onRemoveMachine={handleRemoveSavedMachine}
+                            />
+                          );
+                        })}
+                      </Box>
+                    )}
+                  </>
+                );
+              })()}
+            </Stack>
+          </DialogContent>
+          <DialogActions sx={{ p: 3 }}>
+            <Button
+              onClick={handleCloseInventoryScan}
+              variant="outlined"
+              sx={{ borderRadius: "12px", px: 3 }}
+            >
+              Đóng
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Add Department to Inventory Dialog */}
+        <Dialog
+          open={formData.showAddDepartmentDialog || false}
+          onClose={() =>
+            setFormData((prev) => ({
+              ...prev,
+              showAddDepartmentDialog: false,
+              selectedNewDepartments: [],
+              availableDepartments: [],
+            }))
+          }
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{ sx: { borderRadius: "20px" } }}
+        >
+          <DialogTitle
+            sx={{
+              background: "linear-gradient(45deg, #ff9800, #ff5722)",
+              color: "white",
+              fontWeight: 700,
+            }}
+          >
+            <Stack
+              direction="row"
+              justifyContent="space-between"
+              alignItems="center"
+            >
+              <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                Thêm đơn vị vào phiếu kiểm kê
+              </Typography>
+              <IconButton
+                onClick={() =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    showAddDepartmentDialog: false,
+                    selectedNewDepartments: [],
+                    availableDepartments: [],
+                  }))
+                }
+                sx={{ color: "white" }}
+              >
+                <Close />
+              </IconButton>
+            </Stack>
+          </DialogTitle>
+          <DialogContent sx={{ mt: 3 }}>
+            <Stack spacing={2}>
+              <Alert severity="info" sx={{ borderRadius: "12px" }}>
+                Chọn các đơn vị bạn muốn thêm vào phiếu kiểm kê này.
+              </Alert>
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{ mb: 1 }}
+                alignItems="center"
+              >
+                <Button
+                  size="small"
+                  variant="contained"
+                  onClick={() => {
+                    setFormData((prev) => ({
+                      ...prev,
+                      selectedNewDepartments: (
+                        prev.availableDepartments || []
+                      ).map((d) => d.uuid_department),
+                    }));
+                  }}
+                  sx={{
+                    borderRadius: "8px",
+                    textTransform: "none",
+                  }}
+                >
+                  Chọn tất cả
+                </Button>
+                <Button
+                  size="small"
+                  variant="contained"
+                  onClick={() => {
+                    setFormData((prev) => ({
+                      ...prev,
+                      selectedNewDepartments: [],
+                    }));
+                  }}
+                  sx={{
+                    borderRadius: "8px",
+                    textTransform: "none",
+                  }}
+                >
+                  Bỏ chọn tất cả
+                </Button>
+              </Stack>
+              <Autocomplete
+                multiple
+                fullWidth
+                options={formData.availableDepartments || []}
+                getOptionLabel={(option) => option.name_department || ""}
+                onChange={(event, newValue) => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    selectedNewDepartments: newValue.map(
+                      (d) => d.uuid_department
+                    ),
+                  }));
+                }}
+                value={
+                  (formData.availableDepartments || []).filter((dept) =>
+                    (formData.selectedNewDepartments || []).includes(
+                      dept.uuid_department
+                    )
+                  ) || []
+                }
+                loading={departmentLoading}
+                disableCloseOnSelect
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Chọn đơn vị"
+                    sx={{
+                      "& .MuiOutlinedInput-root": {
+                        borderRadius: "12px",
+                      },
+                    }}
+                    InputProps={{
+                      ...params.InputProps,
+                      endAdornment: (
+                        <>
+                          {departmentLoading ? (
+                            <CircularProgress color="inherit" size={20} />
+                          ) : null}
+                          {params.InputProps.endAdornment}
+                        </>
+                      ),
+                    }}
+                  />
+                )}
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions sx={{ p: 3, gap: 2 }}>
+            <Button
+              variant="outlined"
+              onClick={() =>
+                setFormData((prev) => ({
+                  ...prev,
+                  showAddDepartmentDialog: false,
+                  selectedNewDepartments: [],
+                  availableDepartments: [],
+                }))
+              }
+              sx={{ borderRadius: "12px" }}
+            >
+              Hủy
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<Add />}
+              onClick={handleAddDepartmentsToInventory}
+              disabled={
+                loading ||
+                !formData.selectedNewDepartments ||
+                formData.selectedNewDepartments.length === 0
+              }
+              sx={{
+                borderRadius: "12px",
+                background: "linear-gradient(45deg, #ff9800, #ff5722)",
+              }}
+            >
+              {loading ? <CircularProgress size={24} /> : "Thêm đơn vị"}
+            </Button>
+          </DialogActions>
+        </Dialog>
 
         {/* Snackbar Notification */}
         <Snackbar

@@ -91,3 +91,22 @@ i. xuất trả (máy thuê) (chỉ hiện trường hợp 10,11,12)
 j. xuất trả (máy mượn) (chỉ hiện trường hợp 7,8,9)
 k. điều chuyển nội bộ (chỉ hiện trường hợp 1,2,5,7,8,9,10,11,12)
 l. cập nhật vị trí (ko quan tâm status và is_borrowed_or_rented_or_borrowed_out)
+
+Hành động	Admin	Phòng Cơ điện	Cơ điện xưởng	View Only	Người tạo
+Xem Tab Kiểm kê	✅	✅	✅	✅	✅
+Xem danh sách phiếu	✅	✅	✅	✅	✅
+Xem chi tiết phiếu	✅	✅	✅	✅	✅
+Tạo phiếu kiểm kê	✅	✅	❌	❌	❌
+Thêm đơn vị	✅	✅	❌	❌	✅*
+Kiểm kê (Chi tiết)	✅	✅	✅	❌	✅
+Gửi duyệt	✅	✅	❌	❌	✅*
+: Chỉ khi là người tạo phiếu đó
+
+Hành động	Admin	Phòng Cơ điện	Cơ điện xưởng	Người tạo	User khác
+Xem dialog "Chi tiết / Kiểm kê"	✅	✅	✅	✅	✅
+Xem danh sách máy đã quét	✅	✅	✅	✅	✅
+Thêm vị trí kiểm kê	✅	✅	✅*	✅	❌
+Quét QR/RFID	✅	✅	✅*	✅	❌
+Lưu kết quả kiểm kê	✅	✅	✅*	✅	❌
+Xóa máy khỏi chuyền	✅	✅	✅*	✅	❌
+\: Cơ điện xưởng chỉ có quyền với đơn vị của mình (dựa vào id_department === phongban_id)

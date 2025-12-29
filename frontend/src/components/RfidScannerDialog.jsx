@@ -27,6 +27,7 @@ const RfidScannerDialog = ({
   apiParams,
   showNotification,
   selectedMachineUuids,
+  isInventoryMode = false,
 }) => {
   const [rfidInput, setRfidInput] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
@@ -93,10 +94,12 @@ const RfidScannerDialog = ({
           }
         }
 
+        // Gọi callback để parent xử lý (bao gồm kiểm tra trùng và thông báo)
         if (machinesToAdd.length > 0) {
           onAddMachines(machinesToAdd);
         }
 
+        // Tạo thông báo chi tiết
         let title = "";
         let message = "";
         let severity = "success";
@@ -104,39 +107,57 @@ const RfidScannerDialog = ({
         const duplicateCount = duplicateMachines.length;
         const notFoundCount = notFoundRfids.length;
 
-        if (addedCount > 0 && duplicateCount === 0 && notFoundCount === 0) {
-          title = "Thành công";
-          message = `Đã tìm thấy và thêm ${addedCount} máy.`;
-          severity = "success";
-        } else if (
-          addedCount === 0 &&
-          duplicateCount > 0 &&
-          notFoundCount === 0
-        ) {
-          title = "Không thêm máy mới";
-          message = `Đã tìm thấy ${duplicateCount} máy, nhưng tất cả đều đã có trong danh sách.`;
-          severity = "info";
-        } else {
-          title = "Hoàn tất (có cảnh báo)";
-          severity = "warning";
-          let parts = [];
-          if (addedCount > 0) parts.push(`Đã thêm ${addedCount} máy`);
-          if (duplicateCount > 0)
-            parts.push(
-              `${duplicateCount} máy bị bỏ qua (đã có trong danh sách)`
-            );
+        // Logic thông báo cho chế độ KIỂM KÊ
+        if (isInventoryMode) {
+          // Trong chế độ kiểm kê, không hiển thị thông báo ở đây
+          // Vì parent component (TestProposalPage) sẽ xử lý thông báo chi tiết hơn
+          // (bao gồm cả kiểm tra trùng ở các chuyền/đơn vị khác)
+          // Chỉ hiển thị thông báo về RFID không tìm thấy
           if (notFoundCount > 0) {
             const missingCodesStr = notFoundRfids.join(", ");
-            parts.push(
+            showNotification(
+              "warning",
+              "Một số RFID không tìm thấy",
               `${notFoundCount} mã không tìm thấy: [${missingCodesStr}]`
             );
           }
-          message =
-            parts.join(". ") +
-            `. (Lý do lọc: ${filterMessage || "Máy không hợp lệ"})`;
+        } else {
+          // Logic thông báo cho chế độ PHIẾU NHẬP/XUẤT/ĐIỀU CHUYỂN
+          if (addedCount > 0 && duplicateCount === 0 && notFoundCount === 0) {
+            title = "Thành công";
+            message = `Đã tìm thấy và thêm ${addedCount} máy.`;
+            severity = "success";
+          } else if (
+            addedCount === 0 &&
+            duplicateCount > 0 &&
+            notFoundCount === 0
+          ) {
+            title = "Không thêm máy mới";
+            message = `Đã tìm thấy ${duplicateCount} máy, nhưng tất cả đều đã có trong danh sách.`;
+            severity = "info";
+          } else {
+            title = "Hoàn tất (có cảnh báo)";
+            severity = "warning";
+            let parts = [];
+            if (addedCount > 0) parts.push(`Đã thêm ${addedCount} máy`);
+            if (duplicateCount > 0)
+              parts.push(
+                `${duplicateCount} máy bị bỏ qua (đã có trong danh sách)`
+              );
+            if (notFoundCount > 0) {
+              const missingCodesStr = notFoundRfids.join(", ");
+              parts.push(
+                `${notFoundCount} mã không tìm thấy: [${missingCodesStr}]`
+              );
+            }
+            message =
+              parts.join(". ") +
+              `. (Lý do lọc: ${filterMessage || "Máy không hợp lệ"})`;
+          }
+
+          showNotification(severity, title, message);
         }
 
-        showNotification(severity, title, message);
         handleClose();
       } else {
         showNotification(

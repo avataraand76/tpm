@@ -47,6 +47,7 @@ import {
   useTheme,
   useMediaQuery,
   Tooltip,
+  Autocomplete,
 } from "@mui/material";
 import {
   PrecisionManufacturing,
@@ -170,7 +171,7 @@ const renderMultiSelectValue = (selected) => (
 
 const formatNumber = (num) => {
   if (num === null || num === undefined || num === "") return "0";
-  return Number(num).toLocaleString("en-US");
+  return new Intl.NumberFormat("en-US").format(num);
 };
 
 const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
@@ -755,7 +756,6 @@ const MachineListPage = () => {
   const [modelOptions, setModelOptions] = useState([]);
   const [manufacturerOptions, setManufacturerOptions] = useState([]);
   const [locationOptions, setLocationOptions] = useState([]);
-  const [categoryOptions, setCategoryOptions] = useState([]);
 
   // State for selected filter values
   const [filters, setFilters] = useState({
@@ -781,6 +781,12 @@ const MachineListPage = () => {
         limit: rowsPerPage,
         search: searchQuery,
       };
+
+      // Thêm sort params nếu có
+      if (sortConfig.key) {
+        apiParams.sortBy = sortConfig.key;
+        apiParams.sortOrder = sortConfig.direction;
+      }
 
       // Thêm các bộ lọc vào params NẾU chúng có giá trị
       Object.keys(filters).forEach((key) => {
@@ -833,18 +839,16 @@ const MachineListPage = () => {
 
   const fetchFilterOptions = async () => {
     try {
-      const [typeRes, modelRes, manuRes, locRes, catRes] = await Promise.all([
+      const [typeRes, modelRes, manuRes, locRes] = await Promise.all([
         api.machines.getDistinctValues({ field: "type_machine" }),
         api.machines.getDistinctValues({ field: "model_machine" }),
         api.machines.getDistinctValues({ field: "manufacturer" }),
         api.machines.getDistinctValues({ field: "name_location" }),
-        api.categories.getAll(),
       ]);
       if (typeRes.success) setTypeOptions(typeRes.data);
       if (modelRes.success) setModelOptions(modelRes.data);
       if (manuRes.success) setManufacturerOptions(manuRes.data);
       if (locRes.success) setLocationOptions(locRes.data);
-      if (catRes.success) setCategoryOptions(catRes.data);
     } catch (err) {
       console.error("Error fetching filter options:", err);
       // Hiển thị thông báo lỗi cho người dùng (tùy chọn)
@@ -930,7 +934,7 @@ const MachineListPage = () => {
   useEffect(() => {
     fetchMachines(searchTerm);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchTerm, filters]);
+  }, [searchTerm, filters, sortConfig]);
 
   const handleSearchChange = (event) => {
     const value = event.target.value;
@@ -1037,7 +1041,7 @@ const MachineListPage = () => {
       repair_cost: "",
       note: "",
       current_status: "available",
-      id_category: "", // Default category
+      name_category: "Máy móc thiết bị", // Default category
       // Các trường is_borrowed... không cần khởi tạo vì form tạo mới không có
     });
     setIsCreateMode(true);
@@ -1681,7 +1685,7 @@ const MachineListPage = () => {
         color: "#ff5722",
         label: "Chờ thanh lý",
       },
-      disabled: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Vô hiệu hóa" },
+      disabled: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Chưa sử dụng" },
       broken: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Máy hư" },
       borrowed_return: {
         bg: "#03a9f422",
@@ -1776,42 +1780,12 @@ const MachineListPage = () => {
       direction = "asc";
     }
     setSortConfig({ key, direction });
+    setPage(1); // Reset to page 1 when sorting changes
   };
 
-  const sortedMachines = React.useMemo(() => {
-    let sortableMachines = [...machines];
-    if (sortConfig.key) {
-      sortableMachines.sort((a, b) => {
-        const aVal = a[sortConfig.key];
-        const bVal = b[sortConfig.key];
-
-        // Handle nulls/undefined to sort them at the end
-        if (aVal == null && bVal == null) return 0;
-        if (aVal == null) return 1;
-        if (bVal == null) return -1;
-
-        let compare = 0;
-        // Check for specific data types
-        if (["price", "lifespan", "repair_cost"].includes(sortConfig.key)) {
-          compare = aVal - bVal;
-        } else if (
-          [
-            "date_of_use",
-            "is_borrowed_or_rented_or_borrowed_out_date",
-            "is_borrowed_or_rented_or_borrowed_out_return_date",
-          ].includes(sortConfig.key)
-        ) {
-          compare = new Date(aVal) - new Date(bVal);
-        } else {
-          // Default to string comparison
-          compare = aVal.toString().localeCompare(bVal.toString());
-        }
-
-        return sortConfig.direction === "asc" ? compare : -compare;
-      });
-    }
-    return sortableMachines;
-  }, [machines, sortConfig]);
+  // Sort is now handled by backend, so we use machines directly
+  // No need for frontend sorting anymore
+  const sortedMachines = machines;
 
   // Column visibility logic
   const handleColumnMenuOpen = (event) => {
@@ -2098,7 +2072,7 @@ const MachineListPage = () => {
                   </CardContent>
                 </Card>
               </Grid> */}
-              {/* Vô hiệu hóa / Bị hỏng */}
+              {/* Chưa sử dụng / Bị hỏng */}
               {/* <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
                 <Card
                   elevation={0}
@@ -2136,7 +2110,7 @@ const MachineListPage = () => {
               {/* {stats.broken || 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary"> */}
-              {/* Vô hiệu hóa/ */}
+              {/* Chưa sử dụng/ */}
               {/* Máy hư
                     </Typography>
                   </CardContent>
@@ -2144,7 +2118,7 @@ const MachineListPage = () => {
               </Grid>             */}
 
               {/* --- HÀNG 2 --- */}
-              {/* 3. Chưa sử dụng (Gộp: Bảo trì + Máy hư + Vô hiệu hóa/Cho mượn) */}
+              {/* 3. Chưa sử dụng (Gộp: Bảo trì + Máy hư + Chưa sử dụng/Cho mượn) */}
               <Grid size={{ xs: 6 }}>
                 <Card
                   elevation={0}
@@ -3864,7 +3838,7 @@ const MachineListPage = () => {
                     sx={DISABLED_VIEW_SX}
                   />
                 </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
+                {/* <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
                     fullWidth
                     label="NFC"
@@ -3875,55 +3849,34 @@ const MachineListPage = () => {
                     disabled={!canCreateOrImport}
                     sx={DISABLED_VIEW_SX}
                   />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  {isCreateMode ? (
-                    <FormControl
-                      fullWidth
-                      disabled={!canCreateOrImport}
-                      required
-                    >
-                      <InputLabel>Phân loại</InputLabel>
-                      <Select
-                        name="name_category"
-                        value={editedData.name_category || ""}
-                        label="Phân loại"
-                        onChange={(e) =>
-                          handleInputChange("name_category", e.target.value)
-                        }
-                      >
-                        {categoryOptions.map((category) => (
-                          <MenuItem
-                            key={category.name_category}
-                            value={category.name_category} // Value là TÊN
-                          >
-                            {category.name_category}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  ) : (
-                    <TextField
-                      fullWidth
-                      label="Phân loại"
-                      value={editedData.name_category || ""}
-                      disabled={true}
-                      sx={DISABLED_VIEW_SX} // Luôn bị khóa
-                    />
-                  )}
-                </Grid>
-
+                </Grid> */}
                 <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
                     fullWidth
-                    label="Loại máy"
-                    required
-                    value={editedData.type_machine || ""}
-                    onChange={(e) =>
-                      handleInputChange("type_machine", e.target.value)
-                    }
-                    disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
+                    label="Phân loại"
+                    value="Máy móc thiết bị"
+                    disabled={true}
                     sx={DISABLED_VIEW_SX}
+                  />
+                </Grid>
+
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <Autocomplete
+                    freeSolo
+                    options={typeOptions}
+                    value={editedData.type_machine || ""}
+                    onInputChange={(event, newInputValue) => {
+                      handleInputChange("type_machine", newInputValue);
+                    }}
+                    disabled={!canCreateOrImport}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Loại máy"
+                        required
+                        sx={DISABLED_VIEW_SX}
+                      />
+                    )}
                   />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
@@ -3940,17 +3893,22 @@ const MachineListPage = () => {
                 </Grid>
 
                 <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="Hãng sản xuất"
+                  <Autocomplete
+                    freeSolo
+                    options={manufacturerOptions}
                     value={editedData.manufacturer || ""}
-                    onChange={(e) =>
-                      handleInputChange("manufacturer", e.target.value)
-                    }
-                    // THÊM: Sự kiện onBlur để tự động gọi API khi nhập xong
+                    onInputChange={(event, newInputValue) => {
+                      handleInputChange("manufacturer", newInputValue);
+                    }}
                     onBlur={handleGenerateCode}
                     disabled={!canCreateOrImport}
-                    sx={DISABLED_VIEW_SX}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Hãng sản xuất"
+                        sx={DISABLED_VIEW_SX}
+                      />
+                    )}
                   />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
@@ -3970,11 +3928,11 @@ const MachineListPage = () => {
                       <MenuItem value="available">Có thể sử dụng</MenuItem>
                       <MenuItem value="in_use">Đang sử dụng</MenuItem>
                       <MenuItem value="maintenance">Bảo trì</MenuItem>
-                      <MenuItem value="liquidation">Thanh lý</MenuItem>
+                      {/* <MenuItem value="liquidation">Thanh lý</MenuItem> */}
                       <MenuItem value="pending_liquidation">
                         Chờ thanh lý
                       </MenuItem>
-                      <MenuItem value="disabled">Vô hiệu hóa</MenuItem>
+                      <MenuItem value="disabled">Chưa sử dụng</MenuItem>
                       <MenuItem value="broken">Máy hư</MenuItem>
                     </Select>
                   </FormControl>

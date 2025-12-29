@@ -524,31 +524,6 @@ app.get("/api/auth/permissions", authenticateToken, async (req, res) => {
   }
 });
 
-// MARK: CATEGORIES
-
-// GET /api/categories - Get all categories
-app.get("/api/categories", authenticateToken, async (req, res) => {
-  try {
-    // SỬA: Chỉ lấy ten_phong_ban, không lấy id
-    const [categories] = await tpmConnection.query(
-      "SELECT DISTINCT name_category FROM tb_category ORDER BY name_category ASC"
-    );
-    res.json({
-      success: true,
-      message: "Categories retrieved successfully",
-      // Trả về: [{ name_category: "..." }, { name_category: "..." }]
-      data: categories,
-    });
-  } catch (error) {
-    console.error("Error fetching categories:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal server error",
-      error: error.message,
-    });
-  }
-});
-
 // MARK: MACHINE LIST
 
 // GET /api/machines - Get all machines with pagination
@@ -566,6 +541,8 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
       name_locations,
       current_status,
       is_borrowed_or_rented_or_borrowed_out,
+      sortBy,
+      sortOrder,
     } = req.query;
 
     // Build search condition and params
@@ -755,6 +732,38 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
         ? `WHERE ${whereConditions.join(" AND ")}`
         : "";
 
+    // Build ORDER BY clause
+    let orderByClause = "";
+    if (sortBy) {
+      // Map frontend field names to database column names
+      const columnMap = {
+        code_machine: "m.code_machine",
+        type_machine: "m.type_machine",
+        model_machine: "m.model_machine",
+        manufacturer: "m.manufacturer",
+        serial_machine: "m.serial_machine",
+        RFID_machine: "m.RFID_machine",
+        NFC_machine: "m.NFC_machine",
+        name_category: "c.name_category",
+        name_location: "tl.name_location",
+        current_status: "m.current_status",
+        is_borrowed_or_rented_or_borrowed_out:
+          "m.is_borrowed_or_rented_or_borrowed_out",
+        price: "m.price",
+        lifespan: "m.lifespan",
+        repair_cost: "m.repair_cost",
+        date_of_use: "m.date_of_use",
+        created_at: "m.created_at",
+        updated_at: "m.updated_at",
+      };
+
+      const dbColumn = columnMap[sortBy];
+      if (dbColumn) {
+        const order = sortOrder === "desc" ? "DESC" : "ASC";
+        orderByClause = `ORDER BY ${dbColumn} ${order}`;
+      }
+    }
+
     // Get total count
     const countQuery = `
       SELECT COUNT(*) as total
@@ -800,6 +809,7 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
       LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
       LEFT JOIN tb_location tl ON tl.id_location = ml.id_location
       ${whereClause}
+      ${orderByClause}
       LIMIT ? OFFSET ?
     `;
 
@@ -1685,13 +1695,14 @@ app.post(
         `
         SELECT 
           m.serial_machine,
+          m.NFC_machine,
           m.type_machine, 
           m.model_machine,
           m.RFID_machine
         FROM tb_machine m
-        WHERE m.serial_machine IN (?)
+        WHERE m.serial_machine IN (?) OR m.NFC_machine IN (?)
         `,
-        [uniqueSerials]
+        [uniqueSerials, uniqueSerials]
       );
 
       res.json({ success: true, data: machines });
@@ -2038,6 +2049,13 @@ const getMachineFilterConditions = (ticket_type) => {
         "Chỉ nhận những máy có trạng thái 'Sẵn sàng', 'Đang sử dụng', 'Máy hư', 'Chờ thanh lý' (bao gồm cả máy đang mượn/thuê).";
       break;
 
+    // l. kiểm kê (chỉ hiện trường hợp 1,2,5)
+    case "inventory":
+      where = `m.current_status IN ('available', 'in_use', 'broken', 'pending_liquidation')`;
+      message =
+        "Chỉ nhận những máy có trạng thái 'Sẵn sàng', 'Đang sử dụng', 'Máy hư', 'Chờ thanh lý'.";
+      break;
+
     // Mặc định (nếu ticket_type không xác định, ví dụ: scanner mở trước khi chọn loại phiếu)
     default:
       where = "";
@@ -2369,6 +2387,7 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         m.uuid_machine,
         m.serial_machine,
         m.RFID_machine,
+        m.NFC_machine,
         m.code_machine,
         m.type_machine,
         m.model_machine,
@@ -2379,9 +2398,14 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         m.repair_cost,
         m.note,
         m.current_status,
+        m.is_borrowed_or_rented_or_borrowed_out,
+        m.is_borrowed_or_rented_or_borrowed_out_name,
+        m.is_borrowed_or_rented_or_borrowed_out_date,
+        m.is_borrowed_or_rented_or_borrowed_out_return_date,
         m.created_at,
         m.updated_at,
         c.name_category,
+        tl.name_location,
 
         -- Thêm thông tin người tạo (creator)
         CASE
@@ -2433,6 +2457,8 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
 
       FROM tb_machine m
       LEFT JOIN tb_category c ON c.id_category = m.id_category
+      LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
+      LEFT JOIN tb_location tl ON tl.id_location = ml.id_location
       LEFT JOIN ${process.env.DATA_HITIMESHEET_DATABASE}.sync_nhan_vien creator ON creator.id = m.created_by
       LEFT JOIN ${process.env.DATA_HITIMESHEET_DATABASE}.sync_nhan_vien updater ON updater.id = m.updated_by
       WHERE m.uuid_machine = ?
@@ -6602,24 +6628,35 @@ app.put("/api/admin/users/permissions", async (req, res) => {
   }
 });
 
+// MARK: FASTWORK
+
 // Helper: Map loại phiếu sang tên proposal
-const getProposalName = (type, specificType) => {
+const getProposalName = (type, specificType, date) => {
   const mapping = {
-    purchased: "Nhập máy móc thiết bị móc mới",
-    maintenance_return: "Nhập máy móc thiết bị sau bảo trì",
-    rented: "Nhập thuê máy móc thiết bị",
-    borrowed: "Nhập mượn máy móc thiết bị",
-    borrowed_out_return: "Nhập trả máy móc thiết bị (máy cho mượn)",
-    liquidation: "Xuất thanh lý máy móc thiết bị",
-    maintenance: "Xuất bảo trì máy móc thiết bị",
-    borrowed_out: "Xuất cho mượn máy móc thiết bị",
-    rented_return: "Xuất trả máy móc thiết bị (máy thuê)",
-    borrowed_return: "Xuất trả máy móc thiết bị(máy mượn)",
-    internal: "Điều chuyển máy móc thiết bị",
+    purchased: "Phiếu nhập máy móc thiết bị móc mới",
+    maintenance_return: "Phiếu nhập máy móc thiết bị sau bảo trì",
+    rented: "Phiếu nhập thuê máy móc thiết bị",
+    borrowed: "Phiếu nhập mượn máy móc thiết bị",
+    borrowed_out_return: "Phiếu nhập trả máy móc thiết bị (máy cho mượn)",
+    liquidation: "Phiếu xuất thanh lý máy móc thiết bị",
+    maintenance: "Phiếu xuất bảo trì máy móc thiết bị",
+    borrowed_out: "Phiếu xuất cho mượn máy móc thiết bị",
+    rented_return: "Phiếu xuất trả máy móc thiết bị (máy thuê)",
+    borrowed_return: "Phiếu xuất trả máy móc thiết bị (máy mượn)",
+    internal: "Phiếu điều chuyển máy móc thiết bị",
   };
-  // Nếu là điều chuyển, specificType sẽ null hoặc không khớp key, ta trả về "Điều chuyển"
-  if (type === "internal") return "Điều chuyển";
-  return mapping[specificType] || "Phiếu khác";
+
+  // Tạo chuỗi ngày định dạng Việt Nam
+  const dateStr = date
+    ? ` ngày ${new Date(date).toLocaleDateString("vi-VN")}`
+    : "";
+
+  // Với phiếu internal: type = "internal", specificType thường là null
+  // Với phiếu import/export: type = "import"/"export", specificType = "purchased"/"maintenance"...
+  const key = type === "internal" ? "internal" : specificType;
+  const baseName = mapping[key] || "Phiếu khác";
+
+  return `${baseName}${dateStr}`;
 };
 
 async function enrichApprovalFlowWithNames(flowJson) {
@@ -6921,7 +6958,7 @@ app.post(
       // --- 4. CẤU HÌNH PAYLOAD EXTERNAL & EXPANSION FIELD ---
       let targetUidProposalType = "8622ae80-4345-4efd-9a8a-62a1308d5a3f";
       let expansionField = [];
-      const proposalName = getProposalName(category, type);
+      const proposalName = getProposalName(category, type, date);
 
       // A. Phiếu Nhập
       if (category === "import") {
@@ -7179,7 +7216,7 @@ app.post(
         );
         const externalResponse = await axios.post(
           // "https://servertienich.vietlonghung.com.vn/api/fw/create-proposal-reality-outdoor",
-          "http://192.168.0.35:16002/api/fw/create-proposal-reality-outdoor",
+          "http://192.168.0.65:16002/api/fw/create-proposal-reality-outdoor",
           externalPayload
         );
         console.log("External API Response:", externalResponse.data);
@@ -7270,6 +7307,22 @@ app.post("/api/test-proposals/callback", async (req, res) => {
           ticketInfo = internalCheck[0];
           currentFlowJson = internalCheck[0].approval_flow;
         }
+      }
+    }
+
+    // Kiểm tra Inventory Check
+    if (!table) {
+      const [invCheck] = await connection.query(
+        "SELECT id_inventory_check, approval_flow, created_by, status FROM tb_inventory_check WHERE uuid_inventory_check = ?",
+        [id_refer]
+      );
+      if (invCheck.length > 0) {
+        table = "tb_inventory_check";
+        idCol = "id_inventory_check";
+        ticketId = invCheck[0].id_inventory_check;
+        ticketType = "inventory";
+        ticketInfo = invCheck[0];
+        currentFlowJson = invCheck[0].approval_flow;
       }
     }
 
@@ -7372,22 +7425,143 @@ app.post("/api/test-proposals/callback", async (req, res) => {
 
     // 5. Logic hoàn thành phiếu
     if (internalStatus === "completed") {
-      const [locRes] = await connection.query(
-        "SELECT name_location FROM tb_location WHERE id_location = ?",
-        [ticketInfo.to_location_id]
-      );
-      const locationName = locRes[0]?.name_location || "";
+      if (ticketType === "inventory") {
+        // Xử lý cập nhật vị trí cho các máy bị lệch trong phiếu kiểm kê
+        const [details] = await connection.query(
+          "SELECT scanned_result FROM tb_inventory_check_detail WHERE id_inventory_check = ?",
+          [ticketId]
+        );
 
-      const ticketBorrowInfo = {
-        name: ticketInfo.is_borrowed_or_rented_or_borrowed_out_name,
-        date: ticketInfo.is_borrowed_or_rented_or_borrowed_out_date,
-        return_date:
-          ticketInfo.is_borrowed_or_rented_or_borrowed_out_return_date,
-      };
+        const updaterId = ticketInfo.created_by || 99999;
 
-      const updaterId = ticketInfo.created_by || 99999;
+        for (const det of details) {
+          if (!det.scanned_result) continue;
 
-      if (ticketType === "internal") {
+          let locationsArr = [];
+          try {
+            const parsed =
+              typeof det.scanned_result === "string"
+                ? JSON.parse(det.scanned_result)
+                : det.scanned_result;
+
+            if (Array.isArray(parsed)) {
+              locationsArr = parsed;
+            } else if (
+              parsed &&
+              parsed.locations &&
+              Array.isArray(parsed.locations)
+            ) {
+              locationsArr = parsed.locations;
+            } else {
+              locationsArr = [];
+            }
+          } catch (e) {
+            locationsArr = [];
+          }
+
+          if (Array.isArray(locationsArr)) {
+            for (const loc of locationsArr) {
+              // Get correct location ID from location_uuid
+              const [correctLocationIdResult] = await connection.query(
+                "SELECT id_location FROM tb_location WHERE uuid_location = ?",
+                [loc.location_uuid]
+              );
+
+              if (correctLocationIdResult.length === 0) continue;
+              const correctLocationId = correctLocationIdResult[0].id_location;
+
+              if (loc.scanned_machine && Array.isArray(loc.scanned_machine)) {
+                for (const m of loc.scanned_machine) {
+                  // Chỉ cập nhật nếu máy bị SAI VỊ TRÍ (mislocation = "1")
+                  if (m.mislocation === "1") {
+                    const [mIdRes] = await connection.query(
+                      "SELECT id_machine FROM tb_machine WHERE uuid_machine = ?",
+                      [m.uuid]
+                    );
+                    if (mIdRes.length > 0) {
+                      const idMachine = mIdRes[0].id_machine;
+
+                      // 1. Lấy vị trí cũ để ghi log
+                      const [oldLoc] = await connection.query(
+                        "SELECT id_location FROM tb_machine_location WHERE id_machine = ?",
+                        [idMachine]
+                      );
+                      const idFrom =
+                        oldLoc.length > 0 ? oldLoc[0].id_location : null;
+
+                      // 2. Insert History
+                      await connection.query(
+                        `INSERT INTO tb_machine_location_history (id_machine, id_from_location, id_to_location, move_date, created_by, updated_by) VALUES (?, ?, ?, CURDATE(), ?, ?)`,
+                        [
+                          idMachine,
+                          idFrom,
+                          correctLocationId,
+                          updaterId,
+                          updaterId,
+                        ]
+                      );
+
+                      // 3. Update Location
+                      if (idFrom === null) {
+                        await connection.query(
+                          `INSERT INTO tb_machine_location (id_machine, id_location, created_by, updated_by) VALUES (?, ?, ?, ?)`,
+                          [idMachine, correctLocationId, updaterId, updaterId]
+                        );
+                      } else {
+                        await connection.query(
+                          `UPDATE tb_machine_location SET id_location = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id_machine = ?`,
+                          [correctLocationId, updaterId, idMachine]
+                        );
+                      }
+
+                      // 4. Xác định trạng thái mới dựa trên vị trí
+                      const [newLocationInfo] = await connection.query(
+                        "SELECT name_location FROM tb_location WHERE id_location = ?",
+                        [correctLocationId]
+                      );
+                      const newLocationName =
+                        newLocationInfo[0]?.name_location?.toLowerCase() || "";
+
+                      let newStatus = null;
+                      // Nếu chuyển vào KHO → trạng thái "available"
+                      if (newLocationName.includes("kho")) {
+                        newStatus = "available";
+                      }
+                      // Nếu chuyển vào CHUYỀN/XƯỞng → trạng thái "in_use"
+                      else if (
+                        newLocationName.includes("chuyền") ||
+                        newLocationName.includes("xưởng")
+                      ) {
+                        newStatus = "in_use";
+                      }
+
+                      // 5. Update machine status và timestamp
+                      if (newStatus) {
+                        await connection.query(
+                          `UPDATE tb_machine SET current_status = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id_machine = ?`,
+                          [newStatus, updaterId, idMachine]
+                        );
+                      } else {
+                        await connection.query(
+                          `UPDATE tb_machine SET updated_at = CURRENT_TIMESTAMP WHERE id_machine = ?`,
+                          [idMachine]
+                        );
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else if (ticketType === "internal") {
+        const [locRes] = await connection.query(
+          "SELECT name_location FROM tb_location WHERE id_location = ?",
+          [ticketInfo.to_location_id]
+        );
+        const locationName = locRes[0]?.name_location || "";
+        const updaterId = ticketInfo.created_by || 99999;
+
         await handleInternalTransferApproval(
           connection,
           ticketId,
@@ -7397,6 +7571,21 @@ app.post("/api/test-proposals/callback", async (req, res) => {
           ticketInfo.target_status
         );
       } else {
+        const [locRes] = await connection.query(
+          "SELECT name_location FROM tb_location WHERE id_location = ?",
+          [ticketInfo.to_location_id]
+        );
+        const locationName = locRes[0]?.name_location || "";
+
+        const ticketBorrowInfo = {
+          name: ticketInfo.is_borrowed_or_rented_or_borrowed_out_name,
+          date: ticketInfo.is_borrowed_or_rented_or_borrowed_out_date,
+          return_date:
+            ticketInfo.is_borrowed_or_rented_or_borrowed_out_return_date,
+        };
+
+        const updaterId = ticketInfo.created_by || 99999;
+
         await updateMachineLocationAndStatus(
           connection,
           ticketType,
@@ -7423,3 +7612,929 @@ app.post("/api/test-proposals/callback", async (req, res) => {
     connection.release();
   }
 });
+
+// MARK: INVENTORY CHECKS
+
+// GET /api/inventory-checks - Lấy danh sách phiếu kiểm kê
+app.get("/api/inventory-checks", authenticateToken, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const status = req.query.status || "";
+    const offset = (page - 1) * limit;
+
+    let whereConditions = [];
+    let params = [];
+
+    if (status) {
+      whereConditions.push(`i.status = ?`);
+      params.push(status);
+    }
+
+    const whereClause =
+      whereConditions.length > 0
+        ? `WHERE ${whereConditions.join(" AND ")}`
+        : "";
+
+    // Count total
+    const [countResult] = await tpmConnection.query(
+      `SELECT COUNT(*) as total FROM tb_inventory_check i ${whereClause}`,
+      params
+    );
+    const total = countResult[0].total;
+    const totalPages = Math.ceil(total / limit);
+
+    // Get data
+    const [inventories] = await tpmConnection.query(
+      `
+      SELECT 
+        i.uuid_inventory_check,
+        i.check_date,
+        i.status,
+        i.note,
+        i.created_at,
+        i.updated_at,
+        i.approval_flow,
+        (SELECT COUNT(*) FROM tb_inventory_check_detail d WHERE d.id_inventory_check = i.id_inventory_check) as department_count,
+        (SELECT COUNT(*) FROM tb_inventory_check_detail d WHERE d.id_inventory_check = i.id_inventory_check AND d.is_completed = 1) as completed_department_count,
+        (
+            SELECT GROUP_CONCAT(DISTINCT dep.name_department SEPARATOR ', ')
+            FROM tb_inventory_check_detail d
+            JOIN tb_department dep ON d.id_department = dep.id_department
+            WHERE d.id_inventory_check = i.id_inventory_check
+        ) as department_names
+      FROM tb_inventory_check i
+      ${whereClause}
+      ORDER BY i.check_date DESC, i.created_at DESC
+      LIMIT ? OFFSET ?
+      `,
+      [...params, limit, offset]
+    );
+
+    // Enrich approval flow names and fetch details for each inventory
+    const enrichedInventories = await Promise.all(
+      inventories.map(async (item) => {
+        if (item.approval_flow) {
+          item.approval_flow = await enrichApprovalFlowWithNames(
+            item.approval_flow
+          );
+        }
+
+        // Fetch details (departments) for this inventory
+        const [details] = await tpmConnection.query(
+          `
+          SELECT 
+            d.id_department,
+            d.is_completed,
+            d.scanned_result,
+            dep.name_department,
+            dep.uuid_department,
+            dep.id_phong_ban
+          FROM tb_inventory_check_detail d
+          JOIN tb_department dep ON dep.id_department = d.id_department
+          WHERE d.id_inventory_check = (
+            SELECT id_inventory_check FROM tb_inventory_check WHERE uuid_inventory_check = ?
+          )
+          `,
+          [item.uuid_inventory_check]
+        );
+
+        item.inventoryDetails = details;
+
+        return item;
+      })
+    );
+
+    res.json({
+      success: true,
+      message: "Inventory checks retrieved successfully",
+      data: enrichedInventories,
+      pagination: { page, limit, total, totalPages },
+    });
+  } catch (error) {
+    console.error("Error fetching inventory checks:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/inventory-checks/:uuid - Lấy chi tiết phiếu kiểm kê
+app.get("/api/inventory-checks/:uuid", authenticateToken, async (req, res) => {
+  try {
+    const { uuid } = req.params;
+
+    // 1. Get Inventory Info
+    const [inventory] = await tpmConnection.query(
+      `
+      SELECT 
+        i.*,
+        nv.ma_nv AS creator_ma_nv,
+        CASE 
+          WHEN i.created_by = 99999 THEN '99999'
+          WHEN i.created_by = 99990 THEN '99990'
+          WHEN i.created_by = 99900 THEN '99900'
+          WHEN i.created_by = 99991 THEN '99991'
+          WHEN i.created_by = 99992 THEN '99992'
+          WHEN i.created_by = 99993 THEN '99993'
+          WHEN i.created_by = 99994 THEN '99994'
+          WHEN i.created_by = 99995 THEN '99995'
+          ELSE nv.ma_nv 
+        END AS creator_ma_nv,
+        CASE 
+          WHEN i.created_by = 99999 THEN 'Quản Trị Viên (Test)'
+          WHEN i.created_by = 99990 THEN 'Phòng Cơ Điện (Test)'
+          WHEN i.created_by = 99900 THEN 'Phòng Cơ Điện (Test)'
+          WHEN i.created_by = 99991 THEN 'Cơ Điện Xưởng 1 (Test)'
+          WHEN i.created_by = 99992 THEN 'Cơ Điện Xưởng 2 (Test)'
+          WHEN i.created_by = 99993 THEN 'Cơ Điện Xưởng 3 (Test)'
+          WHEN i.created_by = 99994 THEN 'Cơ Điện Xưởng 4 (Test)'
+          WHEN i.created_by = 99995 THEN 'Viewer (Test)'
+          ELSE nv.ten_nv 
+        END AS creator_ten_nv
+      FROM tb_inventory_check i
+      LEFT JOIN ${process.env.DATA_HITIMESHEET_DATABASE}.sync_nhan_vien nv ON nv.id = i.created_by
+      WHERE i.uuid_inventory_check = ?
+      `,
+      [uuid]
+    );
+
+    if (inventory.length === 0) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Inventory check not found" });
+    }
+
+    const ticket = inventory[0];
+    if (ticket.approval_flow) {
+      ticket.approval_flow = await enrichApprovalFlowWithNames(
+        ticket.approval_flow
+      );
+    }
+    const idInventory = ticket.id_inventory_check;
+
+    // 2. Get Details (Departments) with total locations count
+    const [details] = await tpmConnection.query(
+      `
+      SELECT 
+        d.id_department,
+        d.is_completed,
+        d.scanned_result,
+        dep.name_department,
+        dep.uuid_department,
+        dep.id_phong_ban,
+        (SELECT COUNT(*) FROM tb_location WHERE id_department = d.id_department) as total_locations,
+        (
+            SELECT COUNT(m.id_machine) 
+            FROM tb_machine_location ml
+            JOIN tb_location tl ON ml.id_location = tl.id_location
+            JOIN tb_machine m ON ml.id_machine = m.id_machine
+            WHERE tl.id_department = d.id_department
+              AND m.current_status != 'liquidation'
+              AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))
+        ) as total_machines_system
+      FROM tb_inventory_check_detail d
+      JOIN tb_department dep ON dep.id_department = d.id_department
+      WHERE d.id_inventory_check = ?
+      `,
+      [idInventory]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        inventory: ticket,
+        details: details,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching inventory detail:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/inventory-checks - Tạo phiếu kiểm kê
+app.post("/api/inventory-checks", authenticateToken, async (req, res) => {
+  const connection = await tpmConnection.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const { check_date, note, department_uuids } = req.body;
+    const userId = req.user.id;
+
+    if (!check_date || !department_uuids || department_uuids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Ngày kiểm và danh sách đơn vị là bắt buộc",
+      });
+    }
+
+    // 1. Insert Master Ticket
+    const [result] = await connection.query(
+      `INSERT INTO tb_inventory_check (check_date, status, note, created_by, updated_by) VALUES (?, 'draft', ?, ?, ?)`,
+      [check_date, note || null, userId, userId]
+    );
+    const inventoryId = result.insertId;
+
+    // 2. Insert Details (Departments)
+    const [departments] = await connection.query(
+      `SELECT id_department FROM tb_department WHERE uuid_department IN (?)`,
+      [department_uuids]
+    );
+
+    if (departments.length === 0) {
+      await connection.rollback();
+      return res
+        .status(400)
+        .json({ success: false, message: "Đơn vị không hợp lệ" });
+    }
+
+    for (const dep of departments) {
+      // Lấy tổng toàn đơn vị
+      const [countRes] = await connection.query(
+        `SELECT COUNT(m.id_machine) as total 
+         FROM tb_machine_location ml 
+         JOIN tb_location tl ON ml.id_location = tl.id_location 
+         JOIN tb_machine m ON ml.id_machine = m.id_machine
+         WHERE tl.id_department = ?
+           AND m.current_status != 'liquidation'
+           AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))`,
+        [dep.id_department]
+      );
+      const snapshotCount = countRes[0]?.total || 0;
+
+      // Lấy chi tiết từng vị trí (uuid_location -> count)
+      const [locSnapshots] = await connection.query(
+        `SELECT tl.uuid_location, COUNT(m.id_machine) as count
+         FROM tb_location tl
+         LEFT JOIN tb_machine_location ml ON tl.id_location = ml.id_location
+         LEFT JOIN tb_machine m ON ml.id_machine = m.id_machine 
+              AND m.current_status != 'liquidation'
+              AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))
+         WHERE tl.id_department = ?
+         GROUP BY tl.id_location`,
+        [dep.id_department]
+      );
+      const locationSnapshotsMap = {};
+      locSnapshots.forEach((l) => {
+        locationSnapshotsMap[l.uuid_location] = l.count;
+      });
+
+      const initialData = {
+        snapshot_count: snapshotCount,
+        location_snapshots: locationSnapshotsMap,
+        locations: [],
+      };
+
+      await connection.query(
+        `INSERT INTO tb_inventory_check_detail (id_inventory_check, id_department, created_by, updated_by, scanned_result) VALUES (?, ?, ?, ?, ?)`,
+        [
+          inventoryId,
+          dep.id_department,
+          userId,
+          userId,
+          JSON.stringify(initialData),
+        ]
+      );
+    }
+
+    await connection.commit();
+    res
+      .status(201)
+      .json({ success: true, message: "Tạo phiếu kiểm kê thành công" });
+  } catch (error) {
+    await connection.rollback();
+    console.error("Error creating inventory:", error);
+    res.status(500).json({ success: false, message: error.message });
+  } finally {
+    connection.release();
+  }
+});
+
+// POST /api/inventory-checks/:uuid/scan - Lưu kết quả kiểm kê cho 1 vị trí trong 1 đơn vị
+app.post(
+  "/api/inventory-checks/:uuid/scan",
+  authenticateToken,
+  async (req, res) => {
+    const connection = await tpmConnection.getConnection();
+    try {
+      const { uuid } = req.params;
+      const { department_uuid, location_uuid, scanned_machines } = req.body;
+      const userId = req.user.id;
+
+      // 1. Get IDs
+      const [invRes] = await connection.query(
+        "SELECT id_inventory_check, status FROM tb_inventory_check WHERE uuid_inventory_check = ?",
+        [uuid]
+      );
+      if (invRes.length === 0)
+        return res
+          .status(404)
+          .json({ success: false, message: "Phiếu không tồn tại" });
+      if (invRes[0].status !== "draft")
+        return res.status(400).json({
+          success: false,
+          message: "Phiếu không ở trạng thái nháp, không thể cập nhật",
+        });
+
+      const idInventory = invRes[0].id_inventory_check;
+
+      // 2. Resolve Department
+      const [depRes] = await connection.query(
+        "SELECT id_department FROM tb_department WHERE uuid_department = ?",
+        [department_uuid]
+      );
+      if (depRes.length === 0)
+        return res
+          .status(404)
+          .json({ success: false, message: "Đơn vị không tồn tại" });
+      const idDepartment = depRes[0].id_department;
+
+      // 3. Resolve Location
+      const [locRes] = await connection.query(
+        "SELECT id_location, name_location FROM tb_location WHERE uuid_location = ?",
+        [location_uuid]
+      );
+      if (locRes.length === 0)
+        return res
+          .status(404)
+          .json({ success: false, message: "Vị trí không tồn tại" });
+      const idLocation = locRes[0].id_location;
+      const locationName = locRes[0].name_location;
+
+      // 4. Process Scanning Logic (So sánh vị trí)
+      const scannedUuids = scanned_machines
+        .map((m) => m.uuid_machine)
+        .filter(Boolean);
+
+      let dbMachines = [];
+      if (scannedUuids.length > 0) {
+        [dbMachines] = await connection.query(
+          `
+            SELECT 
+                m.uuid_machine, 
+                ml.id_location as current_location_id, 
+                tl.name_location as current_location_name,
+                tl.id_department as current_department_id
+            FROM tb_machine m
+            LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
+            LEFT JOIN tb_location tl ON tl.id_location = ml.id_location
+            WHERE m.uuid_machine IN (?)
+            `,
+          [scannedUuids]
+        );
+      }
+
+      const dbMachineMap = new Map(
+        dbMachines.map((m) => [
+          m.uuid_machine,
+          {
+            id: m.current_location_id,
+            name: m.current_location_name,
+            depId: m.current_department_id,
+          },
+        ])
+      );
+
+      // 5. Build Object cho Vị trí này
+      const newLocationResult = {
+        location_name: locationName,
+        location_uuid: location_uuid,
+        scanned_machine: scanned_machines.map((m) => {
+          const currentData = dbMachineMap.get(m.uuid_machine);
+          const currentLocationId = currentData?.id;
+          const currentLocationName = currentData?.name || "-";
+          const currentDepartmentId = currentData?.depId;
+          // Chỉ khi vị trí hiện tại BẰNG CHÍNH XÁC với vị trí đang kiểm kê thì mới là "Đúng vị trí"
+          // Nếu không có vị trí hoặc khác vị trí → Sai vị trí
+          const isMislocation = currentLocationId === idLocation ? "0" : "1";
+          let isMisdepartment = "0";
+          if (currentDepartmentId != idDepartment) {
+            isMisdepartment = "1";
+          }
+
+          return {
+            uuid: m.uuid_machine,
+            name: `${m.type_machine || ""} - ${m.model_machine || ""}`,
+            serial: m.serial_machine,
+            code: m.code_machine,
+            RFID: m.RFID_machine,
+            NFC: m.NFC_machine,
+            current_location: currentLocationName,
+            mislocation: isMislocation,
+            misdepartment: isMisdepartment,
+          };
+        }),
+      };
+
+      // 6. Update JSON Array trong DB
+      // Lấy scanned_result cũ
+      const [currentDetail] = await connection.query(
+        "SELECT scanned_result FROM tb_inventory_check_detail WHERE id_inventory_check = ? AND id_department = ?",
+        [idInventory, idDepartment]
+      );
+
+      let resultArray = [];
+      let currentData = {};
+
+      try {
+        if (currentDetail.length > 0 && currentDetail[0].scanned_result) {
+          const parsed =
+            typeof currentDetail[0].scanned_result === "string"
+              ? JSON.parse(currentDetail[0].scanned_result)
+              : currentDetail[0].scanned_result;
+
+          if (Array.isArray(parsed)) {
+            resultArray = parsed;
+            currentData = { locations: parsed }; // Fallback cho data cũ
+          } else if (parsed && typeof parsed === "object") {
+            resultArray = parsed.locations || [];
+            currentData = parsed; // Giữ lại toàn bộ data cũ (snapshot_count, location_snapshots)
+          }
+        }
+      } catch (e) {
+        resultArray = [];
+        currentData = {};
+      }
+
+      // Tìm xem location này đã có trong mảng chưa
+      const existingIndex = resultArray.findIndex(
+        (item) => item.location_uuid === location_uuid
+      );
+      if (existingIndex >= 0) {
+        // *** MERGE: Thêm máy mới vào danh sách cũ (không ghi đè) ***
+        const existingMachines =
+          resultArray[existingIndex].scanned_machine || [];
+        const existingUuids = new Set(existingMachines.map((m) => m.uuid));
+
+        // Chỉ thêm những máy chưa có trong danh sách
+        const newMachines = newLocationResult.scanned_machine.filter(
+          (m) => !existingUuids.has(m.uuid)
+        );
+
+        resultArray[existingIndex].scanned_machine = [
+          ...existingMachines,
+          ...newMachines,
+        ];
+      } else {
+        // Thêm mới
+        resultArray.push(newLocationResult);
+      }
+
+      const finalData = {
+        ...currentData,
+        locations: resultArray,
+      };
+
+      await connection.query(
+        `UPDATE tb_inventory_check_detail 
+         SET scanned_result = ?, 
+             is_completed = 1,
+             updated_by = ?, 
+             updated_at = CURRENT_TIMESTAMP 
+         WHERE id_inventory_check = ? AND id_department = ?`,
+        [JSON.stringify(finalData), userId, idInventory, idDepartment]
+      );
+
+      res.json({ success: true, message: "Lưu kết quả kiểm kê thành công" });
+    } catch (error) {
+      console.error("Error saving scan result:", error);
+      res.status(500).json({ success: false, message: error.message });
+    } finally {
+      connection.release();
+    }
+  }
+);
+
+// PUT /api/inventory-checks/:uuid/update-scanned - Cập nhật scanned_result (dùng khi xóa máy)
+app.put(
+  "/api/inventory-checks/:uuid/update-scanned",
+  authenticateToken,
+  async (req, res) => {
+    const connection = await tpmConnection.getConnection();
+    try {
+      const { uuid } = req.params;
+      const { department_uuid, scanned_result } = req.body;
+      const userId = req.user.id;
+
+      // 1. Get IDs
+      const [invRes] = await connection.query(
+        "SELECT id_inventory_check, status FROM tb_inventory_check WHERE uuid_inventory_check = ?",
+        [uuid]
+      );
+      if (invRes.length === 0)
+        return res
+          .status(404)
+          .json({ success: false, message: "Phiếu không tồn tại" });
+      if (invRes[0].status !== "draft")
+        return res.status(400).json({
+          success: false,
+          message: "Phiếu không ở trạng thái nháp, không thể cập nhật",
+        });
+
+      const idInventory = invRes[0].id_inventory_check;
+
+      // 2. Resolve Department
+      const [depRes] = await connection.query(
+        "SELECT id_department FROM tb_department WHERE uuid_department = ?",
+        [department_uuid]
+      );
+      if (depRes.length === 0)
+        return res
+          .status(404)
+          .json({ success: false, message: "Đơn vị không tồn tại" });
+      const idDepartment = depRes[0].id_department;
+
+      // 3. Update scanned_result
+      const [oldDataRes] = await connection.query(
+        "SELECT scanned_result FROM tb_inventory_check_detail WHERE id_inventory_check = ? AND id_department = ?",
+        [idInventory, idDepartment]
+      );
+
+      let currentData = {};
+      try {
+        if (oldDataRes.length > 0 && oldDataRes[0].scanned_result) {
+          const parsed =
+            typeof oldDataRes[0].scanned_result === "string"
+              ? JSON.parse(oldDataRes[0].scanned_result)
+              : oldDataRes[0].scanned_result;
+
+          if (!Array.isArray(parsed)) {
+            currentData = parsed;
+          }
+        }
+      } catch (e) {}
+
+      // scanned_result gửi lên từ frontend bây giờ chỉ là mảng locations (do frontend xử lý)
+      // Ta đóng gói lại
+      const finalData = {
+        ...currentData,
+        locations: scanned_result, // Body gửi lên là mảng locations sau khi xóa
+      };
+
+      await connection.query(
+        `UPDATE tb_inventory_check_detail SET scanned_result = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id_inventory_check = ? AND id_department = ?`,
+        [JSON.stringify(finalData), userId, idInventory, idDepartment]
+      );
+
+      res.json({
+        success: true,
+        message: "Cập nhật kết quả kiểm kê thành công",
+      });
+    } catch (error) {
+      console.error("Error updating scan result:", error);
+      res.status(500).json({ success: false, message: error.message });
+    } finally {
+      connection.release();
+    }
+  }
+);
+
+// POST /api/inventory-checks/:uuid/add-departments - Thêm đơn vị vào phiếu kiểm kê
+app.post(
+  "/api/inventory-checks/:uuid/add-departments",
+  authenticateToken,
+  async (req, res) => {
+    const connection = await tpmConnection.getConnection();
+    try {
+      await connection.beginTransaction();
+      const { uuid } = req.params;
+      const { department_uuids } = req.body;
+      const userId = req.user.id;
+
+      // 1. Validate input
+      if (!Array.isArray(department_uuids) || department_uuids.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Vui lòng chọn ít nhất một đơn vị",
+        });
+      }
+
+      // 2. Get Inventory
+      const [invRes] = await connection.query(
+        "SELECT id_inventory_check, status FROM tb_inventory_check WHERE uuid_inventory_check = ?",
+        [uuid]
+      );
+      if (invRes.length === 0) {
+        await connection.rollback();
+        return res
+          .status(404)
+          .json({ success: false, message: "Phiếu không tồn tại" });
+      }
+      if (invRes[0].status !== "draft") {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Chỉ có thể thêm đơn vị vào phiếu ở trạng thái nháp",
+        });
+      }
+
+      const idInventory = invRes[0].id_inventory_check;
+
+      // 3. Resolve Department IDs
+      const [depRes] = await connection.query(
+        "SELECT id_department, uuid_department FROM tb_department WHERE uuid_department IN (?)",
+        [department_uuids]
+      );
+
+      if (depRes.length !== department_uuids.length) {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Một số đơn vị không tồn tại",
+        });
+      }
+
+      // 4. Check if departments already exist in this inventory
+      const [existingDeps] = await connection.query(
+        "SELECT id_department FROM tb_inventory_check_detail WHERE id_inventory_check = ? AND id_department IN (?)",
+        [idInventory, depRes.map((d) => d.id_department)]
+      );
+
+      if (existingDeps.length > 0) {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Một số đơn vị đã có trong phiếu kiểm kê này",
+        });
+      }
+
+      // 5. Insert new departments
+      for (const dep of depRes) {
+        const [countRes] = await connection.query(
+          `SELECT COUNT(m.id_machine) as total 
+           FROM tb_machine_location ml 
+           JOIN tb_location tl ON ml.id_location = tl.id_location 
+           JOIN tb_machine m ON ml.id_machine = m.id_machine
+           WHERE tl.id_department = ?
+             AND m.current_status != 'liquidation'
+             AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))`,
+          [dep.id_department]
+        );
+        const snapshotCount = countRes[0]?.total || 0;
+
+        const [locSnapshots] = await connection.query(
+          `SELECT tl.uuid_location, COUNT(m.id_machine) as count
+           FROM tb_location tl
+           LEFT JOIN tb_machine_location ml ON tl.id_location = ml.id_location
+           LEFT JOIN tb_machine m ON ml.id_machine = m.id_machine 
+                AND m.current_status != 'liquidation'
+                AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))
+           WHERE tl.id_department = ?
+           GROUP BY tl.id_location`,
+          [dep.id_department]
+        );
+        const locationSnapshotsMap = {};
+        locSnapshots.forEach((l) => {
+          locationSnapshotsMap[l.uuid_location] = l.count;
+        });
+
+        const initialData = {
+          snapshot_count: snapshotCount,
+          location_snapshots: locationSnapshotsMap,
+          locations: [],
+        };
+
+        await connection.query(
+          `INSERT INTO tb_inventory_check_detail 
+          (id_inventory_check, id_department, scanned_result, is_completed, created_by, updated_by) 
+          VALUES (?, ?, ?, 0, ?, ?)`,
+          [
+            idInventory,
+            dep.id_department,
+            JSON.stringify(initialData),
+            userId,
+            userId,
+          ]
+        );
+      }
+
+      await connection.commit();
+
+      res.json({
+        success: true,
+        message: `Đã thêm ${depRes.length} đơn vị vào phiếu kiểm kê`,
+      });
+    } catch (error) {
+      await connection.rollback();
+      console.error("Error adding departments to inventory:", error);
+      res.status(500).json({ success: false, message: error.message });
+    } finally {
+      connection.release();
+    }
+  }
+);
+
+// PUT /api/inventory-checks/:uuid/submit - Gửi duyệt
+app.put(
+  "/api/inventory-checks/:uuid/submit",
+  authenticateToken,
+  async (req, res) => {
+    const connection = await tpmConnection.getConnection();
+    try {
+      await connection.beginTransaction();
+      const { uuid } = req.params;
+      const userId = req.user.id;
+      const ma_nv_login = req.user.ma_nv;
+
+      // 1. Get Inventory
+      const [invRes] = await connection.query(
+        "SELECT id_inventory_check, check_date, status, created_by FROM tb_inventory_check WHERE uuid_inventory_check = ?",
+        [uuid]
+      );
+      if (invRes.length === 0)
+        return res
+          .status(404)
+          .json({ success: false, message: "Phiếu không tồn tại" });
+      const ticket = invRes[0];
+
+      // 2. Validate: All departments must have at least one location scanned
+      const [details] = await connection.query(
+        "SELECT scanned_result FROM tb_inventory_check_detail WHERE id_inventory_check = ?",
+        [ticket.id_inventory_check]
+      );
+
+      let hasEmptyDepartment = false;
+      for (const det of details) {
+        let scannedArr = [];
+        try {
+          const parsed =
+            typeof det.scanned_result === "string"
+              ? JSON.parse(det.scanned_result)
+              : det.scanned_result;
+
+          // --- SỬA LỖI: Xử lý cả dạng Array (cũ) và Object (mới) ---
+          if (Array.isArray(parsed)) {
+            scannedArr = parsed;
+          } else if (
+            parsed &&
+            parsed.locations &&
+            Array.isArray(parsed.locations)
+          ) {
+            scannedArr = parsed.locations;
+          } else {
+            scannedArr = [];
+          }
+          // -------------------------------------------------------
+        } catch (e) {
+          scannedArr = [];
+        }
+
+        if (scannedArr.length === 0) {
+          hasEmptyDepartment = true;
+          break;
+        }
+      }
+
+      if (hasEmptyDepartment) {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message:
+            "Vui lòng kiểm kê ít nhất một vị trí cho mỗi đơn vị trước khi gửi duyệt.",
+        });
+      }
+
+      // 3. Update Status -> pending
+      const approvalFlowForDB = [
+        {
+          // ma_nv: "06264",
+          ma_nv: "09802",
+          step_flow: 0,
+          isFinalFlow: 1,
+          status_text: "Đang chờ duyệt",
+          is_forward: 0,
+          display_name: "Trưởng phòng Cơ điện",
+          is_flow: 1,
+          indexOf: 1,
+        },
+      ];
+
+      await connection.query(
+        `UPDATE tb_inventory_check SET status = 'pending', approval_flow = ?, updated_by = ? WHERE id_inventory_check = ?`,
+        [JSON.stringify(approvalFlowForDB), userId, ticket.id_inventory_check]
+      );
+
+      // 4. Send to FastWork
+      let tableRows = [];
+      let stt = 1;
+
+      details.forEach((det) => {
+        if (det.scanned_result) {
+          let locationsArr = [];
+          try {
+            const parsed =
+              typeof det.scanned_result === "string"
+                ? JSON.parse(det.scanned_result)
+                : det.scanned_result;
+
+            // --- SỬA LỖI: Xử lý tương tự khi tạo bảng ---
+            if (Array.isArray(parsed)) {
+              locationsArr = parsed;
+            } else if (
+              parsed &&
+              parsed.locations &&
+              Array.isArray(parsed.locations)
+            ) {
+              locationsArr = parsed.locations;
+            }
+            // ------------------------------------------
+          } catch (e) {
+            locationsArr = [];
+          }
+
+          if (Array.isArray(locationsArr)) {
+            locationsArr.forEach((loc) => {
+              const locationName = loc.location_name;
+              if (loc.scanned_machine && Array.isArray(loc.scanned_machine)) {
+                loc.scanned_machine.forEach((m) => {
+                  // Chỉ đưa vào bảng các máy SAI VỊ TRÍ (mislocation) hoặc tùy logic của bạn
+                  if (m.mislocation === "1") {
+                    tableRows.push([
+                      stt++,
+                      m.name,
+                      m.serial,
+                      "Máy",
+                      1,
+                      m.current_location || "-",
+                      locationName,
+                      "Sai vị trí",
+                      "",
+                    ]);
+                  }
+                });
+              }
+            });
+          }
+        }
+      });
+
+      if (tableRows.length === 0) {
+        tableRows.push([
+          "",
+          "Không có máy sai vị trí",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+        ]);
+      }
+
+      const externalPayload = {
+        uid_proposal_type: "ead745eb-8499-46de-9740-ce14974f333b",
+        ma_nv: ma_nv_login,
+        name_proposal_reality: `Phiếu kiểm kê ngày ${new Date(
+          ticket.check_date
+        ).toLocaleDateString("vi-VN")}`,
+        id_department: "1-14",
+        uid_reference_success:
+          // "https://sveffmachine.vietlonghung.com.vn/api/tpm/api/test-proposals/callback",
+          "http://192.168.1.61:8081/api/test-proposals/callback",
+        id_reference_outside: uuid,
+        group_people_flow: approvalFlowForDB.map(
+          ({ status_text, ...rest }) => rest
+        ),
+        table: {
+          columns: [
+            "STT",
+            "Tên thiết bị",
+            "Serial",
+            "ĐVT",
+            "SL",
+            "Vị trí hiện tại",
+            "Vị trí quét được",
+            "Trạng thái",
+            "Ghi chú",
+          ],
+          columnWidths: [2, 4, 3, 2, 2, 3, 3, 3, 4],
+          rows: tableRows,
+        },
+      };
+
+      try {
+        console.log(
+          "Sending to External API:",
+          JSON.stringify(externalPayload, null, 2)
+        );
+        const externalResponse = await axios.post(
+          // "https://servertienich.vietlonghung.com.vn/api/fw/create-proposal-reality-outdoor",
+          "http://192.168.0.65:16002/api/fw/create-proposal-reality-outdoor",
+          externalPayload
+        );
+        console.log("External API Response:", externalResponse.data);
+      } catch (extError) {
+        console.error("Error calling External API:", extError.message);
+      }
+
+      await connection.commit();
+      res.json({ success: true, message: "Đã gửi phiếu kiểm kê đi duyệt" });
+    } catch (error) {
+      await connection.rollback();
+      console.error("Error submitting inventory:", error);
+      res.status(500).json({ success: false, message: error.message });
+    } finally {
+      connection.release();
+    }
+  }
+);
