@@ -550,6 +550,9 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
     let countParams = [];
     let dataParams = [];
 
+    // 0. Loại bỏ máy có current_status = 'temporary' (tạm thời)
+    whereConditions.push(`m.current_status != 'temporary'`);
+
     // 1. Search filter
     if (search) {
       const searchLower = search.toLowerCase().trim();
@@ -766,7 +769,7 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
 
     // Get total count
     const countQuery = `
-      SELECT COUNT(*) as total
+      SELECT COUNT(*) - SUM(CASE WHEN is_borrowed_or_rented_or_borrowed_out = 'borrowed_return' THEN 1 ELSE 0 END) - SUM(CASE WHEN is_borrowed_or_rented_or_borrowed_out = 'rented_return' THEN 1 ELSE 0 END) - SUM(CASE WHEN current_status = 'liquidation' THEN 1 ELSE 0 END) as total
       FROM tb_machine m
       LEFT JOIN tb_category c ON c.id_category = m.id_category
       LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
@@ -888,6 +891,7 @@ app.get(
           `LEFT JOIN tb_location tl ON tl.id_location = ml.id_location`
         );
         whereConditions.push(`m.${field} IS NOT NULL AND m.${field} != ''`);
+        whereConditions.push(`m.current_status != 'temporary'`);
 
         if (location_uuid) {
           // Ưu tiên lọc theo Vị trí
@@ -933,7 +937,7 @@ app.get("/api/machines/stats", authenticateToken, async (req, res) => {
     const [stats] = await tpmConnection.execute(
       `
       SELECT 
-        COUNT(*) as total,
+        COUNT(*) - SUM(CASE WHEN current_status = 'temporary' THEN 1 ELSE 0 END) as total,
         SUM(CASE WHEN current_status = 'available' THEN 1 ELSE 0 END) as available,
         SUM(CASE WHEN current_status = 'in_use' THEN 1 ELSE 0 END) as in_use,
         SUM(CASE WHEN current_status = 'maintenance' THEN 1 ELSE 0 END) as maintenance,
@@ -1194,7 +1198,7 @@ app.get("/api/machines/stats-by-type", authenticateToken, async (req, res) => {
         type_machine,
         COUNT(*) as count
       FROM tb_machine
-      WHERE type_machine IS NOT NULL AND type_machine != ''
+      WHERE type_machine IS NOT NULL AND type_machine != '' AND current_status != 'temporary'
       GROUP BY type_machine
       `
     );
@@ -2790,6 +2794,114 @@ app.post("/api/machines/batch-import", authenticateToken, async (req, res) => {
     connection.release();
   }
 });
+
+// POST /api/machines/resolve-target - Xác định mục tiêu cần tìm
+app.post(
+  "/api/machines/resolve-target",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { keyword, keywords } = req.body; // Hỗ trợ cả keyword đơn và keywords mảng
+
+      // Xử lý cả hai trường hợp: keyword đơn hoặc keywords mảng
+      let keywordList = [];
+      if (keywords && Array.isArray(keywords)) {
+        keywordList = keywords;
+      } else if (keyword) {
+        keywordList = [keyword];
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: "Vui lòng nhập thông tin tìm kiếm.",
+        });
+      }
+
+      // Làm sạch và loại bỏ trùng lặp
+      const cleanKeywords = [
+        ...new Set(keywordList.map((k) => k.trim()).filter((k) => k)),
+      ];
+
+      if (cleanKeywords.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Vui lòng nhập ít nhất một thông tin tìm kiếm hợp lệ.",
+        });
+      }
+
+      // Tìm tất cả máy khớp với danh sách keywords
+      const targets = [];
+      const errors = [];
+
+      for (const cleanKey of cleanKeywords) {
+        try {
+          const [machines] = await tpmConnection.query(
+            `SELECT * FROM tb_machine 
+           WHERE serial_machine = ? 
+           OR code_machine = ? 
+           OR NFC_machine = ? 
+           OR RFID_machine = ? 
+           LIMIT 1`,
+            [cleanKey, cleanKey, cleanKey, cleanKey]
+          );
+
+          if (machines.length === 0) {
+            errors.push({
+              keyword: cleanKey,
+              message: `Không tìm thấy máy nào khớp với "${cleanKey}".`,
+            });
+            continue;
+          }
+
+          const machine = machines[0];
+
+          // Kiểm tra xem máy có RFID để dò không
+          if (!machine.RFID_machine || machine.RFID_machine.trim() === "") {
+            errors.push({
+              keyword: cleanKey,
+              message: `Máy "${machine.type_machine} - ${machine.model_machine}" (Serial: ${machine.serial_machine}) chưa được gán thẻ RFID.`,
+            });
+            continue;
+          }
+
+          targets.push({
+            targetRfid: machine.RFID_machine,
+            info: {
+              name: `${machine.type_machine} - ${machine.model_machine}`,
+              serial: machine.serial_machine,
+              code: machine.code_machine,
+              status: machine.current_status,
+            },
+          });
+        } catch (err) {
+          errors.push({
+            keyword: cleanKey,
+            message: `Lỗi khi xử lý "${cleanKey}": ${err.message}`,
+          });
+        }
+      }
+
+      // Nếu không có target nào hợp lệ
+      if (targets.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Không có máy nào hợp lệ để dò tìm.",
+          errors: errors,
+        });
+      }
+
+      // Trả về kết quả (có thể có một số lỗi nhưng vẫn có targets hợp lệ)
+      res.json({
+        success: true,
+        data: targets.length === 1 ? targets[0] : targets, // Giữ backward compatibility
+        targets: targets, // Luôn trả về mảng
+        errors: errors.length > 0 ? errors : undefined,
+      });
+    } catch (error) {
+      console.error("Error resolving target:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+);
 
 // MARK: DEPARTMENTS
 
@@ -7198,6 +7310,15 @@ app.post(
         // Nhóm Xưởng 4 -> Gửi cho 09802
         else if (deptNameLower.includes("xưởng 4")) {
           // idGroupNotification = ["02722"];
+          idGroupNotification = ["09802"];
+        } else if (deptNameLower.includes("kho thành phẩm")) {
+          // idGroupNotification = ["00253"];
+          idGroupNotification = ["09802"];
+        } else if (
+          deptNameLower.includes("kho nguyên phụ liệu") ||
+          deptNameLower.includes("xưởng cắt")
+        ) {
+          // idGroupNotification = ["90200"];
           idGroupNotification = ["09802"];
         }
       }

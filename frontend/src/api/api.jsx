@@ -197,6 +197,17 @@ export const api = {
       });
       return response.data;
     },
+    resolveTarget: async (keywordOrKeywords) => {
+      // Hỗ trợ cả keyword đơn hoặc mảng keywords
+      const payload = Array.isArray(keywordOrKeywords)
+        ? { keywords: keywordOrKeywords }
+        : { keyword: keywordOrKeywords };
+      const response = await httpConnect.post(
+        "/api/machines/resolve-target",
+        payload
+      );
+      return response.data;
+    },
   },
 
   // MARK: DEPARTMENTS

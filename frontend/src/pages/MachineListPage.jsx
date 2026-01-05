@@ -48,6 +48,8 @@ import {
   useMediaQuery,
   Tooltip,
   Autocomplete,
+  Fab,
+  Badge,
 } from "@mui/material";
 import {
   PrecisionManufacturing,
@@ -71,11 +73,13 @@ import {
   KeyboardArrowDown,
   KeyboardArrowUp,
   HourglassFull,
+  Radar,
 } from "@mui/icons-material";
 import { alpha } from "@mui/material/styles";
 import * as XLSX from "xlsx-js-style";
 import { QRCodeSVG } from "qrcode.react";
 import NavigationBar from "../components/NavigationBar";
+import RfidSearch from "../components/RfidSearch";
 import { api } from "../api/api";
 import { useAuth } from "../hooks/useAuth"; // <<< 1. THÊM MỚI: IMPORT USEAUTH
 
@@ -153,21 +157,6 @@ const initialColumnVisibility = {
   repair_cost: false,
   date_of_use: true,
 };
-
-const renderMultiSelectValue = (selected) => (
-  <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-    {selected.slice(0, 3).map(
-      (
-        value // Chỉ hiện 3 cái đầu
-      ) => (
-        <Chip key={value} label={value} size="small" />
-      )
-    )}
-    {selected.length > 3 && (
-      <Chip label={`+${selected.length - 3}`} size="small" />
-    )}
-  </Box>
-);
 
 const formatNumber = (num) => {
   if (num === null || num === undefined || num === "") return "0";
@@ -747,6 +736,8 @@ const MachineListPage = () => {
   const [isImporting, setIsImporting] = useState(false);
   const [importResults, setImportResults] = useState(null);
   const [fileName, setFileName] = useState("");
+  const [rfidDialogOpen, setRfidDialogOpen] = useState(false);
+  const [selectedMachines, setSelectedMachines] = useState(new Set()); // Set các UUID máy đã chọn
   const tableCardRef = useRef(null);
   const searchInputRef = useRef(null);
   const searchTimeoutRef = useRef(null);
@@ -951,11 +942,11 @@ const MachineListPage = () => {
     }, 800);
   };
 
-  const handleFilterChange = (event) => {
-    const { name, value } = event.target;
+  // Handler cho Autocomplete filters
+  const handleAutocompleteFilterChange = (filterName) => (event, newValue) => {
     setFilters((prev) => ({
       ...prev,
-      [name]: value,
+      [filterName]: newValue || [],
     }));
     // useEffect [searchTerm, filters] sẽ tự động kích hoạt refetch
   };
@@ -1852,6 +1843,41 @@ const MachineListPage = () => {
     );
   };
 
+  // Handler cho checkbox chọn máy
+  const handleMachineSelect = (machineUuid, event) => {
+    event.stopPropagation(); // Ngăn sự kiện click lan ra TableRow
+    setSelectedMachines((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(machineUuid)) {
+        newSet.delete(machineUuid);
+      } else {
+        newSet.add(machineUuid);
+      }
+      return newSet;
+    });
+  };
+
+  // Handler cho checkbox chọn tất cả
+  const handleSelectAll = (event) => {
+    if (event.target.checked) {
+      const allUuids = new Set(machines.map((m) => m.uuid_machine));
+      setSelectedMachines(allUuids);
+    } else {
+      setSelectedMachines(new Set());
+    }
+  };
+
+  // Kiểm tra xem tất cả máy đã được chọn chưa
+  const isAllSelected =
+    machines.length > 0 && selectedMachines.size === machines.length;
+  const isIndeterminate =
+    selectedMachines.size > 0 && selectedMachines.size < machines.length;
+
+  // Handler mở dialog RFID với danh sách máy đã chọn
+  const handleOpenRfidDialog = () => {
+    setRfidDialogOpen(true);
+  };
+
   // Định nghĩa style cho thẻ active/inactive
   const activeCardSx = {
     cursor: "pointer",
@@ -2479,6 +2505,7 @@ const MachineListPage = () => {
         </Grid>
 
         {/* Search and Actions */}
+        {/* Search and Actions - Đã phân chia Trái/Phải */}
         <Card
           elevation={0}
           sx={{
@@ -2488,238 +2515,277 @@ const MachineListPage = () => {
           }}
         >
           <CardContent sx={{ p: 3 }}>
-            <Stack
-              direction={{ xs: "column", sm: "row" }}
-              spacing={2}
-              alignItems="center"
-              justifyContent="space-between"
-            >
-              <Stack
-                direction={{ xs: "column", sm: "row" }}
-                spacing={2}
-                sx={{ flexGrow: 1, width: { xs: "100%", sm: "auto" } }}
-              >
-                <Tooltip
-                  arrow
-                  placement="top-start"
-                  title={
-                    <Box sx={{ p: 1 }}>
-                      <Typography
-                        variant="subtitle2"
-                        fontWeight="bold"
-                        sx={{ mb: 1 }}
-                      >
-                        Mẹo tìm kiếm nâng cao:
-                      </Typography>
-                      <ul
-                        style={{
-                          margin: 0,
-                          paddingLeft: "1.2rem",
-                          fontSize: "0.85rem",
-                          lineHeight: "1.5",
-                        }}
-                      >
-                        <li>Nhập thường: Tìm tất cả thông tin</li>
-                        <li>
-                          <b>loai:</b>... (Tìm theo Loại)
-                        </li>
-                        <li>
-                          <b>model:</b>... (Tìm theo Model)
-                        </li>
-                        <li>
-                          <b>rfid:</b>... (Tìm theo RFID)
-                        </li>
-                        <li>
-                          <b>nfc:</b>... (Tìm theo NFC)
-                        </li>
-                        <li>
-                          <b>seri:</b>... (Tìm theo Serial)
-                        </li>
-                        <li>
-                          <b>hang:</b>... (Tìm theo Hãng SX)
-                        </li>
-                        <li>
-                          <b>ma:</b>... (Tìm theo Mã máy)
-                        </li>
-                      </ul>
-                    </Box>
-                  }
+            <Grid container spacing={2} alignItems="center">
+              {/* === KHU VỰC BÊN TRÁI: Tìm kiếm, RFID, Số dòng === */}
+              <Grid size={{ xs: 12, xl: 5 }}>
+                <Stack
+                  direction="row"
+                  spacing={2}
+                  alignItems="center"
+                  flexWrap="wrap"
+                  useFlexGap // Giúp gap hoạt động tốt khi xuống dòng
                 >
-                  <TextField
-                    placeholder="Tìm kiếm máy móc..."
-                    variant="outlined"
-                    size="medium"
-                    defaultValue=""
-                    inputRef={searchInputRef}
-                    onChange={handleSearchChange}
-                    sx={{
-                      width: "100%",
-                      maxWidth: { sm: 400 },
-                      "& .MuiOutlinedInput-root": {
-                        borderRadius: "12px",
-                        paddingRight: 1,
-                      },
-                    }}
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <Search />
-                        </InputAdornment>
-                      ),
-                      endAdornment: (
-                        <InputAdornment position="end">
-                          <IconButton
-                            onClick={() => {
-                              if (searchInputRef.current) {
-                                searchInputRef.current.value = "";
-                                searchInputRef.current.focus();
-                              }
-                              setSearchTerm("");
-                              setPage(1);
-                            }}
-                            edge="end"
-                            size="small"
-                            sx={{ color: "text.secondary" }}
-                          >
-                            <Close fontSize="small" />
-                          </IconButton>
-                        </InputAdornment>
-                      ),
-                    }}
-                  />
-                </Tooltip>
-                <FormControl
-                  sx={{ minWidth: 120, width: { xs: "100%", sm: 120 } }}
-                >
-                  <InputLabel>Số dòng</InputLabel>
-                  <Select
-                    value={rowsPerPage}
-                    label="Số dòng"
-                    onChange={handleRowsPerPageChange}
-                    sx={{
-                      borderRadius: "12px",
-                    }}
+                  {/* Ô tìm kiếm */}
+                  <Box
+                    sx={{ flexGrow: 1, minWidth: { xs: "100%", sm: "250px" } }}
                   >
-                    <MenuItem value={5}>5</MenuItem>
-                    <MenuItem value={10}>10</MenuItem>
-                    <MenuItem value={20}>20</MenuItem>
-                    <MenuItem value={50}>50</MenuItem>
-                    <MenuItem value={100}>100</MenuItem>
-                    <MenuItem value={200}>200</MenuItem>
-                    <MenuItem value={500}>500</MenuItem>
-                  </Select>
-                </FormControl>
-              </Stack>
-              <Stack
-                direction={{ xs: "column", sm: "row" }}
-                spacing={2}
-                flexWrap="wrap"
-                sx={{ width: { xs: "100%", sm: "auto" } }}
-              >
-                {/* <<< 3. THAY ĐỔI: ẨN NÚT "NHẬP EXCEL" VÀ "THÊM MÁY" CHO VIEW ONLY >>> */}
-                {canCreateOrImport && (
+                    <Tooltip
+                      arrow
+                      placement="top-start"
+                      title={
+                        <Box sx={{ p: 1 }}>
+                          <Typography
+                            variant="subtitle2"
+                            fontWeight="bold"
+                            sx={{ mb: 1 }}
+                          >
+                            Mẹo tìm kiếm nâng cao:
+                          </Typography>
+                          <ul
+                            style={{
+                              margin: 0,
+                              paddingLeft: "1.2rem",
+                              fontSize: "0.85rem",
+                              lineHeight: "1.5",
+                            }}
+                          >
+                            <li>Nhập thường: Tìm tất cả thông tin</li>
+                            <li>
+                              <b>loai:</b>... (Tìm theo Loại)
+                            </li>
+                            <li>
+                              <b>model:</b>... (Tìm theo Model)
+                            </li>
+                            <li>
+                              <b>rfid:</b>... (Tìm theo RFID)
+                            </li>
+                            <li>
+                              <b>nfc:</b>... (Tìm theo NFC)
+                            </li>
+                            <li>
+                              <b>seri:</b>... (Tìm theo Serial)
+                            </li>
+                            <li>
+                              <b>hang:</b>... (Tìm theo Hãng SX)
+                            </li>
+                            <li>
+                              <b>ma:</b>... (Tìm theo Mã máy)
+                            </li>
+                          </ul>
+                        </Box>
+                      }
+                    >
+                      <TextField
+                        fullWidth
+                        placeholder="Tìm kiếm máy móc..."
+                        variant="outlined"
+                        size="medium"
+                        defaultValue=""
+                        inputRef={searchInputRef}
+                        onChange={handleSearchChange}
+                        sx={{
+                          "& .MuiOutlinedInput-root": {
+                            borderRadius: "12px",
+                            paddingRight: 1,
+                          },
+                        }}
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <Search />
+                            </InputAdornment>
+                          ),
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              <IconButton
+                                onClick={() => {
+                                  if (searchInputRef.current) {
+                                    searchInputRef.current.value = "";
+                                    searchInputRef.current.focus();
+                                  }
+                                  setSearchTerm("");
+                                  setPage(1);
+                                }}
+                                edge="end"
+                                size="small"
+                                sx={{ color: "text.secondary" }}
+                              >
+                                <Close fontSize="small" />
+                              </IconButton>
+                            </InputAdornment>
+                          ),
+                        }}
+                      />
+                    </Tooltip>
+                  </Box>
+
+                  {/* Chọn số dòng */}
+                  <FormControl sx={{ minWidth: 80 }}>
+                    <InputLabel>Số dòng</InputLabel>
+                    <Select
+                      value={rowsPerPage}
+                      label="Số dòng"
+                      onChange={handleRowsPerPageChange}
+                      sx={{ borderRadius: "12px" }}
+                    >
+                      <MenuItem value={5}>5</MenuItem>
+                      <MenuItem value={10}>10</MenuItem>
+                      <MenuItem value={20}>20</MenuItem>
+                      <MenuItem value={50}>50</MenuItem>
+                      <MenuItem value={100}>100</MenuItem>
+                      <MenuItem value={200}>200</MenuItem>
+                      <MenuItem value={500}>500</MenuItem>
+                    </Select>
+                  </FormControl>
+
+                  {/* Nút RFID */}
                   <Button
                     variant="outlined"
-                    startIcon={<FileUpload />}
-                    onClick={handleOpenImportDialog}
+                    startIcon={<Radar />}
+                    onClick={handleOpenRfidDialog}
+                    // disabled={selectedMachines.size === 0}
                     sx={{
                       borderRadius: "12px",
-                      color: "#2e7d32",
-                      borderColor: "#2e7d32",
-                      px: 3,
+                      color: "#667eea",
+                      borderColor: "#667eea",
+                      px: 1,
                       py: 1.5,
-                      width: { xs: "100%", sm: "auto" },
+                      whiteSpace: "nowrap", // Không cho chữ xuống dòng
+                      "&:hover": {
+                        borderColor: "#764ba2",
+                        bgcolor: "rgba(102, 126, 234, 0.04)",
+                      },
+                      "&:disabled": {
+                        borderColor: "rgba(0, 0, 0, 0.26)",
+                        color: "rgba(0, 0, 0, 0.26)",
+                      },
                     }}
                   >
-                    Nhập Excel
+                    Tìm kiếm bằng RFID
+                    {selectedMachines.size > 0 && ` (${selectedMachines.size})`}
                   </Button>
-                )}
-                {canCreateOrImport && (
+                </Stack>
+              </Grid>
+
+              {/* === KHU VỰC BÊN PHẢI: Import, Add, Export, Column, Refresh === */}
+              <Grid size={{ xs: 12, xl: 7 }}>
+                <Stack
+                  direction="row"
+                  spacing={2}
+                  alignItems="center"
+                  justifyContent={{ xs: "flex-start", xl: "flex-end" }} // Màn hình to căn phải, nhỏ căn trái
+                  flexWrap="wrap"
+                  useFlexGap
+                >
+                  {/* Nhập Excel */}
+                  {canCreateOrImport && (
+                    <Button
+                      variant="outlined"
+                      startIcon={<FileUpload />}
+                      onClick={handleOpenImportDialog}
+                      sx={{
+                        borderRadius: "12px",
+                        color: "#2e7d32",
+                        borderColor: "#2e7d32",
+                        px: 3,
+                        py: 1.5,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Nhập Excel
+                    </Button>
+                  )}
+
+                  {/* Thêm mới */}
+                  {canCreateOrImport && (
+                    <Button
+                      variant="contained"
+                      startIcon={<Add />}
+                      onClick={handleOpenCreateDialog}
+                      sx={{
+                        borderRadius: "12px",
+                        background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                        px: 3,
+                        py: 1.5,
+                        whiteSpace: "nowrap",
+                        "&:hover": {
+                          transform: "translateY(-2px)",
+                          boxShadow: "0 8px 25px rgba(46, 125, 50, 0.3)",
+                        },
+                        transition: "all 0.3s ease",
+                      }}
+                    >
+                      Thêm máy
+                    </Button>
+                  )}
+
+                  {/* Xuất Excel */}
+                  <Button
+                    variant="outlined"
+                    startIcon={<Download />}
+                    onClick={handleExportExcel}
+                    sx={{
+                      borderRadius: "12px",
+                      px: 3,
+                      py: 1.5,
+                      color: "#1976d2",
+                      borderColor: "#1976d2",
+                      whiteSpace: "nowrap",
+                      "&:hover": {
+                        borderColor: "#1565c0",
+                        bgcolor: "rgba(25, 118, 210, 0.04)",
+                      },
+                    }}
+                  >
+                    Xuất Excel DS Máy
+                  </Button>
+
+                  {/* Chọn Cột */}
+                  <Button
+                    variant="outlined"
+                    startIcon={<ViewColumn />}
+                    onClick={handleColumnMenuOpen}
+                    sx={{
+                      borderRadius: "12px",
+                      px: 3,
+                      py: 1.5,
+                      color: "#667eea",
+                      borderColor: "#667eea",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Cột
+                  </Button>
+
+                  {/* Làm mới */}
                   <Button
                     variant="contained"
-                    startIcon={<Add />}
-                    onClick={handleOpenCreateDialog}
+                    startIcon={<Refresh />}
+                    onClick={() => {
+                      fetchMachines(searchTerm);
+                      fetchStats();
+                      fetchTypeStats();
+                      fetchFilterOptions();
+                      fetchMatrixStats();
+                    }}
                     sx={{
                       borderRadius: "12px",
-                      background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                      background: "linear-gradient(45deg, #667eea, #764ba2)",
                       px: 3,
                       py: 1.5,
+                      whiteSpace: "nowrap",
                       "&:hover": {
                         transform: "translateY(-2px)",
-                        boxShadow: "0 8px 25px rgba(46, 125, 50, 0.3)",
+                        boxShadow: "0 8px 25px rgba(102, 126, 234, 0.3)",
                       },
                       transition: "all 0.3s ease",
-                      width: { xs: "100%", sm: "auto" },
                     }}
                   >
-                    Thêm máy
+                    Làm mới
                   </Button>
-                )}
-
-                <Button
-                  variant="outlined"
-                  startIcon={<Download />} // Import Download icon từ @mui/icons-material
-                  onClick={handleExportExcel}
-                  sx={{
-                    borderRadius: "12px",
-                    px: 3,
-                    py: 1.5,
-                    color: "#1976d2", // Màu xanh dương hoặc màu tùy chọn
-                    borderColor: "#1976d2",
-                    width: { xs: "100%", sm: "auto" },
-                    "&:hover": {
-                      borderColor: "#1565c0",
-                      bgcolor: "rgba(25, 118, 210, 0.04)",
-                    },
-                  }}
-                >
-                  Xuất Excel DS Máy
-                </Button>
-
-                {/* Column Visibility Button */}
-                <Button
-                  variant="outlined"
-                  startIcon={<ViewColumn />}
-                  onClick={handleColumnMenuOpen}
-                  sx={{
-                    borderRadius: "12px",
-                    px: 3,
-                    py: 1.5,
-                    color: "#667eea",
-                    borderColor: "#667eea",
-                    width: { xs: "100%", sm: "auto" },
-                  }}
-                >
-                  Cột
-                </Button>
-
-                <Button
-                  variant="contained"
-                  startIcon={<Refresh />}
-                  onClick={() => {
-                    fetchMachines(searchTerm);
-                    fetchStats();
-                    fetchTypeStats();
-                    fetchFilterOptions();
-                    fetchMatrixStats();
-                  }}
-                  sx={{
-                    borderRadius: "12px",
-                    background: "linear-gradient(45deg, #667eea, #764ba2)",
-                    px: 3,
-                    py: 1.5,
-                    "&:hover": {
-                      transform: "translateY(-2px)",
-                      boxShadow: "0 8px 25px rgba(102, 126, 234, 0.3)",
-                    },
-                    transition: "all 0.3s ease",
-                    width: { xs: "100%", sm: "auto" },
-                  }}
-                >
-                  Làm mới
-                </Button>
-              </Stack>
-            </Stack>
+                </Stack>
+              </Grid>
+            </Grid>
           </CardContent>
         </Card>
 
@@ -2742,99 +2808,143 @@ const MachineListPage = () => {
             <Grid container spacing={2}>
               {/* Filter: Loại máy */}
               <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Loại máy</InputLabel>
-                  <Select
-                    multiple
-                    name="type_machines"
-                    value={filters.type_machines}
-                    onChange={handleFilterChange}
-                    label="Loại máy"
-                    renderValue={renderMultiSelectValue}
-                    sx={{ borderRadius: "12px" }}
-                  >
-                    {typeOptions.map((name) => (
-                      <MenuItem key={name} value={name}>
-                        <Checkbox
-                          checked={filters.type_machines.indexOf(name) > -1}
-                        />
-                        <ListItemText primary={name} />
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                <Autocomplete
+                  multiple
+                  size="small"
+                  options={typeOptions}
+                  value={filters.type_machines}
+                  onChange={handleAutocompleteFilterChange("type_machines")}
+                  disableCloseOnSelect
+                  renderTags={(value, getTagProps) =>
+                    value.map((option, index) => (
+                      <Chip
+                        {...getTagProps({ index })}
+                        key={option}
+                        label={option}
+                        size="small"
+                      />
+                    ))
+                  }
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Loại máy"
+                      sx={{
+                        "& .MuiOutlinedInput-root": {
+                          borderRadius: "12px",
+                        },
+                      }}
+                    />
+                  )}
+                  ListboxProps={{
+                    style: { maxHeight: 300 },
+                  }}
+                />
               </Grid>
               {/* Filter: Model */}
               <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Model</InputLabel>
-                  <Select
-                    multiple
-                    name="model_machines"
-                    value={filters.model_machines}
-                    onChange={handleFilterChange}
-                    label="Model"
-                    renderValue={renderMultiSelectValue}
-                    sx={{ borderRadius: "12px" }}
-                  >
-                    {modelOptions.map((name) => (
-                      <MenuItem key={name} value={name}>
-                        <Checkbox
-                          checked={filters.model_machines.indexOf(name) > -1}
-                        />
-                        <ListItemText primary={name} />
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                <Autocomplete
+                  multiple
+                  size="small"
+                  options={modelOptions}
+                  value={filters.model_machines}
+                  onChange={handleAutocompleteFilterChange("model_machines")}
+                  disableCloseOnSelect
+                  renderTags={(value, getTagProps) =>
+                    value.map((option, index) => (
+                      <Chip
+                        {...getTagProps({ index })}
+                        key={option}
+                        label={option}
+                        size="small"
+                      />
+                    ))
+                  }
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Model"
+                      sx={{
+                        "& .MuiOutlinedInput-root": {
+                          borderRadius: "12px",
+                        },
+                      }}
+                    />
+                  )}
+                  ListboxProps={{
+                    style: { maxHeight: 300 },
+                  }}
+                />
               </Grid>
               {/* Filter: Hãng SX */}
               <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Hãng SX</InputLabel>
-                  <Select
-                    multiple
-                    name="manufacturers"
-                    value={filters.manufacturers}
-                    onChange={handleFilterChange}
-                    label="Hãng SX"
-                    renderValue={renderMultiSelectValue}
-                    sx={{ borderRadius: "12px" }}
-                  >
-                    {manufacturerOptions.map((name) => (
-                      <MenuItem key={name} value={name}>
-                        <Checkbox
-                          checked={filters.manufacturers.indexOf(name) > -1}
-                        />
-                        <ListItemText primary={name} />
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                <Autocomplete
+                  multiple
+                  size="small"
+                  options={manufacturerOptions}
+                  value={filters.manufacturers}
+                  onChange={handleAutocompleteFilterChange("manufacturers")}
+                  disableCloseOnSelect
+                  renderTags={(value, getTagProps) =>
+                    value.map((option, index) => (
+                      <Chip
+                        {...getTagProps({ index })}
+                        key={option}
+                        label={option}
+                        size="small"
+                      />
+                    ))
+                  }
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Hãng SX"
+                      sx={{
+                        "& .MuiOutlinedInput-root": {
+                          borderRadius: "12px",
+                        },
+                      }}
+                    />
+                  )}
+                  ListboxProps={{
+                    style: { maxHeight: 300 },
+                  }}
+                />
               </Grid>
               {/* Filter: Vị trí */}
               <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Vị trí hiện tại</InputLabel>
-                  <Select
-                    multiple
-                    name="name_locations"
-                    value={filters.name_locations}
-                    onChange={handleFilterChange}
-                    label="Vị trí hiện tại"
-                    renderValue={renderMultiSelectValue}
-                    sx={{ borderRadius: "12px" }}
-                  >
-                    {locationOptions.map((name) => (
-                      <MenuItem key={name} value={name}>
-                        <Checkbox
-                          checked={filters.name_locations.indexOf(name) > -1}
-                        />
-                        <ListItemText primary={name} />
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                <Autocomplete
+                  multiple
+                  size="small"
+                  options={locationOptions}
+                  value={filters.name_locations}
+                  onChange={handleAutocompleteFilterChange("name_locations")}
+                  disableCloseOnSelect
+                  renderTags={(value, getTagProps) =>
+                    value.map((option, index) => (
+                      <Chip
+                        {...getTagProps({ index })}
+                        key={option}
+                        label={option}
+                        size="small"
+                      />
+                    ))
+                  }
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Vị trí hiện tại"
+                      sx={{
+                        "& .MuiOutlinedInput-root": {
+                          borderRadius: "12px",
+                        },
+                      }}
+                    />
+                  )}
+                  ListboxProps={{
+                    style: { maxHeight: 300 },
+                  }}
+                />
               </Grid>
             </Grid>
           </CardContent>
@@ -2878,6 +2988,26 @@ const MachineListPage = () => {
                   <TableRow
                     sx={{ backgroundColor: "rgba(102, 126, 234, 0.05)" }}
                   >
+                    <TableCell
+                      sx={{
+                        fontWeight: 600,
+                        fontSize: "0.95rem",
+                        whiteSpace: "nowrap",
+                        width: "50px",
+                      }}
+                    >
+                      <Checkbox
+                        indeterminate={isIndeterminate}
+                        checked={isAllSelected}
+                        onChange={handleSelectAll}
+                        sx={{
+                          color: "#667eea",
+                          "&.Mui-checked": {
+                            color: "#667eea",
+                          },
+                        }}
+                      />
+                    </TableCell>
                     <TableCell
                       sx={{
                         fontWeight: 600,
@@ -3308,7 +3438,7 @@ const MachineListPage = () => {
                   {machines.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={visibleColumnCount}
+                        colSpan={visibleColumnCount + 1}
                         align="center"
                         sx={{ py: 4 }}
                       >
@@ -3338,6 +3468,28 @@ const MachineListPage = () => {
                           }}
                           // <<< END OF CHANGE >>>
                         >
+                          <TableCell
+                            onClick={(e) =>
+                              handleMachineSelect(machine.uuid_machine, e)
+                            }
+                            sx={{ width: "50px" }}
+                          >
+                            <Checkbox
+                              checked={selectedMachines.has(
+                                machine.uuid_machine
+                              )}
+                              onChange={(e) =>
+                                handleMachineSelect(machine.uuid_machine, e)
+                              }
+                              onClick={(e) => e.stopPropagation()}
+                              sx={{
+                                color: "#667eea",
+                                "&.Mui-checked": {
+                                  color: "#667eea",
+                                },
+                              }}
+                            />
+                          </TableCell>
                           <TableCell>
                             {(page - 1) * rowsPerPage + index + 1}
                           </TableCell>
@@ -4517,6 +4669,58 @@ const MachineListPage = () => {
           </DialogActions>
         </Dialog>
 
+        {/* RFID Search Dialog */}
+        <Dialog
+          open={rfidDialogOpen}
+          onClose={() => setRfidDialogOpen(false)}
+          maxWidth="md"
+          fullWidth
+          fullScreen={isMobile}
+          PaperProps={{
+            sx: {
+              borderRadius: isMobile ? 0 : "20px",
+            },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              pb: 1,
+              background: "linear-gradient(45deg, #667eea, #764ba2)",
+              color: "white",
+              fontWeight: 700,
+            }}
+          >
+            <Stack
+              direction="row"
+              alignItems="center"
+              justifyContent="space-between"
+            >
+              <Typography variant={isMobile ? "h6" : "h5"} fontWeight="bold">
+                Dò Tìm Thiết Bị (RFID)
+              </Typography>
+              <IconButton
+                onClick={() => setRfidDialogOpen(false)}
+                size="small"
+                sx={{ color: "white" }}
+              >
+                <Close />
+              </IconButton>
+            </Stack>
+          </DialogTitle>
+          <Divider />
+          <DialogContent sx={{ p: 0 }}>
+            <RfidSearch
+              onClose={() => {
+                setRfidDialogOpen(false);
+                setSelectedMachines(new Set()); // Reset selection khi đóng dialog
+              }}
+              selectedMachines={machines.filter((m) =>
+                selectedMachines.has(m.uuid_machine)
+              )}
+            />
+          </DialogContent>
+        </Dialog>
+
         {/* Notification Snackbar */}
         <Snackbar
           open={notification.open}
@@ -4545,6 +4749,43 @@ const MachineListPage = () => {
             {notification.message}
           </Alert>
         </Snackbar>
+
+        {/* Floating Action Button for RFID Search */}
+        {selectedMachines.size > 0 && (
+          <Fab
+            color="primary"
+            aria-label="Tìm kiếm bằng RFID"
+            onClick={handleOpenRfidDialog}
+            sx={{
+              position: "fixed",
+              bottom: 24,
+              right: 24,
+              zIndex: 1000,
+              background: "linear-gradient(45deg, #667eea, #764ba2)",
+              "&:hover": {
+                background: "linear-gradient(45deg, #764ba2, #667eea)",
+                transform: "scale(1.1)",
+              },
+              transition: "all 0.3s ease",
+              boxShadow: "0 8px 25px rgba(102, 126, 234, 0.4)",
+            }}
+          >
+            <Badge
+              badgeContent={selectedMachines.size}
+              color="error"
+              sx={{
+                "& .MuiBadge-badge": {
+                  fontSize: "0.75rem",
+                  fontWeight: "bold",
+                  minWidth: "24px",
+                  height: "24px",
+                },
+              }}
+            >
+              <Radar />
+            </Badge>
+          </Fab>
+        )}
       </Container>
     </>
   );
