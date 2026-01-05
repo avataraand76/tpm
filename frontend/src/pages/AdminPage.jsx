@@ -1182,7 +1182,7 @@ const AdminPage = () => {
         {/* --- Snackbar --- */}
         <Snackbar
           open={notification.open}
-          autoHideDuration={4000}
+          autoHideDuration={5000}
           onClose={handleCloseNotification}
           anchorOrigin={{ vertical: "top", horizontal: "right" }}
         >

@@ -207,7 +207,7 @@ const RfidSearch = ({ onClose, selectedMachines = [] }) => {
     if (currentFoundTarget) {
       const timer = setTimeout(() => {
         setCurrentFoundTarget(null);
-      }, 1500);
+      }, 3500);
       return () => clearTimeout(timer);
     }
   }, [currentFoundTarget]);

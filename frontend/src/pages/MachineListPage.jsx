@@ -738,6 +738,7 @@ const MachineListPage = () => {
   const [fileName, setFileName] = useState("");
   const [rfidDialogOpen, setRfidDialogOpen] = useState(false);
   const [selectedMachines, setSelectedMachines] = useState(new Set()); // Set các UUID máy đã chọn
+  const [selectedMachinesData, setSelectedMachinesData] = useState(new Map()); // Map lưu toàn bộ thông tin máy đã chọn: uuid -> machine object
   const tableCardRef = useRef(null);
   const searchInputRef = useRef(null);
   const searchTimeoutRef = useRef(null);
@@ -1846,6 +1847,8 @@ const MachineListPage = () => {
   // Handler cho checkbox chọn máy
   const handleMachineSelect = (machineUuid, event) => {
     event.stopPropagation(); // Ngăn sự kiện click lan ra TableRow
+    const machine = machines.find((m) => m.uuid_machine === machineUuid);
+
     setSelectedMachines((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(machineUuid)) {
@@ -1855,6 +1858,17 @@ const MachineListPage = () => {
       }
       return newSet;
     });
+
+    // Cập nhật Map lưu thông tin máy
+    setSelectedMachinesData((prev) => {
+      const newMap = new Map(prev);
+      if (newMap.has(machineUuid)) {
+        newMap.delete(machineUuid);
+      } else if (machine) {
+        newMap.set(machineUuid, machine);
+      }
+      return newMap;
+    });
   };
 
   // Handler cho checkbox chọn tất cả
@@ -1862,8 +1876,28 @@ const MachineListPage = () => {
     if (event.target.checked) {
       const allUuids = new Set(machines.map((m) => m.uuid_machine));
       setSelectedMachines(allUuids);
+      // Lưu toàn bộ thông tin máy vào Map
+      const machinesMap = new Map();
+      machines.forEach((m) => {
+        machinesMap.set(m.uuid_machine, m);
+      });
+      setSelectedMachinesData((prev) => {
+        const newMap = new Map(prev);
+        machines.forEach((m) => {
+          newMap.set(m.uuid_machine, m);
+        });
+        return newMap;
+      });
     } else {
       setSelectedMachines(new Set());
+      // Xóa các máy hiện tại khỏi Map (chỉ xóa những máy đang hiển thị)
+      setSelectedMachinesData((prev) => {
+        const newMap = new Map(prev);
+        machines.forEach((m) => {
+          newMap.delete(m.uuid_machine);
+        });
+        return newMap;
+      });
     }
   };
 
@@ -4713,10 +4747,9 @@ const MachineListPage = () => {
               onClose={() => {
                 setRfidDialogOpen(false);
                 setSelectedMachines(new Set()); // Reset selection khi đóng dialog
+                setSelectedMachinesData(new Map()); // Reset data khi đóng dialog
               }}
-              selectedMachines={machines.filter((m) =>
-                selectedMachines.has(m.uuid_machine)
-              )}
+              selectedMachines={Array.from(selectedMachinesData.values())}
             />
           </DialogContent>
         </Dialog>
