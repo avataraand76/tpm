@@ -1874,13 +1874,15 @@ const MachineListPage = () => {
   // Handler cho checkbox chọn tất cả
   const handleSelectAll = (event) => {
     if (event.target.checked) {
-      const allUuids = new Set(machines.map((m) => m.uuid_machine));
-      setSelectedMachines(allUuids);
-      // Lưu toàn bộ thông tin máy vào Map
-      const machinesMap = new Map();
-      machines.forEach((m) => {
-        machinesMap.set(m.uuid_machine, m);
+      // Merge Set mới với Set cũ để giữ lại các máy đã chọn trước đó
+      setSelectedMachines((prev) => {
+        const newSet = new Set(prev);
+        machines.forEach((m) => {
+          newSet.add(m.uuid_machine);
+        });
+        return newSet;
       });
+      // Lưu toàn bộ thông tin máy vào Map
       setSelectedMachinesData((prev) => {
         const newMap = new Map(prev);
         machines.forEach((m) => {
@@ -1889,7 +1891,14 @@ const MachineListPage = () => {
         return newMap;
       });
     } else {
-      setSelectedMachines(new Set());
+      // Chỉ xóa các máy hiện tại khỏi Set, giữ lại các máy từ trang/filter khác
+      setSelectedMachines((prev) => {
+        const newSet = new Set(prev);
+        machines.forEach((m) => {
+          newSet.delete(m.uuid_machine);
+        });
+        return newSet;
+      });
       // Xóa các máy hiện tại khỏi Map (chỉ xóa những máy đang hiển thị)
       setSelectedMachinesData((prev) => {
         const newMap = new Map(prev);
@@ -1901,11 +1910,14 @@ const MachineListPage = () => {
     }
   };
 
-  // Kiểm tra xem tất cả máy đã được chọn chưa
+  // Kiểm tra xem tất cả máy đang hiển thị đã được chọn chưa
   const isAllSelected =
-    machines.length > 0 && selectedMachines.size === machines.length;
+    machines.length > 0 &&
+    machines.every((m) => selectedMachines.has(m.uuid_machine));
   const isIndeterminate =
-    selectedMachines.size > 0 && selectedMachines.size < machines.length;
+    machines.length > 0 &&
+    machines.some((m) => selectedMachines.has(m.uuid_machine)) &&
+    !isAllSelected;
 
   // Handler mở dialog RFID với danh sách máy đã chọn
   const handleOpenRfidDialog = () => {
@@ -2696,7 +2708,8 @@ const MachineListPage = () => {
                     }}
                   >
                     Tìm kiếm bằng RFID
-                    {selectedMachines.size > 0 && ` (${selectedMachines.size})`}
+                    {selectedMachinesData.size > 0 &&
+                      ` (${selectedMachinesData.size})`}
                   </Button>
                 </Stack>
               </Grid>
@@ -4750,6 +4763,11 @@ const MachineListPage = () => {
                 setSelectedMachinesData(new Map()); // Reset data khi đóng dialog
               }}
               selectedMachines={Array.from(selectedMachinesData.values())}
+              onClearSelection={() => {
+                // Bỏ chọn tất cả máy khi bấm CLEAR trong dialog
+                setSelectedMachines(new Set());
+                setSelectedMachinesData(new Map());
+              }}
             />
           </DialogContent>
         </Dialog>
@@ -4784,7 +4802,7 @@ const MachineListPage = () => {
         </Snackbar>
 
         {/* Floating Action Button for RFID Search */}
-        {selectedMachines.size > 0 && (
+        {selectedMachinesData.size > 0 && (
           <Fab
             color="primary"
             aria-label="Tìm kiếm bằng RFID"
@@ -4804,7 +4822,7 @@ const MachineListPage = () => {
             }}
           >
             <Badge
-              badgeContent={selectedMachines.size}
+              badgeContent={selectedMachinesData.size}
               color="error"
               sx={{
                 "& .MuiBadge-badge": {

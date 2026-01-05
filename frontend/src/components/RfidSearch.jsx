@@ -24,7 +24,7 @@ import {
 import { Search, Radar, CheckCircle, Replay } from "@mui/icons-material";
 import { api } from "../api/api";
 
-const RfidSearch = ({ onClose, selectedMachines = [] }) => {
+const RfidSearch = ({ onClose, selectedMachines = [], onClearSelection }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
@@ -263,6 +263,10 @@ const RfidSearch = ({ onClose, selectedMachines = [] }) => {
     setInputTarget("");
     setError("");
     setErrors([]);
+    // Gọi callback để bỏ chọn các máy trong MachineListPage
+    if (onClearSelection) {
+      onClearSelection();
+    }
   };
 
   // Handler đóng snackbar
