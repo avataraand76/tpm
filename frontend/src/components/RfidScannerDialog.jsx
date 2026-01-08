@@ -48,6 +48,28 @@ const RfidScannerDialog = ({
     }
   };
 
+  // Hàm tạo placeholder machine cho RFID không tìm thấy (chỉ dùng trong chế độ kiểm kê)
+  const createNotFoundMachinePlaceholder = (rfid) => {
+    return {
+      uuid_machine: `NOT_FOUND_${rfid}`, // UUID tạm để đảm bảo unique
+      code_machine: null,
+      type_machine: null,
+      model_machine: null,
+      serial_machine: null,
+      RFID_machine: rfid,
+      NFC_machine: null,
+      current_status: null,
+      is_borrowed_or_rented_or_borrowed_out: null,
+      is_borrowed_or_rented_or_borrowed_out_name: null,
+      is_borrowed_or_rented_or_borrowed_out_date: null,
+      is_borrowed_or_rented_or_borrowed_out_return_date: null,
+      name_category: null,
+      uuid_location: null,
+      name_location: null,
+      isNotFound: true, // Flag để đánh dấu đây là máy không tìm thấy
+    };
+  };
+
   const handleSubmit = async () => {
     setIsProcessing(true);
     try {
@@ -59,7 +81,14 @@ const RfidScannerDialog = ({
         .map((code) => code.trim()) // Cắt bỏ khoảng trắng thừa
         .filter((code) => code.length > 0); // Lọc ra các dòng rỗng
 
-      if (codes.length === 0) {
+      // Chỉ nhận các mã RFID bắt đầu bằng 'E2'
+      const filteredCodes = codes.filter(
+        (code) =>
+          code.toUpperCase().startsWith("E") ||
+          code.toUpperCase().startsWith("A")
+      );
+
+      if (filteredCodes.length === 0) {
         showNotification(
           "warning",
           "Chưa nhập mã",
@@ -70,7 +99,7 @@ const RfidScannerDialog = ({
       }
 
       const payload = {
-        rfid_list: codes,
+        rfid_list: filteredCodes,
         ...apiParams,
       };
 
@@ -94,6 +123,23 @@ const RfidScannerDialog = ({
           }
         }
 
+        // Trong chế độ kiểm kê, tạo placeholder cho các RFID không tìm thấy
+        if (isInventoryMode && notFoundRfids.length > 0) {
+          const notFoundMachines = notFoundRfids
+            .filter((rfid) => {
+              // Kiểm tra xem RFID không tìm thấy đã có trong danh sách chưa
+              const placeholderUuid = `NOT_FOUND_${rfid}`;
+              return !selectedSet.has(placeholderUuid);
+            })
+            .map((rfid) => {
+              const placeholder = createNotFoundMachinePlaceholder(rfid);
+              selectedSet.add(placeholder.uuid_machine);
+              return placeholder;
+            });
+
+          machinesToAdd.push(...notFoundMachines);
+        }
+
         // Gọi callback để parent xử lý (bao gồm kiểm tra trùng và thông báo)
         if (machinesToAdd.length > 0) {
           onAddMachines(machinesToAdd);
@@ -112,13 +158,13 @@ const RfidScannerDialog = ({
           // Trong chế độ kiểm kê, không hiển thị thông báo ở đây
           // Vì parent component (TestProposalPage) sẽ xử lý thông báo chi tiết hơn
           // (bao gồm cả kiểm tra trùng ở các chuyền/đơn vị khác)
-          // Chỉ hiển thị thông báo về RFID không tìm thấy
+          // Chỉ hiển thị thông báo về RFID không tìm thấy (nếu có)
           if (notFoundCount > 0) {
             const missingCodesStr = notFoundRfids.join(", ");
             showNotification(
-              "warning",
-              "Một số RFID không tìm thấy",
-              `${notFoundCount} mã không tìm thấy: [${missingCodesStr}]`
+              "info",
+              "Đã ghi nhận RFID không tìm thấy",
+              `${notFoundCount} mã không tìm thấy đã được ghi nhận: [${missingCodesStr}]`
             );
           }
         } else {
@@ -251,10 +297,7 @@ const RfidScannerDialog = ({
               multiline
               rows={10}
               label="Danh sách mã RFID/NFC"
-              placeholder="RFID1
-RFID2
-RFID1
-RFID3..."
+              placeholder="RFID1&#10;RFID2&#10;RFID1&#10;RFID3..."
               value={rfidInput}
               onChange={(e) => setRfidInput(e.target.value)}
               disabled={isProcessing}

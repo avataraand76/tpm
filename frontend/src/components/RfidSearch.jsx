@@ -20,11 +20,19 @@ import {
   AlertTitle,
   useTheme,
   useMediaQuery,
+  Switch,
+  FormControlLabel,
 } from "@mui/material";
 import { Search, Radar, CheckCircle, Replay } from "@mui/icons-material";
 import { api } from "../api/api";
 
-const RfidSearch = ({ onClose, selectedMachines = [], onClearSelection }) => {
+const RfidSearch = ({
+  onClose,
+  selectedMachines = [],
+  onClearSelection,
+  // Khi ở chế độ kiểm kê (inventory) thì không cần gọi API resolve target
+  skipResolveApi = false,
+}) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
@@ -34,6 +42,8 @@ const RfidSearch = ({ onClose, selectedMachines = [], onClearSelection }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [errors, setErrors] = useState([]);
+  // Switch để chọn chế độ: true = chỉ tìm RFID (không dùng API), false = dùng API
+  const [useRfidOnly, setUseRfidOnly] = useState(skipResolveApi);
 
   // State cho Snackbar
   const [snackbarOpen, setSnackbarOpen] = useState(false);
@@ -113,7 +123,7 @@ const RfidSearch = ({ onClose, selectedMachines = [], onClearSelection }) => {
     }
   };
 
-  // --- BƯỚC 1: API LẤY MỤC TIÊU ---
+  // --- BƯỚC 1: THIẾT LẬP MỤC TIÊU ---
   const handleSetTarget = async (e) => {
     e?.preventDefault();
     if (!inputTarget.trim()) return;
@@ -132,46 +142,74 @@ const RfidSearch = ({ onClose, selectedMachines = [], onClearSelection }) => {
         .map((k) => k.trim())
         .filter((k) => k);
 
-      const res = await api.machines.resolveTarget(keywords);
-      if (res.success) {
-        // res.data có thể là object (backward compatibility) hoặc array
-        const targetsArray = Array.isArray(res.data) ? res.data : [res.data];
-        // Hoặc dùng res.targets nếu có
-        const finalTargets = res.targets || targetsArray;
+      if (useRfidOnly) {
+        // --- CHẾ ĐỘ CHỈ TÌM RFID: KHÔNG GỌI API, DÙNG TRỰC TIẾP DANH SÁCH RFID ---
+        const localTargets = keywords.map((keyword) => ({
+          targetRfid: keyword.toUpperCase(),
+          info: {
+            serial: keyword,
+            name: keyword,
+          },
+        }));
 
-        if (finalTargets.length === 0) {
-          setError("Không có máy nào hợp lệ để dò tìm.");
+        if (localTargets.length === 0) {
+          setError("Vui lòng nhập ít nhất một RFID để dò tìm.");
           return;
         }
 
-        setTargets(finalTargets);
-        if (res.errors && res.errors.length > 0) {
-          setErrors(res.errors);
-          // Hiển thị snackbar cho các lỗi về RFID chưa được gán
-          const rfidErrors = res.errors.filter((err) =>
-            err.message.includes("chưa được gán thẻ RFID")
-          );
-          if (rfidErrors.length > 0) {
-            const errorMessages = rfidErrors
-              .map((err) => err.message)
-              .join("; ");
-            setSnackbarTitle("Cảnh báo");
-            setSnackbarMessage(errorMessages);
-            setSnackbarOpen(true);
-          }
-        }
+        setTargets(localTargets);
         setStep(2);
+      } else {
+        // --- CHẾ ĐỘ MẶC ĐỊNH: GỌI API ĐỂ XÁC THỰC THIẾT BỊ ---
+        const res = await api.machines.resolveTarget(keywords);
+        if (res.success) {
+          // res.data có thể là object (backward compatibility) hoặc array
+          const targetsArray = Array.isArray(res.data) ? res.data : [res.data];
+          // Hoặc dùng res.targets nếu có
+          const finalTargets = res.targets || targetsArray;
+
+          if (finalTargets.length === 0) {
+            setError("Không có máy nào hợp lệ để dò tìm.");
+            return;
+          }
+
+          setTargets(finalTargets);
+          if (res.errors && res.errors.length > 0) {
+            setErrors(res.errors);
+            // Hiển thị snackbar cho các lỗi về RFID chưa được gán
+            const rfidErrors = res.errors.filter((err) =>
+              err.message.includes("chưa được gán thẻ RFID")
+            );
+            if (rfidErrors.length > 0) {
+              const errorMessages = rfidErrors
+                .map((err) => err.message)
+                .join("; ");
+              setSnackbarTitle("Cảnh báo");
+              setSnackbarMessage(errorMessages);
+              setSnackbarOpen(true);
+            }
+          }
+          setStep(2);
+        }
       }
     } catch (err) {
-      setError(err.response?.data?.message || "Lỗi kết nối server");
-      if (err.response?.data?.errors) {
+      console.error("Lỗi xử lý mục tiêu RFID:", err);
+      // Giữ lại logic thông báo lỗi cũ khi có response từ server
+      if (err.response?.data?.message) {
+        setError(err.response.data.message);
+      } else if (!useRfidOnly) {
+        setError("Lỗi kết nối server");
+      } else {
+        setError("Đã xảy ra lỗi khi chuẩn bị danh sách RFID.");
+      }
+
+      if (!useRfidOnly && err.response?.data?.errors) {
         setErrors(err.response.data.errors);
-        // Hiển thị snackbar cho các lỗi về RFID chưa được gán
-        const rfidErrors = err.response.data.errors.filter((err) =>
-          err.message.includes("chưa được gán thẻ RFID")
+        const rfidErrors = err.response.data.errors.filter((er) =>
+          er.message.includes("chưa được gán thẻ RFID")
         );
         if (rfidErrors.length > 0) {
-          const errorMessages = rfidErrors.map((err) => err.message).join("; ");
+          const errorMessages = rfidErrors.map((er) => er.message).join("; ");
           setSnackbarTitle("Cảnh báo");
           setSnackbarMessage(errorMessages);
           setSnackbarOpen(true);
@@ -426,6 +464,37 @@ const RfidSearch = ({ onClose, selectedMachines = [], onClearSelection }) => {
                       </List>
                     </Alert>
                   )}
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      p: 1.5,
+                      bgcolor: "rgba(0, 0, 0, 0.02)",
+                      borderRadius: "12px",
+                      border: "1px solid rgba(0, 0, 0, 0.08)",
+                    }}
+                  >
+                    <Box>
+                      <Typography variant="body2" fontWeight={600} gutterBottom>
+                        Chế độ quét
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {useRfidOnly
+                          ? "Chỉ quét RFID"
+                          : "Chỉ quét thiết bị trong hệ thống"}
+                      </Typography>
+                    </Box>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={useRfidOnly}
+                          onChange={(e) => setUseRfidOnly(e.target.checked)}
+                          color="primary"
+                        />
+                      }
+                    />
+                  </Box>
                   <Button
                     type="submit"
                     variant="contained"

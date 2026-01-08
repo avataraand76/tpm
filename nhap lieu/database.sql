@@ -116,8 +116,13 @@ create table if not exists tb_machine
     NFC_machine varchar(30),
     code_machine varchar(30), -- sẽ là mã barcode tham chiếu theo code loại máy
     type_machine text,
+    attribute_machine text,
     model_machine text,
     manufacturer text, -- hãng sản xuất
+    supplier text, -- nhà cung cấp
+    power text, -- công xuất
+    pressure text, -- áp suất
+    voltage text, -- điện áp
     price decimal(15, 0), -- giá
     date_of_use date, -- ngày sử dụng
     lifespan int, -- tuổi thọ

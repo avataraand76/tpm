@@ -27,6 +27,7 @@ import {
   Menu as MenuIcon,
   Update,
   AdminPanelSettings,
+  QuestionMark,
 } from "@mui/icons-material";
 import { useAuth } from "../hooks/useAuth";
 
@@ -110,6 +111,15 @@ const NavigationBar = () => {
   const handleMobileNav = (route) => {
     navigate(route);
     handleMobileMenuClose();
+  };
+
+  // Handler để mở link Google Docs
+  const handleOpenDocs = () => {
+    window.open(
+      "https://docs.google.com/document/d/1ByVcQQiD06zHyr8xjNENYkovnag3JZimV_nFK6-0a-8/edit?usp=sharing",
+      "_blank",
+      "noopener,noreferrer"
+    );
   };
 
   if (!isAuthenticated) {
@@ -299,7 +309,27 @@ const NavigationBar = () => {
 
         {/* === PHẦN CHUNG: MENU NGƯỜI DÙNG === */}
         {/* (Hiển thị trên cả mobile và desktop) */}
-        <div>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          {/* Nút mở Google Docs */}
+          <IconButton
+            size="large"
+            aria-label="mở tài liệu"
+            onClick={handleOpenDocs}
+            sx={{
+              color: "white",
+              background: "rgba(255, 255, 255, 0.1)",
+              backdropFilter: "blur(10px)",
+              border: "1px solid rgba(255, 255, 255, 0.2)",
+              "&:hover": {
+                background: "rgba(255, 255, 255, 0.2)",
+                transform: "translateY(-2px)",
+                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+              },
+              transition: "all 0.3s ease",
+            }}
+          >
+            <QuestionMark />
+          </IconButton>
           <IconButton
             size="large"
             aria-label="account of current user"

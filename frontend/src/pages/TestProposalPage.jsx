@@ -74,11 +74,13 @@ import {
   EditNote,
 } from "@mui/icons-material";
 import * as XLSX from "xlsx-js-style";
+import ExcelJS from "exceljs";
 import NavigationBar from "../components/NavigationBar";
 import { api } from "../api/api";
 import MachineQRScanner from "../components/MachineQRScanner";
 import FileUploadComponent from "../components/FileUploadComponent";
 import RfidScannerDialog from "../components/RfidScannerDialog";
+import RfidSearch from "../components/RfidSearch";
 import { useAuth } from "../hooks/useAuth";
 
 // Component con để hiển thị từng vị trí kiểm kê (Accordion + Filter)
@@ -466,6 +468,11 @@ const TestProposalPage = () => {
   // Inventory Scan Dialog State
   const [openInventoryScanDialog, setOpenInventoryScanDialog] = useState(false);
   const [inventoryScannedList, setInventoryScannedList] = useState([]);
+  const [openInventoryRfidSearchDialog, setOpenInventoryRfidSearchDialog] =
+    useState(false);
+  const [inventoryRfidSearchTargets, setInventoryRfidSearchTargets] = useState(
+    []
+  );
 
   // Inventory Department Detail State
   const [currentDepartment, setCurrentDepartment] = useState(null);
@@ -1046,12 +1053,19 @@ const TestProposalPage = () => {
       const duplicatesInOtherDept = [];
 
       machinesToAdd.forEach((machine) => {
+        // Lấy tên hiển thị cho máy (để dùng trong thông báo)
+        const machineDisplayName = machine.isNotFound
+          ? `RFID: ${machine.RFID_machine}`
+          : machine.code_machine ||
+            machine.serial_machine ||
+            "Máy không xác định";
+
         // 1. Kiểm tra trùng trong danh sách tạm
         const existsInCurrent = inventoryScannedList.some(
           (m) => m.uuid_machine === machine.uuid_machine
         );
         if (existsInCurrent) {
-          duplicatesInCurrent.push(machine.code_machine);
+          duplicatesInCurrent.push(machineDisplayName);
           return;
         }
 
@@ -1106,7 +1120,7 @@ const TestProposalPage = () => {
             locationName = "không rõ";
           }
           duplicatesInOtherDept.push({
-            code: machine.code_machine,
+            code: machineDisplayName,
             location: locationName,
             department: foundInOtherDept.name_department,
           });
@@ -1116,7 +1130,7 @@ const TestProposalPage = () => {
         // Thêm thông tin vị trí trùng (nếu có trong cùng đơn vị)
         if (foundInOther) {
           duplicatesInCurrentDept.push({
-            code: machine.code_machine,
+            code: machineDisplayName,
             location: foundInOther.location_name,
             department: currentDepartment?.name_department,
           });
@@ -1648,6 +1662,76 @@ const TestProposalPage = () => {
     }
   };
 
+  const handleOpenInventoryRfidSearch = () => {
+    // Hàm kiểm tra máy không có trong hệ thống
+    const isNotFoundMachine = (machine) => {
+      const isNotFoundFlag = machine.isNotFound === true;
+      const isNotFoundUuid =
+        typeof machine.uuid_machine === "string" &&
+        machine.uuid_machine.startsWith("NOT_FOUND_");
+      return isNotFoundFlag || isNotFoundUuid;
+    };
+
+    // Hàm kiểm tra máy đã quét trước đó (có duplicateLocationName hoặc isDuplicate)
+    const isPreviouslyScannedMachine = (machine) => {
+      return (
+        machine.isDuplicate === true ||
+        (machine.duplicateLocationName &&
+          machine.duplicateLocationName.trim() !== "")
+      );
+    };
+
+    // 1. Từ danh sách tạm hiện tại: Lấy các RFID:
+    //    - Không có trong hệ thống (isNotFound)
+    //    - Đã quét trước đó (isDuplicate hoặc có duplicateLocationName)
+    //    KHÔNG lấy các RFID chỉ sai vị trí nhưng chưa quét trước đó
+    const rfidsFromCurrentList = inventoryScannedList
+      .filter(
+        (machine) =>
+          isNotFoundMachine(machine) || isPreviouslyScannedMachine(machine)
+      )
+      .map((m) => m.RFID_machine)
+      .filter((rfid) => rfid && rfid.trim() !== "");
+
+    // 2. Từ các vị trí đã quét trước đó: Lấy TẤT CẢ các RFID (vì đã quét trước đó rồi)
+    const rfidsFromScannedLocations = [];
+    if (scannedLocationsList && Array.isArray(scannedLocationsList)) {
+      scannedLocationsList.forEach((location) => {
+        if (
+          location.scanned_machine &&
+          Array.isArray(location.scanned_machine)
+        ) {
+          location.scanned_machine.forEach((machine) => {
+            if (machine.RFID_machine && machine.RFID_machine.trim() !== "") {
+              rfidsFromScannedLocations.push(machine.RFID_machine);
+            }
+          });
+        }
+      });
+    }
+
+    // 3. Kết hợp và loại bỏ trùng lặp (dùng Set để đảm bảo unique)
+    const allRfids = [...rfidsFromCurrentList, ...rfidsFromScannedLocations];
+    const uniqueRfids = Array.from(new Set(allRfids));
+
+    if (uniqueRfids.length === 0) {
+      showNotification(
+        "info",
+        "Không có RFID",
+        "Không có RFID nào đã quét trước đó hoặc không có trong hệ thống để dò tìm."
+      );
+      return;
+    }
+
+    // 4. Chuyển thành dạng "máy" đơn giản để truyền vào RfidSearch
+    const targets = uniqueRfids.map((rfid) => ({
+      RFID_machine: rfid,
+    }));
+
+    setInventoryRfidSearchTargets(targets);
+    setOpenInventoryRfidSearchDialog(true);
+  };
+
   const handleInventorySubmit = async () => {
     if (!selectedTicket) return;
 
@@ -1903,6 +1987,129 @@ const TestProposalPage = () => {
       setImportResults(null);
     }
     event.target.value = null;
+  };
+
+  const handleDownloadSampleExcel = async () => {
+    try {
+      // 1. Lấy danh sách loại máy và hãng sản xuất từ API
+      const [typeMachineResult, manufacturerResult] = await Promise.all([
+        api.machines.getDistinctValues({ field: "type_machine" }),
+        api.machines.getDistinctValues({ field: "manufacturer" }),
+      ]);
+
+      // Đảm bảo có ít nhất 1 dòng để tránh lỗi validation
+      const typeMachineList =
+        typeMachineResult.success && typeMachineResult.data.length > 0
+          ? typeMachineResult.data
+          : ["Máy mẫu"];
+
+      const manufacturerList =
+        manufacturerResult.success && manufacturerResult.data.length > 0
+          ? manufacturerResult.data
+          : ["Hãng mẫu"];
+
+      // 2. Tải file Excel mẫu
+      const response = await fetch("/Mau_Excel_MayMoc.xlsx");
+      if (!response.ok) throw new Error("Không thể tải file Excel mẫu");
+      const arrayBuffer = await response.arrayBuffer();
+
+      // 3. Load Workbook
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(arrayBuffer);
+
+      // --- BƯỚC 4: CẬP NHẬT SHEET "LoaiMayMoc" ---
+      let loaiMayMocSheet = workbook.getWorksheet("LoaiMayMoc");
+      if (!loaiMayMocSheet) {
+        loaiMayMocSheet = workbook.addWorksheet("LoaiMayMoc");
+      }
+
+      // Xóa dữ liệu cũ sạch sẽ
+      if (loaiMayMocSheet.rowCount > 0) {
+        loaiMayMocSheet.spliceRows(1, loaiMayMocSheet.rowCount);
+      }
+
+      // Thêm dữ liệu mới vào
+      typeMachineList.forEach((type) => {
+        loaiMayMocSheet.addRow([type]);
+      });
+
+      // --- BƯỚC 5: CẬP NHẬT SHEET "HangSX" ---
+      let hangSXSheet = workbook.getWorksheet("HangSX");
+      if (!hangSXSheet) {
+        hangSXSheet = workbook.addWorksheet("HangSX");
+      }
+
+      // Xóa dữ liệu cũ sạch sẽ
+      if (hangSXSheet.rowCount > 0) {
+        hangSXSheet.spliceRows(1, hangSXSheet.rowCount);
+      }
+
+      // Thêm dữ liệu mới vào
+      manufacturerList.forEach((manufacturer) => {
+        hangSXSheet.addRow([manufacturer]);
+      });
+
+      // --- BƯỚC 6 (QUAN TRỌNG): GÁN LẠI VALIDATION CHO SHEET CHÍNH ---
+      const mainSheet = workbook.getWorksheet("DanhSachMayMoc");
+      if (mainSheet) {
+        const startRow = 2;
+        const endRow = 1000;
+
+        // 6.1. Validation cho cột B (Loại máy)
+        const validationFormulaType = `'LoaiMayMoc'!$A$1:$A$${typeMachineList.length}`;
+        for (let i = startRow; i <= endRow; i++) {
+          const cell = mainSheet.getCell(`B${i}`);
+          cell.dataValidation = {
+            type: "list",
+            allowBlank: true,
+            operator: "equal",
+            showErrorMessage: true,
+            errorTitle: "Lỗi nhập liệu",
+            error: "Vui lòng chọn Loại máy từ danh sách có sẵn.",
+            formulae: [validationFormulaType],
+          };
+        }
+
+        // 6.2. Validation cho cột D (Hãng sản xuất)
+        const validationFormulaManufacturer = `'HangSX'!$A$1:$A$${manufacturerList.length}`;
+        for (let i = startRow; i <= endRow; i++) {
+          const cell = mainSheet.getCell(`D${i}`);
+          cell.dataValidation = {
+            type: "list",
+            allowBlank: true,
+            operator: "equal",
+            showErrorMessage: true,
+            errorTitle: "Lỗi nhập liệu",
+            error: "Vui lòng chọn Hãng sản xuất từ danh sách có sẵn.",
+            formulae: [validationFormulaManufacturer],
+          };
+        }
+      }
+
+      // 6. Xuất file
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "Mau_Excel_MayMoc.xlsx";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      showNotification(
+        "success",
+        "Thành công",
+        "Đã tải xuống file mẫu mới nhất."
+      );
+    } catch (error) {
+      console.error("Error:", error);
+      showNotification("error", "Lỗi", error.message);
+    }
   };
 
   const handleImportExcel = async () => {
@@ -6035,8 +6242,8 @@ const TestProposalPage = () => {
 
               <Box sx={{ mt: 1 }}>
                 <Link
-                  href="/Mau_Excel_MayMoc.xlsx"
-                  download="Mau_Excel_MayMoc.xlsx"
+                  component="button"
+                  onClick={handleDownloadSampleExcel}
                   variant="body2"
                   sx={{
                     fontWeight: "bold",
@@ -6247,6 +6454,48 @@ const TestProposalPage = () => {
           isInventoryMode={openInventoryScanDialog}
         />
 
+        {/* RFID Search dialog cho các RFID không có trong hệ thống (kiểm kê) */}
+        <Dialog
+          open={openInventoryRfidSearchDialog}
+          onClose={() => setOpenInventoryRfidSearchDialog(false)}
+          maxWidth="md"
+          fullWidth
+          fullScreen={isMobile}
+          PaperProps={{ sx: { borderRadius: isMobile ? 0 : "20px" } }}
+        >
+          <DialogTitle
+            sx={{
+              background: "linear-gradient(45deg, #667eea, #764ba2)",
+              color: "white",
+              fontWeight: 700,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <Typography
+              component="span"
+              variant={isMobile ? "h6" : "h5"}
+              sx={{ fontWeight: 700 }}
+            >
+              Dò tìm thiết bị (RFID)
+            </Typography>
+            <IconButton
+              onClick={() => setOpenInventoryRfidSearchDialog(false)}
+              sx={{ color: "white" }}
+            >
+              <Close />
+            </IconButton>
+          </DialogTitle>
+          <DialogContent sx={{ p: 0 }}>
+            <RfidSearch
+              onClose={() => setOpenInventoryRfidSearchDialog(false)}
+              selectedMachines={inventoryRfidSearchTargets}
+              skipResolveApi
+            />
+          </DialogContent>
+        </Dialog>
+
         {/* Inventory Department Detail Dialog */}
         <Dialog
           open={openInventoryScanDialog}
@@ -6341,10 +6590,30 @@ const TestProposalPage = () => {
                     {/* List máy đang quét tạm (chưa lưu) */}
                     {inventoryScannedList.length > 0 && (
                       <Box sx={{ mt: 2 }}>
-                        <Typography variant="subtitle2" gutterBottom>
-                          Đang quét: {inventoryScannedList.length} máy tại{" "}
-                          {selectedLocationForScan?.name_location}
-                        </Typography>
+                        <Stack
+                          direction={{ xs: "column", sm: "row" }}
+                          spacing={1}
+                          alignItems={{ xs: "flex-start", sm: "center" }}
+                          justifyContent="space-between"
+                          sx={{ mb: 1 }}
+                        >
+                          <Typography variant="subtitle2">
+                            Đang quét: {inventoryScannedList.length} máy tại{" "}
+                            {selectedLocationForScan?.name_location}
+                          </Typography>
+                          <Button
+                            variant="text"
+                            size="small"
+                            onClick={handleOpenInventoryRfidSearch}
+                            sx={{
+                              textTransform: "none",
+                              borderRadius: "999px",
+                              px: 2,
+                            }}
+                          >
+                            Dò tìm các RFID không có trong hệ thống
+                          </Button>
+                        </Stack>
                         <TableContainer
                           component={Paper}
                           variant="outlined"
@@ -6394,12 +6663,21 @@ const TestProposalPage = () => {
                                   selectedLocationForScan?.uuid_location;
                                 const isDuplicate =
                                   machine.isDuplicateInCurrentDept;
-                                const machineName =
-                                  machine.type_machine && machine.model_machine
-                                    ? `${machine.type_machine} - ${machine.model_machine}`
-                                    : machine.type_machine ||
-                                      machine.model_machine ||
-                                      "-";
+                                // Kiểm tra máy placeholder: có flag isNotFound hoặc uuid_machine bắt đầu bằng "NOT_FOUND_"
+                                const isNotFound =
+                                  machine.isNotFound === true ||
+                                  (machine.uuid_machine &&
+                                    machine.uuid_machine.startsWith(
+                                      "NOT_FOUND_"
+                                    ));
+                                const machineName = isNotFound
+                                  ? "Không tìm thấy trong hệ thống"
+                                  : machine.type_machine &&
+                                    machine.model_machine
+                                  ? `${machine.type_machine} - ${machine.model_machine}`
+                                  : machine.type_machine ||
+                                    machine.model_machine ||
+                                    "-";
                                 return (
                                   <TableRow
                                     key={index}
@@ -6408,6 +6686,8 @@ const TestProposalPage = () => {
                                         ? "#ffebee"
                                         : isMislocation
                                         ? "#fff3e0"
+                                        : isNotFound
+                                        ? "#e3f2fd"
                                         : "inherit",
                                     }}
                                   >
@@ -6416,7 +6696,7 @@ const TestProposalPage = () => {
                                     </TableCell> */}
                                     <TableCell>{machineName}</TableCell>
                                     <TableCell>
-                                      {machine.serial_machine}
+                                      {machine.serial_machine || "-"}
                                     </TableCell>
                                     <TableCell>
                                       {machine.RFID_machine || "-"}
@@ -6429,7 +6709,13 @@ const TestProposalPage = () => {
                                     </TableCell>
                                     <TableCell>
                                       <Stack direction="column" spacing={0.5}>
-                                        {isDuplicate ? (
+                                        {isNotFound ? (
+                                          <Chip
+                                            label="Không tìm thấy trong hệ thống"
+                                            color="info"
+                                            size="small"
+                                          />
+                                        ) : isDuplicate ? (
                                           <>
                                             <Chip
                                               label={`Đã quét tại ${machine.duplicateLocationName}`}
