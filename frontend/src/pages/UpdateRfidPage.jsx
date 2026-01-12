@@ -305,9 +305,9 @@ const UpdateRfidPage = () => {
             serial: machine.serial_machine,
             inputType: machine.serial_machine === inputCode ? "Serial" : "NFC",
             inputVal: inputCode,
-            name: `${machine.type_machine || ""} - ${
-              machine.model_machine || ""
-            }`,
+            name: `${machine.type_machine || ""} ${
+              machine.attribute_machine || ""
+            } - ${machine.model_machine || ""}`,
             currentRfid: machine.RFID_machine || "(Chưa có)",
             newRfid: newRfid,
             notFound: false,

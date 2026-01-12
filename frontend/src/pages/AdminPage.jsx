@@ -121,15 +121,32 @@ function TabPanel(props) {
   );
 }
 
+// Component TabPanel con cho tab "Danh mục máy móc"
+function MachineCatalogSubTabPanel(props) {
+  const { children, value, index, ...other } = props;
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`machine-catalog-subtab-${index}`}
+      aria-labelledby={`machine-catalog-subtab-${index}`}
+      {...other}
+    >
+      {value === index && <Box sx={{ pt: 2 }}>{children}</Box>}
+    </div>
+  );
+}
+
 const AdminPage = () => {
   const [currentTab, setCurrentTab] = useState(0);
+  const [machineCatalogSubTab, setMachineCatalogSubTab] = useState(0);
   const [loading, setLoading] = useState(true);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   // States for data
   const [departments, setDepartments] = useState([]);
-  const [categories, setCategories] = useState([]);
+  // const [categories, setCategories] = useState([]);
   const [hiTimeSheetDepartments, setHiTimeSheetDepartments] = useState([]);
   const [allPermissions, setAllPermissions] = useState([]);
   const [userSearchQuery, setUserSearchQuery] = useState("");
@@ -181,7 +198,7 @@ const AdminPage = () => {
     try {
       const [
         deptLocRes,
-        catRes,
+        // catRes,
         hiTimeSheetRes,
         allPermsRes,
         typesRes,
@@ -190,7 +207,7 @@ const AdminPage = () => {
         suppsRes,
       ] = await Promise.all([
         api.admin.getDepartmentsWithLocations(),
-        api.admin.getCategories(),
+        // api.admin.getCategories(),
         api.admin.getHiTimeSheetDepartments(),
         api.admin.getAllPermissions(),
         api.admin.getMachineTypes(),
@@ -200,7 +217,7 @@ const AdminPage = () => {
       ]);
 
       if (deptLocRes.success) setDepartments(deptLocRes.data);
-      if (catRes.success) setCategories(catRes.data);
+      // if (catRes.success) setCategories(catRes.data);
       if (hiTimeSheetRes.success)
         setHiTimeSheetDepartments(hiTimeSheetRes.data);
       if (allPermsRes.success) setAllPermissions(allPermsRes.data);
@@ -786,7 +803,7 @@ const AdminPage = () => {
                 icon={<Business />}
                 iconPosition="start"
               />
-              <Tab label="Phân Loại" icon={<Category />} iconPosition="start" />
+              {/* <Tab label="Phân Loại" icon={<Category />} iconPosition="start" /> */}
               <Tab
                 label="Danh mục máy móc"
                 icon={<Build />}
@@ -1001,7 +1018,7 @@ const AdminPage = () => {
               </TabPanel>
 
               {/* === TAB PHÂN LOẠI === */}
-              <TabPanel value={currentTab} index={1}>
+              {/* <TabPanel value={currentTab} index={1}>
                 <Button
                   variant="contained"
                   startIcon={<Add />}
@@ -1054,434 +1071,495 @@ const AdminPage = () => {
                     ))}
                   </List>
                 </Paper>
-              </TabPanel>
+              </TabPanel> */}
 
               {/* === TAB DANH MỤC MÁY MÓC === */}
-              <TabPanel value={currentTab} index={2}>
-                <Grid container spacing={3}>
-                  {/* LOẠI MÁY */}
-                  <Grid size={{ xs: 12, md: 6 }}>
-                    <Paper
-                      variant="outlined"
-                      sx={{
-                        p: 3,
-                        borderRadius: "16px",
-                        height: "100%",
-                      }}
-                    >
-                      <Box
+              <TabPanel value={currentTab} index={1}>
+                <Box sx={{ borderBottom: 1, borderColor: "divider", mb: 3 }}>
+                  <Tabs
+                    value={machineCatalogSubTab}
+                    onChange={(e, newValue) =>
+                      setMachineCatalogSubTab(newValue)
+                    }
+                    aria-label="Machine catalog sub tabs"
+                    variant={isMobile ? "scrollable" : "standard"}
+                    scrollButtons="auto"
+                    sx={{
+                      "& .MuiTab-root": {
+                        textTransform: "none",
+                        fontWeight: 600,
+                        fontSize: "0.95rem",
+                        minHeight: 48,
+                      },
+                      "& .Mui-selected": {
+                        color: "#764ba2",
+                      },
+                      "& .MuiTabs-indicator": {
+                        backgroundColor: "#764ba2",
+                        height: 3,
+                      },
+                    }}
+                  >
+                    <Tab
+                      label="Loại máy & Đặc tính"
+                      icon={<Settings />}
+                      iconPosition="start"
+                    />
+                    <Tab
+                      label="Hãng sản xuất"
+                      icon={<Factory />}
+                      iconPosition="start"
+                    />
+                    <Tab
+                      label="Nhà cung cấp"
+                      icon={<LocalShipping />}
+                      iconPosition="start"
+                    />
+                  </Tabs>
+                </Box>
+
+                {/* TAB CON: LOẠI MÁY & ĐẶC TÍNH */}
+                <MachineCatalogSubTabPanel
+                  value={machineCatalogSubTab}
+                  index={0}
+                >
+                  <Grid container spacing={3}>
+                    {/* LIÊN KẾT ĐẶC TÍNH VỚI LOẠI MÁY */}
+                    <Grid size={{ xs: 12 }}>
+                      <Paper
+                        variant="outlined"
                         sx={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          mb: 2,
+                          p: 3,
+                          borderRadius: "16px",
                         }}
                       >
-                        <Typography variant="h6" fontWeight={600}>
-                          Loại máy
+                        <Typography variant="h6" fontWeight={600} mb={2}>
+                          Liên kết Đặc tính với Loại máy
                         </Typography>
-                        <Button
-                          size="small"
-                          variant="contained"
-                          startIcon={<Add />}
-                          onClick={() =>
-                            handleOpenDialog("create", "machine-type")
-                          }
-                          sx={btnGreenStyle}
-                        >
-                          Thêm
-                        </Button>
-                      </Box>
-                      <List disablePadding>
-                        {machineTypes.map((item, index) => (
-                          <ListItem
-                            key={item.uuid}
-                            secondaryAction={
-                              <Box>
-                                <IconButton
-                                  size="small"
-                                  onClick={() =>
-                                    handleOpenDialog("edit", "machine-type", {
-                                      uuid: item.uuid,
-                                      name_machine_type: item.name,
-                                    })
-                                  }
-                                >
-                                  <Edit fontSize="small" color="primary" />
-                                </IconButton>
-                                <IconButton
-                                  size="small"
-                                  onClick={() =>
-                                    handleDelete(
-                                      "machine-type",
-                                      item.uuid,
-                                      item.name
-                                    )
-                                  }
-                                >
-                                  <Delete fontSize="small" color="error" />
-                                </IconButton>
-                              </Box>
-                            }
-                            divider={index < machineTypes.length - 1}
-                            sx={{ py: 1 }}
-                          >
-                            <ListItemText primary={item.name} />
-                          </ListItem>
-                        ))}
-                      </List>
-                    </Paper>
-                  </Grid>
-
-                  {/* ĐẶC TÍNH */}
-                  <Grid size={{ xs: 12, md: 6 }}>
-                    <Paper
-                      variant="outlined"
-                      sx={{
-                        p: 3,
-                        borderRadius: "16px",
-                        height: "100%",
-                      }}
-                    >
-                      <Box
-                        sx={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          mb: 2,
-                        }}
-                      >
-                        <Typography variant="h6" fontWeight={600}>
-                          Đặc tính
-                        </Typography>
-                        <Button
-                          size="small"
-                          variant="contained"
-                          startIcon={<Add />}
-                          onClick={() =>
-                            handleOpenDialog("create", "machine-attribute")
-                          }
-                          sx={btnGreenStyle}
-                        >
-                          Thêm
-                        </Button>
-                      </Box>
-                      <List disablePadding>
-                        {machineAttributes.map((item, index) => (
-                          <ListItem
-                            key={item.uuid}
-                            secondaryAction={
-                              <Box>
-                                <IconButton
-                                  size="small"
-                                  onClick={() =>
-                                    handleOpenDialog(
-                                      "edit",
-                                      "machine-attribute",
-                                      {
-                                        uuid: item.uuid,
-                                        name_machine_attribute: item.name,
-                                      }
-                                    )
-                                  }
-                                >
-                                  <Edit fontSize="small" color="primary" />
-                                </IconButton>
-                                <IconButton
-                                  size="small"
-                                  onClick={() =>
-                                    handleDelete(
-                                      "machine-attribute",
-                                      item.uuid,
-                                      item.name
-                                    )
-                                  }
-                                >
-                                  <Delete fontSize="small" color="error" />
-                                </IconButton>
-                              </Box>
-                            }
-                            divider={index < machineAttributes.length - 1}
-                            sx={{ py: 1 }}
-                          >
-                            <ListItemText primary={item.name} />
-                          </ListItem>
-                        ))}
-                      </List>
-                    </Paper>
-                  </Grid>
-
-                  {/* HÃNG SẢN XUẤT */}
-                  <Grid size={{ xs: 12, md: 6 }}>
-                    <Paper
-                      variant="outlined"
-                      sx={{
-                        p: 3,
-                        borderRadius: "16px",
-                        height: "100%",
-                      }}
-                    >
-                      <Box
-                        sx={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          mb: 2,
-                        }}
-                      >
-                        <Typography variant="h6" fontWeight={600}>
-                          Hãng sản xuất
-                        </Typography>
-                        <Button
-                          size="small"
-                          variant="contained"
-                          startIcon={<Add />}
-                          onClick={() =>
-                            handleOpenDialog("create", "machine-manufacturer")
-                          }
-                          sx={btnGreenStyle}
-                        >
-                          Thêm
-                        </Button>
-                      </Box>
-                      <List disablePadding>
-                        {machineManufacturers.map((item, index) => (
-                          <ListItem
-                            key={item.uuid}
-                            secondaryAction={
-                              <Box>
-                                <IconButton
-                                  size="small"
-                                  onClick={() =>
-                                    handleOpenDialog(
-                                      "edit",
-                                      "machine-manufacturer",
-                                      {
-                                        uuid: item.uuid,
-                                        name_machine_manufacturer: item.name,
-                                      }
-                                    )
-                                  }
-                                >
-                                  <Edit fontSize="small" color="primary" />
-                                </IconButton>
-                                <IconButton
-                                  size="small"
-                                  onClick={() =>
-                                    handleDelete(
-                                      "machine-manufacturer",
-                                      item.uuid,
-                                      item.name
-                                    )
-                                  }
-                                >
-                                  <Delete fontSize="small" color="error" />
-                                </IconButton>
-                              </Box>
-                            }
-                            divider={index < machineManufacturers.length - 1}
-                            sx={{ py: 1 }}
-                          >
-                            <ListItemText primary={item.name} />
-                          </ListItem>
-                        ))}
-                      </List>
-                    </Paper>
-                  </Grid>
-
-                  {/* NHÀ CUNG CẤP */}
-                  <Grid size={{ xs: 12, md: 6 }}>
-                    <Paper
-                      variant="outlined"
-                      sx={{
-                        p: 3,
-                        borderRadius: "16px",
-                        height: "100%",
-                      }}
-                    >
-                      <Box
-                        sx={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          mb: 2,
-                        }}
-                      >
-                        <Typography variant="h6" fontWeight={600}>
-                          Nhà cung cấp
-                        </Typography>
-                        <Button
-                          size="small"
-                          variant="contained"
-                          startIcon={<Add />}
-                          onClick={() =>
-                            handleOpenDialog("create", "machine-supplier")
-                          }
-                          sx={btnGreenStyle}
-                        >
-                          Thêm
-                        </Button>
-                      </Box>
-                      <List disablePadding>
-                        {machineSuppliers.map((item, index) => (
-                          <ListItem
-                            key={item.uuid}
-                            secondaryAction={
-                              <Box>
-                                <IconButton
-                                  size="small"
-                                  onClick={() =>
-                                    handleOpenDialog(
-                                      "edit",
-                                      "machine-supplier",
-                                      {
-                                        uuid: item.uuid,
-                                        name_machine_supplier: item.name,
-                                      }
-                                    )
-                                  }
-                                >
-                                  <Edit fontSize="small" color="primary" />
-                                </IconButton>
-                                <IconButton
-                                  size="small"
-                                  onClick={() =>
-                                    handleDelete(
-                                      "machine-supplier",
-                                      item.uuid,
-                                      item.name
-                                    )
-                                  }
-                                >
-                                  <Delete fontSize="small" color="error" />
-                                </IconButton>
-                              </Box>
-                            }
-                            divider={index < machineSuppliers.length - 1}
-                            sx={{ py: 1 }}
-                          >
-                            <ListItemText primary={item.name} />
-                          </ListItem>
-                        ))}
-                      </List>
-                    </Paper>
-                  </Grid>
-
-                  {/* LIÊN KẾT ĐẶC TÍNH VỚI LOẠI MÁY */}
-                  <Grid size={{ xs: 12 }}>
-                    <Paper
-                      variant="outlined"
-                      sx={{
-                        p: 3,
-                        borderRadius: "16px",
-                      }}
-                    >
-                      <Typography variant="h6" fontWeight={600} mb={2}>
-                        Liên kết Đặc tính với Loại máy
-                      </Typography>
-                      <Grid container spacing={2}>
-                        <Grid size={{ xs: 12, md: 4 }}>
-                          <FormControl fullWidth sx={inputStyle}>
-                            <InputLabel>Chọn Loại máy</InputLabel>
-                            <Select
-                              value={selectedTypeForAttributes || ""}
-                              label="Chọn Loại máy"
-                              onChange={(e) => {
-                                const uuid = e.target.value;
-                                setSelectedTypeForAttributes(uuid);
-                                fetchTypeAttributes(uuid);
-                              }}
-                            >
-                              <MenuItem value="">
-                                <em>Chọn loại máy</em>
-                              </MenuItem>
-                              {machineTypes.map((type) => (
-                                <MenuItem key={type.uuid} value={type.uuid}>
-                                  {type.name}
+                        <Grid container spacing={2}>
+                          <Grid size={{ xs: 12, md: 4 }}>
+                            <FormControl fullWidth sx={inputStyle}>
+                              <InputLabel>Chọn Loại máy</InputLabel>
+                              <Select
+                                value={selectedTypeForAttributes || ""}
+                                label="Chọn Loại máy"
+                                onChange={(e) => {
+                                  const uuid = e.target.value;
+                                  setSelectedTypeForAttributes(uuid);
+                                  fetchTypeAttributes(uuid);
+                                }}
+                              >
+                                <MenuItem value="">
+                                  <em>Chọn loại máy</em>
                                 </MenuItem>
-                              ))}
-                            </Select>
-                          </FormControl>
-                        </Grid>
-                        <Grid size={{ xs: 12, md: 8 }}>
-                          {selectedTypeForAttributes ? (
-                            <Box>
-                              <Typography variant="subtitle2" mb={1}>
-                                Đặc tính đã liên kết:
-                              </Typography>
-                              <Box
-                                sx={{
-                                  display: "flex",
-                                  flexWrap: "wrap",
-                                  gap: 1,
-                                  mb: 2,
-                                }}
-                              >
-                                {typeAttributes.map((attr) => (
-                                  <Chip
-                                    key={attr.uuid}
-                                    label={attr.name}
-                                    onDelete={() =>
-                                      handleUnlinkAttribute(
-                                        selectedTypeForAttributes,
-                                        attr.uuid
-                                      )
-                                    }
-                                    deleteIcon={<LinkOff />}
-                                    color="primary"
-                                    variant="outlined"
-                                  />
+                                {machineTypes.map((type) => (
+                                  <MenuItem key={type.uuid} value={type.uuid}>
+                                    {type.name}
+                                  </MenuItem>
                                 ))}
-                              </Box>
-                              <Typography variant="subtitle2" mb={1}>
-                                Đặc tính chưa liên kết:
-                              </Typography>
-                              <Box
-                                sx={{
-                                  display: "flex",
-                                  flexWrap: "wrap",
-                                  gap: 1,
-                                }}
-                              >
-                                {machineAttributes
-                                  .filter(
-                                    (attr) =>
-                                      !typeAttributes.some(
-                                        (ta) => ta.uuid === attr.uuid
-                                      )
-                                  )
-                                  .map((attr) => (
+                              </Select>
+                            </FormControl>
+                          </Grid>
+                          <Grid size={{ xs: 12, md: 8 }}>
+                            {selectedTypeForAttributes ? (
+                              <Box>
+                                <Typography variant="subtitle2" mb={1}>
+                                  Đặc tính đã liên kết:
+                                </Typography>
+                                <Box
+                                  sx={{
+                                    display: "flex",
+                                    flexWrap: "wrap",
+                                    gap: 1,
+                                    mb: 2,
+                                  }}
+                                >
+                                  {typeAttributes.map((attr) => (
                                     <Chip
                                       key={attr.uuid}
                                       label={attr.name}
-                                      onClick={() =>
-                                        handleLinkAttribute(
+                                      onDelete={() =>
+                                        handleUnlinkAttribute(
                                           selectedTypeForAttributes,
                                           attr.uuid
                                         )
                                       }
-                                      icon={<Link />}
-                                      color="default"
+                                      deleteIcon={<LinkOff />}
+                                      color="primary"
                                       variant="outlined"
-                                      sx={{ cursor: "pointer" }}
                                     />
                                   ))}
+                                </Box>
+                                <Typography variant="subtitle2" mb={1}>
+                                  Đặc tính chưa liên kết:
+                                </Typography>
+                                <Box
+                                  sx={{
+                                    display: "flex",
+                                    flexWrap: "wrap",
+                                    gap: 1,
+                                  }}
+                                >
+                                  {machineAttributes
+                                    .filter(
+                                      (attr) =>
+                                        !typeAttributes.some(
+                                          (ta) => ta.uuid === attr.uuid
+                                        )
+                                    )
+                                    .map((attr) => (
+                                      <Chip
+                                        key={attr.uuid}
+                                        label={attr.name}
+                                        onClick={() =>
+                                          handleLinkAttribute(
+                                            selectedTypeForAttributes,
+                                            attr.uuid
+                                          )
+                                        }
+                                        icon={<Link />}
+                                        color="default"
+                                        variant="outlined"
+                                        sx={{ cursor: "pointer" }}
+                                      />
+                                    ))}
+                                </Box>
                               </Box>
-                            </Box>
-                          ) : (
-                            <Alert severity="info">
-                              Vui lòng chọn loại máy để quản lý đặc tính
-                            </Alert>
-                          )}
+                            ) : (
+                              <Alert severity="info">
+                                Vui lòng chọn loại máy để quản lý đặc tính
+                              </Alert>
+                            )}
+                          </Grid>
                         </Grid>
-                      </Grid>
-                    </Paper>
+                      </Paper>
+                    </Grid>
+
+                    {/* LOẠI MÁY */}
+                    <Grid size={{ xs: 12, md: 6 }}>
+                      <Paper
+                        variant="outlined"
+                        sx={{
+                          p: 3,
+                          borderRadius: "16px",
+                          height: "100%",
+                        }}
+                      >
+                        <Box
+                          sx={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            mb: 2,
+                          }}
+                        >
+                          <Typography variant="h6" fontWeight={600}>
+                            Loại máy
+                          </Typography>
+                          <Button
+                            size="small"
+                            variant="contained"
+                            startIcon={<Add />}
+                            onClick={() =>
+                              handleOpenDialog("create", "machine-type")
+                            }
+                            sx={btnGreenStyle}
+                          >
+                            Thêm
+                          </Button>
+                        </Box>
+                        <List disablePadding>
+                          {machineTypes.map((item, index) => (
+                            <ListItem
+                              key={item.uuid}
+                              secondaryAction={
+                                <Box>
+                                  <IconButton
+                                    size="small"
+                                    onClick={() =>
+                                      handleOpenDialog("edit", "machine-type", {
+                                        uuid: item.uuid,
+                                        name_machine_type: item.name,
+                                      })
+                                    }
+                                  >
+                                    <Edit fontSize="small" color="primary" />
+                                  </IconButton>
+                                  <IconButton
+                                    size="small"
+                                    onClick={() =>
+                                      handleDelete(
+                                        "machine-type",
+                                        item.uuid,
+                                        item.name
+                                      )
+                                    }
+                                  >
+                                    <Delete fontSize="small" color="error" />
+                                  </IconButton>
+                                </Box>
+                              }
+                              divider={index < machineTypes.length - 1}
+                              sx={{ py: 1 }}
+                            >
+                              <ListItemText primary={item.name} />
+                            </ListItem>
+                          ))}
+                        </List>
+                      </Paper>
+                    </Grid>
+
+                    {/* ĐẶC TÍNH */}
+                    <Grid size={{ xs: 12, md: 6 }}>
+                      <Paper
+                        variant="outlined"
+                        sx={{
+                          p: 3,
+                          borderRadius: "16px",
+                          height: "100%",
+                        }}
+                      >
+                        <Box
+                          sx={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            mb: 2,
+                          }}
+                        >
+                          <Typography variant="h6" fontWeight={600}>
+                            Đặc tính
+                          </Typography>
+                          <Button
+                            size="small"
+                            variant="contained"
+                            startIcon={<Add />}
+                            onClick={() =>
+                              handleOpenDialog("create", "machine-attribute")
+                            }
+                            sx={btnGreenStyle}
+                          >
+                            Thêm
+                          </Button>
+                        </Box>
+                        <List disablePadding>
+                          {machineAttributes.map((item, index) => (
+                            <ListItem
+                              key={item.uuid}
+                              secondaryAction={
+                                <Box>
+                                  <IconButton
+                                    size="small"
+                                    onClick={() =>
+                                      handleOpenDialog(
+                                        "edit",
+                                        "machine-attribute",
+                                        {
+                                          uuid: item.uuid,
+                                          name_machine_attribute: item.name,
+                                        }
+                                      )
+                                    }
+                                  >
+                                    <Edit fontSize="small" color="primary" />
+                                  </IconButton>
+                                  <IconButton
+                                    size="small"
+                                    onClick={() =>
+                                      handleDelete(
+                                        "machine-attribute",
+                                        item.uuid,
+                                        item.name
+                                      )
+                                    }
+                                  >
+                                    <Delete fontSize="small" color="error" />
+                                  </IconButton>
+                                </Box>
+                              }
+                              divider={index < machineAttributes.length - 1}
+                              sx={{ py: 1 }}
+                            >
+                              <ListItemText primary={item.name} />
+                            </ListItem>
+                          ))}
+                        </List>
+                      </Paper>
+                    </Grid>
                   </Grid>
-                </Grid>
+                </MachineCatalogSubTabPanel>
+
+                {/* TAB CON: HÃNG SẢN XUẤT */}
+                <MachineCatalogSubTabPanel
+                  value={machineCatalogSubTab}
+                  index={1}
+                >
+                  <Grid container spacing={3}>
+                    <Grid size={{ xs: 12 }}>
+                      <Paper
+                        variant="outlined"
+                        sx={{
+                          p: 3,
+                          borderRadius: "16px",
+                        }}
+                      >
+                        <Box
+                          sx={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            mb: 2,
+                          }}
+                        >
+                          <Typography variant="h6" fontWeight={600}>
+                            Hãng sản xuất
+                          </Typography>
+                          <Button
+                            size="small"
+                            variant="contained"
+                            startIcon={<Add />}
+                            onClick={() =>
+                              handleOpenDialog("create", "machine-manufacturer")
+                            }
+                            sx={btnGreenStyle}
+                          >
+                            Thêm
+                          </Button>
+                        </Box>
+                        <List disablePadding>
+                          {machineManufacturers.map((item, index) => (
+                            <ListItem
+                              key={item.uuid}
+                              secondaryAction={
+                                <Box>
+                                  <IconButton
+                                    size="small"
+                                    onClick={() =>
+                                      handleOpenDialog(
+                                        "edit",
+                                        "machine-manufacturer",
+                                        {
+                                          uuid: item.uuid,
+                                          name_machine_manufacturer: item.name,
+                                        }
+                                      )
+                                    }
+                                  >
+                                    <Edit fontSize="small" color="primary" />
+                                  </IconButton>
+                                  <IconButton
+                                    size="small"
+                                    onClick={() =>
+                                      handleDelete(
+                                        "machine-manufacturer",
+                                        item.uuid,
+                                        item.name
+                                      )
+                                    }
+                                  >
+                                    <Delete fontSize="small" color="error" />
+                                  </IconButton>
+                                </Box>
+                              }
+                              divider={index < machineManufacturers.length - 1}
+                              sx={{ py: 1 }}
+                            >
+                              <ListItemText primary={item.name} />
+                            </ListItem>
+                          ))}
+                        </List>
+                      </Paper>
+                    </Grid>
+                  </Grid>
+                </MachineCatalogSubTabPanel>
+
+                {/* TAB CON: NHÀ CUNG CẤP */}
+                <MachineCatalogSubTabPanel
+                  value={machineCatalogSubTab}
+                  index={2}
+                >
+                  <Grid container spacing={3}>
+                    <Grid size={{ xs: 12 }}>
+                      <Paper
+                        variant="outlined"
+                        sx={{
+                          p: 3,
+                          borderRadius: "16px",
+                        }}
+                      >
+                        <Box
+                          sx={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            mb: 2,
+                          }}
+                        >
+                          <Typography variant="h6" fontWeight={600}>
+                            Nhà cung cấp
+                          </Typography>
+                          <Button
+                            size="small"
+                            variant="contained"
+                            startIcon={<Add />}
+                            onClick={() =>
+                              handleOpenDialog("create", "machine-supplier")
+                            }
+                            sx={btnGreenStyle}
+                          >
+                            Thêm
+                          </Button>
+                        </Box>
+                        <List disablePadding>
+                          {machineSuppliers.map((item, index) => (
+                            <ListItem
+                              key={item.uuid}
+                              secondaryAction={
+                                <Box>
+                                  <IconButton
+                                    size="small"
+                                    onClick={() =>
+                                      handleOpenDialog(
+                                        "edit",
+                                        "machine-supplier",
+                                        {
+                                          uuid: item.uuid,
+                                          name_machine_supplier: item.name,
+                                        }
+                                      )
+                                    }
+                                  >
+                                    <Edit fontSize="small" color="primary" />
+                                  </IconButton>
+                                  <IconButton
+                                    size="small"
+                                    onClick={() =>
+                                      handleDelete(
+                                        "machine-supplier",
+                                        item.uuid,
+                                        item.name
+                                      )
+                                    }
+                                  >
+                                    <Delete fontSize="small" color="error" />
+                                  </IconButton>
+                                </Box>
+                              }
+                              divider={index < machineSuppliers.length - 1}
+                              sx={{ py: 1 }}
+                            >
+                              <ListItemText primary={item.name} />
+                            </ListItem>
+                          ))}
+                        </List>
+                      </Paper>
+                    </Grid>
+                  </Grid>
+                </MachineCatalogSubTabPanel>
               </TabPanel>
 
               {/* === TAB PHÂN QUYỀN === */}
-              <TabPanel value={currentTab} index={3}>
+              <TabPanel value={currentTab} index={2}>
                 <Grid container spacing={3}>
                   {/* CỘT TRÁI: TÌM KIẾM */}
                   <Grid size={{ xs: 12, md: 5 }}>
