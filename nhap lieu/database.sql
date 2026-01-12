@@ -100,6 +100,103 @@ create table if not exists tb_category
     updated_by bigint default '0'
 );
 
+-- MARK: machine type loại máy móc
+create table if not exists tb_machine_type
+(
+    -- primary
+    id_machine_type bigint not null auto_increment,
+    uuid_machine_type varchar(36) not null unique default (UUID()),
+    
+    -- properties
+    name_machine_type text,
+    
+    -- key
+    primary key (id_machine_type),
+    
+    -- timestamp
+    created_at timestamp default current_timestamp,
+    created_by bigint default '0',
+    updated_at timestamp default current_timestamp on update current_timestamp,
+    updated_by bigint default '0'
+);
+
+-- MARK: machine type attribute đặc tính máy móc
+create table if not exists tb_machine_attribute
+(
+    -- primary
+    id_machine_attribute bigint not null auto_increment,
+    uuid_machine_attribute varchar(36) not null unique default (UUID()),
+
+    -- properties
+    name_machine_attribute text,
+    
+    -- key
+    primary key (id_machine_attribute),
+    
+    -- timestamp
+    created_at timestamp default current_timestamp,
+    created_by bigint default '0',
+    updated_at timestamp default current_timestamp on update current_timestamp,
+    updated_by bigint default '0'
+);
+
+-- MARK: machine type attribute liên kết đặc tính máy móc
+create table if not exists tb_machine_type_attribute
+(
+    -- foreign
+    id_machine_type bigint,
+    id_machine_attribute bigint,
+    
+    -- key
+    unique (id_machine_type, id_machine_attribute),
+    
+    -- timestamp
+    created_at timestamp default current_timestamp,
+    created_by bigint default '0',
+    updated_at timestamp default current_timestamp on update current_timestamp,
+    updated_by bigint default '0'
+);
+
+-- MARK: machine manufacturer hãng sản xuất
+create table if not exists tb_machine_manufacturer
+(
+    -- primary
+    id_machine_manufacturer bigint not null auto_increment,
+    uuid_machine_manufacturer varchar(36) not null unique default (UUID()),
+
+    -- properties
+    name_machine_manufacturer text,
+    
+    -- key
+    primary key (id_machine_manufacturer),
+    
+    -- timestamp
+    created_at timestamp default current_timestamp,
+    created_by bigint default '0',
+    updated_at timestamp default current_timestamp on update current_timestamp,
+    updated_by bigint default '0'
+);
+
+-- MARK: machine supplier nhà cung cấp
+create table if not exists tb_machine_supplier
+(
+    -- primary
+    id_machine_supplier bigint not null auto_increment,
+    uuid_machine_supplier varchar(36) not null unique default (UUID()),
+
+    -- properties
+    name_machine_supplier text,
+    
+    -- key
+    primary key (id_machine_supplier),
+    
+    -- timestamp
+    created_at timestamp default current_timestamp,
+    created_by bigint default '0',
+    updated_at timestamp default current_timestamp on update current_timestamp,
+    updated_by bigint default '0'
+);
+
 -- MARK: machine máy móc
 create table if not exists tb_machine
 (

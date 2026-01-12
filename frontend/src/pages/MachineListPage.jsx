@@ -119,8 +119,10 @@ const DISABLED_VIEW_SX = {
 const columnConfig = {
   code_machine: "Mã máy",
   type_machine: "Loại máy",
+  attribute_machine: "Đặc tính",
   model_machine: "Model",
   manufacturer: "Hãng SX",
+  supplier: "Nhà cung cấp",
   serial_machine: "Serial",
   RFID_machine: "RFID",
   NFC_machine: "NFC",
@@ -131,6 +133,9 @@ const columnConfig = {
   is_borrowed_or_rented_or_borrowed_out_name: "Đơn vị (mượn/thuê)",
   is_borrowed_or_rented_or_borrowed_out_date: "Ngày (mượn/thuê)",
   is_borrowed_or_rented_or_borrowed_out_return_date: "Ngày trả (mượn/thuê)",
+  power: "Công suất",
+  pressure: "Áp suất",
+  voltage: "Điện áp",
   price: "Giá",
   lifespan: "Tuổi thọ (năm)",
   repair_cost: "Chi phí sửa chữa",
@@ -141,8 +146,10 @@ const columnConfig = {
 const initialColumnVisibility = {
   code_machine: true,
   type_machine: true,
+  attribute_machine: true,
   model_machine: true,
   manufacturer: true,
+  supplier: true,
   serial_machine: true,
   RFID_machine: false,
   NFC_machine: false,
@@ -156,6 +163,9 @@ const initialColumnVisibility = {
   price: false,
   lifespan: false,
   repair_cost: false,
+  power: false,
+  pressure: false,
+  voltage: false,
   date_of_use: true,
 };
 
@@ -746,15 +756,23 @@ const MachineListPage = () => {
 
   // State for filter dropdown data
   const [typeOptions, setTypeOptions] = useState([]);
+  const [attributeOptions, setAttributeOptions] = useState([]);
   const [modelOptions, setModelOptions] = useState([]);
   const [manufacturerOptions, setManufacturerOptions] = useState([]);
+  const [supplierOptions, setSupplierOptions] = useState([]);
   const [locationOptions, setLocationOptions] = useState([]);
+  const [formMachineTypes, setFormMachineTypes] = useState([]);
+  const [formAttributes, setFormAttributes] = useState([]);
+  const [formManufacturers, setFormManufacturers] = useState([]);
+  const [formSuppliers, setFormSuppliers] = useState([]);
 
   // State for selected filter values
   const [filters, setFilters] = useState({
     type_machines: [],
+    attribute_machines: [],
     model_machines: [],
     manufacturers: [],
+    suppliers: [],
     name_locations: [],
     current_status: [],
     borrow_status: [],
@@ -763,6 +781,49 @@ const MachineListPage = () => {
   // State cho matrix
   const [matrixData, setMatrixData] = useState({});
   const [matrixLoading, setMatrixLoading] = useState(false);
+
+  const fetchFormData = async () => {
+    try {
+      const [typesRes, manuRes, suppRes] = await Promise.all([
+        api.machines.getMachineTypes(),
+        api.machines.getMachineManufacturers(),
+        api.machines.getMachineSuppliers(),
+      ]);
+
+      if (typesRes.success) setFormMachineTypes(typesRes.data);
+      if (manuRes.success) setFormManufacturers(manuRes.data);
+      if (suppRes.success) setFormSuppliers(suppRes.data);
+    } catch (err) {
+      console.error("Error fetching form data:", err);
+    }
+  };
+
+  // Hàm lấy đặc tính dựa trên Loại máy (Name)
+  const fetchAttributesByTypeName = async (typeName) => {
+    if (!typeName) {
+      setFormAttributes([]);
+      return;
+    }
+    // Tìm UUID của loại máy dựa trên tên
+    const selectedType = formMachineTypes.find((t) => t.name === typeName);
+
+    if (selectedType) {
+      try {
+        const res = await api.machines.getMachineTypeAttributes(
+          selectedType.uuid
+        );
+        if (res.success) {
+          setFormAttributes(res.data);
+        }
+      } catch (err) {
+        console.error("Error fetching attributes:", err);
+        setFormAttributes([]);
+      }
+    } else {
+      // Nếu nhập tay loại mới hoặc không tìm thấy trong danh mục
+      setFormAttributes([]);
+    }
+  };
 
   const fetchMachines = async (searchQuery = "") => {
     try {
@@ -832,15 +893,20 @@ const MachineListPage = () => {
 
   const fetchFilterOptions = async () => {
     try {
-      const [typeRes, modelRes, manuRes, locRes] = await Promise.all([
-        api.machines.getDistinctValues({ field: "type_machine" }),
-        api.machines.getDistinctValues({ field: "model_machine" }),
-        api.machines.getDistinctValues({ field: "manufacturer" }),
-        api.machines.getDistinctValues({ field: "name_location" }),
-      ]);
+      const [typeRes, attrRes, modelRes, manuRes, supplierRes, locRes] =
+        await Promise.all([
+          api.machines.getDistinctValues({ field: "type_machine" }),
+          api.machines.getDistinctValues({ field: "attribute_machine" }),
+          api.machines.getDistinctValues({ field: "model_machine" }),
+          api.machines.getDistinctValues({ field: "manufacturer" }),
+          api.machines.getDistinctValues({ field: "supplier" }),
+          api.machines.getDistinctValues({ field: "name_location" }),
+        ]);
       if (typeRes.success) setTypeOptions(typeRes.data);
+      if (attrRes.success) setAttributeOptions(attrRes.data);
       if (modelRes.success) setModelOptions(modelRes.data);
       if (manuRes.success) setManufacturerOptions(manuRes.data);
+      if (supplierRes.success) setSupplierOptions(supplierRes.data);
       if (locRes.success) setLocationOptions(locRes.data);
     } catch (err) {
       console.error("Error fetching filter options:", err);
@@ -900,11 +966,12 @@ const MachineListPage = () => {
 
     setPage(1);
     if (tableCardRef.current) {
-      const ref = tableCardRef.current;
-      ref.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+      setTimeout(() => {
+        tableCardRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 100); // Delay nhỏ để đảm bảo state đã cập nhật
     }
   };
 
@@ -914,7 +981,7 @@ const MachineListPage = () => {
     fetchStats();
     fetchTypeStats();
     fetchMatrixStats();
-
+    fetchFormData();
     fetchFilterOptions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -956,10 +1023,12 @@ const MachineListPage = () => {
   const handlePageChange = (event, newPage) => {
     setPage(newPage);
     if (tableCardRef.current) {
-      tableCardRef.current.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+      setTimeout(() => {
+        tableCardRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 100);
     }
   };
 
@@ -997,6 +1066,11 @@ const MachineListPage = () => {
         setEditedData(result.data);
         setIsCreateMode(false);
         setOpenDialog(true);
+        if (result.data.type_machine) {
+          fetchAttributesByTypeName(result.data.type_machine);
+        } else {
+          setFormAttributes([]);
+        }
         try {
           const historyResult = await api.tracking.getMachineHistory(uuid);
           if (historyResult.success) {
@@ -1026,17 +1100,23 @@ const MachineListPage = () => {
       RFID_machine: "",
       NFC_machine: "",
       type_machine: "",
+      attribute_machine: "",
       model_machine: "",
       manufacturer: "",
+      supplier: "",
       price: "",
       date_of_use: "",
       lifespan: "",
       repair_cost: "",
+      power: "",
+      pressure: "",
+      voltage: "",
       note: "",
       current_status: "available",
       name_category: "Máy móc thiết bị", // Default category
       // Các trường is_borrowed... không cần khởi tạo vì form tạo mới không có
     });
+    setFormAttributes([]);
     setIsCreateMode(true);
     setOpenDialog(true);
   };
@@ -1356,14 +1436,19 @@ const MachineListPage = () => {
     "Mã máy": "code_machine",
     Serial: "serial_machine",
     "Loại máy": "type_machine",
+    "Đặc tính": "attribute_machine",
     "Model máy": "model_machine",
     "Hãng sản xuất": "manufacturer",
+    "Nhà cung cấp": "supplier",
     RFID: "RFID_machine",
     NFC: "NFC_machine",
     "Giá (VNĐ)": "price",
     "Ngày sử dụng (DD/MM/YYYY)": "date_of_use",
     "Tuổi thọ (năm)": "lifespan",
     "Chi phí sửa chữa (VNĐ)": "repair_cost",
+    "Công suất": "power",
+    "Áp suất": "pressure",
+    "Điện áp": "voltage",
     "Ghi chú": "note",
   };
   // Lấy danh sách các cột bắt buộc (sẽ dùng để tô màu)
@@ -1383,10 +1468,17 @@ const MachineListPage = () => {
 
   const handleDownloadSampleExcel = async () => {
     try {
-      // 1. Lấy danh sách loại máy và hãng sản xuất từ API
-      const [typeMachineResult, manufacturerResult] = await Promise.all([
+      // 1. Lấy danh sách loại máy, hãng sản xuất, đặc tính và nhà cung cấp từ API
+      const [
+        typeMachineResult,
+        manufacturerResult,
+        attributeResult,
+        supplierResult,
+      ] = await Promise.all([
         api.machines.getDistinctValues({ field: "type_machine" }),
         api.machines.getDistinctValues({ field: "manufacturer" }),
+        api.machines.getDistinctValues({ field: "attribute_machine" }),
+        api.machines.getDistinctValues({ field: "supplier" }),
       ]);
 
       // Đảm bảo có ít nhất 1 dòng để tránh lỗi validation
@@ -1399,6 +1491,16 @@ const MachineListPage = () => {
         manufacturerResult.success && manufacturerResult.data.length > 0
           ? manufacturerResult.data
           : ["Hãng mẫu"];
+
+      const attributeList =
+        attributeResult.success && attributeResult.data.length > 0
+          ? attributeResult.data
+          : ["Đặc tính mẫu"];
+
+      const supplierList =
+        supplierResult.success && supplierResult.data.length > 0
+          ? supplierResult.data
+          : ["Nhà cung cấp mẫu"];
 
       // 2. Tải file Excel mẫu
       const response = await fetch("/Mau_Excel_MayMoc.xlsx");
@@ -1420,10 +1522,14 @@ const MachineListPage = () => {
         loaiMayMocSheet.spliceRows(1, loaiMayMocSheet.rowCount);
       }
 
-      // Thêm dữ liệu mới vào
-      typeMachineList.forEach((type) => {
-        loaiMayMocSheet.addRow([type]);
-      });
+      // Thêm dữ liệu mới vào: cột A = Loại máy, cột B = Đặc tính
+      // Đảm bảo có đủ số dòng bằng với số lượng lớn hơn giữa typeMachineList và attributeList
+      const maxRows = Math.max(typeMachineList.length, attributeList.length);
+      for (let i = 0; i < maxRows; i++) {
+        const type = i < typeMachineList.length ? typeMachineList[i] : "";
+        const attribute = i < attributeList.length ? attributeList[i] : "";
+        loaiMayMocSheet.addRow([type, attribute]);
+      }
 
       // --- BƯỚC 5: CẬP NHẬT SHEET "HangSX" ---
       let hangSXSheet = workbook.getWorksheet("HangSX");
@@ -1441,13 +1547,29 @@ const MachineListPage = () => {
         hangSXSheet.addRow([manufacturer]);
       });
 
-      // --- BƯỚC 6 (QUAN TRỌNG): GÁN LẠI VALIDATION CHO SHEET CHÍNH ---
+      // --- BƯỚC 6: CẬP NHẬT SHEET "NhaCungCap" ---
+      let nhaCungCapSheet = workbook.getWorksheet("NhaCungCap");
+      if (!nhaCungCapSheet) {
+        nhaCungCapSheet = workbook.addWorksheet("NhaCungCap");
+      }
+
+      // Xóa dữ liệu cũ sạch sẽ
+      if (nhaCungCapSheet.rowCount > 0) {
+        nhaCungCapSheet.spliceRows(1, nhaCungCapSheet.rowCount);
+      }
+
+      // Thêm dữ liệu mới vào cột A
+      supplierList.forEach((supplier) => {
+        nhaCungCapSheet.addRow([supplier]);
+      });
+
+      // --- BƯỚC 7 (QUAN TRỌNG): GÁN LẠI VALIDATION CHO SHEET CHÍNH ---
       const mainSheet = workbook.getWorksheet("DanhSachMayMoc");
       if (mainSheet) {
         const startRow = 2;
         const endRow = 1000;
 
-        // 6.1. Validation cho cột B (Loại máy)
+        // 7.1. Validation cho cột B (Loại máy)
         const validationFormulaType = `'LoaiMayMoc'!$A$1:$A$${typeMachineList.length}`;
         for (let i = startRow; i <= endRow; i++) {
           const cell = mainSheet.getCell(`B${i}`);
@@ -1462,10 +1584,29 @@ const MachineListPage = () => {
           };
         }
 
-        // 6.2. Validation cho cột D (Hãng sản xuất)
+        // 7.2. Validation cho cột C (Đặc tính)
+        const maxAttributeRow = Math.max(
+          typeMachineList.length,
+          attributeList.length
+        );
+        const validationFormulaAttribute = `'LoaiMayMoc'!$B$1:$B$${maxAttributeRow}`;
+        for (let i = startRow; i <= endRow; i++) {
+          const cell = mainSheet.getCell(`C${i}`);
+          cell.dataValidation = {
+            type: "list",
+            allowBlank: true,
+            operator: "equal",
+            showErrorMessage: true,
+            errorTitle: "Lỗi nhập liệu",
+            error: "Vui lòng chọn Đặc tính từ danh sách có sẵn.",
+            formulae: [validationFormulaAttribute],
+          };
+        }
+
+        // 7.3. Validation cho cột E (Hãng sản xuất)
         const validationFormulaManufacturer = `'HangSX'!$A$1:$A$${manufacturerList.length}`;
         for (let i = startRow; i <= endRow; i++) {
-          const cell = mainSheet.getCell(`D${i}`);
+          const cell = mainSheet.getCell(`E${i}`);
           cell.dataValidation = {
             type: "list",
             allowBlank: true,
@@ -1476,9 +1617,24 @@ const MachineListPage = () => {
             formulae: [validationFormulaManufacturer],
           };
         }
+
+        // 7.4. Validation cho cột F (Nhà cung cấp)
+        const validationFormulaSupplier = `'NhaCungCap'!$A$1:$A$${supplierList.length}`;
+        for (let i = startRow; i <= endRow; i++) {
+          const cell = mainSheet.getCell(`F${i}`);
+          cell.dataValidation = {
+            type: "list",
+            allowBlank: true,
+            operator: "equal",
+            showErrorMessage: true,
+            errorTitle: "Lỗi nhập liệu",
+            error: "Vui lòng chọn Nhà cung cấp từ danh sách có sẵn.",
+            formulae: [validationFormulaSupplier],
+          };
+        }
       }
 
-      // 6. Xuất file
+      // 8. Xuất file
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1577,8 +1733,10 @@ const MachineListPage = () => {
             STT: index + 1,
             "Mã máy": item.code_machine || "",
             "Loại máy": item.type_machine || "",
+            "Đặc tính": item.attribute_machine || "",
             Model: item.model_machine || "",
             "Hãng SX": item.manufacturer || "",
+            "Nhà cung cấp": item.supplier || "",
             Serial: item.serial_machine || "",
             RFID: item.RFID_machine || "",
             NFC: item.NFC_machine || "",
@@ -1594,9 +1752,12 @@ const MachineListPage = () => {
             "Ngày trả (mượn/thuê)": formatDate(
               item.is_borrowed_or_rented_or_borrowed_out_return_date
             ),
-            "Giá (VNĐ)": item.price || 0,
+            "Công suất": item.power || "",
+            "Áp suất": item.pressure || "",
+            "Điện áp": item.voltage || "",
+            "Giá (VNĐ)": item.price || "",
             "Tuổi thọ (năm)": item.lifespan || "",
-            "Chi phí sửa chữa": item.repair_cost || 0,
+            "Chi phí sửa chữa": item.repair_cost || "",
             "Ngày sử dụng": formatDate(item.date_of_use),
             "Ghi chú": item.note || "",
           };
@@ -1943,10 +2104,12 @@ const MachineListPage = () => {
     // useEffect [searchTerm, filters] sẽ tự động gọi fetchMachines
 
     if (tableCardRef.current) {
-      tableCardRef.current.scrollIntoView({
-        behavior: "smooth",
-        block: "start", // Cuộn lên đầu của element
-      });
+      setTimeout(() => {
+        tableCardRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start", // Cuộn lên đầu của element
+        });
+      }, 100);
     }
   };
 
@@ -2736,7 +2899,10 @@ const MachineListPage = () => {
                               <b>seri:</b>... (Tìm theo Serial)
                             </li>
                             <li>
-                              <b>hang:</b>... (Tìm theo Hãng SX)
+                              <b>hsx:</b>... (Tìm theo Hãng SX)
+                            </li>
+                            <li>
+                              <b>ncc:</b>... (Tìm theo Nhà cung cấp)
                             </li>
                             <li>
                               <b>ma:</b>... (Tìm theo Mã máy)
@@ -2978,7 +3144,7 @@ const MachineListPage = () => {
             </Typography>
             <Grid container spacing={2}>
               {/* Filter: Loại máy */}
-              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+              <Grid size={{ xs: 12, sm: 6, md: 2 }}>
                 <Autocomplete
                   multiple
                   size="small"
@@ -3012,8 +3178,45 @@ const MachineListPage = () => {
                   }}
                 />
               </Grid>
+              {/* Filter: Đặc tính */}
+              <Grid size={{ xs: 12, sm: 6, md: 2 }}>
+                <Autocomplete
+                  multiple
+                  size="small"
+                  options={attributeOptions}
+                  value={filters.attribute_machines}
+                  onChange={handleAutocompleteFilterChange(
+                    "attribute_machines"
+                  )}
+                  disableCloseOnSelect
+                  renderTags={(value, getTagProps) =>
+                    value.map((option, index) => (
+                      <Chip
+                        {...getTagProps({ index })}
+                        key={option}
+                        label={option}
+                        size="small"
+                      />
+                    ))
+                  }
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Đặc tính"
+                      sx={{
+                        "& .MuiOutlinedInput-root": {
+                          borderRadius: "12px",
+                        },
+                      }}
+                    />
+                  )}
+                  ListboxProps={{
+                    style: { maxHeight: 300 },
+                  }}
+                />
+              </Grid>
               {/* Filter: Model */}
-              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+              <Grid size={{ xs: 12, sm: 6, md: 2 }}>
                 <Autocomplete
                   multiple
                   size="small"
@@ -3048,7 +3251,7 @@ const MachineListPage = () => {
                 />
               </Grid>
               {/* Filter: Hãng SX */}
-              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+              <Grid size={{ xs: 12, sm: 6, md: 2 }}>
                 <Autocomplete
                   multiple
                   size="small"
@@ -3082,8 +3285,43 @@ const MachineListPage = () => {
                   }}
                 />
               </Grid>
+              {/* Filter: Nhà cung cấp */}
+              <Grid size={{ xs: 12, sm: 6, md: 2 }}>
+                <Autocomplete
+                  multiple
+                  size="small"
+                  options={supplierOptions}
+                  value={filters.suppliers}
+                  onChange={handleAutocompleteFilterChange("suppliers")}
+                  disableCloseOnSelect
+                  renderTags={(value, getTagProps) =>
+                    value.map((option, index) => (
+                      <Chip
+                        {...getTagProps({ index })}
+                        key={option}
+                        label={option}
+                        size="small"
+                      />
+                    ))
+                  }
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Nhà cung cấp"
+                      sx={{
+                        "& .MuiOutlinedInput-root": {
+                          borderRadius: "12px",
+                        },
+                      }}
+                    />
+                  )}
+                  ListboxProps={{
+                    style: { maxHeight: 300 },
+                  }}
+                />
+              </Grid>
               {/* Filter: Vị trí */}
-              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+              <Grid size={{ xs: 12, sm: 6, md: 2 }}>
                 <Autocomplete
                   multiple
                   size="small"
@@ -3233,6 +3471,27 @@ const MachineListPage = () => {
                         </TableSortLabel>
                       </TableCell>
                     )}
+                    {columnVisibility.attribute_machine && (
+                      <TableCell
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: "0.95rem",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        <TableSortLabel
+                          active={sortConfig.key === "attribute_machine"}
+                          direction={
+                            sortConfig.key === "attribute_machine"
+                              ? sortConfig.direction
+                              : "asc"
+                          }
+                          onClick={() => handleSortRequest("attribute_machine")}
+                        >
+                          Đặc tính
+                        </TableSortLabel>
+                      </TableCell>
+                    )}
                     {columnVisibility.model_machine && (
                       <TableCell
                         sx={{
@@ -3273,6 +3532,27 @@ const MachineListPage = () => {
                           onClick={() => handleSortRequest("manufacturer")}
                         >
                           Hãng SX
+                        </TableSortLabel>
+                      </TableCell>
+                    )}
+                    {columnVisibility.supplier && (
+                      <TableCell
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: "0.95rem",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        <TableSortLabel
+                          active={sortConfig.key === "supplier"}
+                          direction={
+                            sortConfig.key === "supplier"
+                              ? sortConfig.direction
+                              : "asc"
+                          }
+                          onClick={() => handleSortRequest("supplier")}
+                        >
+                          Nhà cung cấp
                         </TableSortLabel>
                       </TableCell>
                     )}
@@ -3519,6 +3799,69 @@ const MachineListPage = () => {
                         </TableSortLabel>
                       </TableCell>
                     )}
+                    {columnVisibility.power && (
+                      <TableCell
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: "0.95rem",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        <TableSortLabel
+                          active={sortConfig.key === "power"}
+                          direction={
+                            sortConfig.key === "power"
+                              ? sortConfig.direction
+                              : "asc"
+                          }
+                          onClick={() => handleSortRequest("power")}
+                        >
+                          Công suất
+                        </TableSortLabel>
+                      </TableCell>
+                    )}
+                    {columnVisibility.pressure && (
+                      <TableCell
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: "0.95rem",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        <TableSortLabel
+                          active={sortConfig.key === "pressure"}
+                          direction={
+                            sortConfig.key === "pressure"
+                              ? sortConfig.direction
+                              : "asc"
+                          }
+                          onClick={() => handleSortRequest("pressure")}
+                        >
+                          Áp suất
+                        </TableSortLabel>
+                      </TableCell>
+                    )}
+                    {columnVisibility.voltage && (
+                      <TableCell
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: "0.95rem",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        <TableSortLabel
+                          active={sortConfig.key === "voltage"}
+                          direction={
+                            sortConfig.key === "voltage"
+                              ? sortConfig.direction
+                              : "asc"
+                          }
+                          onClick={() => handleSortRequest("voltage")}
+                        >
+                          Điện áp
+                        </TableSortLabel>
+                      </TableCell>
+                    )}
                     {columnVisibility.price && (
                       <TableCell
                         sx={{
@@ -3678,6 +4021,11 @@ const MachineListPage = () => {
                               {machine.type_machine || "-"}
                             </TableCell>
                           )}
+                          {columnVisibility.attribute_machine && (
+                            <TableCell sx={{ whiteSpace: "nowrap" }}>
+                              {machine.attribute_machine || "-"}
+                            </TableCell>
+                          )}
                           {columnVisibility.model_machine && (
                             <TableCell
                               sx={{ fontWeight: 500, whiteSpace: "nowrap" }}
@@ -3688,6 +4036,11 @@ const MachineListPage = () => {
                           {columnVisibility.manufacturer && (
                             <TableCell sx={{ whiteSpace: "nowrap" }}>
                               {machine.manufacturer || "-"}
+                            </TableCell>
+                          )}
+                          {columnVisibility.supplier && (
+                            <TableCell sx={{ whiteSpace: "nowrap" }}>
+                              {machine.supplier || "-"}
                             </TableCell>
                           )}
                           {columnVisibility.serial_machine && (
@@ -3826,6 +4179,21 @@ const MachineListPage = () => {
                               {formatDate(
                                 machine.is_borrowed_or_rented_or_borrowed_out_return_date
                               )}
+                            </TableCell>
+                          )}
+                          {columnVisibility.power && (
+                            <TableCell sx={{ whiteSpace: "nowrap" }}>
+                              {machine.power || "-"}
+                            </TableCell>
+                          )}
+                          {columnVisibility.pressure && (
+                            <TableCell sx={{ whiteSpace: "nowrap" }}>
+                              {machine.pressure || "-"}
+                            </TableCell>
+                          )}
+                          {columnVisibility.voltage && (
+                            <TableCell sx={{ whiteSpace: "nowrap" }}>
+                              {machine.voltage || "-"}
                             </TableCell>
                           )}
                           {columnVisibility.price && (
@@ -4185,11 +4553,17 @@ const MachineListPage = () => {
 
                 <Grid size={{ xs: 12, sm: 6 }}>
                   <Autocomplete
-                    freeSolo
-                    options={typeOptions}
-                    value={editedData.type_machine || ""}
-                    onInputChange={(event, newInputValue) => {
-                      handleInputChange("type_machine", newInputValue);
+                    options={formMachineTypes}
+                    getOptionLabel={(option) => option.name || ""}
+                    value={
+                      formMachineTypes.find(
+                        (t) => t.name === editedData.type_machine
+                      ) || null
+                    }
+                    onChange={(event, newValue) => {
+                      const typeName = newValue ? newValue.name : "";
+                      handleInputChange("type_machine", typeName);
+                      fetchAttributesByTypeName(typeName);
                     }}
                     disabled={!canCreateOrImport}
                     renderInput={(params) => (
@@ -4197,6 +4571,32 @@ const MachineListPage = () => {
                         {...params}
                         label="Loại máy"
                         required
+                        sx={DISABLED_VIEW_SX}
+                      />
+                    )}
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <Autocomplete
+                    options={formAttributes}
+                    getOptionLabel={(option) => option.name || ""}
+                    // Map string (trong state) sang object (trong options)
+                    value={
+                      formAttributes.find(
+                        (a) => a.name === editedData.attribute_machine
+                      ) || null
+                    }
+                    onChange={(event, newValue) => {
+                      handleInputChange(
+                        "attribute_machine",
+                        newValue ? newValue.name : ""
+                      );
+                    }}
+                    disabled={!canCreateOrImport}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Đặc tính"
                         sx={DISABLED_VIEW_SX}
                       />
                     )}
@@ -4215,25 +4615,6 @@ const MachineListPage = () => {
                   />
                 </Grid>
 
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <Autocomplete
-                    freeSolo
-                    options={manufacturerOptions}
-                    value={editedData.manufacturer || ""}
-                    onInputChange={(event, newInputValue) => {
-                      handleInputChange("manufacturer", newInputValue);
-                    }}
-                    onBlur={handleGenerateCode}
-                    disabled={!canCreateOrImport}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        label="Hãng sản xuất"
-                        sx={DISABLED_VIEW_SX}
-                      />
-                    )}
-                  />
-                </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
                   <FormControl
                     fullWidth
@@ -4259,6 +4640,100 @@ const MachineListPage = () => {
                       <MenuItem value="broken">Máy hư</MenuItem>
                     </Select>
                   </FormControl>
+                </Grid>
+
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <Autocomplete
+                    options={formManufacturers}
+                    getOptionLabel={(option) => option.name || ""}
+                    value={
+                      formManufacturers.find(
+                        (m) => m.name === editedData.manufacturer
+                      ) || null
+                    }
+                    onChange={(event, newValue) => {
+                      handleInputChange(
+                        "manufacturer",
+                        newValue ? newValue.name : ""
+                      );
+                    }}
+                    onBlur={handleGenerateCode} // Giữ nguyên logic tạo mã
+                    disabled={!canCreateOrImport}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Hãng sản xuất"
+                        sx={DISABLED_VIEW_SX}
+                      />
+                    )}
+                  />
+                </Grid>
+
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <Autocomplete
+                    options={formSuppliers}
+                    getOptionLabel={(option) => option.name || ""}
+                    value={
+                      formSuppliers.find(
+                        (s) => s.name === editedData.supplier
+                      ) || null
+                    }
+                    onChange={(event, newValue) => {
+                      handleInputChange(
+                        "supplier",
+                        newValue ? newValue.name : ""
+                      );
+                    }}
+                    disabled={!canCreateOrImport}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Nhà cung cấp"
+                        sx={DISABLED_VIEW_SX}
+                      />
+                    )}
+                  />
+                </Grid>
+
+                <Grid size={{ xs: 12 }}>
+                  <Divider sx={{ my: 2 }}>
+                    <Chip label="Thông tin kỹ thuật" />
+                  </Divider>
+                </Grid>
+
+                <Grid size={{ xs: 12, sm: 4 }}>
+                  <TextField
+                    fullWidth
+                    label="Công suất"
+                    value={editedData.power || ""}
+                    onChange={(e) => handleInputChange("power", e.target.value)}
+                    disabled={!canCreateOrImport}
+                    sx={DISABLED_VIEW_SX}
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 4 }}>
+                  <TextField
+                    fullWidth
+                    label="Áp suất"
+                    value={editedData.pressure || ""}
+                    onChange={(e) =>
+                      handleInputChange("pressure", e.target.value)
+                    }
+                    disabled={!canCreateOrImport}
+                    sx={DISABLED_VIEW_SX}
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 4 }}>
+                  <TextField
+                    fullWidth
+                    label="Điện áp"
+                    value={editedData.voltage || ""}
+                    onChange={(e) =>
+                      handleInputChange("voltage", e.target.value)
+                    }
+                    disabled={!canCreateOrImport}
+                    sx={DISABLED_VIEW_SX}
+                  />
                 </Grid>
 
                 {!isCreateMode && (
@@ -4745,7 +5220,7 @@ const MachineListPage = () => {
                                 />
                               </ListItemIcon>
                               <ListItemText
-                                primary={`${succ.type} - ${succ.model}`}
+                                primary={`${succ.type} ${succ.attribute} - ${succ.model}`}
                                 secondary={`Mã máy: ${succ.code} | Serial: ${succ.serial}`}
                               />
                             </ListItem>

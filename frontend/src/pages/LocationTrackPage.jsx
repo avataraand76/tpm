@@ -33,12 +33,9 @@ import {
   CardContent,
   useTheme,
   useMediaQuery,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Checkbox,
   IconButton,
+  Autocomplete,
+  TextField,
 } from "@mui/material";
 import {
   LocationOn,
@@ -52,17 +49,6 @@ import {
 import { alpha } from "@mui/material/styles";
 import NavigationBar from "../components/NavigationBar";
 import { api } from "../api/api";
-
-const renderMultiSelectValue = (selected) => (
-  <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-    {selected.slice(0, 3).map((value) => (
-      <Chip key={value} label={value} size="small" />
-    ))}
-    {selected.length > 3 && (
-      <Chip label={`+${selected.length - 3}`} size="small" />
-    )}
-  </Box>
-);
 
 const formatNumber = (num) => {
   if (num === null || num === undefined || num === "") return "0";
@@ -578,10 +564,13 @@ const LocationTrackPage = () => {
   const [loadingHistory, setLoadingHistory] = useState(false);
 
   const filterCardRef = useRef(null);
+  const tableCardRef = useRef(null);
   // State for filter dropdown data
   const [typeOptions, setTypeOptions] = useState([]);
+  const [attributeOptions, setAttributeOptions] = useState([]);
   const [modelOptions, setModelOptions] = useState([]);
   const [manufacturerOptions, setManufacturerOptions] = useState([]);
+  const [supplierOptions, setSupplierOptions] = useState([]);
 
   const [matrixData, setMatrixData] = useState({});
   const [matrixLoading, setMatrixLoading] = useState(false);
@@ -589,8 +578,10 @@ const LocationTrackPage = () => {
   // State for selected filter values
   const [filters, setFilters] = useState({
     type_machines: [],
+    attribute_machines: [],
     model_machines: [],
     manufacturers: [],
+    suppliers: [],
     name_locations: [], // Dùng khi xem theo Đơn vị
     current_status: [], // Dùng cho cả 2
     borrow_status: [], // Dùng cho cả 2
@@ -831,20 +822,30 @@ const LocationTrackPage = () => {
     } else {
       // Nếu không chọn gì, xóa các tùy chọn và không gọi API
       setTypeOptions([]);
+      setAttributeOptions([]);
       setModelOptions([]);
       setManufacturerOptions([]);
+      setSupplierOptions([]);
       return;
     }
     try {
       // Tải song song các tùy chọn chung
-      const [typeRes, modelRes, manuRes] = await Promise.all([
-        api.machines.getDistinctValues({ field: "type_machine", ...params }),
-        api.machines.getDistinctValues({ field: "model_machine", ...params }),
-        api.machines.getDistinctValues({ field: "manufacturer", ...params }),
-      ]);
+      const [typeRes, attrRes, modelRes, manuRes, supplierRes] =
+        await Promise.all([
+          api.machines.getDistinctValues({ field: "type_machine", ...params }),
+          api.machines.getDistinctValues({
+            field: "attribute_machine",
+            ...params,
+          }),
+          api.machines.getDistinctValues({ field: "model_machine", ...params }),
+          api.machines.getDistinctValues({ field: "manufacturer", ...params }),
+          api.machines.getDistinctValues({ field: "supplier", ...params }),
+        ]);
       if (typeRes.success) setTypeOptions(typeRes.data);
+      if (attrRes.success) setAttributeOptions(attrRes.data);
       if (modelRes.success) setModelOptions(modelRes.data);
       if (manuRes.success) setManufacturerOptions(manuRes.data);
+      if (supplierRes.success) setSupplierOptions(supplierRes.data);
     } catch (err) {
       console.error("Error fetching filter options:", err);
     }
@@ -905,13 +906,23 @@ const LocationTrackPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDepartment, selectedLocation, page, limit, filters]);
 
-  const handleFilterChange = (event) => {
-    const { name, value } = event.target;
+  // Handler cho Autocomplete filters
+  const handleAutocompleteFilterChange = (filterName) => (event, newValue) => {
     setFilters((prev) => ({
       ...prev,
-      [name]: value,
+      [filterName]: newValue || [],
     }));
     setPage(1); // Reset về trang 1 khi lọc
+
+    // Cuộn tới bảng kết quả
+    if (tableCardRef.current) {
+      setTimeout(() => {
+        tableCardRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 100); // Delay nhỏ để đảm bảo state đã cập nhật
+    }
   };
 
   const handleDepartmentChange = (department) => {
@@ -922,8 +933,10 @@ const LocationTrackPage = () => {
     setPage(1);
     setFilters({
       type_machines: [],
+      attribute_machines: [],
       model_machines: [],
       manufacturers: [],
+      suppliers: [],
       name_locations: [],
       current_status: [],
       borrow_status: [],
@@ -937,8 +950,10 @@ const LocationTrackPage = () => {
     setFilters((prev) => ({
       ...prev,
       type_machines: [],
+      attribute_machines: [],
       model_machines: [],
       manufacturers: [],
+      suppliers: [],
       name_locations: [],
     }));
   };
@@ -967,8 +982,10 @@ const LocationTrackPage = () => {
       ...prev,
       // Giữ nguyên các bộ lọc dropdown
       type_machines: prev.type_machines,
+      attribute_machines: prev.attribute_machines,
       model_machines: prev.model_machines,
       manufacturers: prev.manufacturers,
+      suppliers: prev.suppliers,
       name_locations: prev.name_locations,
       // Cập nhật bộ lọc trạng thái
       current_status: currentStatus,
@@ -976,12 +993,14 @@ const LocationTrackPage = () => {
     }));
     setPage(1); // Quay về trang 1 khi lọc
 
-    // Cuộn xuống bảng
-    if (filterCardRef.current) {
-      filterCardRef.current.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+    // Cuộn tới bảng kết quả
+    if (tableCardRef.current) {
+      setTimeout(() => {
+        tableCardRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 100); // Delay nhỏ để đảm bảo state đã cập nhật
     }
   };
 
@@ -1084,12 +1103,15 @@ const LocationTrackPage = () => {
     }));
 
     setPage(1);
-    if (filterCardRef.current) {
-      const ref = filterCardRef.current;
-      ref.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+
+    // Cuộn tới bảng kết quả
+    if (tableCardRef.current) {
+      setTimeout(() => {
+        tableCardRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 100); // Delay nhỏ để đảm bảo state đã cập nhật
     }
   };
 
@@ -1695,108 +1717,222 @@ const LocationTrackPage = () => {
             </Typography>
             <Grid container spacing={2}>
               {/* Filter: Loại máy */}
-              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Loại máy</InputLabel>
-                  <Select
-                    multiple
-                    name="type_machines"
-                    value={filters.type_machines}
-                    onChange={handleFilterChange}
-                    label="Loại máy"
-                    renderValue={renderMultiSelectValue}
-                    sx={{ borderRadius: "12px" }}
-                    disabled={typeOptions.length === 0}
-                  >
-                    {typeOptions.map((name) => (
-                      <MenuItem key={name} value={name}>
-                        <Checkbox
-                          checked={filters.type_machines.indexOf(name) > -1}
-                        />
-                        <ListItemText primary={name} />
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+              <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                <Autocomplete
+                  multiple
+                  size="small"
+                  options={typeOptions}
+                  value={filters.type_machines}
+                  onChange={handleAutocompleteFilterChange("type_machines")}
+                  disableCloseOnSelect
+                  renderTags={(value, getTagProps) =>
+                    value.map((option, index) => (
+                      <Chip
+                        {...getTagProps({ index })}
+                        key={option}
+                        label={option}
+                        size="small"
+                      />
+                    ))
+                  }
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Loại máy"
+                      sx={{
+                        "& .MuiOutlinedInput-root": {
+                          borderRadius: "12px",
+                        },
+                      }}
+                    />
+                  )}
+                  ListboxProps={{
+                    style: { maxHeight: 300 },
+                  }}
+                />
+              </Grid>
+
+              {/* Filter: Đặc tính */}
+              <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                <Autocomplete
+                  multiple
+                  size="small"
+                  options={attributeOptions}
+                  value={filters.attribute_machines}
+                  onChange={handleAutocompleteFilterChange(
+                    "attribute_machines"
+                  )}
+                  disableCloseOnSelect
+                  renderTags={(value, getTagProps) =>
+                    value.map((option, index) => (
+                      <Chip
+                        {...getTagProps({ index })}
+                        key={option}
+                        label={option}
+                        size="small"
+                      />
+                    ))
+                  }
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Đặc tính"
+                      sx={{
+                        "& .MuiOutlinedInput-root": {
+                          borderRadius: "12px",
+                        },
+                      }}
+                    />
+                  )}
+                  ListboxProps={{
+                    style: { maxHeight: 300 },
+                  }}
+                />
               </Grid>
 
               {/* Filter: Model */}
-              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Model</InputLabel>
-                  <Select
-                    multiple
-                    name="model_machines"
-                    value={filters.model_machines}
-                    onChange={handleFilterChange}
-                    label="Model"
-                    renderValue={renderMultiSelectValue}
-                    sx={{ borderRadius: "12px" }}
-                    disabled={modelOptions.length === 0}
-                  >
-                    {modelOptions.map((name) => (
-                      <MenuItem key={name} value={name}>
-                        <Checkbox
-                          checked={filters.model_machines.indexOf(name) > -1}
-                        />
-                        <ListItemText primary={name} />
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+              <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                <Autocomplete
+                  multiple
+                  size="small"
+                  options={modelOptions}
+                  value={filters.model_machines}
+                  onChange={handleAutocompleteFilterChange("model_machines")}
+                  disableCloseOnSelect
+                  renderTags={(value, getTagProps) =>
+                    value.map((option, index) => (
+                      <Chip
+                        {...getTagProps({ index })}
+                        key={option}
+                        label={option}
+                        size="small"
+                      />
+                    ))
+                  }
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Model"
+                      sx={{
+                        "& .MuiOutlinedInput-root": {
+                          borderRadius: "12px",
+                        },
+                      }}
+                    />
+                  )}
+                  ListboxProps={{
+                    style: { maxHeight: 300 },
+                  }}
+                />
               </Grid>
 
               {/* Filter: Hãng SX */}
-              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Hãng SX</InputLabel>
-                  <Select
-                    multiple
-                    name="manufacturers"
-                    value={filters.manufacturers}
-                    onChange={handleFilterChange}
-                    label="Hãng SX"
-                    renderValue={renderMultiSelectValue}
-                    sx={{ borderRadius: "12px" }}
-                    disabled={manufacturerOptions.length === 0}
-                  >
-                    {manufacturerOptions.map((name) => (
-                      <MenuItem key={name} value={name}>
-                        <Checkbox
-                          checked={filters.manufacturers.indexOf(name) > -1}
-                        />
-                        <ListItemText primary={name} />
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+              <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                <Autocomplete
+                  multiple
+                  size="small"
+                  options={manufacturerOptions}
+                  value={filters.manufacturers}
+                  onChange={handleAutocompleteFilterChange("manufacturers")}
+                  disableCloseOnSelect
+                  renderTags={(value, getTagProps) =>
+                    value.map((option, index) => (
+                      <Chip
+                        {...getTagProps({ index })}
+                        key={option}
+                        label={option}
+                        size="small"
+                      />
+                    ))
+                  }
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Hãng SX"
+                      sx={{
+                        "& .MuiOutlinedInput-root": {
+                          borderRadius: "12px",
+                        },
+                      }}
+                    />
+                  )}
+                  ListboxProps={{
+                    style: { maxHeight: 300 },
+                  }}
+                />
+              </Grid>
+
+              {/* Filter: Nhà cung cấp */}
+              <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                <Autocomplete
+                  multiple
+                  size="small"
+                  options={supplierOptions}
+                  value={filters.suppliers}
+                  onChange={handleAutocompleteFilterChange("suppliers")}
+                  disableCloseOnSelect
+                  renderTags={(value, getTagProps) =>
+                    value.map((option, index) => (
+                      <Chip
+                        {...getTagProps({ index })}
+                        key={option}
+                        label={option}
+                        size="small"
+                      />
+                    ))
+                  }
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Nhà cung cấp"
+                      sx={{
+                        "& .MuiOutlinedInput-root": {
+                          borderRadius: "12px",
+                        },
+                      }}
+                    />
+                  )}
+                  ListboxProps={{
+                    style: { maxHeight: 300 },
+                  }}
+                />
               </Grid>
 
               {/* Filter: Vị trí */}
               {!selectedLocation && (
-                <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                  <FormControl fullWidth size="small">
-                    <InputLabel>Vị trí (trong Đơn vị)</InputLabel>
-                    <Select
-                      multiple
-                      name="name_locations"
-                      value={filters.name_locations}
-                      onChange={handleFilterChange}
-                      label="Vị trí (trong Đơn vị)"
-                      renderValue={renderMultiSelectValue}
-                      sx={{ borderRadius: "12px" }}
-                      disabled={locationOptions.length === 0}
-                    >
-                      {locationOptions.map((name) => (
-                        <MenuItem key={name} value={name}>
-                          <Checkbox
-                            checked={filters.name_locations.indexOf(name) > -1}
-                          />
-                          <ListItemText primary={name} />
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
+                <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                  <Autocomplete
+                    multiple
+                    size="small"
+                    options={locationOptions}
+                    value={filters.name_locations}
+                    onChange={handleAutocompleteFilterChange("name_locations")}
+                    disableCloseOnSelect
+                    renderTags={(value, getTagProps) =>
+                      value.map((option, index) => (
+                        <Chip
+                          {...getTagProps({ index })}
+                          key={option}
+                          label={option}
+                          size="small"
+                        />
+                      ))
+                    }
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Vị trí (trong ĐV)"
+                        sx={{
+                          "& .MuiOutlinedInput-root": {
+                            borderRadius: "12px",
+                          },
+                        }}
+                      />
+                    )}
+                    ListboxProps={{
+                      style: { maxHeight: 300 },
+                    }}
+                  />
                 </Grid>
               )}
             </Grid>
@@ -1819,6 +1955,7 @@ const LocationTrackPage = () => {
           <>
             {/* Table */}
             <TableContainer
+              ref={tableCardRef}
               component={Paper}
               elevation={1}
               sx={{
@@ -1837,6 +1974,9 @@ const LocationTrackPage = () => {
                     </TableCell>
                     <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
                       Loại máy
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                      Đặc tính
                     </TableCell>
                     <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
                       Model
@@ -1901,6 +2041,9 @@ const LocationTrackPage = () => {
                         </TableCell>
                         <TableCell sx={{ whiteSpace: "nowrap" }}>
                           {machine.type_machine || "-"}
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: "nowrap" }}>
+                          {machine.attribute_machine || "-"}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: "nowrap" }}>
                           {machine.model_machine || "-"}
@@ -2247,8 +2390,10 @@ const LocationTrackPage = () => {
               variant={isMobile ? "h6" : "h5"}
               sx={{ fontWeight: 700 }}
             >
-              Lịch sử di chuyển: {selectedMachine?.code_machine} -{" "}
-              {selectedMachine?.type_machine} - {selectedMachine?.model_machine}
+              Lịch sử điều chuyển: {selectedMachine?.code_machine} -{" "}
+              {selectedMachine?.type_machine}{" "}
+              {selectedMachine?.attribute_machine} -{" "}
+              {selectedMachine?.model_machine}
             </Typography>
           </DialogTitle>
           <DialogContent sx={{ mt: 3 }}>

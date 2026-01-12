@@ -79,14 +79,19 @@ const excelHeaderMapping = {
   "Mã máy": "code_machine",
   Serial: "serial_machine",
   "Loại máy": "type_machine",
+  "Đặc tính": "attribute_machine",
   "Model máy": "model_machine",
   "Hãng sản xuất": "manufacturer",
+  "Nhà cung cấp": "supplier",
   RFID: "RFID_machine",
   NFC: "NFC_machine",
   "Giá (VNĐ)": "price",
   "Ngày sử dụng (DD/MM/YYYY)": "date_of_use",
   "Tuổi thọ (năm)": "lifespan",
   "Chi phí sửa chữa (VNĐ)": "repair_cost",
+  "Công suất": "power",
+  "Áp suất": "pressure",
+  "Điện áp": "voltage",
   "Ghi chú": "note",
 };
 // Lấy danh sách các cột bắt buộc (sẽ dùng để tô màu)
@@ -184,9 +189,11 @@ const TicketManagementPage = () => {
     name_category: "",
   });
 
-  // State for autocomplete options
-  const [typeOptions, setTypeOptions] = useState([]);
-  const [manufacturerOptions, setManufacturerOptions] = useState([]);
+  // State for autocomplete options (using objects like MachineListPage)
+  const [formMachineTypes, setFormMachineTypes] = useState([]);
+  const [formAttributes, setFormAttributes] = useState([]);
+  const [formManufacturers, setFormManufacturers] = useState([]);
+  const [formSuppliers, setFormSuppliers] = useState([]);
 
   const [openImportDialog, setOpenImportDialog] = useState(false);
   const [importFile, setImportFile] = useState(null);
@@ -903,16 +910,46 @@ const TicketManagementPage = () => {
     return errors;
   };
 
-  const fetchFilterOptions = async () => {
+  const fetchFormData = async () => {
     try {
-      const [typeRes, manuRes] = await Promise.all([
-        api.machines.getDistinctValues({ field: "type_machine" }),
-        api.machines.getDistinctValues({ field: "manufacturer" }),
+      const [typesRes, manuRes, suppRes] = await Promise.all([
+        api.machines.getMachineTypes(),
+        api.machines.getMachineManufacturers(),
+        api.machines.getMachineSuppliers(),
       ]);
-      if (typeRes.success) setTypeOptions(typeRes.data);
-      if (manuRes.success) setManufacturerOptions(manuRes.data);
+
+      if (typesRes.success) setFormMachineTypes(typesRes.data);
+      if (manuRes.success) setFormManufacturers(manuRes.data);
+      if (suppRes.success) setFormSuppliers(suppRes.data);
     } catch (err) {
-      console.error("Error fetching filter options:", err);
+      console.error("Error fetching form data:", err);
+    }
+  };
+
+  // Hàm lấy đặc tính dựa trên Loại máy (Name)
+  const fetchAttributesByTypeName = async (typeName) => {
+    if (!typeName) {
+      setFormAttributes([]);
+      return;
+    }
+    // Tìm UUID của loại máy dựa trên tên
+    const selectedType = formMachineTypes.find((t) => t.name === typeName);
+
+    if (selectedType) {
+      try {
+        const res = await api.machines.getMachineTypeAttributes(
+          selectedType.uuid
+        );
+        if (res.success) {
+          setFormAttributes(res.data);
+        }
+      } catch (err) {
+        console.error("Error fetching attributes:", err);
+        setFormAttributes([]);
+      }
+    } else {
+      // Nếu nhập tay loại mới hoặc không tìm thấy trong danh mục
+      setFormAttributes([]);
     }
   };
 
@@ -923,18 +960,24 @@ const TicketManagementPage = () => {
       RFID_machine: "",
       NFC_machine: "",
       type_machine: "",
+      attribute_machine: "",
       model_machine: "",
       manufacturer: "",
+      supplier: "",
       price: "",
       date_of_use: "",
       lifespan: "",
       repair_cost: "",
+      power: "",
+      pressure: "",
+      voltage: "",
       note: "",
       current_status: "available",
       name_category: "Máy móc thiết bị",
     });
-    // Fetch filter options when opening dialog
-    await fetchFilterOptions();
+    // Fetch form data when opening dialog
+    await fetchFormData();
+    setFormAttributes([]); // Reset attributes
     setOpenCreateMachineDialog(true);
   };
 
@@ -1034,10 +1077,17 @@ const TicketManagementPage = () => {
 
   const handleDownloadSampleExcel = async () => {
     try {
-      // 1. Lấy danh sách loại máy và hãng sản xuất từ API
-      const [typeMachineResult, manufacturerResult] = await Promise.all([
+      // 1. Lấy danh sách loại máy, hãng sản xuất, đặc tính và nhà cung cấp từ API
+      const [
+        typeMachineResult,
+        manufacturerResult,
+        attributeResult,
+        supplierResult,
+      ] = await Promise.all([
         api.machines.getDistinctValues({ field: "type_machine" }),
         api.machines.getDistinctValues({ field: "manufacturer" }),
+        api.machines.getDistinctValues({ field: "attribute_machine" }),
+        api.machines.getDistinctValues({ field: "supplier" }),
       ]);
 
       // Đảm bảo có ít nhất 1 dòng để tránh lỗi validation
@@ -1050,6 +1100,16 @@ const TicketManagementPage = () => {
         manufacturerResult.success && manufacturerResult.data.length > 0
           ? manufacturerResult.data
           : ["Hãng mẫu"];
+
+      const attributeList =
+        attributeResult.success && attributeResult.data.length > 0
+          ? attributeResult.data
+          : ["Đặc tính mẫu"];
+
+      const supplierList =
+        supplierResult.success && supplierResult.data.length > 0
+          ? supplierResult.data
+          : ["Nhà cung cấp mẫu"];
 
       // 2. Tải file Excel mẫu
       const response = await fetch("/Mau_Excel_MayMoc.xlsx");
@@ -1071,10 +1131,14 @@ const TicketManagementPage = () => {
         loaiMayMocSheet.spliceRows(1, loaiMayMocSheet.rowCount);
       }
 
-      // Thêm dữ liệu mới vào
-      typeMachineList.forEach((type) => {
-        loaiMayMocSheet.addRow([type]);
-      });
+      // Thêm dữ liệu mới vào: cột A = Loại máy, cột B = Đặc tính
+      // Đảm bảo có đủ số dòng bằng với số lượng lớn hơn giữa typeMachineList và attributeList
+      const maxRows = Math.max(typeMachineList.length, attributeList.length);
+      for (let i = 0; i < maxRows; i++) {
+        const type = i < typeMachineList.length ? typeMachineList[i] : "";
+        const attribute = i < attributeList.length ? attributeList[i] : "";
+        loaiMayMocSheet.addRow([type, attribute]);
+      }
 
       // --- BƯỚC 5: CẬP NHẬT SHEET "HangSX" ---
       let hangSXSheet = workbook.getWorksheet("HangSX");
@@ -1092,13 +1156,29 @@ const TicketManagementPage = () => {
         hangSXSheet.addRow([manufacturer]);
       });
 
-      // --- BƯỚC 6 (QUAN TRỌNG): GÁN LẠI VALIDATION CHO SHEET CHÍNH ---
+      // --- BƯỚC 6: CẬP NHẬT SHEET "NhaCungCap" ---
+      let nhaCungCapSheet = workbook.getWorksheet("NhaCungCap");
+      if (!nhaCungCapSheet) {
+        nhaCungCapSheet = workbook.addWorksheet("NhaCungCap");
+      }
+
+      // Xóa dữ liệu cũ sạch sẽ
+      if (nhaCungCapSheet.rowCount > 0) {
+        nhaCungCapSheet.spliceRows(1, nhaCungCapSheet.rowCount);
+      }
+
+      // Thêm dữ liệu mới vào cột A
+      supplierList.forEach((supplier) => {
+        nhaCungCapSheet.addRow([supplier]);
+      });
+
+      // --- BƯỚC 7 (QUAN TRỌNG): GÁN LẠI VALIDATION CHO SHEET CHÍNH ---
       const mainSheet = workbook.getWorksheet("DanhSachMayMoc");
       if (mainSheet) {
         const startRow = 2;
         const endRow = 1000;
 
-        // 6.1. Validation cho cột B (Loại máy)
+        // 7.1. Validation cho cột B (Loại máy)
         const validationFormulaType = `'LoaiMayMoc'!$A$1:$A$${typeMachineList.length}`;
         for (let i = startRow; i <= endRow; i++) {
           const cell = mainSheet.getCell(`B${i}`);
@@ -1113,10 +1193,29 @@ const TicketManagementPage = () => {
           };
         }
 
-        // 6.2. Validation cho cột D (Hãng sản xuất)
+        // 7.2. Validation cho cột C (Đặc tính)
+        const maxAttributeRow = Math.max(
+          typeMachineList.length,
+          attributeList.length
+        );
+        const validationFormulaAttribute = `'LoaiMayMoc'!$B$1:$B$${maxAttributeRow}`;
+        for (let i = startRow; i <= endRow; i++) {
+          const cell = mainSheet.getCell(`C${i}`);
+          cell.dataValidation = {
+            type: "list",
+            allowBlank: true,
+            operator: "equal",
+            showErrorMessage: true,
+            errorTitle: "Lỗi nhập liệu",
+            error: "Vui lòng chọn Đặc tính từ danh sách có sẵn.",
+            formulae: [validationFormulaAttribute],
+          };
+        }
+
+        // 7.3. Validation cho cột E (Hãng sản xuất)
         const validationFormulaManufacturer = `'HangSX'!$A$1:$A$${manufacturerList.length}`;
         for (let i = startRow; i <= endRow; i++) {
-          const cell = mainSheet.getCell(`D${i}`);
+          const cell = mainSheet.getCell(`E${i}`);
           cell.dataValidation = {
             type: "list",
             allowBlank: true,
@@ -1127,9 +1226,24 @@ const TicketManagementPage = () => {
             formulae: [validationFormulaManufacturer],
           };
         }
+
+        // 7.4. Validation cho cột F (Nhà cung cấp)
+        const validationFormulaSupplier = `'NhaCungCap'!$A$1:$A$${supplierList.length}`;
+        for (let i = startRow; i <= endRow; i++) {
+          const cell = mainSheet.getCell(`F${i}`);
+          cell.dataValidation = {
+            type: "list",
+            allowBlank: true,
+            operator: "equal",
+            showErrorMessage: true,
+            errorTitle: "Lỗi nhập liệu",
+            error: "Vui lòng chọn Nhà cung cấp từ danh sách có sẵn.",
+            formulae: [validationFormulaSupplier],
+          };
+        }
       }
 
-      // 6. Xuất file
+      // 8. Xuất file
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1473,49 +1587,202 @@ const TicketManagementPage = () => {
                 gap: 2,
               }}
             >
-              <Tabs
-                value={hasImportExportTabs ? activeTab : activeTab - 2}
-                onChange={handleTabChange}
-                variant={isMobile ? "scrollable" : "standard"}
-                allowScrollButtonsMobile
-                sx={{
-                  width: { xs: "100%", md: "auto" },
-                  "& .MuiTab-root": {
-                    fontWeight: 600,
-                    fontSize: isMobile ? "0.8rem" : "1rem",
-                    minWidth: { xs: 100, md: 140 },
-                    borderRadius: "12px",
-                    margin: "0 4px",
-                    transition: "all 0.3s ease",
-                    "&.Mui-selected": {
-                      color: "#667eea",
-                      background: "rgba(102, 126, 234, 0.1)",
+              {/* Mobile: Grid 2x2 buttons */}
+              {isMobile ? (
+                <Grid container spacing={2} sx={{ width: "100%" }}>
+                  {hasImportExportTabs && (
+                    <Grid size={{ xs: 6 }} sx={{ display: "flex" }}>
+                      <Button
+                        fullWidth
+                        variant={activeTab === 0 ? "contained" : "outlined"}
+                        startIcon={<FileDownload />}
+                        onClick={(e) => handleTabChange(e, 0)}
+                        sx={{
+                          minHeight: "80px",
+                          py: 2,
+                          borderRadius: "12px",
+                          fontWeight: 600,
+                          fontSize: "0.9rem",
+                          textTransform: "none",
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: 0.5,
+                          "& .MuiButton-startIcon": {
+                            margin: 0,
+                            marginBottom: "4px",
+                          },
+                          ...(activeTab === 0
+                            ? {
+                                background:
+                                  "linear-gradient(45deg, #667eea, #764ba2)",
+                                color: "white",
+                                "&:hover": {
+                                  background:
+                                    "linear-gradient(45deg, #5568d3, #6a3f8f)",
+                                },
+                              }
+                            : {
+                                borderColor: "#667eea",
+                                color: "#667eea",
+                                "&:hover": {
+                                  borderColor: "#5568d3",
+                                  background: "rgba(102, 126, 234, 0.05)",
+                                },
+                              }),
+                          transition: "all 0.3s ease",
+                        }}
+                      >
+                        Phiếu nhập
+                      </Button>
+                    </Grid>
+                  )}
+                  {hasImportExportTabs && (
+                    <Grid size={{ xs: 6 }} sx={{ display: "flex" }}>
+                      <Button
+                        fullWidth
+                        variant={activeTab === 1 ? "contained" : "outlined"}
+                        startIcon={<FileUpload />}
+                        onClick={(e) => handleTabChange(e, 1)}
+                        sx={{
+                          minHeight: "80px",
+                          py: 2,
+                          borderRadius: "12px",
+                          fontWeight: 600,
+                          fontSize: "0.9rem",
+                          textTransform: "none",
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: 0.5,
+                          "& .MuiButton-startIcon": {
+                            margin: 0,
+                            marginBottom: "4px",
+                          },
+                          ...(activeTab === 1
+                            ? {
+                                background:
+                                  "linear-gradient(45deg, #667eea, #764ba2)",
+                                color: "white",
+                                "&:hover": {
+                                  background:
+                                    "linear-gradient(45deg, #5568d3, #6a3f8f)",
+                                },
+                              }
+                            : {
+                                borderColor: "#667eea",
+                                color: "#667eea",
+                                "&:hover": {
+                                  borderColor: "#5568d3",
+                                  background: "rgba(102, 126, 234, 0.05)",
+                                },
+                              }),
+                          transition: "all 0.3s ease",
+                        }}
+                      >
+                        Phiếu xuất
+                      </Button>
+                    </Grid>
+                  )}
+                  <Grid
+                    size={{ xs: hasImportExportTabs ? 6 : 12 }}
+                    sx={{ display: "flex" }}
+                  >
+                    <Button
+                      fullWidth
+                      variant={activeTab === 2 ? "contained" : "outlined"}
+                      startIcon={<Autorenew />}
+                      onClick={(e) =>
+                        handleTabChange(e, hasImportExportTabs ? 2 : 0)
+                      }
+                      sx={{
+                        minHeight: "80px",
+                        py: 2,
+                        borderRadius: "12px",
+                        fontWeight: 600,
+                        fontSize: "0.9rem",
+                        textTransform: "none",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 0.5,
+                        "& .MuiButton-startIcon": {
+                          margin: 0,
+                          marginBottom: "4px",
+                        },
+                        ...(activeTab === 2
+                          ? {
+                              background:
+                                "linear-gradient(45deg, #667eea, #764ba2)",
+                              color: "white",
+                              "&:hover": {
+                                background:
+                                  "linear-gradient(45deg, #5568d3, #6a3f8f)",
+                              },
+                            }
+                          : {
+                              borderColor: "#667eea",
+                              color: "#667eea",
+                              "&:hover": {
+                                borderColor: "#5568d3",
+                                background: "rgba(102, 126, 234, 0.05)",
+                              },
+                            }),
+                        transition: "all 0.3s ease",
+                      }}
+                    >
+                      Điều chuyển
+                    </Button>
+                  </Grid>
+                </Grid>
+              ) : (
+                // Desktop: Tabs
+                <Tabs
+                  value={hasImportExportTabs ? activeTab : activeTab - 2}
+                  onChange={handleTabChange}
+                  variant="scrollable"
+                  sx={{
+                    width: { xs: "100%", md: "auto" },
+                    "& .MuiTab-root": {
+                      fontWeight: 600,
+                      fontSize: "1rem",
+                      minWidth: 140,
+                      borderRadius: "12px",
+                      margin: "0 4px",
+                      transition: "all 0.3s ease",
+                      "&.Mui-selected": {
+                        color: "#667eea",
+                        background: "rgba(102, 126, 234, 0.1)",
+                      },
                     },
-                  },
-                  "& .MuiTabs-indicator": { display: "none" },
-                }}
-              >
-                {hasImportExportTabs && (
-                  <Tab
-                    icon={<FileDownload />}
-                    label="Phiếu nhập"
-                    iconPosition="start"
-                  />
-                )}
-                {hasImportExportTabs && (
-                  <Tab
-                    icon={<FileUpload />}
-                    label="Phiếu xuất"
-                    iconPosition="start"
-                  />
-                )}
+                    "& .MuiTabs-indicator": { display: "none" },
+                  }}
+                >
+                  {hasImportExportTabs && (
+                    <Tab
+                      icon={<FileDownload />}
+                      label="Phiếu nhập"
+                      iconPosition="start"
+                    />
+                  )}
+                  {hasImportExportTabs && (
+                    <Tab
+                      icon={<FileUpload />}
+                      label="Phiếu xuất"
+                      iconPosition="start"
+                    />
+                  )}
 
-                <Tab
-                  icon={<Autorenew />}
-                  label="Điều chuyển / Cập nhật vị trí"
-                  iconPosition="start"
-                />
-              </Tabs>
+                  <Tab
+                    icon={<Autorenew />}
+                    label="Điều chuyển / Cập nhật vị trí"
+                    iconPosition="start"
+                  />
+                </Tabs>
+              )}
               {activeTab === 2 ? (
                 <Stack
                   direction={{ xs: "column", sm: "row" }}
@@ -1798,7 +2065,7 @@ const TicketManagementPage = () => {
           open={openDialog}
           onClose={handleCloseDialog}
           maxWidth="lg"
-          fullScreen
+          fullScreen={isMobile}
           fullWidth
           PaperProps={{ sx: { borderRadius: isMobile ? 0 : "20px" } }}
         >
@@ -2546,8 +2813,9 @@ const TicketManagementPage = () => {
                                                     sx={{ fontWeight: 600 }}
                                                   >
                                                     {machine.code_machine} -{" "}
-                                                    {machine.type_machine} -{" "}
-                                                    {machine.model_machine}
+                                                    {machine.type_machine}{" "}
+                                                    {machine.attribute_machine}{" "}
+                                                    - {machine.model_machine}
                                                   </Typography>
                                                   <Chip
                                                     label={getMachineStatusLabel(
@@ -2682,7 +2950,8 @@ const TicketManagementPage = () => {
                                                   sx={{ fontWeight: 600 }}
                                                 >
                                                   {machine.code_machine} -{" "}
-                                                  {machine.type_machine} -{" "}
+                                                  {machine.type_machine}{" "}
+                                                  {machine.attribute_machine} -{" "}
                                                   {machine.model_machine}
                                                 </Typography>
                                                 <Chip
@@ -2830,6 +3099,14 @@ const TicketManagementPage = () => {
                                           whiteSpace: "nowrap",
                                         }}
                                       >
+                                        Đặc tính
+                                      </TableCell>
+                                      <TableCell
+                                        sx={{
+                                          fontWeight: 600,
+                                          whiteSpace: "nowrap",
+                                        }}
+                                      >
                                         Model
                                       </TableCell>
                                       <TableCell
@@ -2888,13 +3165,16 @@ const TicketManagementPage = () => {
                                         key={machine.uuid_machine || index}
                                       >
                                         <TableCell>
-                                          {machine.code_machine}
+                                          {machine.code_machine || "-"}
                                         </TableCell>
                                         <TableCell>
-                                          {machine.type_machine}
+                                          {machine.type_machine || "-"}
                                         </TableCell>
                                         <TableCell>
-                                          {machine.model_machine}
+                                          {machine.attribute_machine || "-"}
+                                        </TableCell>
+                                        <TableCell>
+                                          {machine.model_machine || "-"}
                                         </TableCell>
                                         <TableCell>
                                           {machine.serial_machine || "-"}
@@ -3379,18 +3659,42 @@ const TicketManagementPage = () => {
 
               <Grid size={{ xs: 12, sm: 6 }}>
                 <Autocomplete
-                  freeSolo
-                  options={typeOptions}
-                  value={newMachineData.type_machine || ""}
-                  onInputChange={(event, newInputValue) => {
-                    handleCreateMachineInputChange(
-                      "type_machine",
-                      newInputValue
-                    );
+                  options={formMachineTypes}
+                  getOptionLabel={(option) => option.name || ""}
+                  value={
+                    formMachineTypes.find(
+                      (t) => t.name === newMachineData.type_machine
+                    ) || null
+                  }
+                  onChange={(event, newValue) => {
+                    const typeName = newValue ? newValue.name : "";
+                    handleCreateMachineInputChange("type_machine", typeName);
+                    fetchAttributesByTypeName(typeName);
                   }}
                   disabled={!canCreateOrImportMachines}
                   renderInput={(params) => (
                     <TextField {...params} label="Loại máy" required />
+                  )}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <Autocomplete
+                  options={formAttributes}
+                  getOptionLabel={(option) => option.name || ""}
+                  value={
+                    formAttributes.find(
+                      (a) => a.name === newMachineData.attribute_machine
+                    ) || null
+                  }
+                  onChange={(event, newValue) => {
+                    handleCreateMachineInputChange(
+                      "attribute_machine",
+                      newValue ? newValue.name : ""
+                    );
+                  }}
+                  disabled={!canCreateOrImportMachines}
+                  renderInput={(params) => (
+                    <TextField {...params} label="Đặc tính" />
                   )}
                 />
               </Grid>
@@ -3409,24 +3713,6 @@ const TicketManagementPage = () => {
                 />
               </Grid>
 
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <Autocomplete
-                  freeSolo
-                  options={manufacturerOptions}
-                  value={newMachineData.manufacturer || ""}
-                  onInputChange={(event, newInputValue) => {
-                    handleCreateMachineInputChange(
-                      "manufacturer",
-                      newInputValue
-                    );
-                  }}
-                  onBlur={handleGenerateCodeForNewMachine}
-                  disabled={!canCreateOrImportMachines}
-                  renderInput={(params) => (
-                    <TextField {...params} label="Hãng sản xuất" />
-                  )}
-                />
-              </Grid>
               <Grid size={{ xs: 12, sm: 6 }}>
                 <FormControl fullWidth disabled={!canCreateOrImportMachines}>
                   <InputLabel>Trạng thái</InputLabel>
@@ -3448,6 +3734,89 @@ const TicketManagementPage = () => {
                     <MenuItem value="broken">Máy hư</MenuItem>
                   </Select>
                 </FormControl>
+              </Grid>
+
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <Autocomplete
+                  options={formManufacturers}
+                  getOptionLabel={(option) => option.name || ""}
+                  value={
+                    formManufacturers.find(
+                      (m) => m.name === newMachineData.manufacturer
+                    ) || null
+                  }
+                  onChange={(event, newValue) => {
+                    handleCreateMachineInputChange(
+                      "manufacturer",
+                      newValue ? newValue.name : ""
+                    );
+                  }}
+                  onBlur={handleGenerateCodeForNewMachine}
+                  disabled={!canCreateOrImportMachines}
+                  renderInput={(params) => (
+                    <TextField {...params} label="Hãng sản xuất" />
+                  )}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <Autocomplete
+                  options={formSuppliers}
+                  getOptionLabel={(option) => option.name || ""}
+                  value={
+                    formSuppliers.find(
+                      (s) => s.name === newMachineData.supplier
+                    ) || null
+                  }
+                  onChange={(event, newValue) => {
+                    handleCreateMachineInputChange(
+                      "supplier",
+                      newValue ? newValue.name : ""
+                    );
+                  }}
+                  disabled={!canCreateOrImportMachines}
+                  renderInput={(params) => (
+                    <TextField {...params} label="Nhà cung cấp" />
+                  )}
+                />
+              </Grid>
+
+              <Grid size={{ xs: 12 }}>
+                <Divider sx={{ my: 2 }}>
+                  <Chip label="Thông tin kỹ thuật" />
+                </Divider>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <TextField
+                  fullWidth
+                  label="Công suất"
+                  value={newMachineData.power || ""}
+                  onChange={(e) =>
+                    handleCreateMachineInputChange("power", e.target.value)
+                  }
+                  disabled={!canCreateOrImportMachines}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <TextField
+                  fullWidth
+                  label="Áp suất"
+                  value={newMachineData.pressure || ""}
+                  onChange={(e) =>
+                    handleCreateMachineInputChange("pressure", e.target.value)
+                  }
+                  disabled={!canCreateOrImportMachines}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <TextField
+                  fullWidth
+                  label="Điện áp"
+                  value={newMachineData.voltage || ""}
+                  onChange={(e) =>
+                    handleCreateMachineInputChange("voltage", e.target.value)
+                  }
+                  disabled={!canCreateOrImportMachines}
+                />
               </Grid>
 
               <Grid size={{ xs: 12 }}>
@@ -3725,7 +4094,7 @@ const TicketManagementPage = () => {
                                 />
                               </ListItemIcon>
                               <ListItemText
-                                primary={`${succ.type} - ${succ.model}`}
+                                primary={`${succ.type} ${succ.attribute} - ${succ.model}`}
                                 secondary={`Mã máy: ${succ.code} | Serial: ${succ.serial}`}
                               />
                             </ListItem>

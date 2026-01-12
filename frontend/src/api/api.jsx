@@ -208,6 +208,24 @@ export const api = {
       );
       return response.data;
     },
+    getMachineTypes: async () => {
+      const response = await httpConnect.get("/api/machine-types");
+      return response.data;
+    },
+    getMachineTypeAttributes: async (typeUuid) => {
+      const response = await httpConnect.get(
+        `/api/machine-types/${typeUuid}/attributes`
+      );
+      return response.data;
+    },
+    getMachineManufacturers: async () => {
+      const response = await httpConnect.get("/api/machine-manufacturers");
+      return response.data;
+    },
+    getMachineSuppliers: async () => {
+      const response = await httpConnect.get("/api/machine-suppliers");
+      return response.data;
+    },
   },
 
   // MARK: DEPARTMENTS
@@ -462,6 +480,116 @@ export const api = {
         ma_nv,
         permissions,
       });
+      return response.data;
+    },
+    // Machine Types
+    getMachineTypes: async () => {
+      const response = await httpConnect.get("/api/machine-types");
+      return response.data;
+    },
+    createMachineType: async (data) => {
+      const response = await httpConnect.post("/api/admin/machine-types", data);
+      return response.data;
+    },
+    updateMachineType: async (uuid, data) => {
+      const response = await httpConnect.put(
+        `/api/admin/machine-types/${uuid}`,
+        data
+      );
+      return response.data;
+    },
+    deleteMachineType: async (uuid) => {
+      const response = await httpConnect.delete(
+        `/api/admin/machine-types/${uuid}`
+      );
+      return response.data;
+    },
+    // Machine Attributes
+    getMachineAttributes: async () => {
+      const response = await httpConnect.get("/api/admin/machine-attributes");
+      return response.data;
+    },
+    createMachineAttribute: async (data) => {
+      const response = await httpConnect.post(
+        "/api/admin/machine-attributes",
+        data
+      );
+      return response.data;
+    },
+    updateMachineAttribute: async (uuid, data) => {
+      const response = await httpConnect.put(
+        `/api/admin/machine-attributes/${uuid}`,
+        data
+      );
+      return response.data;
+    },
+    deleteMachineAttribute: async (uuid) => {
+      const response = await httpConnect.delete(
+        `/api/admin/machine-attributes/${uuid}`
+      );
+      return response.data;
+    },
+    linkAttributeToType: async (typeUuid, attributeUuid) => {
+      const response = await httpConnect.post(
+        `/api/admin/machine-types/${typeUuid}/attributes`,
+        { attribute_uuid: attributeUuid }
+      );
+      return response.data;
+    },
+    unlinkAttributeFromType: async (typeUuid, attributeUuid) => {
+      const response = await httpConnect.delete(
+        `/api/admin/machine-types/${typeUuid}/attributes/${attributeUuid}`
+      );
+      return response.data;
+    },
+    // Machine Manufacturers
+    getMachineManufacturers: async () => {
+      const response = await httpConnect.get("/api/machine-manufacturers");
+      return response.data;
+    },
+    createMachineManufacturer: async (data) => {
+      const response = await httpConnect.post(
+        "/api/admin/machine-manufacturers",
+        data
+      );
+      return response.data;
+    },
+    updateMachineManufacturer: async (uuid, data) => {
+      const response = await httpConnect.put(
+        `/api/admin/machine-manufacturers/${uuid}`,
+        data
+      );
+      return response.data;
+    },
+    deleteMachineManufacturer: async (uuid) => {
+      const response = await httpConnect.delete(
+        `/api/admin/machine-manufacturers/${uuid}`
+      );
+      return response.data;
+    },
+    // Machine Suppliers
+    getMachineSuppliers: async () => {
+      const response = await httpConnect.get("/api/machine-suppliers");
+      return response.data;
+    },
+    createMachineSupplier: async (data) => {
+      const response = await httpConnect.post(
+        "/api/admin/machine-suppliers",
+        data
+      );
+      return response.data;
+    },
+    updateMachineSupplier: async (uuid, data) => {
+      const response = await httpConnect.put(
+        `/api/admin/machine-suppliers/${uuid}`,
+        data
+      );
+      return response.data;
+    },
+    deleteMachineSupplier: async (uuid) => {
+      const response = await httpConnect.delete(
+        `/api/admin/machine-suppliers/${uuid}`
+      );
       return response.data;
     },
   },

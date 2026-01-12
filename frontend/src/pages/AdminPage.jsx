@@ -42,6 +42,7 @@ import {
   Divider,
   useTheme,
   useMediaQuery,
+  Chip,
 } from "@mui/material";
 import {
   AdminPanelSettings,
@@ -56,6 +57,13 @@ import {
   Search,
   Save,
   Close,
+  Delete,
+  Build,
+  Settings,
+  Factory,
+  LocalShipping,
+  Link,
+  LinkOff,
 } from "@mui/icons-material";
 import NavigationBar from "../components/NavigationBar";
 import { api } from "../api/api"; // Import API
@@ -133,6 +141,15 @@ const AdminPage = () => {
   const [savingPermissions, setSavingPermissions] = useState(false);
   const [expandedAccordions, setExpandedAccordions] = useState({});
 
+  // States for machine catalogs
+  const [machineTypes, setMachineTypes] = useState([]);
+  const [machineAttributes, setMachineAttributes] = useState([]);
+  const [machineManufacturers, setMachineManufacturers] = useState([]);
+  const [machineSuppliers, setMachineSuppliers] = useState([]);
+  const [selectedTypeForAttributes, setSelectedTypeForAttributes] =
+    useState(null);
+  const [typeAttributes, setTypeAttributes] = useState([]);
+
   // States for Dialog
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState("create");
@@ -162,19 +179,35 @@ const AdminPage = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [deptLocRes, catRes, hiTimeSheetRes, allPermsRes] =
-        await Promise.all([
-          api.admin.getDepartmentsWithLocations(),
-          api.admin.getCategories(),
-          api.admin.getHiTimeSheetDepartments(),
-          api.admin.getAllPermissions(),
-        ]);
+      const [
+        deptLocRes,
+        catRes,
+        hiTimeSheetRes,
+        allPermsRes,
+        typesRes,
+        attrsRes,
+        mfrsRes,
+        suppsRes,
+      ] = await Promise.all([
+        api.admin.getDepartmentsWithLocations(),
+        api.admin.getCategories(),
+        api.admin.getHiTimeSheetDepartments(),
+        api.admin.getAllPermissions(),
+        api.admin.getMachineTypes(),
+        api.admin.getMachineAttributes(),
+        api.admin.getMachineManufacturers(),
+        api.admin.getMachineSuppliers(),
+      ]);
 
       if (deptLocRes.success) setDepartments(deptLocRes.data);
       if (catRes.success) setCategories(catRes.data);
       if (hiTimeSheetRes.success)
         setHiTimeSheetDepartments(hiTimeSheetRes.data);
       if (allPermsRes.success) setAllPermissions(allPermsRes.data);
+      if (typesRes.success) setMachineTypes(typesRes.data);
+      if (attrsRes.success) setMachineAttributes(attrsRes.data);
+      if (mfrsRes.success) setMachineManufacturers(mfrsRes.data);
+      if (suppsRes.success) setMachineSuppliers(suppsRes.data);
     } catch (error) {
       console.error("Error fetching admin data:", error);
       showNotification(
@@ -187,9 +220,31 @@ const AdminPage = () => {
     }
   }, []);
 
+  // Fetch attributes for a specific type
+  const fetchTypeAttributes = useCallback(async (typeUuid) => {
+    if (!typeUuid) {
+      setTypeAttributes([]);
+      return;
+    }
+    try {
+      const res = await api.machines.getMachineTypeAttributes(typeUuid);
+      if (res.success) {
+        setTypeAttributes(res.data);
+      }
+    } catch (error) {
+      console.error("Error fetching type attributes:", error);
+    }
+  }, []);
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    if (selectedTypeForAttributes) {
+      fetchTypeAttributes(selectedTypeForAttributes);
+    }
+  }, [selectedTypeForAttributes, fetchTypeAttributes]);
 
   // --- Handlers ---
   const handleTabChange = (event, newValue) => {
@@ -318,10 +373,20 @@ const AdminPage = () => {
           [item.uuid_department]: true,
         }));
       }
-    } else if (mode === "create" && type === "department") {
-      finalItem = { type: "department" };
-    } else if (mode === "create" && type === "category") {
-      finalItem = { type: "category" };
+    } else if (mode === "create") {
+      if (type === "department") {
+        finalItem = { type: "department" };
+      } else if (type === "category") {
+        finalItem = { type: "category" };
+      } else if (type === "machine-type") {
+        finalItem = { type: "machine-type" };
+      } else if (type === "machine-attribute") {
+        finalItem = { type: "machine-attribute" };
+      } else if (type === "machine-manufacturer") {
+        finalItem = { type: "machine-manufacturer" };
+      } else if (type === "machine-supplier") {
+        finalItem = { type: "machine-supplier" };
+      }
     }
 
     setCurrentItem(finalItem);
@@ -388,6 +453,38 @@ const AdminPage = () => {
           apiCall = api.admin.updateCategory(data.uuid_category, data);
           successMessage = "Cập nhật loại thành công";
         }
+      } else if (type === "machine-type") {
+        if (dialogMode === "create") {
+          apiCall = api.admin.createMachineType(data);
+          successMessage = "Tạo loại máy thành công";
+        } else {
+          apiCall = api.admin.updateMachineType(data.uuid, data);
+          successMessage = "Cập nhật loại máy thành công";
+        }
+      } else if (type === "machine-attribute") {
+        if (dialogMode === "create") {
+          apiCall = api.admin.createMachineAttribute(data);
+          successMessage = "Tạo đặc tính thành công";
+        } else {
+          apiCall = api.admin.updateMachineAttribute(data.uuid, data);
+          successMessage = "Cập nhật đặc tính thành công";
+        }
+      } else if (type === "machine-manufacturer") {
+        if (dialogMode === "create") {
+          apiCall = api.admin.createMachineManufacturer(data);
+          successMessage = "Tạo hãng sản xuất thành công";
+        } else {
+          apiCall = api.admin.updateMachineManufacturer(data.uuid, data);
+          successMessage = "Cập nhật hãng sản xuất thành công";
+        }
+      } else if (type === "machine-supplier") {
+        if (dialogMode === "create") {
+          apiCall = api.admin.createMachineSupplier(data);
+          successMessage = "Tạo nhà cung cấp thành công";
+        } else {
+          apiCall = api.admin.updateMachineSupplier(data.uuid, data);
+          successMessage = "Cập nhật nhà cung cấp thành công";
+        }
       }
 
       await apiCall;
@@ -412,6 +509,74 @@ const AdminPage = () => {
       );
     } finally {
       setDialogLoading(false);
+    }
+  };
+
+  const handleDelete = async (type, uuid, name) => {
+    if (!window.confirm(`Bạn có chắc chắn muốn xóa "${name}"?`)) {
+      return;
+    }
+    try {
+      let apiCall;
+      let successMessage = "";
+      if (type === "machine-type") {
+        apiCall = api.admin.deleteMachineType(uuid);
+        successMessage = "Xóa loại máy thành công";
+      } else if (type === "machine-attribute") {
+        apiCall = api.admin.deleteMachineAttribute(uuid);
+        successMessage = "Xóa đặc tính thành công";
+      } else if (type === "machine-manufacturer") {
+        apiCall = api.admin.deleteMachineManufacturer(uuid);
+        successMessage = "Xóa hãng sản xuất thành công";
+      } else if (type === "machine-supplier") {
+        apiCall = api.admin.deleteMachineSupplier(uuid);
+        successMessage = "Xóa nhà cung cấp thành công";
+      }
+      await apiCall;
+      showNotification("success", "Thành công", successMessage);
+      fetchData();
+    } catch (error) {
+      showNotification(
+        "error",
+        "Lỗi",
+        error.response?.data?.message || error.message
+      );
+    }
+  };
+
+  const handleLinkAttribute = async (typeUuid, attributeUuid) => {
+    try {
+      await api.admin.linkAttributeToType(typeUuid, attributeUuid);
+      showNotification("success", "Thành công", "Liên kết đặc tính thành công");
+      if (selectedTypeForAttributes === typeUuid) {
+        fetchTypeAttributes(typeUuid);
+      }
+    } catch (error) {
+      showNotification(
+        "error",
+        "Lỗi",
+        error.response?.data?.message || error.message
+      );
+    }
+  };
+
+  const handleUnlinkAttribute = async (typeUuid, attributeUuid) => {
+    try {
+      await api.admin.unlinkAttributeFromType(typeUuid, attributeUuid);
+      showNotification(
+        "success",
+        "Thành công",
+        "Hủy liên kết đặc tính thành công"
+      );
+      if (selectedTypeForAttributes === typeUuid) {
+        fetchTypeAttributes(typeUuid);
+      }
+    } catch (error) {
+      showNotification(
+        "error",
+        "Lỗi",
+        error.response?.data?.message || error.message
+      );
     }
   };
 
@@ -482,6 +647,62 @@ const AdminPage = () => {
               label="Tên Loại"
               name="name_category"
               value={currentItem.name_category || ""}
+              onChange={handleDialogChange}
+              required
+              sx={inputStyle}
+            />
+          </Stack>
+        );
+      case "machine-type":
+        return (
+          <Stack spacing={3} sx={{ pt: 1 }}>
+            <TextField
+              fullWidth
+              label="Tên Loại máy"
+              name="name_machine_type"
+              value={currentItem.name_machine_type || ""}
+              onChange={handleDialogChange}
+              required
+              sx={inputStyle}
+            />
+          </Stack>
+        );
+      case "machine-attribute":
+        return (
+          <Stack spacing={3} sx={{ pt: 1 }}>
+            <TextField
+              fullWidth
+              label="Tên Đặc tính"
+              name="name_machine_attribute"
+              value={currentItem.name_machine_attribute || ""}
+              onChange={handleDialogChange}
+              required
+              sx={inputStyle}
+            />
+          </Stack>
+        );
+      case "machine-manufacturer":
+        return (
+          <Stack spacing={3} sx={{ pt: 1 }}>
+            <TextField
+              fullWidth
+              label="Tên Hãng sản xuất"
+              name="name_machine_manufacturer"
+              value={currentItem.name_machine_manufacturer || ""}
+              onChange={handleDialogChange}
+              required
+              sx={inputStyle}
+            />
+          </Stack>
+        );
+      case "machine-supplier":
+        return (
+          <Stack spacing={3} sx={{ pt: 1 }}>
+            <TextField
+              fullWidth
+              label="Tên Nhà cung cấp"
+              name="name_machine_supplier"
+              value={currentItem.name_machine_supplier || ""}
               onChange={handleDialogChange}
               required
               sx={inputStyle}
@@ -566,6 +787,11 @@ const AdminPage = () => {
                 iconPosition="start"
               />
               <Tab label="Phân Loại" icon={<Category />} iconPosition="start" />
+              <Tab
+                label="Danh mục máy móc"
+                icon={<Build />}
+                iconPosition="start"
+              />
               <Tab label="Phân Quyền" icon={<People />} iconPosition="start" />
             </Tabs>
           </Box>
@@ -830,8 +1056,432 @@ const AdminPage = () => {
                 </Paper>
               </TabPanel>
 
-              {/* === TAB PHÂN QUYỀN === */}
+              {/* === TAB DANH MỤC MÁY MÓC === */}
               <TabPanel value={currentTab} index={2}>
+                <Grid container spacing={3}>
+                  {/* LOẠI MÁY */}
+                  <Grid size={{ xs: 12, md: 6 }}>
+                    <Paper
+                      variant="outlined"
+                      sx={{
+                        p: 3,
+                        borderRadius: "16px",
+                        height: "100%",
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          mb: 2,
+                        }}
+                      >
+                        <Typography variant="h6" fontWeight={600}>
+                          Loại máy
+                        </Typography>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          startIcon={<Add />}
+                          onClick={() =>
+                            handleOpenDialog("create", "machine-type")
+                          }
+                          sx={btnGreenStyle}
+                        >
+                          Thêm
+                        </Button>
+                      </Box>
+                      <List disablePadding>
+                        {machineTypes.map((item, index) => (
+                          <ListItem
+                            key={item.uuid}
+                            secondaryAction={
+                              <Box>
+                                <IconButton
+                                  size="small"
+                                  onClick={() =>
+                                    handleOpenDialog("edit", "machine-type", {
+                                      uuid: item.uuid,
+                                      name_machine_type: item.name,
+                                    })
+                                  }
+                                >
+                                  <Edit fontSize="small" color="primary" />
+                                </IconButton>
+                                <IconButton
+                                  size="small"
+                                  onClick={() =>
+                                    handleDelete(
+                                      "machine-type",
+                                      item.uuid,
+                                      item.name
+                                    )
+                                  }
+                                >
+                                  <Delete fontSize="small" color="error" />
+                                </IconButton>
+                              </Box>
+                            }
+                            divider={index < machineTypes.length - 1}
+                            sx={{ py: 1 }}
+                          >
+                            <ListItemText primary={item.name} />
+                          </ListItem>
+                        ))}
+                      </List>
+                    </Paper>
+                  </Grid>
+
+                  {/* ĐẶC TÍNH */}
+                  <Grid size={{ xs: 12, md: 6 }}>
+                    <Paper
+                      variant="outlined"
+                      sx={{
+                        p: 3,
+                        borderRadius: "16px",
+                        height: "100%",
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          mb: 2,
+                        }}
+                      >
+                        <Typography variant="h6" fontWeight={600}>
+                          Đặc tính
+                        </Typography>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          startIcon={<Add />}
+                          onClick={() =>
+                            handleOpenDialog("create", "machine-attribute")
+                          }
+                          sx={btnGreenStyle}
+                        >
+                          Thêm
+                        </Button>
+                      </Box>
+                      <List disablePadding>
+                        {machineAttributes.map((item, index) => (
+                          <ListItem
+                            key={item.uuid}
+                            secondaryAction={
+                              <Box>
+                                <IconButton
+                                  size="small"
+                                  onClick={() =>
+                                    handleOpenDialog(
+                                      "edit",
+                                      "machine-attribute",
+                                      {
+                                        uuid: item.uuid,
+                                        name_machine_attribute: item.name,
+                                      }
+                                    )
+                                  }
+                                >
+                                  <Edit fontSize="small" color="primary" />
+                                </IconButton>
+                                <IconButton
+                                  size="small"
+                                  onClick={() =>
+                                    handleDelete(
+                                      "machine-attribute",
+                                      item.uuid,
+                                      item.name
+                                    )
+                                  }
+                                >
+                                  <Delete fontSize="small" color="error" />
+                                </IconButton>
+                              </Box>
+                            }
+                            divider={index < machineAttributes.length - 1}
+                            sx={{ py: 1 }}
+                          >
+                            <ListItemText primary={item.name} />
+                          </ListItem>
+                        ))}
+                      </List>
+                    </Paper>
+                  </Grid>
+
+                  {/* HÃNG SẢN XUẤT */}
+                  <Grid size={{ xs: 12, md: 6 }}>
+                    <Paper
+                      variant="outlined"
+                      sx={{
+                        p: 3,
+                        borderRadius: "16px",
+                        height: "100%",
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          mb: 2,
+                        }}
+                      >
+                        <Typography variant="h6" fontWeight={600}>
+                          Hãng sản xuất
+                        </Typography>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          startIcon={<Add />}
+                          onClick={() =>
+                            handleOpenDialog("create", "machine-manufacturer")
+                          }
+                          sx={btnGreenStyle}
+                        >
+                          Thêm
+                        </Button>
+                      </Box>
+                      <List disablePadding>
+                        {machineManufacturers.map((item, index) => (
+                          <ListItem
+                            key={item.uuid}
+                            secondaryAction={
+                              <Box>
+                                <IconButton
+                                  size="small"
+                                  onClick={() =>
+                                    handleOpenDialog(
+                                      "edit",
+                                      "machine-manufacturer",
+                                      {
+                                        uuid: item.uuid,
+                                        name_machine_manufacturer: item.name,
+                                      }
+                                    )
+                                  }
+                                >
+                                  <Edit fontSize="small" color="primary" />
+                                </IconButton>
+                                <IconButton
+                                  size="small"
+                                  onClick={() =>
+                                    handleDelete(
+                                      "machine-manufacturer",
+                                      item.uuid,
+                                      item.name
+                                    )
+                                  }
+                                >
+                                  <Delete fontSize="small" color="error" />
+                                </IconButton>
+                              </Box>
+                            }
+                            divider={index < machineManufacturers.length - 1}
+                            sx={{ py: 1 }}
+                          >
+                            <ListItemText primary={item.name} />
+                          </ListItem>
+                        ))}
+                      </List>
+                    </Paper>
+                  </Grid>
+
+                  {/* NHÀ CUNG CẤP */}
+                  <Grid size={{ xs: 12, md: 6 }}>
+                    <Paper
+                      variant="outlined"
+                      sx={{
+                        p: 3,
+                        borderRadius: "16px",
+                        height: "100%",
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          mb: 2,
+                        }}
+                      >
+                        <Typography variant="h6" fontWeight={600}>
+                          Nhà cung cấp
+                        </Typography>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          startIcon={<Add />}
+                          onClick={() =>
+                            handleOpenDialog("create", "machine-supplier")
+                          }
+                          sx={btnGreenStyle}
+                        >
+                          Thêm
+                        </Button>
+                      </Box>
+                      <List disablePadding>
+                        {machineSuppliers.map((item, index) => (
+                          <ListItem
+                            key={item.uuid}
+                            secondaryAction={
+                              <Box>
+                                <IconButton
+                                  size="small"
+                                  onClick={() =>
+                                    handleOpenDialog(
+                                      "edit",
+                                      "machine-supplier",
+                                      {
+                                        uuid: item.uuid,
+                                        name_machine_supplier: item.name,
+                                      }
+                                    )
+                                  }
+                                >
+                                  <Edit fontSize="small" color="primary" />
+                                </IconButton>
+                                <IconButton
+                                  size="small"
+                                  onClick={() =>
+                                    handleDelete(
+                                      "machine-supplier",
+                                      item.uuid,
+                                      item.name
+                                    )
+                                  }
+                                >
+                                  <Delete fontSize="small" color="error" />
+                                </IconButton>
+                              </Box>
+                            }
+                            divider={index < machineSuppliers.length - 1}
+                            sx={{ py: 1 }}
+                          >
+                            <ListItemText primary={item.name} />
+                          </ListItem>
+                        ))}
+                      </List>
+                    </Paper>
+                  </Grid>
+
+                  {/* LIÊN KẾT ĐẶC TÍNH VỚI LOẠI MÁY */}
+                  <Grid size={{ xs: 12 }}>
+                    <Paper
+                      variant="outlined"
+                      sx={{
+                        p: 3,
+                        borderRadius: "16px",
+                      }}
+                    >
+                      <Typography variant="h6" fontWeight={600} mb={2}>
+                        Liên kết Đặc tính với Loại máy
+                      </Typography>
+                      <Grid container spacing={2}>
+                        <Grid size={{ xs: 12, md: 4 }}>
+                          <FormControl fullWidth sx={inputStyle}>
+                            <InputLabel>Chọn Loại máy</InputLabel>
+                            <Select
+                              value={selectedTypeForAttributes || ""}
+                              label="Chọn Loại máy"
+                              onChange={(e) => {
+                                const uuid = e.target.value;
+                                setSelectedTypeForAttributes(uuid);
+                                fetchTypeAttributes(uuid);
+                              }}
+                            >
+                              <MenuItem value="">
+                                <em>Chọn loại máy</em>
+                              </MenuItem>
+                              {machineTypes.map((type) => (
+                                <MenuItem key={type.uuid} value={type.uuid}>
+                                  {type.name}
+                                </MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
+                        </Grid>
+                        <Grid size={{ xs: 12, md: 8 }}>
+                          {selectedTypeForAttributes ? (
+                            <Box>
+                              <Typography variant="subtitle2" mb={1}>
+                                Đặc tính đã liên kết:
+                              </Typography>
+                              <Box
+                                sx={{
+                                  display: "flex",
+                                  flexWrap: "wrap",
+                                  gap: 1,
+                                  mb: 2,
+                                }}
+                              >
+                                {typeAttributes.map((attr) => (
+                                  <Chip
+                                    key={attr.uuid}
+                                    label={attr.name}
+                                    onDelete={() =>
+                                      handleUnlinkAttribute(
+                                        selectedTypeForAttributes,
+                                        attr.uuid
+                                      )
+                                    }
+                                    deleteIcon={<LinkOff />}
+                                    color="primary"
+                                    variant="outlined"
+                                  />
+                                ))}
+                              </Box>
+                              <Typography variant="subtitle2" mb={1}>
+                                Đặc tính chưa liên kết:
+                              </Typography>
+                              <Box
+                                sx={{
+                                  display: "flex",
+                                  flexWrap: "wrap",
+                                  gap: 1,
+                                }}
+                              >
+                                {machineAttributes
+                                  .filter(
+                                    (attr) =>
+                                      !typeAttributes.some(
+                                        (ta) => ta.uuid === attr.uuid
+                                      )
+                                  )
+                                  .map((attr) => (
+                                    <Chip
+                                      key={attr.uuid}
+                                      label={attr.name}
+                                      onClick={() =>
+                                        handleLinkAttribute(
+                                          selectedTypeForAttributes,
+                                          attr.uuid
+                                        )
+                                      }
+                                      icon={<Link />}
+                                      color="default"
+                                      variant="outlined"
+                                      sx={{ cursor: "pointer" }}
+                                    />
+                                  ))}
+                              </Box>
+                            </Box>
+                          ) : (
+                            <Alert severity="info">
+                              Vui lòng chọn loại máy để quản lý đặc tính
+                            </Alert>
+                          )}
+                        </Grid>
+                      </Grid>
+                    </Paper>
+                  </Grid>
+                </Grid>
+              </TabPanel>
+
+              {/* === TAB PHÂN QUYỀN === */}
+              <TabPanel value={currentTab} index={3}>
                 <Grid container spacing={3}>
                   {/* CỘT TRÁI: TÌM KIẾM */}
                   <Grid size={{ xs: 12, md: 5 }}>
@@ -1129,7 +1779,17 @@ const AdminPage = () => {
                 ? "Đơn vị"
                 : currentItem?.type === "location"
                 ? "Vị trí"
-                : "Phân Loại"}
+                : currentItem?.type === "category"
+                ? "Phân Loại"
+                : currentItem?.type === "machine-type"
+                ? "Loại máy"
+                : currentItem?.type === "machine-attribute"
+                ? "Đặc tính"
+                : currentItem?.type === "machine-manufacturer"
+                ? "Hãng sản xuất"
+                : currentItem?.type === "machine-supplier"
+                ? "Nhà cung cấp"
+                : ""}
             </Box>
             <IconButton onClick={handleCloseDialog} sx={{ color: "white" }}>
               <Close />

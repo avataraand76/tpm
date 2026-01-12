@@ -537,7 +537,9 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
     const {
       type_machines,
       model_machines,
+      attribute_machines,
       manufacturers,
+      suppliers,
       name_locations,
       current_status,
       is_borrowed_or_rented_or_borrowed_out,
@@ -599,6 +601,10 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
         searchColumn = "m.manufacturer";
         searchTermRaw = search.substring(search.indexOf(":") + 1).trim();
         isSpecificSearch = true;
+      } else if (searchLower.startsWith("ncc:")) {
+        searchColumn = "m.supplier";
+        searchTermRaw = search.substring(search.indexOf(":") + 1).trim();
+        isSpecificSearch = true;
       } else if (
         searchLower.startsWith("ma:") ||
         searchLower.startsWith("code:")
@@ -623,16 +629,18 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
         const searchPattern = `%${search}%`;
         whereConditions.push(`
           (m.type_machine LIKE ?
+          OR m.attribute_machine LIKE ?
           OR m.model_machine LIKE ?
           OR m.code_machine LIKE ? 
           OR m.serial_machine LIKE ? 
           OR m.manufacturer LIKE ?
+          OR m.supplier LIKE ?
           OR tl.name_location LIKE ?
           OR m.RFID_machine LIKE ?
           OR m.NFC_machine LIKE ?)
         `);
-        // Push params 8 lần cho 8 dấu ?
-        for (let i = 0; i < 8; i++) {
+        // Push params 10 lần cho 10 dấu ?
+        for (let i = 0; i < 10; i++) {
           countParams.push(searchPattern);
           dataParams.push(searchPattern);
         }
@@ -650,7 +658,17 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
       dataParams.push(typeValues);
     }
 
-    // 3. Model filter
+    // 3. Attribute filter
+    if (attribute_machines && attribute_machines.length > 0) {
+      whereConditions.push(`m.attribute_machine IN (?)`);
+      const attrValues = Array.isArray(attribute_machines)
+        ? attribute_machines
+        : [attribute_machines];
+      countParams.push(attrValues);
+      dataParams.push(attrValues);
+    }
+
+    // 4. Model filter
     if (model_machines && model_machines.length > 0) {
       whereConditions.push(`m.model_machine IN (?)`);
       const modelValues = Array.isArray(model_machines)
@@ -660,7 +678,7 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
       dataParams.push(modelValues);
     }
 
-    // 4. Manufacturer filter
+    // 5. Manufacturer filter
     if (manufacturers && manufacturers.length > 0) {
       whereConditions.push(`m.manufacturer IN (?)`);
       const manuValues = Array.isArray(manufacturers)
@@ -670,7 +688,15 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
       dataParams.push(manuValues);
     }
 
-    // 5. Location filter
+    // 6. Supplier filter
+    if (suppliers && suppliers.length > 0) {
+      whereConditions.push(`m.supplier IN (?)`);
+      const supplierValues = Array.isArray(suppliers) ? suppliers : [suppliers];
+      countParams.push(supplierValues);
+      dataParams.push(supplierValues);
+    }
+
+    // 7. Location filter
     if (name_locations && name_locations.length > 0) {
       whereConditions.push(`tl.name_location IN (?)`);
       const locValues = Array.isArray(name_locations)
@@ -680,7 +706,7 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
       dataParams.push(locValues);
     }
 
-    // 6. Current Status filter (Trạng thái chính)
+    // 8. Current Status filter (Trạng thái chính)
     if (current_status && current_status.length > 0) {
       whereConditions.push(`m.current_status IN (?)`);
       const statusValues = Array.isArray(current_status)
@@ -690,7 +716,7 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
       dataParams.push(statusValues);
     }
 
-    // 7. Borrow Status filter (Trạng thái mượn/thuê)
+    // 9. Borrow Status filter (Trạng thái mượn/thuê)
     // (req.query param "is_borrowed_or_rented_or_borrowed_out" sẽ được map tới cột "is_borrowed_...")
     if (
       is_borrowed_or_rented_or_borrowed_out &&
@@ -742,8 +768,10 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
       const columnMap = {
         code_machine: "m.code_machine",
         type_machine: "m.type_machine",
+        attribute_machine: "m.attribute_machine",
         model_machine: "m.model_machine",
         manufacturer: "m.manufacturer",
+        supplier: "m.supplier",
         serial_machine: "m.serial_machine",
         RFID_machine: "m.RFID_machine",
         NFC_machine: "m.NFC_machine",
@@ -752,6 +780,15 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
         current_status: "m.current_status",
         is_borrowed_or_rented_or_borrowed_out:
           "m.is_borrowed_or_rented_or_borrowed_out",
+        is_borrowed_or_rented_or_borrowed_out_name:
+          "m.is_borrowed_or_rented_or_borrowed_out_name",
+        is_borrowed_or_rented_or_borrowed_out_date:
+          "m.is_borrowed_or_rented_or_borrowed_out_date",
+        is_borrowed_or_rented_or_borrowed_out_return_date:
+          "m.is_borrowed_or_rented_or_borrowed_out_return_date",
+        power: "m.power",
+        pressure: "m.pressure",
+        voltage: "m.voltage",
         price: "m.price",
         lifespan: "m.lifespan",
         repair_cost: "m.repair_cost",
@@ -803,6 +840,11 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
         m.is_borrowed_or_rented_or_borrowed_out_name,
         m.is_borrowed_or_rented_or_borrowed_out_date,
         m.is_borrowed_or_rented_or_borrowed_out_return_date,
+        m.attribute_machine,
+        m.supplier,
+        m.power,
+        m.pressure,
+        m.voltage,
         m.created_at,
         m.updated_at,
         c.name_category,
@@ -852,7 +894,9 @@ app.get(
       const allowedFields = [
         "type_machine",
         "model_machine",
+        "attribute_machine",
         "manufacturer",
+        "supplier",
         "name_location",
       ];
 
@@ -930,6 +974,517 @@ app.get(
     }
   }
 );
+
+// GET /api/machine-types - Get all machine types
+app.get("/api/machine-types", authenticateToken, async (req, res) => {
+  try {
+    const [types] = await tpmConnection.query(
+      `SELECT 
+        uuid_machine_type as uuid,
+        name_machine_type as name
+      FROM tb_machine_type
+      ORDER BY name_machine_type ASC`
+    );
+    res.json({
+      success: true,
+      data: types,
+    });
+  } catch (error) {
+    console.error("Error fetching machine types:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+// GET /api/machine-types/:uuid/attributes - Get attributes for a specific machine type
+app.get(
+  "/api/machine-types/:uuid/attributes",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { uuid } = req.params;
+      const [attributes] = await tpmConnection.query(
+        `SELECT 
+          ma.uuid_machine_attribute as uuid,
+          ma.name_machine_attribute as name
+        FROM tb_machine_attribute ma
+        INNER JOIN tb_machine_type_attribute mta ON mta.id_machine_attribute = ma.id_machine_attribute
+        INNER JOIN tb_machine_type mt ON mt.id_machine_type = mta.id_machine_type
+        WHERE mt.uuid_machine_type = ?
+        ORDER BY ma.name_machine_attribute ASC`,
+        [uuid]
+      );
+      res.json({
+        success: true,
+        data: attributes,
+      });
+    } catch (error) {
+      console.error("Error fetching machine type attributes:", error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// GET /api/machine-manufacturers - Get all machine manufacturers
+app.get("/api/machine-manufacturers", authenticateToken, async (req, res) => {
+  try {
+    const [manufacturers] = await tpmConnection.query(
+      `SELECT 
+          uuid_machine_manufacturer as uuid,
+          name_machine_manufacturer as name
+        FROM tb_machine_manufacturer
+        ORDER BY name_machine_manufacturer ASC`
+    );
+    res.json({
+      success: true,
+      data: manufacturers,
+    });
+  } catch (error) {
+    console.error("Error fetching machine manufacturers:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+// GET /api/machine-suppliers - Get all machine suppliers
+app.get("/api/machine-suppliers", authenticateToken, async (req, res) => {
+  try {
+    const [suppliers] = await tpmConnection.query(
+      `SELECT 
+        uuid_machine_supplier as uuid,
+        name_machine_supplier as name
+      FROM tb_machine_supplier
+      ORDER BY name_machine_supplier ASC`
+    );
+    res.json({
+      success: true,
+      data: suppliers,
+    });
+  } catch (error) {
+    console.error("Error fetching machine suppliers:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+// ========== ADMIN API: MACHINE TYPES, ATTRIBUTES, MANUFACTURERS, SUPPLIERS ==========
+
+// --- MACHINE TYPES ---
+// POST /api/admin/machine-types - Create machine type
+app.post("/api/admin/machine-types", async (req, res) => {
+  try {
+    const { name_machine_type } = req.body;
+    const userId = req.user.id;
+    if (!name_machine_type) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Tên loại máy là bắt buộc" });
+    }
+    const [result] = await tpmConnection.query(
+      "INSERT INTO tb_machine_type (name_machine_type, created_by, updated_by) VALUES (?, ?, ?)",
+      [name_machine_type, userId, userId]
+    );
+    const [newData] = await tpmConnection.query(
+      "SELECT uuid_machine_type as uuid, name_machine_type as name FROM tb_machine_type WHERE id_machine_type = ?",
+      [result.insertId]
+    );
+    res.status(201).json({
+      success: true,
+      message: "Tạo loại máy thành công",
+      data: newData[0],
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// PUT /api/admin/machine-types/:uuid - Update machine type
+app.put("/api/admin/machine-types/:uuid", async (req, res) => {
+  try {
+    const { uuid } = req.params;
+    const { name_machine_type } = req.body;
+    const userId = req.user.id;
+    if (!name_machine_type) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Tên loại máy là bắt buộc" });
+    }
+    await tpmConnection.query(
+      "UPDATE tb_machine_type SET name_machine_type = ?, updated_by = ? WHERE uuid_machine_type = ?",
+      [name_machine_type, userId, uuid]
+    );
+    res.json({ success: true, message: "Cập nhật loại máy thành công" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// DELETE /api/admin/machine-types/:uuid - Delete machine type
+app.delete("/api/admin/machine-types/:uuid", async (req, res) => {
+  try {
+    const { uuid } = req.params;
+    // Check if type is used in machines
+    const [used] = await tpmConnection.query(
+      "SELECT COUNT(*) as count FROM tb_machine WHERE type_machine = (SELECT name_machine_type FROM tb_machine_type WHERE uuid_machine_type = ?)",
+      [uuid]
+    );
+    if (used[0].count > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Không thể xóa loại máy đang được sử dụng",
+      });
+    }
+    // Delete type-attribute relationships first
+    await tpmConnection.query(
+      "DELETE FROM tb_machine_type_attribute WHERE id_machine_type = (SELECT id_machine_type FROM tb_machine_type WHERE uuid_machine_type = ?)",
+      [uuid]
+    );
+    await tpmConnection.query(
+      "DELETE FROM tb_machine_type WHERE uuid_machine_type = ?",
+      [uuid]
+    );
+    res.json({ success: true, message: "Xóa loại máy thành công" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// --- MACHINE ATTRIBUTES ---
+// GET /api/admin/machine-attributes - Get all machine attributes
+app.get("/api/admin/machine-attributes", async (req, res) => {
+  try {
+    const [attributes] = await tpmConnection.query(
+      `SELECT 
+        uuid_machine_attribute as uuid,
+        name_machine_attribute as name
+      FROM tb_machine_attribute
+      ORDER BY name_machine_attribute ASC`
+    );
+    res.json({ success: true, data: attributes });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/admin/machine-attributes - Create machine attribute
+app.post("/api/admin/machine-attributes", async (req, res) => {
+  try {
+    const { name_machine_attribute } = req.body;
+    const userId = req.user.id;
+    if (!name_machine_attribute) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Tên đặc tính là bắt buộc" });
+    }
+    const [result] = await tpmConnection.query(
+      "INSERT INTO tb_machine_attribute (name_machine_attribute, created_by, updated_by) VALUES (?, ?, ?)",
+      [name_machine_attribute, userId, userId]
+    );
+    const [newData] = await tpmConnection.query(
+      "SELECT uuid_machine_attribute as uuid, name_machine_attribute as name FROM tb_machine_attribute WHERE id_machine_attribute = ?",
+      [result.insertId]
+    );
+    res.status(201).json({
+      success: true,
+      message: "Tạo đặc tính thành công",
+      data: newData[0],
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// PUT /api/admin/machine-attributes/:uuid - Update machine attribute
+app.put("/api/admin/machine-attributes/:uuid", async (req, res) => {
+  try {
+    const { uuid } = req.params;
+    const { name_machine_attribute } = req.body;
+    const userId = req.user.id;
+    if (!name_machine_attribute) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Tên đặc tính là bắt buộc" });
+    }
+    await tpmConnection.query(
+      "UPDATE tb_machine_attribute SET name_machine_attribute = ?, updated_by = ? WHERE uuid_machine_attribute = ?",
+      [name_machine_attribute, userId, uuid]
+    );
+    res.json({ success: true, message: "Cập nhật đặc tính thành công" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// DELETE /api/admin/machine-attributes/:uuid - Delete machine attribute
+app.delete("/api/admin/machine-attributes/:uuid", async (req, res) => {
+  try {
+    const { uuid } = req.params;
+    // Check if attribute is used in machines
+    const [used] = await tpmConnection.query(
+      "SELECT COUNT(*) as count FROM tb_machine WHERE attribute_machine = (SELECT name_machine_attribute FROM tb_machine_attribute WHERE uuid_machine_attribute = ?)",
+      [uuid]
+    );
+    if (used[0].count > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Không thể xóa đặc tính đang được sử dụng",
+      });
+    }
+    // Delete type-attribute relationships
+    await tpmConnection.query(
+      "DELETE FROM tb_machine_type_attribute WHERE id_machine_attribute = (SELECT id_machine_attribute FROM tb_machine_attribute WHERE uuid_machine_attribute = ?)",
+      [uuid]
+    );
+    await tpmConnection.query(
+      "DELETE FROM tb_machine_attribute WHERE uuid_machine_attribute = ?",
+      [uuid]
+    );
+    res.json({ success: true, message: "Xóa đặc tính thành công" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/admin/machine-types/:uuid/attributes - Link attribute to type
+app.post("/api/admin/machine-types/:uuid/attributes", async (req, res) => {
+  try {
+    const { uuid } = req.params;
+    const { attribute_uuid } = req.body;
+    if (!attribute_uuid) {
+      return res
+        .status(400)
+        .json({ success: false, message: "UUID đặc tính là bắt buộc" });
+    }
+    // Get IDs
+    const [type] = await tpmConnection.query(
+      "SELECT id_machine_type FROM tb_machine_type WHERE uuid_machine_type = ?",
+      [uuid]
+    );
+    const [attr] = await tpmConnection.query(
+      "SELECT id_machine_attribute FROM tb_machine_attribute WHERE uuid_machine_attribute = ?",
+      [attribute_uuid]
+    );
+    if (type.length === 0 || attr.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Loại máy hoặc đặc tính không tồn tại",
+      });
+    }
+    // Check if already linked
+    const [existing] = await tpmConnection.query(
+      "SELECT * FROM tb_machine_type_attribute WHERE id_machine_type = ? AND id_machine_attribute = ?",
+      [type[0].id_machine_type, attr[0].id_machine_attribute]
+    );
+    if (existing.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Đặc tính đã được liên kết với loại máy này",
+      });
+    }
+    await tpmConnection.query(
+      "INSERT INTO tb_machine_type_attribute (id_machine_type, id_machine_attribute) VALUES (?, ?)",
+      [type[0].id_machine_type, attr[0].id_machine_attribute]
+    );
+    res.status(201).json({
+      success: true,
+      message: "Liên kết đặc tính với loại máy thành công",
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// DELETE /api/admin/machine-types/:uuid/attributes/:attrUuid - Unlink attribute from type
+app.delete(
+  "/api/admin/machine-types/:uuid/attributes/:attrUuid",
+  async (req, res) => {
+    try {
+      const { uuid, attrUuid } = req.params;
+      const [type] = await tpmConnection.query(
+        "SELECT id_machine_type FROM tb_machine_type WHERE uuid_machine_type = ?",
+        [uuid]
+      );
+      const [attr] = await tpmConnection.query(
+        "SELECT id_machine_attribute FROM tb_machine_attribute WHERE uuid_machine_attribute = ?",
+        [attrUuid]
+      );
+      if (type.length === 0 || attr.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Loại máy hoặc đặc tính không tồn tại",
+        });
+      }
+      await tpmConnection.query(
+        "DELETE FROM tb_machine_type_attribute WHERE id_machine_type = ? AND id_machine_attribute = ?",
+        [type[0].id_machine_type, attr[0].id_machine_attribute]
+      );
+      res.json({ success: true, message: "Hủy liên kết đặc tính thành công" });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+);
+
+// --- MACHINE MANUFACTURERS ---
+// POST /api/admin/machine-manufacturers - Create manufacturer
+app.post("/api/admin/machine-manufacturers", async (req, res) => {
+  try {
+    const { name_machine_manufacturer } = req.body;
+    const userId = req.user.id;
+    if (!name_machine_manufacturer) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Tên hãng sản xuất là bắt buộc" });
+    }
+    const [result] = await tpmConnection.query(
+      "INSERT INTO tb_machine_manufacturer (name_machine_manufacturer, created_by, updated_by) VALUES (?, ?, ?)",
+      [name_machine_manufacturer, userId, userId]
+    );
+    const [newData] = await tpmConnection.query(
+      "SELECT uuid_machine_manufacturer as uuid, name_machine_manufacturer as name FROM tb_machine_manufacturer WHERE id_machine_manufacturer = ?",
+      [result.insertId]
+    );
+    res.status(201).json({
+      success: true,
+      message: "Tạo hãng sản xuất thành công",
+      data: newData[0],
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// PUT /api/admin/machine-manufacturers/:uuid - Update manufacturer
+app.put("/api/admin/machine-manufacturers/:uuid", async (req, res) => {
+  try {
+    const { uuid } = req.params;
+    const { name_machine_manufacturer } = req.body;
+    const userId = req.user.id;
+    if (!name_machine_manufacturer) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Tên hãng sản xuất là bắt buộc" });
+    }
+    await tpmConnection.query(
+      "UPDATE tb_machine_manufacturer SET name_machine_manufacturer = ?, updated_by = ? WHERE uuid_machine_manufacturer = ?",
+      [name_machine_manufacturer, userId, uuid]
+    );
+    res.json({ success: true, message: "Cập nhật hãng sản xuất thành công" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// DELETE /api/admin/machine-manufacturers/:uuid - Delete manufacturer
+app.delete("/api/admin/machine-manufacturers/:uuid", async (req, res) => {
+  try {
+    const { uuid } = req.params;
+    const [used] = await tpmConnection.query(
+      "SELECT COUNT(*) as count FROM tb_machine WHERE manufacturer = (SELECT name_machine_manufacturer FROM tb_machine_manufacturer WHERE uuid_machine_manufacturer = ?)",
+      [uuid]
+    );
+    if (used[0].count > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Không thể xóa hãng sản xuất đang được sử dụng",
+      });
+    }
+    await tpmConnection.query(
+      "DELETE FROM tb_machine_manufacturer WHERE uuid_machine_manufacturer = ?",
+      [uuid]
+    );
+    res.json({ success: true, message: "Xóa hãng sản xuất thành công" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// --- MACHINE SUPPLIERS ---
+// POST /api/admin/machine-suppliers - Create supplier
+app.post("/api/admin/machine-suppliers", async (req, res) => {
+  try {
+    const { name_machine_supplier } = req.body;
+    const userId = req.user.id;
+    if (!name_machine_supplier) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Tên nhà cung cấp là bắt buộc" });
+    }
+    const [result] = await tpmConnection.query(
+      "INSERT INTO tb_machine_supplier (name_machine_supplier, created_by, updated_by) VALUES (?, ?, ?)",
+      [name_machine_supplier, userId, userId]
+    );
+    const [newData] = await tpmConnection.query(
+      "SELECT uuid_machine_supplier as uuid, name_machine_supplier as name FROM tb_machine_supplier WHERE id_machine_supplier = ?",
+      [result.insertId]
+    );
+    res.status(201).json({
+      success: true,
+      message: "Tạo nhà cung cấp thành công",
+      data: newData[0],
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// PUT /api/admin/machine-suppliers/:uuid - Update supplier
+app.put("/api/admin/machine-suppliers/:uuid", async (req, res) => {
+  try {
+    const { uuid } = req.params;
+    const { name_machine_supplier } = req.body;
+    const userId = req.user.id;
+    if (!name_machine_supplier) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Tên nhà cung cấp là bắt buộc" });
+    }
+    await tpmConnection.query(
+      "UPDATE tb_machine_supplier SET name_machine_supplier = ?, updated_by = ? WHERE uuid_machine_supplier = ?",
+      [name_machine_supplier, userId, uuid]
+    );
+    res.json({ success: true, message: "Cập nhật nhà cung cấp thành công" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// DELETE /api/admin/machine-suppliers/:uuid - Delete supplier
+app.delete("/api/admin/machine-suppliers/:uuid", async (req, res) => {
+  try {
+    const { uuid } = req.params;
+    const [used] = await tpmConnection.query(
+      "SELECT COUNT(*) as count FROM tb_machine WHERE supplier = (SELECT name_machine_supplier FROM tb_machine_supplier WHERE uuid_machine_supplier = ?)",
+      [uuid]
+    );
+    if (used[0].count > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Không thể xóa nhà cung cấp đang được sử dụng",
+      });
+    }
+    await tpmConnection.query(
+      "DELETE FROM tb_machine_supplier WHERE uuid_machine_supplier = ?",
+      [uuid]
+    );
+    res.json({ success: true, message: "Xóa nhà cung cấp thành công" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
 
 // GET /api/machines/stats - Get machine statistics
 app.get("/api/machines/stats", authenticateToken, async (req, res) => {
@@ -1281,6 +1836,10 @@ app.get("/api/machines/search", authenticateToken, async (req, res) => {
       searchColumn = "m.manufacturer";
       searchTermRaw = search.substring(search.indexOf(":") + 1).trim();
       isSpecificSearch = true;
+    } else if (searchLower.startsWith("ncc:")) {
+      searchColumn = "m.supplier";
+      searchTermRaw = search.substring(search.indexOf(":") + 1).trim();
+      isSpecificSearch = true;
     } else if (
       searchLower.startsWith("ma:") ||
       searchLower.startsWith("code:")
@@ -1308,6 +1867,7 @@ app.get("/api/machines/search", authenticateToken, async (req, res) => {
 
       whereConditions.push(`
         (m.type_machine LIKE ? 
+        OR m.attribute_machine LIKE ?
         OR m.model_machine LIKE ? 
         OR m.code_machine LIKE ? 
         OR m.serial_machine LIKE ? 
@@ -1315,8 +1875,16 @@ app.get("/api/machines/search", authenticateToken, async (req, res) => {
         OR m.NFC_machine LIKE ?)
       `);
       const pattern = `%${search}%`;
-      // Push 6 lần cho 6 dấu ?
-      searchParams.push(pattern, pattern, pattern, pattern, pattern, pattern);
+      // Push 7 lần cho 7 dấu ?
+      searchParams.push(
+        pattern,
+        pattern,
+        pattern,
+        pattern,
+        pattern,
+        pattern,
+        pattern
+      );
     }
 
     // --- 2. XỬ LÝ LOGIC LỌC THEO LOẠI PHIẾU (Ticket Type) ---
@@ -1368,6 +1936,7 @@ app.get("/api/machines/search", authenticateToken, async (req, res) => {
         m.uuid_machine,
         m.code_machine,
         m.type_machine,
+        m.attribute_machine,
         m.model_machine,
         m.serial_machine,
         m.RFID_machine,
@@ -1488,6 +2057,11 @@ app.get("/api/machines/:uuid", authenticateToken, async (req, res) => {
         m.is_borrowed_or_rented_or_borrowed_out_name,
         m.is_borrowed_or_rented_or_borrowed_out_date,
         m.is_borrowed_or_rented_or_borrowed_out_return_date,
+        m.attribute_machine,
+        m.supplier,
+        m.power,
+        m.pressure,
+        m.voltage,
         m.created_at,
         m.updated_at,
         c.name_category,
@@ -1634,7 +2208,8 @@ app.get(
       SELECT 
         m.uuid_machine,
         m.code_machine,
-        m.type_machine, 
+        m.type_machine,
+        m.attribute_machine,
         m.model_machine,
         m.serial_machine,
         m.RFID_machine,
@@ -1894,7 +2469,8 @@ app.post("/api/machines/by-rfid-list", authenticateToken, async (req, res) => {
       SELECT 
         m.uuid_machine,
         m.code_machine,
-        m.type_machine, 
+        m.type_machine,
+        m.attribute_machine,
         m.model_machine,
         m.serial_machine,
         m.RFID_machine,
@@ -2087,6 +2663,11 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
       note,
       current_status,
       name_category,
+      attribute_machine,
+      supplier,
+      power,
+      pressure,
+      voltage,
     } = req.body;
 
     // Validate required fields
@@ -2161,8 +2742,9 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
       INSERT INTO tb_machine 
         (code_machine, serial_machine, RFID_machine, NFC_machine, type_machine, model_machine, manufacturer, 
          price, date_of_use, lifespan, repair_cost, note, current_status, id_category,
+         attribute_machine, supplier, power, pressure, voltage,
          created_by, updated_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         code_machine,
@@ -2179,6 +2761,11 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
         note || null,
         current_status || "available",
         id_category,
+        attribute_machine || null,
+        supplier || null,
+        power || null,
+        pressure || null,
+        voltage || null,
         userId, // created_by
         userId, // updated_by
       ]
@@ -2201,6 +2788,11 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
         m.repair_cost,
         m.note,
         m.current_status,
+        m.attribute_machine,
+        m.supplier,
+        m.power,
+        m.pressure,
+        m.voltage,
         m.created_at,
         m.updated_at,
         c.name_category,
@@ -2297,6 +2889,11 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
       note,
       current_status,
       is_borrowed_or_rented_or_borrowed_out_return_date,
+      attribute_machine,
+      supplier,
+      power,
+      pressure,
+      voltage,
     } = req.body;
 
     // Check if machine exists
@@ -2360,6 +2957,11 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         note = ?,
         current_status = ?,
         is_borrowed_or_rented_or_borrowed_out_return_date = ?,
+        attribute_machine = ?,
+        supplier = ?,
+        power = ?,
+        pressure = ?,
+        voltage = ?,
         updated_by = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE uuid_machine = ?
@@ -2379,6 +2981,11 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         note,
         current_status,
         is_borrowed_or_rented_or_borrowed_out_return_date,
+        attribute_machine,
+        supplier,
+        power,
+        pressure,
+        voltage,
         userId, // updated_by
         uuid,
       ]
@@ -2406,6 +3013,11 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         m.is_borrowed_or_rented_or_borrowed_out_name,
         m.is_borrowed_or_rented_or_borrowed_out_date,
         m.is_borrowed_or_rented_or_borrowed_out_return_date,
+        m.attribute_machine,
+        m.supplier,
+        m.power,
+        m.pressure,
+        m.voltage,
         m.created_at,
         m.updated_at,
         c.name_category,
@@ -2741,8 +3353,9 @@ app.post("/api/machines/batch-import", authenticateToken, async (req, res) => {
         `INSERT INTO tb_machine 
           (code_machine, serial_machine, RFID_machine, NFC_machine, type_machine, model_machine, manufacturer, 
            price, date_of_use, lifespan, repair_cost, note, current_status, id_category,
+           attribute_machine, supplier, power, pressure, voltage,
            created_by, updated_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           m.code_machine,
           m.serial_machine,
@@ -2758,6 +3371,11 @@ app.post("/api/machines/batch-import", authenticateToken, async (req, res) => {
           m.note || null,
           "available",
           m.id_category_looked_up,
+          m.attribute_machine || null,
+          m.supplier || null,
+          m.power || null,
+          m.pressure || null,
+          m.voltage || null,
           userId,
           userId,
         ]
@@ -2766,6 +3384,7 @@ app.post("/api/machines/batch-import", authenticateToken, async (req, res) => {
         code: m.code_machine,
         serial: m.serial_machine,
         type: m.type_machine,
+        attribute: m.attribute_machine,
         model: m.model_machine,
       });
     }
@@ -2858,7 +3477,7 @@ app.post(
           if (!machine.RFID_machine || machine.RFID_machine.trim() === "") {
             errors.push({
               keyword: cleanKey,
-              message: `Máy "${machine.type_machine} - ${machine.model_machine}" (Serial: ${machine.serial_machine}) chưa được gán thẻ RFID.`,
+              message: `Máy "${machine.type_machine} ${machine.attribute_machine} - ${machine.model_machine}" (Serial: ${machine.serial_machine}) chưa được gán thẻ RFID.`,
             });
             continue;
           }
@@ -2866,7 +3485,7 @@ app.post(
           targets.push({
             targetRfid: machine.RFID_machine,
             info: {
-              name: `${machine.type_machine} - ${machine.model_machine}`,
+              name: `${machine.type_machine} ${machine.attribute_machine} - ${machine.model_machine}`,
               serial: machine.serial_machine,
               code: machine.code_machine,
               status: machine.current_status,
@@ -3500,6 +4119,7 @@ app.get("/api/imports/:uuid", authenticateToken, async (req, res) => {
         m.uuid_machine,
         m.code_machine,
         m.type_machine,
+        m.attribute_machine,
         m.model_machine,
         m.serial_machine,
         m.current_status,
@@ -4188,6 +4808,7 @@ app.get("/api/exports/:uuid", authenticateToken, async (req, res) => {
         m.uuid_machine,
         m.code_machine,
         m.type_machine,
+        m.attribute_machine,
         m.model_machine,
         m.serial_machine,
         m.current_status,
@@ -4814,6 +5435,7 @@ app.get(
           m.uuid_machine,
           m.code_machine,
           m.type_machine,
+          m.attribute_machine,
           m.model_machine,
           m.serial_machine,
           m.current_status,
@@ -5481,7 +6103,9 @@ app.get(
       const {
         type_machines,
         model_machines,
+        attribute_machines,
         manufacturers,
+        suppliers,
         current_status,
         is_borrowed_or_rented_or_borrowed_out,
       } = req.query;
@@ -5546,7 +6170,16 @@ app.get(
         filterParams.push(modelValues);
         dataParams.push(modelValues);
       }
-      // 3. Manufacturer filter
+      // 3. Attribute filter
+      if (attribute_machines && attribute_machines.length > 0) {
+        whereConditions.push(`m.attribute_machine IN (?)`);
+        const attrValues = Array.isArray(attribute_machines)
+          ? attribute_machines
+          : [attribute_machines];
+        filterParams.push(attrValues);
+        dataParams.push(attrValues);
+      }
+      // 4. Manufacturer filter
       if (manufacturers && manufacturers.length > 0) {
         whereConditions.push(`m.manufacturer IN (?)`);
         const manuValues = Array.isArray(manufacturers)
@@ -5555,7 +6188,16 @@ app.get(
         filterParams.push(manuValues);
         dataParams.push(manuValues);
       }
-      // 4. Current Status filter
+      // 5. Supplier filter
+      if (suppliers && suppliers.length > 0) {
+        whereConditions.push(`m.supplier IN (?)`);
+        const supplierValues = Array.isArray(suppliers)
+          ? suppliers
+          : [suppliers];
+        filterParams.push(supplierValues);
+        dataParams.push(supplierValues);
+      }
+      // 6. Current Status filter
       if (current_status && current_status.length > 0) {
         whereConditions.push(`m.current_status IN (?)`);
         const statusValues = Array.isArray(current_status)
@@ -5564,7 +6206,7 @@ app.get(
         filterParams.push(statusValues);
         dataParams.push(statusValues);
       }
-      // 5. Borrow Status filter
+      // 7. Borrow Status filter
       if (
         is_borrowed_or_rented_or_borrowed_out &&
         is_borrowed_or_rented_or_borrowed_out.length > 0
@@ -5630,6 +6272,7 @@ app.get(
           m.uuid_machine,
           m.code_machine,
           m.type_machine,
+          m.attribute_machine,
           m.model_machine,
           m.serial_machine,
           m.current_status,
@@ -5678,7 +6321,7 @@ app.get("/api/machines/:uuid/history", authenticateToken, async (req, res) => {
 
     // 1. Get internal machine ID
     const [machineResult] = await tpmConnection.query(
-      "SELECT id_machine, code_machine, type_machine, model_machine FROM tb_machine WHERE uuid_machine = ?",
+      "SELECT id_machine, code_machine, type_machine, attribute_machine, model_machine FROM tb_machine WHERE uuid_machine = ?",
       [uuid]
     );
 
@@ -5749,6 +6392,7 @@ app.get("/api/machines/:uuid/history", authenticateToken, async (req, res) => {
           code_machine: machineResult[0].code_machine,
           type_machine: machineResult[0].type_machine,
           model_machine: machineResult[0].model_machine,
+          attribute_machine: machineResult[0].attribute_machine,
         },
         history: history, // history giờ đã chứa ma_nv và ten_nv
       },
@@ -5832,7 +6476,9 @@ app.get(
       const {
         type_machines,
         model_machines,
+        attribute_machines,
         manufacturers,
+        suppliers,
         name_locations,
         current_status,
         is_borrowed_or_rented_or_borrowed_out,
@@ -5900,7 +6546,16 @@ app.get(
         filterParams.push(modelValues);
         dataParams.push(modelValues);
       }
-      // 3. Manufacturer filter
+      // 3. Attribute filter
+      if (attribute_machines && attribute_machines.length > 0) {
+        whereConditions.push(`m.attribute_machine IN (?)`);
+        const attrValues = Array.isArray(attribute_machines)
+          ? attribute_machines
+          : [attribute_machines];
+        filterParams.push(attrValues);
+        dataParams.push(attrValues);
+      }
+      // 4. Manufacturer filter
       if (manufacturers && manufacturers.length > 0) {
         whereConditions.push(`m.manufacturer IN (?)`);
         const manuValues = Array.isArray(manufacturers)
@@ -5909,7 +6564,16 @@ app.get(
         filterParams.push(manuValues);
         dataParams.push(manuValues);
       }
-      // 4. Location filter (specific to department view)
+      // 5. Supplier filter
+      if (suppliers && suppliers.length > 0) {
+        whereConditions.push(`m.supplier IN (?)`);
+        const supplierValues = Array.isArray(suppliers)
+          ? suppliers
+          : [suppliers];
+        filterParams.push(supplierValues);
+        dataParams.push(supplierValues);
+      }
+      // 6. Location filter (specific to department view)
       if (name_locations && name_locations.length > 0) {
         whereConditions.push(`tl.name_location IN (?)`);
         const locValues = Array.isArray(name_locations)
@@ -5990,6 +6654,7 @@ app.get(
           m.uuid_machine,
           m.code_machine,
           m.type_machine,
+          m.attribute_machine,
           m.model_machine,
           m.serial_machine,
           m.current_status,
@@ -7238,16 +7903,51 @@ app.post(
       }
 
       // --- 6. GỬI SANG EXTERNAL API ---
-      // A. Nhóm các máy theo Type + Model
+      // A. Query lại đầy đủ thông tin máy từ database
+      const machineUuids = machines.map((m) => m.uuid_machine);
+      const [machineDetails] = await connection.query(
+        `SELECT 
+          uuid_machine,
+          type_machine,
+          attribute_machine,
+          model_machine,
+          serial_machine
+        FROM tb_machine 
+        WHERE uuid_machine IN (?)`,
+        [machineUuids]
+      );
+
+      // Tạo map để tra cứu nhanh
+      const machineMap = {};
+      machineDetails.forEach((m) => {
+        machineMap[m.uuid_machine] = m;
+      });
+
+      // B. Nhóm các máy theo Type + Attribute + Model
       const groupedMachines = {};
 
       machines.forEach((m) => {
-        const key = `${m.type_machine || ""}|${m.model_machine || ""}`;
+        // Lấy thông tin đầy đủ từ database
+        const machineInfo = machineMap[m.uuid_machine];
+        if (!machineInfo) return; // Bỏ qua nếu không tìm thấy
+
+        const typeMachine = machineInfo.type_machine || "";
+        const attributeMachine = machineInfo.attribute_machine || "";
+        const modelMachine = machineInfo.model_machine || "";
+        const serialMachine = machineInfo.serial_machine || "";
+
+        const key = `${typeMachine}|${attributeMachine}|${modelMachine}`;
 
         if (!groupedMachines[key]) {
+          // Tạo tên thiết bị kèm attribute nếu có
+          let deviceName = typeMachine;
+          if (attributeMachine) {
+            deviceName = `${deviceName} ${attributeMachine}`;
+          }
+
           groupedMachines[key] = {
-            name: m.type_machine || "",
-            model: m.model_machine || "",
+            name: deviceName.trim() || "",
+            model: modelMachine,
             unit: "Máy",
             count: 0,
             serials: [],
@@ -7256,8 +7956,8 @@ app.post(
         }
 
         groupedMachines[key].count += 1;
-        if (m.serial_machine) {
-          groupedMachines[key].serials.push(m.serial_machine);
+        if (serialMachine) {
+          groupedMachines[key].serials.push(serialMachine);
         }
         if (m.note) {
           groupedMachines[key].notes.push(m.note);
@@ -7273,10 +7973,10 @@ app.post(
           index + 1, // STT
           group.name, // Tên thiết bị
           group.model, // Model
+          serialsString, // Serial
           group.unit, // ĐVT
           group.count, // Số lượng yêu cầu
           group.count, // Số lượng thực xuất
-          serialsString, // Serial
           notesString, // Ghi chú
         ];
       });
@@ -7287,10 +7987,10 @@ app.post(
         "",
         "Tổng",
         "",
+        "",
         "Máy",
         totalMachines,
         totalMachines,
-        "",
         "",
       ]);
 
@@ -7339,14 +8039,14 @@ app.post(
           columns: [
             "STT",
             "Tên thiết bị",
-            "Model",
+            "Số hiệu/Model",
+            "Số máy/Serial",
             "ĐVT",
             "SL Yêu cầu",
             "SL Thực xuất",
-            "Serial",
             "Ghi chú",
           ],
-          columnWidths: [2.0, 3.0, 4.0, 2.0, 2.0, 2.0, 4.0, 5.0],
+          columnWidths: [2.0, 3.0, 4.0, 4.0, 2.0, 2.0, 2.0, 5.0],
           rows: tableRows,
         },
         ...(expansionField.length > 0 && { expansion_field: expansionField }),
@@ -8159,7 +8859,9 @@ app.post(
 
           return {
             uuid: m.uuid_machine,
-            name: `${m.type_machine || ""} - ${m.model_machine || ""}`,
+            name: `${m.type_machine || ""} ${m.attribute_machine || ""} - ${
+              m.model_machine || ""
+            }`,
             serial: m.serial_machine,
             code: m.code_machine,
             RFID: m.RFID_machine,
@@ -8645,7 +9347,7 @@ app.put(
           columns: [
             "STT",
             "Tên thiết bị",
-            "Serial",
+            "Số máy/Serial",
             "ĐVT",
             "SL",
             "Vị trí hiện tại",
