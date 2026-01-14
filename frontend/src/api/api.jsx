@@ -531,7 +531,7 @@ export const api = {
     },
     // Machine Attributes
     getMachineAttributes: async () => {
-      const response = await httpConnect.get("/api/admin/machine-attributes");
+      const response = await httpConnect.get("/api/machine-attributes");
       return response.data;
     },
     createMachineAttribute: async (data) => {

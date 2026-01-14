@@ -7342,7 +7342,7 @@ app.delete("/api/admin/machine-types/:uuid", async (req, res) => {
 
 // --- MACHINE ATTRIBUTES ---
 // GET /api/admin/machine-attributes - Get all machine attributes
-app.get("/api/admin/machine-attributes", async (req, res) => {
+app.get("/api/machine-attributes", async (req, res) => {
   try {
     const [attributes] = await tpmConnection.query(
       `SELECT 

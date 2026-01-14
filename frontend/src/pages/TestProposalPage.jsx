@@ -2100,38 +2100,38 @@ const TestProposalPage = () => {
 
   const handleDownloadSampleExcel = async () => {
     try {
-      // 1. Lấy danh sách loại máy, hãng sản xuất, đặc tính và nhà cung cấp từ API
+      // 1. Lấy danh sách loại máy, hãng sản xuất, đặc tính và nhà cung cấp từ API ADMIN
       const [
         typeMachineResult,
         manufacturerResult,
         attributeResult,
         supplierResult,
       ] = await Promise.all([
-        api.machines.getDistinctValues({ field: "type_machine" }),
-        api.machines.getDistinctValues({ field: "manufacturer" }),
-        api.machines.getDistinctValues({ field: "attribute_machine" }),
-        api.machines.getDistinctValues({ field: "supplier" }),
+        api.admin.getMachineTypes(),
+        api.admin.getMachineManufacturers(),
+        api.admin.getMachineAttributes(),
+        api.admin.getMachineSuppliers(),
       ]);
 
       // Đảm bảo có ít nhất 1 dòng để tránh lỗi validation
       const typeMachineList =
         typeMachineResult.success && typeMachineResult.data.length > 0
-          ? typeMachineResult.data
+          ? typeMachineResult.data.map((item) => item.name)
           : ["Máy mẫu"];
 
       const manufacturerList =
         manufacturerResult.success && manufacturerResult.data.length > 0
-          ? manufacturerResult.data
+          ? manufacturerResult.data.map((item) => item.name)
           : ["Hãng mẫu"];
 
       const attributeList =
         attributeResult.success && attributeResult.data.length > 0
-          ? attributeResult.data
+          ? attributeResult.data.map((item) => item.name)
           : ["Đặc tính mẫu"];
 
       const supplierList =
         supplierResult.success && supplierResult.data.length > 0
-          ? supplierResult.data
+          ? supplierResult.data.map((item) => item.name)
           : ["Nhà cung cấp mẫu"];
 
       // 2. Tải file Excel mẫu
