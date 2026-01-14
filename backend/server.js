@@ -885,92 +885,123 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
   }
 });
 
+// GET /api/machines/distinct-values
 app.get(
   "/api/machines/distinct-values",
   authenticateToken,
   async (req, res) => {
     try {
-      const { field, department_uuid, location_uuid } = req.query; // <<< THÊM MỚI
-      const allowedFields = [
-        "type_machine",
-        "model_machine",
-        "attribute_machine",
-        "manufacturer",
-        "supplier",
-        "name_location",
-      ];
+      const {
+        field,
+        department_uuid, // Context: Đơn vị đang chọn
+        location_uuid, // Context: Vị trí đang chọn
+        // Filters từ dropdown
+        type_machines,
+        attribute_machines,
+        model_machines,
+        manufacturers,
+        suppliers,
+        name_locations,
+      } = req.query;
 
-      if (!field || !allowedFields.includes(field)) {
-        return res
-          .status(400)
-          .json({ success: false, message: "Invalid field" });
-      }
+      const toArray = (val) => (Array.isArray(val) ? val : [val]);
+      const hasValue = (val) => val && val.length > 0;
 
-      let query;
+      let query = "";
       let params = [];
-      let joins = [];
       let whereConditions = [];
+      let joins = [];
 
+      // 1. Base Query
       if (field === "name_location") {
-        // Lọc Vị trí (chỉ dùng khi xem theo Đơn vị)
         query = `SELECT DISTINCT tl.name_location as value 
                  FROM tb_location tl 
-                 LEFT JOIN tb_department td ON td.id_department = tl.id_department`;
+                 LEFT JOIN tb_department td ON td.id_department = tl.id_department
+                 LEFT JOIN tb_machine_location ml ON ml.id_location = tl.id_location
+                 LEFT JOIN tb_machine m ON m.id_machine = ml.id_machine`;
+
         whereConditions.push(
-          `tl.name_location IS NOT NULL AND tl.name_location != ''`
+          "tl.name_location IS NOT NULL AND tl.name_location != ''"
         );
-
-        if (department_uuid) {
-          whereConditions.push(`td.uuid_department = ?`);
-          params.push(department_uuid);
-        }
       } else {
-        // Lọc Loại máy, Model, Hãng SX
-        query = `SELECT DISTINCT m.${field} as value 
-                 FROM tb_machine m`;
+        query = `SELECT DISTINCT m.${field} as value FROM tb_machine m`;
         joins.push(
-          `LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine`
+          "LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine"
         );
         joins.push(
-          `LEFT JOIN tb_location tl ON tl.id_location = ml.id_location`
+          "LEFT JOIN tb_location tl ON tl.id_location = ml.id_location"
         );
+        joins.push(
+          "LEFT JOIN tb_department td ON td.id_department = tl.id_department"
+        );
+
         whereConditions.push(`m.${field} IS NOT NULL AND m.${field} != ''`);
-        whereConditions.push(`m.current_status != 'temporary'`);
-
-        if (location_uuid) {
-          // Ưu tiên lọc theo Vị trí
-          whereConditions.push(`tl.uuid_location = ?`);
-          params.push(location_uuid);
-        } else if (department_uuid) {
-          // Nếu không, lọc theo Đơn vị
-          joins.push(
-            `LEFT JOIN tb_department td ON td.id_department = tl.id_department`
-          );
-          whereConditions.push(`td.uuid_department = ?`);
-          params.push(department_uuid);
-        } else {
-          // Nếu không chọn gì (trường hợp này không nên xảy ra ở LocationTrackPage)
-          // Nó sẽ trả về tất cả
-        }
+        whereConditions.push("m.current_status != 'temporary'");
       }
 
-      query += " \n " + joins.join(" \n ");
-      if (whereConditions.length > 0) {
-        query += ` WHERE ${whereConditions.join(" AND ")}`;
+      // 2. CONTEXT FILTERS (Luôn áp dụng nếu có - Đây là sự khác biệt chính)
+      // Nếu đang ở trang Theo dõi vị trí, ta phải luôn giới hạn trong Vị trí/Đơn vị đó
+      if (location_uuid) {
+        whereConditions.push(`tl.uuid_location = ?`);
+        params.push(location_uuid);
+      } else if (department_uuid) {
+        whereConditions.push(`td.uuid_department = ?`);
+        params.push(department_uuid);
       }
+
+      // 3. CASCADING FILTERS (Áp dụng nếu không phải là field đang query)
+
+      // -> Loại máy
+      if (field !== "type_machine" && hasValue(type_machines)) {
+        whereConditions.push(`m.type_machine IN (?)`);
+        params.push(toArray(type_machines));
+      }
+
+      // -> Đặc tính
+      if (field !== "attribute_machine" && hasValue(attribute_machines)) {
+        whereConditions.push(`m.attribute_machine IN (?)`);
+        params.push(toArray(attribute_machines));
+      }
+
+      // -> Model
+      if (field !== "model_machine" && hasValue(model_machines)) {
+        whereConditions.push(`m.model_machine IN (?)`);
+        params.push(toArray(model_machines));
+      }
+
+      // -> Hãng SX
+      if (field !== "manufacturer" && hasValue(manufacturers)) {
+        whereConditions.push(`m.manufacturer IN (?)`);
+        params.push(toArray(manufacturers));
+      }
+
+      // -> Nhà cung cấp
+      if (field !== "supplier" && hasValue(suppliers)) {
+        whereConditions.push(`m.supplier IN (?)`);
+        params.push(toArray(suppliers));
+      }
+
+      // -> Vị trí (Tên) - Chỉ dùng khi xem theo Đơn vị (để lọc các vị trí con)
+      // Lưu ý: Nếu đã có location_uuid (context) thì cái này thường thừa, nhưng giữ logic chung
+      if (field !== "name_location" && hasValue(name_locations)) {
+        whereConditions.push(`tl.name_location IN (?)`);
+        params.push(toArray(name_locations));
+      }
+
+      // 4. Execute
+      if (joins.length > 0) query += " " + joins.join(" ");
+      if (whereConditions.length > 0)
+        query += " WHERE " + whereConditions.join(" AND ");
+
       if (field !== "name_location") {
         query += ` ORDER BY value ASC`;
       }
 
-      const [values] = await tpmConnection.query(query, params);
-      res.json({ success: true, data: values.map((v) => v.value) });
+      const [rows] = await tpmConnection.query(query, params);
+      res.json({ success: true, data: rows.map((r) => r.value) });
     } catch (error) {
-      console.error("Error fetching distinct values:", error);
-      res.status(500).json({
-        success: false,
-        message: "Internal server error",
-        error: error.message,
-      });
+      console.error("Error distinct values:", error);
+      res.status(500).json({ success: false, message: error.message });
     }
   }
 );
@@ -3616,6 +3647,85 @@ app.get("/api/imports", authenticateToken, async (req, res) => {
   }
 });
 
+// GET /api/imports/stats - Get import ticket statistics
+app.get("/api/imports/stats", authenticateToken, async (req, res) => {
+  try {
+    // Get counts by status
+    const [statusStats] = await tpmConnection.query(
+      `
+      SELECT 
+        status,
+        COUNT(*) as count
+      FROM tb_machine_import
+      GROUP BY status
+      `
+    );
+
+    // Get counts by import_type
+    const [typeStats] = await tpmConnection.query(
+      `
+      SELECT 
+        import_type,
+        COUNT(*) as count
+      FROM tb_machine_import
+      GROUP BY import_type
+      `
+    );
+
+    // Transform to object format
+    const stats = {
+      byStatus: {
+        pending: 0,
+        completed: 0,
+        cancelled: 0,
+      },
+      byType: {
+        purchased: 0,
+        maintenance_return: 0,
+        rented: 0,
+        borrowed: 0,
+        borrowed_out_return: 0,
+      },
+    };
+
+    statusStats.forEach((row) => {
+      if (row.status === "pending" || row.status === "pending_approval") {
+        stats.byStatus.pending += row.count;
+      } else if (row.status === "completed") {
+        stats.byStatus.completed += row.count;
+      } else if (row.status === "cancelled") {
+        stats.byStatus.cancelled += row.count;
+      }
+    });
+
+    typeStats.forEach((row) => {
+      if (row.import_type === "purchased") {
+        stats.byType.purchased = row.count;
+      } else if (row.import_type === "maintenance_return") {
+        stats.byType.maintenance_return = row.count;
+      } else if (row.import_type === "rented") {
+        stats.byType.rented = row.count;
+      } else if (row.import_type === "borrowed") {
+        stats.byType.borrowed = row.count;
+      } else if (row.import_type === "borrowed_out_return") {
+        stats.byType.borrowed_out_return = row.count;
+      }
+    });
+
+    res.json({
+      success: true,
+      data: stats,
+    });
+  } catch (error) {
+    console.error("Error fetching import stats:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
 // GET /api/imports/:uuid - Get import details by UUID
 app.get("/api/imports/:uuid", authenticateToken, async (req, res) => {
   try {
@@ -4305,6 +4415,85 @@ app.get("/api/exports", authenticateToken, async (req, res) => {
   }
 });
 
+// GET /api/exports/stats - Get export ticket statistics
+app.get("/api/exports/stats", authenticateToken, async (req, res) => {
+  try {
+    // Get counts by status
+    const [statusStats] = await tpmConnection.query(
+      `
+      SELECT 
+        status,
+        COUNT(*) as count
+      FROM tb_machine_export
+      GROUP BY status
+      `
+    );
+
+    // Get counts by export_type
+    const [typeStats] = await tpmConnection.query(
+      `
+      SELECT 
+        export_type,
+        COUNT(*) as count
+      FROM tb_machine_export
+      GROUP BY export_type
+      `
+    );
+
+    // Transform to object format
+    const stats = {
+      byStatus: {
+        pending: 0,
+        completed: 0,
+        cancelled: 0,
+      },
+      byType: {
+        liquidation: 0,
+        maintenance: 0,
+        borrowed_out: 0,
+        rented_return: 0,
+        borrowed_return: 0,
+      },
+    };
+
+    statusStats.forEach((row) => {
+      if (row.status === "pending" || row.status === "pending_approval") {
+        stats.byStatus.pending += row.count;
+      } else if (row.status === "completed") {
+        stats.byStatus.completed += row.count;
+      } else if (row.status === "cancelled") {
+        stats.byStatus.cancelled += row.count;
+      }
+    });
+
+    typeStats.forEach((row) => {
+      if (row.export_type === "liquidation") {
+        stats.byType.liquidation = row.count;
+      } else if (row.export_type === "maintenance") {
+        stats.byType.maintenance = row.count;
+      } else if (row.export_type === "borrowed_out") {
+        stats.byType.borrowed_out = row.count;
+      } else if (row.export_type === "rented_return") {
+        stats.byType.rented_return = row.count;
+      } else if (row.export_type === "borrowed_return") {
+        stats.byType.borrowed_return = row.count;
+      }
+    });
+
+    res.json({
+      success: true,
+      data: stats,
+    });
+  } catch (error) {
+    console.error("Error fetching export stats:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
 // GET /api/exports/:uuid - Get export details by UUID
 app.get("/api/exports/:uuid", authenticateToken, async (req, res) => {
   try {
@@ -4821,6 +5010,7 @@ app.get("/api/internal-transfers", authenticateToken, async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const status = req.query.status || "";
+    const to_location_uuid = req.query.to_location_uuid || "";
     const offset = (page - 1) * limit;
 
     let whereConditions = [];
@@ -4831,6 +5021,11 @@ app.get("/api/internal-transfers", authenticateToken, async (req, res) => {
       params.push(status);
     }
 
+    if (to_location_uuid) {
+      whereConditions.push(`loc_to.uuid_location = ?`);
+      params.push(to_location_uuid);
+    }
+
     const whereClause =
       whereConditions.length > 0
         ? `WHERE ${whereConditions.join(" AND ")}`
@@ -4838,7 +5033,10 @@ app.get("/api/internal-transfers", authenticateToken, async (req, res) => {
 
     // Get total count
     const [countResult] = await tpmConnection.query(
-      `SELECT COUNT(*) as total FROM tb_machine_internal_transfer t ${whereClause}`,
+      `SELECT COUNT(DISTINCT t.id_machine_internal_transfer) as total 
+       FROM tb_machine_internal_transfer t
+       LEFT JOIN tb_location loc_to ON loc_to.id_location = t.to_location_id
+       ${whereClause}`,
       params
     );
     const total = countResult[0].total;
@@ -4944,6 +5142,58 @@ app.get("/api/internal-transfers", authenticateToken, async (req, res) => {
     });
   }
 });
+
+// GET /api/internal-transfers/stats - Get transfer ticket statistics
+app.get(
+  "/api/internal-transfers/stats",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      // Get counts by status
+      const [statusStats] = await tpmConnection.query(
+        `
+      SELECT 
+        status,
+        COUNT(*) as count
+      FROM tb_machine_internal_transfer
+      GROUP BY status
+      `
+      );
+
+      // Transform to object format
+      const stats = {
+        pending_confirmation: 0,
+        pending_approval: 0,
+        completed: 0,
+        cancelled: 0,
+      };
+
+      statusStats.forEach((row) => {
+        if (row.status === "pending_confirmation") {
+          stats.pending_confirmation = row.count;
+        } else if (row.status === "pending_approval") {
+          stats.pending_approval = row.count;
+        } else if (row.status === "completed") {
+          stats.completed = row.count;
+        } else if (row.status === "cancelled") {
+          stats.cancelled = row.count;
+        }
+      });
+
+      res.json({
+        success: true,
+        data: stats,
+      });
+    } catch (error) {
+      console.error("Error fetching transfer stats:", error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    }
+  }
+);
 
 // GET /api/internal-transfers/:uuid - Get single internal transfer details
 app.get(
@@ -8061,16 +8311,31 @@ app.post(
         );
         const externalResponse = await axios.post(
           // "https://servertienich.vietlonghung.com.vn/api/fw/create-proposal-reality-outdoor",
-          "http://192.168.0.34:16002/api/fw/create-proposal-reality-outdoor",
+          "http://192.168.0.41:16002/api/fw/create-proposal-reality-outdoor",
           externalPayload
         );
         console.log("External API Response:", externalResponse.data);
       } catch (extError) {
         console.error("Error calling External API:", extError.message);
+        if (extError.response?.data?.message) {
+          console.error(
+            "Error calling External API detail:",
+            extError.response.data.message
+          );
+        }
+
+        // Nếu gọi Fastwork lỗi thì rollback, KHÔNG tạo phiếu trong hệ thống TPM
+        await connection.rollback();
+        return res.status(500).json({
+          success: false,
+          message:
+            "Lỗi khi gửi phiếu sang hệ thống Fastwork, phiếu chưa được tạo, vui lòng tạo lại.",
+          error: extError.message,
+        });
       }
 
       await connection.commit();
-      res.json({
+      return res.json({
         success: true,
         message: "Tạo phiếu thử nghiệm và gửi duyệt thành công",
         data: { local_uuid: newTicketUuid },
@@ -8559,6 +8824,57 @@ app.get("/api/inventory-checks", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Error fetching inventory checks:", error);
     res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/inventory-checks/stats - Get inventory ticket statistics
+app.get("/api/inventory-checks/stats", authenticateToken, async (req, res) => {
+  try {
+    // Get counts by status
+    const [statusStats] = await tpmConnection.query(
+      `
+      SELECT 
+        status,
+        COUNT(*) as count
+      FROM tb_inventory_check
+      GROUP BY status
+      `
+    );
+
+    // Transform to object format
+    const stats = {
+      draft: 0,
+      pending: 0,
+      completed: 0,
+      cancelled: 0,
+    };
+
+    statusStats.forEach((row) => {
+      if (row.status === "draft") {
+        stats.draft = row.count;
+      } else if (
+        row.status === "pending" ||
+        row.status === "pending_approval"
+      ) {
+        stats.pending += row.count;
+      } else if (row.status === "completed") {
+        stats.completed = row.count;
+      } else if (row.status === "cancelled") {
+        stats.cancelled = row.count;
+      }
+    });
+
+    res.json({
+      success: true,
+      data: stats,
+    });
+  } catch (error) {
+    console.error("Error fetching inventory stats:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
   }
 });
 
@@ -9366,16 +9682,33 @@ app.put(
         );
         const externalResponse = await axios.post(
           // "https://servertienich.vietlonghung.com.vn/api/fw/create-proposal-reality-outdoor",
-          "http://192.168.0.34:16002/api/fw/create-proposal-reality-outdoor",
+          "http://192.168.0.41:16002/api/fw/create-proposal-reality-outdoor",
           externalPayload
         );
         console.log("External API Response:", externalResponse.data);
       } catch (extError) {
         console.error("Error calling External API:", extError.message);
+        if (extError.response?.data?.message) {
+          console.error(
+            "Error calling External API detail:",
+            extError.response.data.message
+          );
+        }
+        // Nếu gọi Fastwork lỗi thì rollback, KHÔNG gửi và không đổi trạng thái phiếu kiểm kê
+        await connection.rollback();
+        return res.status(500).json({
+          success: false,
+          message:
+            "Lỗi khi gửi phiếu kiểm kê sang hệ thống Fastwork, phiếu chưa được gửi, vui lòng gửi lại.",
+          error: extError.message,
+        });
       }
 
       await connection.commit();
-      res.json({ success: true, message: "Đã gửi phiếu kiểm kê đi duyệt" });
+      return res.json({
+        success: true,
+        message: "Đã gửi phiếu kiểm kê đi duyệt",
+      });
     } catch (error) {
       await connection.rollback();
       console.error("Error submitting inventory:", error);

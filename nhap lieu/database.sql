@@ -112,6 +112,7 @@ create table if not exists tb_machine_type
     
     -- key
     primary key (id_machine_type),
+    unique (name_machine_type),
     
     -- timestamp
     created_at timestamp default current_timestamp,
@@ -132,6 +133,7 @@ create table if not exists tb_machine_attribute
     
     -- key
     primary key (id_machine_attribute),
+    unique (name_machine_attribute),
     
     -- timestamp
     created_at timestamp default current_timestamp,
@@ -169,6 +171,7 @@ create table if not exists tb_machine_manufacturer
     
     -- key
     primary key (id_machine_manufacturer),
+    unique (name_machine_manufacturer),
     
     -- timestamp
     created_at timestamp default current_timestamp,
@@ -189,6 +192,7 @@ create table if not exists tb_machine_supplier
     
     -- key
     primary key (id_machine_supplier),
+    unique (name_machine_supplier),
     
     -- timestamp
     created_at timestamp default current_timestamp,
@@ -234,7 +238,9 @@ create table if not exists tb_machine
     -- key
     primary key (id_machine),
     unique (id_machine, id_category),
-    
+    unique (serial_machine),
+    unique (RFID_machine),
+
     -- timestamp
     created_at timestamp default current_timestamp,
     created_by bigint default '0',

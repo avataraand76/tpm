@@ -813,51 +813,71 @@ const LocationTrackPage = () => {
     }
   }, []);
 
-  const fetchFilterOptions = useCallback(async () => {
-    let params = {};
-    if (selectedLocation) {
-      params.location_uuid = selectedLocation.uuid_location;
-    } else if (selectedDepartment) {
-      params.department_uuid = selectedDepartment.uuid_department;
-    } else {
-      // Nếu không chọn gì, xóa các tùy chọn và không gọi API
-      setTypeOptions([]);
-      setAttributeOptions([]);
-      setModelOptions([]);
-      setManufacturerOptions([]);
-      setSupplierOptions([]);
-      return;
-    }
-    try {
-      // Tải song song các tùy chọn chung
-      const [typeRes, attrRes, modelRes, manuRes, supplierRes] =
-        await Promise.all([
-          api.machines.getDistinctValues({ field: "type_machine", ...params }),
-          api.machines.getDistinctValues({
-            field: "attribute_machine",
-            ...params,
-          }),
-          api.machines.getDistinctValues({ field: "model_machine", ...params }),
-          api.machines.getDistinctValues({ field: "manufacturer", ...params }),
-          api.machines.getDistinctValues({ field: "supplier", ...params }),
-        ]);
-      if (typeRes.success) setTypeOptions(typeRes.data);
-      if (attrRes.success) setAttributeOptions(attrRes.data);
-      if (modelRes.success) setModelOptions(modelRes.data);
-      if (manuRes.success) setManufacturerOptions(manuRes.data);
-      if (supplierRes.success) setSupplierOptions(supplierRes.data);
-    } catch (err) {
-      console.error("Error fetching filter options:", err);
-    }
-  }, [selectedDepartment, selectedLocation]);
+  const fetchFilterOptions = useCallback(
+    async (currentFilters = {}) => {
+      // 1. Xác định Context (Đơn vị hoặc Vị trí đang chọn)
+      let contextParams = {};
+      if (selectedLocation) {
+        contextParams.location_uuid = selectedLocation.uuid_location;
+      } else if (selectedDepartment) {
+        contextParams.department_uuid = selectedDepartment.uuid_department;
+      } else {
+        // Nếu chưa chọn gì cả, reset options và thoát
+        setTypeOptions([]);
+        setAttributeOptions([]);
+        setModelOptions([]);
+        setManufacturerOptions([]);
+        setSupplierOptions([]);
+        return;
+      }
+
+      // 2. Hàm helper tạo params gồm: Field cần lấy + Context + Các Filters hiện tại
+      const makeParams = (field) => ({
+        field,
+        ...contextParams, // Spread context (location/department uuid)
+        type_machines: currentFilters.type_machines || [],
+        attribute_machines: currentFilters.attribute_machines || [],
+        model_machines: currentFilters.model_machines || [],
+        manufacturers: currentFilters.manufacturers || [],
+        suppliers: currentFilters.suppliers || [],
+        name_locations: currentFilters.name_locations || [],
+      });
+
+      try {
+        // 3. Gọi API song song
+        const [typeRes, attrRes, modelRes, manuRes, supplierRes] =
+          await Promise.all([
+            api.machines.getDistinctValues(makeParams("type_machine")),
+            api.machines.getDistinctValues(makeParams("attribute_machine")),
+            api.machines.getDistinctValues(makeParams("model_machine")),
+            api.machines.getDistinctValues(makeParams("manufacturer")),
+            api.machines.getDistinctValues(makeParams("supplier")),
+            // Nếu đang xem theo Department, có thể cần cập nhật list LocationFilter options
+            // api.machines.getDistinctValues(makeParams("name_location")),
+          ]);
+
+        if (typeRes.success) setTypeOptions(typeRes.data);
+        if (attrRes.success) setAttributeOptions(attrRes.data);
+        if (modelRes.success) setModelOptions(modelRes.data);
+        if (manuRes.success) setManufacturerOptions(manuRes.data);
+        if (supplierRes.success) setSupplierOptions(supplierRes.data);
+      } catch (err) {
+        console.error("Error fetching filter options:", err);
+      }
+    },
+    [selectedDepartment, selectedLocation]
+  );
 
   useEffect(() => {
     fetchDepartments();
   }, [fetchDepartments]);
 
   useEffect(() => {
-    fetchFilterOptions();
-  }, [fetchFilterOptions]);
+    // Chỉ chạy nếu đã chọn Department hoặc Location
+    if (selectedDepartment || selectedLocation) {
+      fetchFilterOptions(filters);
+    }
+  }, [selectedDepartment, selectedLocation, filters, fetchFilterOptions]);
 
   // THÊM useEffect NÀY: Tải Vị trí khi Đơn vị thay đổi
   useEffect(() => {
@@ -871,37 +891,27 @@ const LocationTrackPage = () => {
   // useEffect để tự động tải lại máy móc khi `selectedLocation` hoặc `page` thay đổi
   useEffect(() => {
     if (selectedLocation) {
-      // ƯU TIÊN 1: Tải theo VỊ TRÍ
+      // ƯU TIÊN 1: VỊ TRÍ
       fetchMachinesAtLocation(selectedLocation.uuid_location, page, limit);
       fetchMachineTypeStats(selectedLocation.uuid_location);
+      fetchMatrixStats(selectedLocation.uuid_location, null);
     } else if (selectedDepartment) {
-      // ƯU TIÊN 2: Tải theo ĐƠN VỊ
+      // ƯU TIÊN 2: ĐƠN VỊ
       fetchMachinesAtDepartment(
         selectedDepartment.uuid_department,
         page,
         limit
       );
       fetchDepartmentTypeStats(selectedDepartment.uuid_department);
+      fetchMatrixStats(null, selectedDepartment.uuid_department);
     } else {
-      // ƯU TIÊN 3: Reset mọi thứ
+      // RESET
       setMachinesAtLocation([]);
-      setLocationStats({
-        total: 0,
-        available: 0,
-        in_use: 0,
-        maintenance: 0,
-        broken: 0,
-        borrowed_out: 0,
-        liquidation: 0,
-        disabled: 0,
-        rented: 0,
-        borrowed: 0,
-        borrowed_return: 0,
-        rented_return: 0,
-      });
+      setLocationStats({});
       setTotalPages(1);
       setPage(1);
       setTypeStats([]);
+      setMatrixData({});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDepartment, selectedLocation, page, limit, filters]);

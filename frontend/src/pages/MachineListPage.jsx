@@ -891,17 +891,32 @@ const MachineListPage = () => {
     }
   };
 
-  const fetchFilterOptions = async () => {
+  const fetchFilterOptions = async (currentFilters = {}) => {
     try {
+      // Tạo object params bao gồm field cần lấy + toàn bộ filter hiện tại
+      const makeParams = (field) => ({
+        field,
+        type_machines: currentFilters.type_machines || [],
+        attribute_machines: currentFilters.attribute_machines || [],
+        model_machines: currentFilters.model_machines || [],
+        manufacturers: currentFilters.manufacturers || [],
+        suppliers: currentFilters.suppliers || [],
+        name_locations: currentFilters.name_locations || [],
+        // Nếu trang này có lọc theo department/location cứng (như trang tracking)
+        // department_uuid: currentDepartmentUuid,
+      });
+
+      // Gọi API song song cho tất cả các dropdown
       const [typeRes, attrRes, modelRes, manuRes, supplierRes, locRes] =
         await Promise.all([
-          api.machines.getDistinctValues({ field: "type_machine" }),
-          api.machines.getDistinctValues({ field: "attribute_machine" }),
-          api.machines.getDistinctValues({ field: "model_machine" }),
-          api.machines.getDistinctValues({ field: "manufacturer" }),
-          api.machines.getDistinctValues({ field: "supplier" }),
-          api.machines.getDistinctValues({ field: "name_location" }),
+          api.machines.getDistinctValues(makeParams("type_machine")),
+          api.machines.getDistinctValues(makeParams("attribute_machine")),
+          api.machines.getDistinctValues(makeParams("model_machine")),
+          api.machines.getDistinctValues(makeParams("manufacturer")),
+          api.machines.getDistinctValues(makeParams("supplier")),
+          api.machines.getDistinctValues(makeParams("name_location")),
         ]);
+
       if (typeRes.success) setTypeOptions(typeRes.data);
       if (attrRes.success) setAttributeOptions(attrRes.data);
       if (modelRes.success) setModelOptions(modelRes.data);
@@ -910,12 +925,6 @@ const MachineListPage = () => {
       if (locRes.success) setLocationOptions(locRes.data);
     } catch (err) {
       console.error("Error fetching filter options:", err);
-      // Hiển thị thông báo lỗi cho người dùng (tùy chọn)
-      showNotification(
-        "error",
-        "Lỗi tải bộ lọc",
-        "Không thể tải danh sách cho bộ lọc chi tiết."
-      );
     }
   };
 
@@ -976,14 +985,22 @@ const MachineListPage = () => {
   };
 
   useEffect(() => {
-    // Tải danh sách máy và các thống kê
+    // a. Fetch dữ liệu bảng máy (giữ nguyên logic cũ)
     fetchMachines(searchTerm);
+
+    // b. Fetch lại Options cho bộ lọc dựa trên selection hiện tại
+    // (Đây chính là bước tạo hiệu ứng "tiếp tục lọc")
+    fetchFilterOptions(filters);
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm, filters, sortConfig]);
+
+  useEffect(() => {
+    // Tải danh sách máy và các thống kê
     fetchStats();
     fetchTypeStats();
     fetchMatrixStats();
     fetchFormData();
-    fetchFilterOptions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

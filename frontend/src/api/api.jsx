@@ -128,10 +128,23 @@ export const api = {
       return response.data;
     },
     getDistinctValues: async (params = {}) => {
-      const response = await httpConnect.get(
-        "/api/machines/distinct-values",
-        { params } // Gửi tất cả params (field, location_uuid, department_uuid)
-      );
+      // params chứa: field, và tất cả các filters hiện tại (type_machines, ...)
+      const response = await httpConnect.get("/api/machines/distinct-values", {
+        params,
+        // Serializer quan trọng để gửi mảng params đúng định dạng cho Express
+        paramsSerializer: (params) => {
+          const searchParams = new URLSearchParams();
+          for (const key in params) {
+            const value = params[key];
+            if (Array.isArray(value)) {
+              value.forEach((v) => searchParams.append(key, v));
+            } else if (value !== undefined && value !== null) {
+              searchParams.append(key, value);
+            }
+          }
+          return searchParams.toString();
+        },
+      });
       return response.data;
     },
     getById: async (uuid) => {
@@ -264,6 +277,10 @@ export const api = {
       });
       return response.data;
     },
+    getStats: async () => {
+      const response = await httpConnect.get("/api/imports/stats");
+      return response.data;
+    },
   },
 
   // MARK: EXPORTS
@@ -284,6 +301,10 @@ export const api = {
       const response = await httpConnect.put(`/api/exports/${uuid}/status`, {
         status,
       });
+      return response.data;
+    },
+    getStats: async () => {
+      const response = await httpConnect.get("/api/exports/stats");
       return response.data;
     },
   },
@@ -320,6 +341,10 @@ export const api = {
       const response = await httpConnect.put(
         `/api/internal-transfers/${uuid}/cancel`
       );
+      return response.data;
+    },
+    getStats: async () => {
+      const response = await httpConnect.get("/api/internal-transfers/stats");
       return response.data;
     },
   },
@@ -651,6 +676,10 @@ export const api = {
         `/api/inventory-checks/${uuid}/add-departments`,
         data
       );
+      return response.data;
+    },
+    getStats: async () => {
+      const response = await httpConnect.get("/api/inventory-checks/stats");
       return response.data;
     },
   },

@@ -385,12 +385,21 @@ const TestProposalPage = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [statusFilter, setStatusFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
+  const [locationFilter, setLocationFilter] = useState("");
+
+  // Statistics states
+  const [importStats, setImportStats] = useState(null);
+  const [exportStats, setExportStats] = useState(null);
+  const [transferStats, setTransferStats] = useState(null);
+  const [inventoryStats, setInventoryStats] = useState(null);
+  const [statsLoading, setStatsLoading] = useState(false);
 
   // Location Data
   const [filteredLocations, setFilteredLocations] = useState([]);
   const [locationLoading, setLocationLoading] = useState(false);
   const [externalLocations, setExternalLocations] = useState([]);
   const [externalLocationLoading, setExternalLocationLoading] = useState(false);
+  const [allLocationsForFilter, setAllLocationsForFilter] = useState([]);
 
   // Dialog states
   const [openDialog, setOpenDialog] = useState(false);
@@ -642,6 +651,9 @@ const TestProposalPage = () => {
       } else if (activeTab === 2) {
         delete params.import_type;
         delete params.export_type;
+        if (locationFilter) {
+          params.to_location_uuid = locationFilter;
+        }
         response = await api.internal_transfers.getAll(params);
         setTransfers(response.data);
       } else if (activeTab === 3) {
@@ -657,7 +669,14 @@ const TestProposalPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, page, statusFilter, typeFilter, showNotification]);
+  }, [
+    activeTab,
+    page,
+    statusFilter,
+    typeFilter,
+    locationFilter,
+    showNotification,
+  ]);
 
   const searchMachines = useCallback(
     async (searchTerm, pageNumber = 1, filters = {}) => {
@@ -707,13 +726,59 @@ const TestProposalPage = () => {
     }
   }, [showNotification]);
 
+  // Fetch statistics
+  const fetchStatistics = useCallback(async () => {
+    setStatsLoading(true);
+    try {
+      if (activeTab === 0) {
+        const response = await api.imports.getStats();
+        setImportStats(response.data);
+      } else if (activeTab === 1) {
+        const response = await api.exports.getStats();
+        setExportStats(response.data);
+      } else if (activeTab === 2) {
+        const response = await api.internal_transfers.getStats();
+        setTransferStats(response.data);
+      } else if (activeTab === 3) {
+        const response = await api.inventory.getStats();
+        setInventoryStats(response.data);
+      }
+    } catch (error) {
+      console.error("Error fetching statistics:", error);
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [activeTab]);
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
   useEffect(() => {
+    fetchStatistics();
+  }, [fetchStatistics]);
+
+  useEffect(() => {
     fetchExternalLocations();
   }, [fetchExternalLocations, showNotification]);
+
+  // Fetch all locations for filter when on transfer tab
+  useEffect(() => {
+    const fetchAllLocationsForFilter = async () => {
+      if (activeTab === 2) {
+        try {
+          const response = await api.locations.getAll({});
+          setAllLocationsForFilter(response.data || []);
+        } catch (error) {
+          console.error("Error fetching locations for filter:", error);
+          setAllLocationsForFilter([]);
+        }
+      } else {
+        setAllLocationsForFilter([]);
+      }
+    };
+    fetchAllLocationsForFilter();
+  }, [activeTab]);
 
   useEffect(() => {
     setScannerApiParams(getMachineFiltersForDialog());
@@ -739,6 +804,7 @@ const TestProposalPage = () => {
     setPage(1);
     setStatusFilter("");
     setTypeFilter("");
+    setLocationFilter("");
   };
 
   const getMachineFiltersForDialog = () => {
@@ -3272,8 +3338,10 @@ const TestProposalPage = () => {
                       px: 3,
                       py: 1.5,
                       "&:hover": {
-                        /* ... */
+                        transform: "translateY(-2px)",
+                        boxShadow: "0 8px 25px rgba(102, 126, 234, 0.3)",
                       },
+                      transition: "all 0.3s ease",
                       width: { xs: "100%", sm: "auto" },
                     }}
                   >
@@ -3283,14 +3351,336 @@ const TestProposalPage = () => {
               )}
             </Box>
 
+            {/* Statistics Display */}
+            {!statsLoading && (
+              <Box sx={{ mb: 3 }}>
+                {activeTab === 0 && importStats && (
+                  <Box
+                    sx={{
+                      p: 2,
+                      borderRadius: "12px",
+                      bgcolor: "#f5f5f5",
+                      border: "1px solid #e0e0e0",
+                    }}
+                  >
+                    <Typography
+                      variant="subtitle2"
+                      sx={{ fontWeight: 600, mb: 1.5, color: "#667eea" }}
+                    >
+                      Thống kê phiếu nhập
+                    </Typography>
+                    {/* Hàng 1: Trạng thái */}
+                    <Grid container spacing={2} sx={{ mb: 2 }}>
+                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <Chip
+                          label={`Chờ duyệt: ${
+                            importStats.byStatus?.pending || 0
+                          }`}
+                          color="warning"
+                          sx={{ fontWeight: 600 }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <Chip
+                          label={`Đã duyệt: ${
+                            importStats.byStatus?.completed || 0
+                          }`}
+                          color="success"
+                          sx={{ fontWeight: 600 }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <Chip
+                          label={`Đã hủy: ${
+                            importStats.byStatus?.cancelled || 0
+                          }`}
+                          color="error"
+                          sx={{ fontWeight: 600 }}
+                        />
+                      </Grid>
+                    </Grid>
+                    {/* Hàng 2: Loại phiếu */}
+                    <Grid container spacing={2}>
+                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <Chip
+                          label={`Nhập mua mới: ${
+                            importStats.byType?.purchased || 0
+                          }`}
+                          sx={{
+                            fontWeight: 600,
+                            bgcolor: "#1976d211",
+                            color: "#1976d2",
+                          }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <Chip
+                          label={`Sau bảo trì: ${
+                            importStats.byType?.maintenance_return || 0
+                          }`}
+                          sx={{
+                            fontWeight: 600,
+                            bgcolor: "#ff980011",
+                            color: "#ff9800",
+                          }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <Chip
+                          label={`Nhập thuê máy: ${
+                            importStats.byType?.rented || 0
+                          }`}
+                          sx={{
+                            fontWeight: 600,
+                            bgcolor: "#673ab711",
+                            color: "#673ab7",
+                          }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <Chip
+                          label={`Nhập mượn máy: ${
+                            importStats.byType?.borrowed || 0
+                          }`}
+                          sx={{
+                            fontWeight: 600,
+                            bgcolor: "#03a9f411",
+                            color: "#03a9f4",
+                          }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <Chip
+                          label={`Trả (máy cho mượn): ${
+                            importStats.byType?.borrowed_out_return || 0
+                          }`}
+                          sx={{
+                            fontWeight: 600,
+                            bgcolor: "#00bcd411",
+                            color: "#00bcd4",
+                          }}
+                        />
+                      </Grid>
+                    </Grid>
+                  </Box>
+                )}
+
+                {activeTab === 1 && exportStats && (
+                  <Box
+                    sx={{
+                      p: 2,
+                      borderRadius: "12px",
+                      bgcolor: "#f5f5f5",
+                      border: "1px solid #e0e0e0",
+                    }}
+                  >
+                    <Typography
+                      variant="subtitle2"
+                      sx={{ fontWeight: 600, mb: 1.5, color: "#667eea" }}
+                    >
+                      Thống kê phiếu xuất
+                    </Typography>
+                    {/* Hàng 1: Trạng thái */}
+                    <Grid container spacing={2} sx={{ mb: 2 }}>
+                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <Chip
+                          label={`Chờ duyệt: ${
+                            exportStats.byStatus?.pending || 0
+                          }`}
+                          color="warning"
+                          sx={{ fontWeight: 600 }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <Chip
+                          label={`Đã duyệt: ${
+                            exportStats.byStatus?.completed || 0
+                          }`}
+                          color="success"
+                          sx={{ fontWeight: 600 }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <Chip
+                          label={`Đã hủy: ${
+                            exportStats.byStatus?.cancelled || 0
+                          }`}
+                          color="error"
+                          sx={{ fontWeight: 600 }}
+                        />
+                      </Grid>
+                    </Grid>
+                    {/* Hàng 2: Loại phiếu */}
+                    <Grid container spacing={2}>
+                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <Chip
+                          label={`Xuất thanh lý: ${
+                            exportStats.byType?.liquidation || 0
+                          }`}
+                          sx={{
+                            fontWeight: 600,
+                            bgcolor: "#f4433611",
+                            color: "#f44336",
+                          }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <Chip
+                          label={`Bảo trì: ${
+                            exportStats.byType?.maintenance || 0
+                          }`}
+                          sx={{
+                            fontWeight: 600,
+                            bgcolor: "#ff980011",
+                            color: "#ff9800",
+                          }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <Chip
+                          label={`Cho mượn máy: ${
+                            exportStats.byType?.borrowed_out || 0
+                          }`}
+                          sx={{
+                            fontWeight: 600,
+                            bgcolor: "#00bcd411",
+                            color: "#00bcd4",
+                          }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <Chip
+                          label={`Trả (máy thuê): ${
+                            exportStats.byType?.rented_return || 0
+                          }`}
+                          sx={{
+                            fontWeight: 600,
+                            bgcolor: "#673ab711",
+                            color: "#673ab7",
+                          }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <Chip
+                          label={`Trả (máy mượn): ${
+                            exportStats.byType?.borrowed_return || 0
+                          }`}
+                          sx={{
+                            fontWeight: 600,
+                            bgcolor: "#03a9f411",
+                            color: "#03a9f4",
+                          }}
+                        />
+                      </Grid>
+                    </Grid>
+                  </Box>
+                )}
+
+                {activeTab === 2 && transferStats && (
+                  <Box
+                    sx={{
+                      p: 2,
+                      borderRadius: "12px",
+                      bgcolor: "#f5f5f5",
+                      border: "1px solid #e0e0e0",
+                    }}
+                  >
+                    <Typography
+                      variant="subtitle2"
+                      sx={{ fontWeight: 600, mb: 1.5, color: "#667eea" }}
+                    >
+                      Thống kê phiếu điều chuyển
+                    </Typography>
+                    <Grid container spacing={2}>
+                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <Chip
+                          label={`Chờ xác nhận: ${
+                            transferStats.pending_confirmation || 0
+                          }`}
+                          color="warning"
+                          sx={{ fontWeight: 600 }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <Chip
+                          label={`Chờ duyệt: ${
+                            transferStats.pending_approval || 0
+                          }`}
+                          color="warning"
+                          sx={{ fontWeight: 600 }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <Chip
+                          label={`Đã duyệt: ${transferStats.completed || 0}`}
+                          color="success"
+                          sx={{ fontWeight: 600 }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <Chip
+                          label={`Đã hủy: ${transferStats.cancelled || 0}`}
+                          color="error"
+                          sx={{ fontWeight: 600 }}
+                        />
+                      </Grid>
+                    </Grid>
+                  </Box>
+                )}
+
+                {activeTab === 3 && inventoryStats && (
+                  <Box
+                    sx={{
+                      p: 2,
+                      borderRadius: "12px",
+                      bgcolor: "#f5f5f5",
+                      border: "1px solid #e0e0e0",
+                    }}
+                  >
+                    <Typography
+                      variant="subtitle2"
+                      sx={{ fontWeight: 600, mb: 1.5, color: "#667eea" }}
+                    >
+                      Thống kê phiếu kiểm kê
+                    </Typography>
+                    <Grid container spacing={2}>
+                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <Chip
+                          label={`Nháp: ${inventoryStats.draft || 0}`}
+                          color="info"
+                          sx={{ fontWeight: 600 }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <Chip
+                          label={`Chờ duyệt: ${inventoryStats.pending || 0}`}
+                          color="warning"
+                          sx={{ fontWeight: 600 }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <Chip
+                          label={`Đã duyệt: ${inventoryStats.completed || 0}`}
+                          color="success"
+                          sx={{ fontWeight: 600 }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <Chip
+                          label={`Đã hủy: ${inventoryStats.cancelled || 0}`}
+                          color="error"
+                          sx={{ fontWeight: 600 }}
+                        />
+                      </Grid>
+                    </Grid>
+                  </Box>
+                )}
+              </Box>
+            )}
+
             {/* Content for Tabs 0, 1, 2, 3 (Filters, Table, Pagination) */}
             <Grid container spacing={2} sx={{ mb: 3 }}>
-              <Grid
-                size={{
-                  xs: 12,
-                  md: activeTab === 2 || activeTab === 3 ? 12 : 6,
-                }}
-              >
+              <Grid size={{ xs: 12, md: activeTab === 3 ? 12 : 6 }}>
                 <TextField
                   fullWidth
                   select
@@ -3355,6 +3745,30 @@ const TestProposalPage = () => {
                       ]}
                 </TextField>
               </Grid>
+              {activeTab === 2 && (
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <TextField
+                    fullWidth
+                    select
+                    label="Đến vị trí"
+                    value={locationFilter}
+                    onChange={(e) => setLocationFilter(e.target.value)}
+                    sx={{
+                      "& .MuiOutlinedInput-root": { borderRadius: "12px" },
+                    }}
+                  >
+                    <MenuItem value="">Tất cả</MenuItem>
+                    {allLocationsForFilter.map((location) => (
+                      <MenuItem
+                        key={location.uuid_location}
+                        value={location.uuid_location}
+                      >
+                        {location.name_location}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+              )}
               {activeTab !== 2 && activeTab !== 3 && (
                 <Grid size={{ xs: 12, md: 6 }}>
                   <TextField
@@ -5204,7 +5618,11 @@ const TestProposalPage = () => {
                                             <b>seri:</b>... (Tìm theo Serial)
                                           </li>
                                           <li>
-                                            <b>hang:</b>... (Tìm theo Hãng SX)
+                                            <b>hsx:</b>... (Tìm theo Hãng SX)
+                                          </li>
+                                          <li>
+                                            <b>ncc:</b>... (Tìm theo Nhà cung
+                                            cấp)
                                           </li>
                                           <li>
                                             <b>ma:</b>... (Tìm theo Mã máy)
@@ -7033,7 +7451,7 @@ const TestProposalPage = () => {
                               px: 2,
                             }}
                           >
-                            Dò tìm các RFID không có trong hệ thống
+                            Dò tìm các RFID trùng/không có trong hệ thống
                           </Button>
                         </Stack>
                         <TableContainer
