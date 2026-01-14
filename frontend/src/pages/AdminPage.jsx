@@ -519,11 +519,24 @@ const AdminPage = () => {
       handleCloseDialog();
     } catch (error) {
       console.error("Error saving item:", error);
-      showNotification(
-        "error",
-        "Lỗi",
-        error.response?.data?.message || error.message
-      );
+
+      // Xử lý riêng lỗi trùng (Duplicate entry) cho các danh mục
+      const rawMessage = error.response?.data?.message || error.message || "";
+      let friendlyMessage = rawMessage;
+
+      if (rawMessage && rawMessage.toString().includes("Duplicate entry")) {
+        if (currentItem?.type === "machine-type") {
+          friendlyMessage = "Tên loại máy bị trùng.";
+        } else if (currentItem?.type === "machine-attribute") {
+          friendlyMessage = "Tên đặc tính máy bị trùng.";
+        } else if (currentItem?.type === "machine-manufacturer") {
+          friendlyMessage = "Tên hãng sản xuất bị trùng.";
+        } else if (currentItem?.type === "machine-supplier") {
+          friendlyMessage = "Tên nhà cung cấp bị trùng.";
+        }
+      }
+
+      showNotification("error", "Lỗi", friendlyMessage);
     } finally {
       setDialogLoading(false);
     }

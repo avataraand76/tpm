@@ -7290,10 +7290,31 @@ app.put("/api/admin/machine-types/:uuid", async (req, res) => {
         .status(400)
         .json({ success: false, message: "Tên loại máy là bắt buộc" });
     }
+
+    // Lấy tên loại máy cũ để cập nhật lại trong tb_machine
+    const [oldTypeRows] = await tpmConnection.query(
+      "SELECT name_machine_type FROM tb_machine_type WHERE uuid_machine_type = ?",
+      [uuid]
+    );
+    const oldTypeName =
+      oldTypeRows && oldTypeRows.length > 0
+        ? oldTypeRows[0].name_machine_type
+        : null;
+
+    // Cập nhật tên loại máy trong bảng danh mục
     await tpmConnection.query(
       "UPDATE tb_machine_type SET name_machine_type = ?, updated_by = ? WHERE uuid_machine_type = ?",
       [name_machine_type, userId, uuid]
     );
+
+    // Đồng bộ tên loại máy trong tb_machine (nếu tìm được tên cũ)
+    if (oldTypeName) {
+      await tpmConnection.query(
+        "UPDATE tb_machine SET type_machine = ? WHERE type_machine = ?",
+        [name_machine_type, oldTypeName]
+      );
+    }
+
     res.json({ success: true, message: "Cập nhật loại máy thành công" });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -7304,17 +7325,6 @@ app.put("/api/admin/machine-types/:uuid", async (req, res) => {
 app.delete("/api/admin/machine-types/:uuid", async (req, res) => {
   try {
     const { uuid } = req.params;
-    // Check if type is used in machines
-    const [used] = await tpmConnection.query(
-      "SELECT COUNT(*) as count FROM tb_machine WHERE type_machine = (SELECT name_machine_type FROM tb_machine_type WHERE uuid_machine_type = ?)",
-      [uuid]
-    );
-    if (used[0].count > 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Không thể xóa loại máy đang được sử dụng",
-      });
-    }
     // Delete type-attribute relationships first
     await tpmConnection.query(
       "DELETE FROM tb_machine_type_attribute WHERE id_machine_type = (SELECT id_machine_type FROM tb_machine_type WHERE uuid_machine_type = ?)",
@@ -7386,10 +7396,30 @@ app.put("/api/admin/machine-attributes/:uuid", async (req, res) => {
         .status(400)
         .json({ success: false, message: "Tên đặc tính là bắt buộc" });
     }
+    // Lấy tên đặc tính cũ để cập nhật lại trong tb_machine
+    const [oldAttrRows] = await tpmConnection.query(
+      "SELECT name_machine_attribute FROM tb_machine_attribute WHERE uuid_machine_attribute = ?",
+      [uuid]
+    );
+    const oldAttrName =
+      oldAttrRows && oldAttrRows.length > 0
+        ? oldAttrRows[0].name_machine_attribute
+        : null;
+
+    // Cập nhật tên đặc tính trong bảng danh mục
     await tpmConnection.query(
       "UPDATE tb_machine_attribute SET name_machine_attribute = ?, updated_by = ? WHERE uuid_machine_attribute = ?",
       [name_machine_attribute, userId, uuid]
     );
+
+    // Đồng bộ tên đặc tính trong tb_machine (nếu tìm được tên cũ)
+    if (oldAttrName) {
+      await tpmConnection.query(
+        "UPDATE tb_machine SET attribute_machine = ? WHERE attribute_machine = ?",
+        [name_machine_attribute, oldAttrName]
+      );
+    }
+
     res.json({ success: true, message: "Cập nhật đặc tính thành công" });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -7400,17 +7430,6 @@ app.put("/api/admin/machine-attributes/:uuid", async (req, res) => {
 app.delete("/api/admin/machine-attributes/:uuid", async (req, res) => {
   try {
     const { uuid } = req.params;
-    // Check if attribute is used in machines
-    const [used] = await tpmConnection.query(
-      "SELECT COUNT(*) as count FROM tb_machine WHERE attribute_machine = (SELECT name_machine_attribute FROM tb_machine_attribute WHERE uuid_machine_attribute = ?)",
-      [uuid]
-    );
-    if (used[0].count > 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Không thể xóa đặc tính đang được sử dụng",
-      });
-    }
     // Delete type-attribute relationships
     await tpmConnection.query(
       "DELETE FROM tb_machine_type_attribute WHERE id_machine_attribute = (SELECT id_machine_attribute FROM tb_machine_attribute WHERE uuid_machine_attribute = ?)",
@@ -7546,10 +7565,30 @@ app.put("/api/admin/machine-manufacturers/:uuid", async (req, res) => {
         .status(400)
         .json({ success: false, message: "Tên hãng sản xuất là bắt buộc" });
     }
+    // Lấy tên hãng sản xuất cũ để cập nhật lại trong tb_machine
+    const [oldManuRows] = await tpmConnection.query(
+      "SELECT name_machine_manufacturer FROM tb_machine_manufacturer WHERE uuid_machine_manufacturer = ?",
+      [uuid]
+    );
+    const oldManuName =
+      oldManuRows && oldManuRows.length > 0
+        ? oldManuRows[0].name_machine_manufacturer
+        : null;
+
+    // Cập nhật tên hãng sản xuất trong bảng danh mục
     await tpmConnection.query(
       "UPDATE tb_machine_manufacturer SET name_machine_manufacturer = ?, updated_by = ? WHERE uuid_machine_manufacturer = ?",
       [name_machine_manufacturer, userId, uuid]
     );
+
+    // Đồng bộ tên hãng sản xuất trong tb_machine (nếu tìm được tên cũ)
+    if (oldManuName) {
+      await tpmConnection.query(
+        "UPDATE tb_machine SET manufacturer = ? WHERE manufacturer = ?",
+        [name_machine_manufacturer, oldManuName]
+      );
+    }
+
     res.json({ success: true, message: "Cập nhật hãng sản xuất thành công" });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -7560,16 +7599,6 @@ app.put("/api/admin/machine-manufacturers/:uuid", async (req, res) => {
 app.delete("/api/admin/machine-manufacturers/:uuid", async (req, res) => {
   try {
     const { uuid } = req.params;
-    const [used] = await tpmConnection.query(
-      "SELECT COUNT(*) as count FROM tb_machine WHERE manufacturer = (SELECT name_machine_manufacturer FROM tb_machine_manufacturer WHERE uuid_machine_manufacturer = ?)",
-      [uuid]
-    );
-    if (used[0].count > 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Không thể xóa hãng sản xuất đang được sử dụng",
-      });
-    }
     await tpmConnection.query(
       "DELETE FROM tb_machine_manufacturer WHERE uuid_machine_manufacturer = ?",
       [uuid]
@@ -7620,10 +7649,30 @@ app.put("/api/admin/machine-suppliers/:uuid", async (req, res) => {
         .status(400)
         .json({ success: false, message: "Tên nhà cung cấp là bắt buộc" });
     }
+    // Lấy tên nhà cung cấp cũ để cập nhật lại trong tb_machine
+    const [oldSuppRows] = await tpmConnection.query(
+      "SELECT name_machine_supplier FROM tb_machine_supplier WHERE uuid_machine_supplier = ?",
+      [uuid]
+    );
+    const oldSuppName =
+      oldSuppRows && oldSuppRows.length > 0
+        ? oldSuppRows[0].name_machine_supplier
+        : null;
+
+    // Cập nhật tên nhà cung cấp trong bảng danh mục
     await tpmConnection.query(
       "UPDATE tb_machine_supplier SET name_machine_supplier = ?, updated_by = ? WHERE uuid_machine_supplier = ?",
       [name_machine_supplier, userId, uuid]
     );
+
+    // Đồng bộ tên nhà cung cấp trong tb_machine (nếu tìm được tên cũ)
+    if (oldSuppName) {
+      await tpmConnection.query(
+        "UPDATE tb_machine SET supplier = ? WHERE supplier = ?",
+        [name_machine_supplier, oldSuppName]
+      );
+    }
+
     res.json({ success: true, message: "Cập nhật nhà cung cấp thành công" });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -7634,16 +7683,6 @@ app.put("/api/admin/machine-suppliers/:uuid", async (req, res) => {
 app.delete("/api/admin/machine-suppliers/:uuid", async (req, res) => {
   try {
     const { uuid } = req.params;
-    const [used] = await tpmConnection.query(
-      "SELECT COUNT(*) as count FROM tb_machine WHERE supplier = (SELECT name_machine_supplier FROM tb_machine_supplier WHERE uuid_machine_supplier = ?)",
-      [uuid]
-    );
-    if (used[0].count > 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Không thể xóa nhà cung cấp đang được sử dụng",
-      });
-    }
     await tpmConnection.query(
       "DELETE FROM tb_machine_supplier WHERE uuid_machine_supplier = ?",
       [uuid]
