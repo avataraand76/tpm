@@ -3542,6 +3542,8 @@ app.get("/api/imports", authenticateToken, async (req, res) => {
     const search = req.query.search || "";
     const status = req.query.status || "";
     const import_type = req.query.import_type || "";
+    const date_from = req.query.date_from || "";
+    const date_to = req.query.date_to || "";
     const offset = (page - 1) * limit;
 
     let whereConditions = [];
@@ -3560,6 +3562,16 @@ app.get("/api/imports", authenticateToken, async (req, res) => {
     if (import_type) {
       whereConditions.push(`i.import_type = ?`);
       params.push(import_type);
+    }
+
+    if (date_from) {
+      whereConditions.push(`DATE(i.import_date) >= ?`);
+      params.push(date_from);
+    }
+
+    if (date_to) {
+      whereConditions.push(`DATE(i.import_date) <= ?`);
+      params.push(date_to);
     }
 
     const whereClause =
@@ -4310,6 +4322,8 @@ app.get("/api/exports", authenticateToken, async (req, res) => {
     const search = req.query.search || "";
     const status = req.query.status || "";
     const export_type = req.query.export_type || "";
+    const date_from = req.query.date_from || "";
+    const date_to = req.query.date_to || "";
     const offset = (page - 1) * limit;
 
     let whereConditions = [];
@@ -4328,6 +4342,16 @@ app.get("/api/exports", authenticateToken, async (req, res) => {
     if (export_type) {
       whereConditions.push(`e.export_type = ?`);
       params.push(export_type);
+    }
+
+    if (date_from) {
+      whereConditions.push(`DATE(e.export_date) >= ?`);
+      params.push(date_from);
+    }
+
+    if (date_to) {
+      whereConditions.push(`DATE(e.export_date) <= ?`);
+      params.push(date_to);
     }
 
     const whereClause =
@@ -5011,6 +5035,8 @@ app.get("/api/internal-transfers", authenticateToken, async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const status = req.query.status || "";
     const to_location_uuid = req.query.to_location_uuid || "";
+    const date_from = req.query.date_from || "";
+    const date_to = req.query.date_to || "";
     const offset = (page - 1) * limit;
 
     let whereConditions = [];
@@ -5024,6 +5050,16 @@ app.get("/api/internal-transfers", authenticateToken, async (req, res) => {
     if (to_location_uuid) {
       whereConditions.push(`loc_to.uuid_location = ?`);
       params.push(to_location_uuid);
+    }
+
+    if (date_from) {
+      whereConditions.push(`DATE(t.transfer_date) >= ?`);
+      params.push(date_from);
+    }
+
+    if (date_to) {
+      whereConditions.push(`DATE(t.transfer_date) <= ?`);
+      params.push(date_to);
     }
 
     const whereClause =
@@ -8770,6 +8806,8 @@ app.get("/api/inventory-checks", authenticateToken, async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const status = req.query.status || "";
+    const date_from = req.query.date_from || "";
+    const date_to = req.query.date_to || "";
     const offset = (page - 1) * limit;
 
     let whereConditions = [];
@@ -8778,6 +8816,16 @@ app.get("/api/inventory-checks", authenticateToken, async (req, res) => {
     if (status) {
       whereConditions.push(`i.status = ?`);
       params.push(status);
+    }
+
+    if (date_from) {
+      whereConditions.push(`DATE(i.check_date) >= ?`);
+      params.push(date_from);
+    }
+
+    if (date_to) {
+      whereConditions.push(`DATE(i.check_date) <= ?`);
+      params.push(date_to);
     }
 
     const whereClause =

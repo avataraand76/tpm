@@ -125,6 +125,8 @@ const TicketManagementPage = () => {
   const [statusFilter, setStatusFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [locationFilter, setLocationFilter] = useState("");
+  const [dateFromFilter, setDateFromFilter] = useState("");
+  const [dateToFilter, setDateToFilter] = useState("");
   const [importStats, setImportStats] = useState(null);
   const [exportStats, setExportStats] = useState(null);
   const [transferStats, setTransferStats] = useState(null);
@@ -330,6 +332,15 @@ const TicketManagementPage = () => {
     setLoading(true);
     try {
       const params = { page, limit: 20, status: statusFilter };
+
+      // Add date filters
+      if (dateFromFilter) {
+        params.date_from = dateFromFilter;
+      }
+      if (dateToFilter) {
+        params.date_to = dateToFilter;
+      }
+
       let response;
       if (activeTab === 0) {
         params.import_type = typeFilter;
@@ -361,6 +372,8 @@ const TicketManagementPage = () => {
     statusFilter,
     typeFilter,
     locationFilter,
+    dateFromFilter,
+    dateToFilter,
     showNotification,
   ]);
 
@@ -488,6 +501,8 @@ const TicketManagementPage = () => {
     setStatusFilter("");
     setTypeFilter("");
     setLocationFilter("");
+    setDateFromFilter("");
+    setDateToFilter("");
   };
 
   const getMachineFiltersForDialog = () => {
@@ -1875,7 +1890,10 @@ const TicketManagementPage = () => {
                   <Button
                     variant="contained"
                     startIcon={<Refresh />}
-                    onClick={fetchData}
+                    onClick={() => {
+                      fetchData();
+                      fetchStatistics();
+                    }}
                     sx={{
                       borderRadius: "12px",
                       background: "linear-gradient(45deg, #667eea, #764ba2)",
@@ -1928,7 +1946,10 @@ const TicketManagementPage = () => {
                   <Button
                     variant="contained"
                     startIcon={<Refresh />}
-                    onClick={fetchData}
+                    onClick={() => {
+                      fetchData();
+                      fetchStatistics();
+                    }}
                     sx={{
                       borderRadius: "12px",
                       background: "linear-gradient(45deg, #667eea, #764ba2)",
@@ -2360,6 +2381,37 @@ const TicketManagementPage = () => {
                   </TextField>
                 </Grid>
               )}
+              {/* Date Filter - Hiển thị cho tất cả các tab */}
+              <Grid size={{ xs: 12, md: 6 }}>
+                <TextField
+                  fullWidth
+                  type="date"
+                  label="Từ ngày"
+                  value={dateFromFilter}
+                  onChange={(e) => setDateFromFilter(e.target.value)}
+                  InputLabelProps={{
+                    shrink: true,
+                  }}
+                  sx={{
+                    "& .MuiOutlinedInput-root": { borderRadius: "12px" },
+                  }}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, md: 6 }}>
+                <TextField
+                  fullWidth
+                  type="date"
+                  label="Đến ngày"
+                  value={dateToFilter}
+                  onChange={(e) => setDateToFilter(e.target.value)}
+                  InputLabelProps={{
+                    shrink: true,
+                  }}
+                  sx={{
+                    "& .MuiOutlinedInput-root": { borderRadius: "12px" },
+                  }}
+                />
+              </Grid>
             </Grid>
             <TableContainer
               component={Paper}

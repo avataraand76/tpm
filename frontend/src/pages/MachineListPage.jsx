@@ -144,7 +144,7 @@ const columnConfig = {
 
 // Initial visibility state
 const initialColumnVisibility = {
-  code_machine: true,
+  code_machine: false,
   type_machine: true,
   attribute_machine: true,
   model_machine: true,
@@ -166,7 +166,7 @@ const initialColumnVisibility = {
   power: false,
   pressure: false,
   voltage: false,
-  date_of_use: true,
+  date_of_use: false,
 };
 
 const formatNumber = (num) => {

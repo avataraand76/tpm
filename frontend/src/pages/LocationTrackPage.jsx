@@ -1979,9 +1979,9 @@ const LocationTrackPage = () => {
                   <TableRow
                     sx={{ backgroundColor: "rgba(102, 126, 234, 0.05)" }}
                   >
-                    <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                    {/* <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
                       Mã máy
-                    </TableCell>
+                    </TableCell> */}
                     <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
                       Loại máy
                     </TableCell>
@@ -2046,9 +2046,9 @@ const LocationTrackPage = () => {
                         onClick={() => handleOpenHistoryDialog(machine)}
                         sx={{ cursor: "pointer" }}
                       >
-                        <TableCell sx={{ fontWeight: 600 }}>
+                        {/* <TableCell sx={{ fontWeight: 600 }}>
                           {machine.code_machine}
-                        </TableCell>
+                        </TableCell> */}
                         <TableCell sx={{ whiteSpace: "nowrap" }}>
                           {machine.type_machine || "-"}
                         </TableCell>
@@ -2400,8 +2400,7 @@ const LocationTrackPage = () => {
               variant={isMobile ? "h6" : "h5"}
               sx={{ fontWeight: 700 }}
             >
-              Lịch sử điều chuyển: {selectedMachine?.code_machine} -{" "}
-              {selectedMachine?.type_machine}{" "}
+              Lịch sử điều chuyển: {selectedMachine?.type_machine}{" "}
               {selectedMachine?.attribute_machine} -{" "}
               {selectedMachine?.model_machine}
             </Typography>
