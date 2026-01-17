@@ -5001,7 +5001,7 @@ const updateMachineLocationAndStatus = async (
       ticketTypeDetail === "borrowed_return" ||
       ticketTypeDetail === "rented_return"
     ) {
-      updateQuery += `, is_borrowed_or_rented_or_borrowed_out = ?`;
+      updateQuery += `, is_borrowed_or_rented_or_borrowed_out = ?, RFID_machine = NULL`;
       updateParams.push(newBorrowStatus); // newBorrowStatus đã được set trong switch case
     }
     // Xử lý cho các trường hợp XÓA hoặc CẬP NHẬT MỚI toàn bộ
@@ -8192,13 +8192,22 @@ app.post(
             );
         }
       } else if (category === "internal") {
+        // Xác định status dựa trên luồng duyệt
+        // Nếu cùng phòng ban (chỉ có 1 người duyệt) -> 'pending_approval' (Chờ duyệt)
+        // Nếu khác phòng ban (có nhiều người duyệt) -> 'pending_confirmation' (Chờ xác nhận)
+        const transferStatus =
+          user_phongban_id === dest_phongban_id
+            ? "pending_approval"
+            : "pending_confirmation";
+
         const [resTransfer] = await connection.query(
           `INSERT INTO tb_machine_internal_transfer (
              to_location_id, transfer_date, status, note, created_by, updated_by, attached_file, approval_flow, target_status
-           ) VALUES (?, ?, 'pending_confirmation', ?, ?, ?, ?, ?, ?)`,
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             to_location_id,
             dateFormatted,
+            transferStatus,
             note,
             userId,
             userId,
