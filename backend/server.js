@@ -8395,7 +8395,7 @@ app.post(
         );
         const externalResponse = await axios.post(
           // "https://servertienich.vietlonghung.com.vn/api/fw/create-proposal-reality-outdoor",
-          "http://192.168.0.41:16002/api/fw/create-proposal-reality-outdoor",
+          "http://192.168.0.43:16002/api/fw/create-proposal-reality-outdoor",
           externalPayload
         );
         console.log("External API Response:", externalResponse.data);
@@ -9778,7 +9778,7 @@ app.put(
         );
         const externalResponse = await axios.post(
           // "https://servertienich.vietlonghung.com.vn/api/fw/create-proposal-reality-outdoor",
-          "http://192.168.0.41:16002/api/fw/create-proposal-reality-outdoor",
+          "http://192.168.0.43:16002/api/fw/create-proposal-reality-outdoor",
           externalPayload
         );
         console.log("External API Response:", externalResponse.data);

@@ -1548,6 +1548,37 @@ const TestProposalPage = () => {
         return;
       }
 
+      // 2b. Validate required export info
+      if (dialogType === "export") {
+        if (!formData.receiver_name?.trim()) {
+          showNotification(
+            "error",
+            "Lỗi nhập liệu",
+            "Vui lòng nhập Họ tên người nhận."
+          );
+          setLoading(false);
+          return;
+        }
+        if (!formData.vehicle_number?.trim()) {
+          showNotification(
+            "error",
+            "Lỗi nhập liệu",
+            "Vui lòng nhập Số xe."
+          );
+          setLoading(false);
+          return;
+        }
+        if (!formData.department_address?.trim()) {
+          showNotification(
+            "error",
+            "Lỗi nhập liệu",
+            "Vui lòng nhập Địa chỉ (Bộ phận)."
+          );
+          setLoading(false);
+          return;
+        }
+      }
+
       // 3. Create FormData object
       const data = new FormData();
       const catStr = dialogType; // 'import', 'export', 'internal'
@@ -5228,6 +5259,7 @@ const TestProposalPage = () => {
                               <TextField
                                 fullWidth
                                 label="Họ tên người nhận"
+                                required
                                 value={formData.receiver_name}
                                 onChange={(e) =>
                                   handleFormChange(
@@ -5246,6 +5278,7 @@ const TestProposalPage = () => {
                                 <TextField
                                   fullWidth
                                   label="Số xe"
+                                  required
                                   value={formData.vehicle_number}
                                   onChange={(e) =>
                                     handleFormChange(
@@ -5259,6 +5292,7 @@ const TestProposalPage = () => {
                                 <TextField
                                   fullWidth
                                   label="Địa chỉ (Bộ phận)"
+                                  required
                                   value={formData.department_address}
                                   onChange={(e) =>
                                     handleFormChange(
