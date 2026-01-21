@@ -1102,6 +1102,7 @@ const UpdateRfidPage = () => {
       >
         <Alert
           onClose={() => setNotification({ ...notification, open: false })}
+          onClick={() => setNotification({ ...notification, open: false })}
           severity={notification.severity}
           variant="filled"
           sx={{

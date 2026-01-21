@@ -81,12 +81,11 @@ const RfidScannerDialog = ({
         .map((code) => code.trim()) // Cắt bỏ khoảng trắng thừa
         .filter((code) => code.length > 0); // Lọc ra các dòng rỗng
 
-      // Chỉ nhận các mã RFID bắt đầu bằng 'E2'
       const filteredCodes = codes.filter(
         (code) =>
           code.toUpperCase().startsWith("E") ||
           code.toUpperCase().startsWith("A") ||
-          code.startsWith("test")
+          code.toLowerCase().includes("test")
       );
 
       if (filteredCodes.length === 0) {

@@ -754,6 +754,7 @@ const RfidSearch = ({
       >
         <Alert
           onClose={handleCloseSnackbar}
+          onClick={handleCloseSnackbar}
           severity="warning"
           variant="filled"
           sx={{

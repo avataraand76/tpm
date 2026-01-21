@@ -1939,6 +1939,7 @@ const AdminPage = () => {
         >
           <Alert
             onClose={handleCloseNotification}
+            onClick={handleCloseNotification}
             severity={notification.severity}
             variant="filled"
             sx={{
