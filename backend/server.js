@@ -8044,15 +8044,35 @@ app.post(
         ];
       } else if (category === "internal") {
         if (user_phongban_id === dest_phongban_id) {
+          // Mặc định là Trưởng phòng Cơ điện
+          // let approverMaNv = "06264";
+          let approverMaNv = "09802";
+          let approverName = "Trưởng phòng Cơ điện";
+
+          // Chuyển về số để so sánh cho chính xác
+          const pId = Number(user_phongban_id);
+
+          if (pId === 10) {
+            approverMaNv = "00184";
+            approverName = "Quản đốc Xưởng 1";
+          } else if (pId === 30) {
+            approverMaNv = "00160";
+            approverName = "Quản đốc Xưởng 2";
+          } else if (pId === 24) {
+            approverMaNv = "00023";
+            approverName = "Quản đốc Xưởng 3";
+          } else if (pId === 31) {
+            approverMaNv = "01949";
+            approverName = "Quản đốc Xưởng 4";
+          }
           approvalFlowForDB = [
             {
-              // ma_nv: "06264",
-              ma_nv: "09802",
+              ma_nv: approverMaNv,
               step_flow: 0,
               isFinalFlow: 1,
               status_text: "Đang chờ duyệt",
               is_forward: 0,
-              display_name: "Trưởng phòng Cơ điện",
+              display_name: approverName,
               is_flow: 1,
               indexOf: 1,
             },
