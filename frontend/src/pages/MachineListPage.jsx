@@ -4257,7 +4257,7 @@ const MachineListPage = () => {
                 <Typography variant="body2" color="text.secondary">
                   Hiển thị {(page - 1) * rowsPerPage + 1} -{" "}
                   {Math.min(page * rowsPerPage, pagination.total)} trong tổng số{" "}
-                  {pagination.total} máy móc
+                  {pagination.displayTotal} máy móc
                 </Typography>
                 <Pagination
                   count={pagination.totalPages}

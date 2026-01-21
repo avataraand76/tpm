@@ -806,7 +806,9 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
 
     // Get total count
     const countQuery = `
-      SELECT COUNT(*) - SUM(CASE WHEN is_borrowed_or_rented_or_borrowed_out = 'borrowed_return' THEN 1 ELSE 0 END) - SUM(CASE WHEN is_borrowed_or_rented_or_borrowed_out = 'rented_return' THEN 1 ELSE 0 END) - SUM(CASE WHEN current_status = 'liquidation' THEN 1 ELSE 0 END) as total
+      SELECT 
+        COUNT(*) as real_total,
+        COUNT(*) - SUM(CASE WHEN is_borrowed_or_rented_or_borrowed_out = 'borrowed_return' THEN 1 ELSE 0 END) - SUM(CASE WHEN is_borrowed_or_rented_or_borrowed_out = 'rented_return' THEN 1 ELSE 0 END) - SUM(CASE WHEN current_status = 'liquidation' THEN 1 ELSE 0 END) as display_total
       FROM tb_machine m
       LEFT JOIN tb_category c ON c.id_category = m.id_category
       LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
@@ -816,8 +818,9 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
 
     const [countResult] = await tpmConnection.query(countQuery, countParams);
 
-    const total = countResult[0].total;
-    const totalPages = Math.ceil(total / limit);
+    const realTotal = countResult[0].real_total;
+    const displayTotal = countResult[0].display_total;
+    const totalPages = Math.ceil(realTotal / limit);
 
     // Get paginated data
     const dataQuery = `
@@ -869,7 +872,8 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
       pagination: {
         page,
         limit,
-        total,
+        total: realTotal,
+        displayTotal: displayTotal,
         totalPages,
         hasNextPage: page < totalPages,
         hasPrevPage: page > 1,
@@ -1953,17 +1957,45 @@ app.post(
         }
 
         try {
+          const serialTrimmed = String(update.serial).trim();
+          const rfidTrimmed = String(update.rfid).trim();
+
+          // Lấy id_machine & RFID hiện tại
+          const [machineRows] = await connection.query(
+            "SELECT id_machine, RFID_machine FROM tb_machine WHERE serial_machine = ? LIMIT 1",
+            [serialTrimmed]
+          );
+
+          if (machineRows.length === 0) {
+            errorCount++;
+            errors.push(
+              `Dòng ${index + 1}: Không tìm thấy Serial "${serialTrimmed}" để cập nhật.`
+            );
+            return;
+          }
+
+          const machineId = machineRows[0].id_machine;
+          const currentRfid = machineRows[0].RFID_machine
+            ? String(machineRows[0].RFID_machine).trim()
+            : null;
+
+          // Nếu RFID mới giống RFID hiện tại -> coi như thành công, không ghi lịch sử
+          if (currentRfid && currentRfid === rfidTrimmed) {
+            successCount++;
+            return;
+          }
+
           // Kiểm tra xem RFID mới có bị trùng không (trên máy khác)
           const [existingRfid] = await connection.query(
             "SELECT serial_machine FROM tb_machine WHERE RFID_machine = ? AND serial_machine != ?",
-            [update.rfid, update.serial]
+            [rfidTrimmed, serialTrimmed]
           );
 
           if (existingRfid.length > 0) {
             errorCount++;
             errors.push(
               `Dòng ${index + 1} (${update.serial}): RFID "${
-                update.rfid
+                rfidTrimmed
               }" đã tồn tại trên máy "${existingRfid[0].serial_machine}".`
             );
             return;
@@ -1979,10 +2011,21 @@ app.post(
               updated_at = CURRENT_TIMESTAMP
             WHERE serial_machine = ?
             `,
-            [update.rfid, userId, update.serial]
+            [rfidTrimmed, userId, serialTrimmed]
           );
 
           if (result.affectedRows > 0) {
+            // Lưu lịch sử RFID sau khi update thành công
+            if (rfidTrimmed) {
+              await connection.query(
+                `
+                INSERT INTO tb_machine_rfid_history
+                  (id_machine, RFID_machine, created_by, updated_by)
+                VALUES (?, ?, ?, ?)
+                `,
+                [machineId, rfidTrimmed, userId, userId]
+              );
+            }
             successCount++;
           } else {
             errorCount++;
@@ -2397,6 +2440,22 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
       ]
     );
 
+    // Lưu lịch sử RFID nếu có gán RFID lúc tạo
+    const rfidToSave =
+      RFID_machine && String(RFID_machine).trim() !== ""
+        ? String(RFID_machine).trim()
+        : null;
+    if (rfidToSave) {
+      await tpmConnection.query(
+        `
+        INSERT INTO tb_machine_rfid_history
+          (id_machine, RFID_machine, created_by, updated_by)
+        VALUES (?, ?, ?, ?)
+        `,
+        [result.insertId, rfidToSave, userId, userId]
+      );
+    }
+
     // Get the newly created machine
     const [newMachine] = await tpmConnection.query(
       `
@@ -2522,9 +2581,9 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
       voltage,
     } = req.body;
 
-    // Check if machine exists
+    // Check if machine exists + lấy id_machine & RFID hiện tại để ghi lịch sử khi đổi RFID
     const [existing] = await tpmConnection.query(
-      "SELECT uuid_machine FROM tb_machine WHERE uuid_machine = ?",
+      "SELECT id_machine, uuid_machine, RFID_machine FROM tb_machine WHERE uuid_machine = ? LIMIT 1",
       [uuid]
     );
 
@@ -2534,6 +2593,11 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         message: "Machine not found",
       });
     }
+
+    const machineId = existing[0].id_machine;
+    const currentRfid = existing[0].RFID_machine
+      ? String(existing[0].RFID_machine).trim()
+      : null;
 
     // Check if serial_machine and code_machine already exists for another machine (if provided)
     if (serial_machine) {
@@ -2616,6 +2680,22 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         uuid,
       ]
     );
+
+    // Lưu lịch sử RFID nếu có đổi RFID
+    const newRfid =
+      RFID_machine && String(RFID_machine).trim() !== ""
+        ? String(RFID_machine).trim()
+        : null;
+    if (newRfid && newRfid !== currentRfid) {
+      await tpmConnection.query(
+        `
+        INSERT INTO tb_machine_rfid_history
+          (id_machine, RFID_machine, created_by, updated_by)
+        VALUES (?, ?, ?, ?)
+        `,
+        [machineId, newRfid, userId, userId]
+      );
+    }
 
     // Get updated machine
     const [updated] = await tpmConnection.query(
@@ -2975,7 +3055,7 @@ app.post("/api/machines/batch-import", authenticateToken, async (req, res) => {
 
     // --- BƯỚC 5: INSERT VÀO DATABASE ---
     for (const m of machinesToInsert) {
-      await connection.query(
+      const [insertResult] = await connection.query(
         `INSERT INTO tb_machine 
           (code_machine, serial_machine, RFID_machine, NFC_machine, type_machine, model_machine, manufacturer, 
            price, date_of_use, lifespan, repair_cost, note, current_status, id_category,
@@ -3006,6 +3086,23 @@ app.post("/api/machines/batch-import", authenticateToken, async (req, res) => {
           userId,
         ]
       );
+
+      // Lưu lịch sử RFID nếu file excel có RFID_machine
+      const rfidToSave =
+        m.RFID_machine && String(m.RFID_machine).trim() !== ""
+          ? String(m.RFID_machine).trim()
+          : null;
+      if (rfidToSave) {
+        await connection.query(
+          `
+          INSERT INTO tb_machine_rfid_history
+            (id_machine, RFID_machine, created_by, updated_by)
+          VALUES (?, ?, ?, ?)
+          `,
+          [insertResult.insertId, rfidToSave, userId, userId]
+        );
+      }
+
       successes.push({
         code: m.code_machine,
         serial: m.serial_machine,
@@ -8062,6 +8159,7 @@ app.post(
       let targetUidProposalType = "8622ae80-4345-4efd-9a8a-62a1308d5a3f";
       let expansionField = [];
       const proposalName = getProposalName(category, type, date);
+      const reasonName = (getProposalName(category, type, null) || "").replace(/^Phiếu\s*/i, "").trim();
 
       // A. Phiếu Nhập
       if (category === "import") {
@@ -8083,7 +8181,7 @@ app.post(
       else if (category === "export") {
         targetUidProposalType = "03bb46e0-c614-4746-bf94-f532ca065911";
 
-        let reason = proposalName;
+        let reason = reasonName;
         let duration = "";
         let fromUnit = "Việt Long Hưng";
         let toUnit = "";
