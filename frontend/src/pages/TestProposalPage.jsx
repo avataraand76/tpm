@@ -1390,10 +1390,32 @@ const TestProposalPage = () => {
       machines: prev.machines.filter((m) => m.uuid_machine !== uuid_machine),
     }));
 
-  const handleRemoveInventoryScannedMachine = (uuid_machine) =>
+  const handleRemoveInventoryScannedMachine = async (uuid_machine) => {
+    // Xóa khỏi danh sách quét tạm
+    const machineToRemove = inventoryScannedList.find(
+      (m) => m.uuid_machine === uuid_machine
+    );
+
     setInventoryScannedList((prev) =>
       prev.filter((m) => m.uuid_machine !== uuid_machine)
     );
+
+    // Nếu máy này đã được lưu trong scannedLocationsList (có duplicate), cần xóa cả ở đó
+    if (machineToRemove?.isDuplicateInCurrentDept) {
+      // Tìm location chứa máy này trong scannedLocationsList
+      const locationContainingMachine = scannedLocationsList.find((loc) =>
+        loc.scanned_machine?.some((m) => m.uuid === uuid_machine)
+      );
+
+      if (locationContainingMachine && currentDepartment && selectedTicket) {
+        // Gọi hàm xóa máy khỏi danh sách đã lưu
+        await handleRemoveSavedMachine(
+          locationContainingMachine.location_uuid,
+          uuid_machine
+        );
+      }
+    }
+  };
 
   // Xóa máy khỏi danh sách đã lưu (scannedLocationsList)
   const handleRemoveSavedMachine = async (locationUuid, machineUuid) => {
@@ -1560,11 +1582,7 @@ const TestProposalPage = () => {
           return;
         }
         if (!formData.vehicle_number?.trim()) {
-          showNotification(
-            "error",
-            "Lỗi nhập liệu",
-            "Vui lòng nhập Số xe."
-          );
+          showNotification("error", "Lỗi nhập liệu", "Vui lòng nhập Số xe.");
           setLoading(false);
           return;
         }
@@ -7603,7 +7621,9 @@ const TestProposalPage = () => {
                                   ? "Không tìm thấy trong hệ thống"
                                   : machine.type_machine &&
                                     machine.model_machine
-                                  ? `${machine.type_machine} ${machine.attribute_machine} - ${machine.model_machine}`
+                                  ? `${machine.type_machine} ${
+                                      machine.attribute_machine || ""
+                                    } - ${machine.model_machine}`
                                   : machine.type_machine ||
                                     machine.model_machine ||
                                     "-";
@@ -7646,11 +7666,37 @@ const TestProposalPage = () => {
                                           />
                                         ) : isDuplicate ? (
                                           <>
-                                            <Chip
-                                              label={`Đã quét tại ${machine.duplicateLocationName}`}
-                                              color="error"
-                                              size="small"
-                                            />
+                                            <Stack
+                                              direction="row"
+                                              spacing={0.5}
+                                              alignItems="center"
+                                            >
+                                              <Chip
+                                                label={`Đã quét tại ${machine.duplicateLocationName}`}
+                                                color="error"
+                                                size="small"
+                                              />
+                                              <Chip
+                                                label={`Xóa tại ${machine.duplicateLocationName}`}
+                                                color="error"
+                                                size="small"
+                                                icon={
+                                                  <Delete fontSize="small" />
+                                                }
+                                                onClick={() =>
+                                                  handleRemoveInventoryScannedMachine(
+                                                    machine.uuid_machine
+                                                  )
+                                                }
+                                                sx={{
+                                                  cursor: "pointer",
+                                                  "&:hover": {
+                                                    backgroundColor: "#d32f2f",
+                                                    color: "#fff",
+                                                  },
+                                                }}
+                                              />
+                                            </Stack>
                                             {isMislocation && (
                                               <Chip
                                                 label="Sai vị trí"
