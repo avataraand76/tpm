@@ -1969,7 +1969,9 @@ app.post(
           if (machineRows.length === 0) {
             errorCount++;
             errors.push(
-              `Dòng ${index + 1}: Không tìm thấy Serial "${serialTrimmed}" để cập nhật.`
+              `Dòng ${
+                index + 1
+              }: Không tìm thấy Serial "${serialTrimmed}" để cập nhật.`
             );
             return;
           }
@@ -1994,9 +1996,11 @@ app.post(
           if (existingRfid.length > 0) {
             errorCount++;
             errors.push(
-              `Dòng ${index + 1} (${update.serial}): RFID "${
-                rfidTrimmed
-              }" đã tồn tại trên máy "${existingRfid[0].serial_machine}".`
+              `Dòng ${index + 1} (${
+                update.serial
+              }): RFID "${rfidTrimmed}" đã tồn tại trên máy "${
+                existingRfid[0].serial_machine
+              }".`
             );
             return;
           }
@@ -4096,11 +4100,11 @@ app.put("/api/imports/:uuid/status", authenticateToken, async (req, res) => {
         "import",
         id_machine_import,
         to_location_id,
-        name_location, // NEW
+        name_location,
         status,
         import_type,
-        ticketBorrowInfo, // NEW
-        userId
+        ticketBorrowInfo,
+        created_by
       );
     }
 
@@ -4876,11 +4880,11 @@ app.put("/api/exports/:uuid/status", authenticateToken, async (req, res) => {
         "export",
         id_machine_export,
         to_location_id,
-        name_location, // NEW
+        name_location,
         status,
         export_type,
-        ticketBorrowInfo, // NEW
-        userId
+        ticketBorrowInfo,
+        created_by
       );
     }
 
@@ -4914,7 +4918,7 @@ const updateMachineLocationAndStatus = async (
   ticketStatus,
   ticketTypeDetail, // import_type or export_type
   ticketBorrowInfo, // NEW: Object { name, date, return_date }
-  userId
+  creatorId // id người tạo phiếu -> tb_machine_location, tb_machine_location_history, tb_machine.updated_by
 ) => {
   if (ticketStatus !== "completed") {
     return; // Chỉ xử lý khi phiếu được duyệt
@@ -5042,7 +5046,7 @@ const updateMachineLocationAndStatus = async (
     const idFromLocation =
       currentLocResult.length > 0 ? currentLocResult[0].id_location : null;
 
-    // b. Insert into tb_machine_location_history
+    // b. Insert into tb_machine_location_history (created_by, updated_by = người tạo phiếu)
     if (idFromLocation !== toLocationId) {
       // Only insert if location changes
       await connection.query(
@@ -5051,11 +5055,11 @@ const updateMachineLocationAndStatus = async (
           (id_machine, id_from_location, id_to_location, move_date, created_by, updated_by)
         VALUES (?, ?, ?, CURDATE(), ?, ?)
         `,
-        [idMachine, idFromLocation, toLocationId, userId, userId]
+        [idMachine, idFromLocation, toLocationId, creatorId, creatorId]
       );
     }
 
-    // c. Update/Insert into tb_machine_location
+    // c. Update/Insert into tb_machine_location (created_by, updated_by = người tạo phiếu)
     if (currentLocResult.length === 0) {
       // Insert
       await connection.query(
@@ -5064,7 +5068,7 @@ const updateMachineLocationAndStatus = async (
           (id_machine, id_location, created_by, updated_by)
         VALUES (?, ?, ?, ?)
         `,
-        [idMachine, toLocationId, userId, userId]
+        [idMachine, toLocationId, creatorId, creatorId]
       );
     } else if (idFromLocation !== toLocationId) {
       // Update
@@ -5074,7 +5078,7 @@ const updateMachineLocationAndStatus = async (
         SET id_location = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id_machine = ?
         `,
-        [toLocationId, userId, idMachine]
+        [toLocationId, creatorId, idMachine]
       );
     } else {
       // No change, just touch updated_at
@@ -5084,15 +5088,15 @@ const updateMachineLocationAndStatus = async (
         SET updated_by = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id_machine = ?
         `,
-        [userId, idMachine]
+        [creatorId, idMachine]
       );
     }
 
-    // d. Update tb_machine status
+    // d. Update tb_machine status (updated_by = người tạo phiếu)
     let updateQuery = `
       UPDATE tb_machine
       SET current_status = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP`;
-    let updateParams = [newMachineStatus, userId];
+    let updateParams = [newMachineStatus, creatorId];
 
     if (
       ticketTypeDetail === "borrowed_return" ||
@@ -5805,6 +5809,7 @@ app.put(
           t.id_machine_internal_transfer, 
           t.status,
           t.to_location_id,
+          t.created_by,
           l_to.name_location as to_location_name
         FROM tb_machine_internal_transfer t
         LEFT JOIN tb_location l_to ON l_to.id_location = t.to_location_id
@@ -5844,13 +5849,13 @@ app.put(
         [userId, ticket.id_machine_internal_transfer]
       );
 
-      // 5. Kích hoạt logic duyệt phiếu (cập nhật vị trí máy)
+      // 5. Kích hoạt logic duyệt phiếu (cập nhật vị trí máy; created_by/updated_by = người tạo phiếu)
       await handleInternalTransferApproval(
         connection,
         ticket.id_machine_internal_transfer,
         ticket.to_location_id,
         ticket.to_location_name,
-        userId
+        ticket.created_by
       );
 
       await connection.commit();
@@ -5950,7 +5955,7 @@ const handleInternalTransferApproval = async (
   ticketId,
   toLocationId,
   toLocationName, // Cần tên vị trí đến
-  userId,
+  creatorId, // id người tạo phiếu -> tb_machine_location, tb_machine_location_history, tb_machine.updated_by
   forcedTargetStatus = null
 ) => {
   let targetStatus = forcedTargetStatus;
@@ -6005,7 +6010,7 @@ const handleInternalTransferApproval = async (
     const idFromLocation =
       currentLocResult.length > 0 ? currentLocResult[0].id_location : null;
 
-    // b. Ghi lịch sử
+    // b. Ghi lịch sử (created_by, updated_by = người tạo phiếu)
     if (idFromLocation !== idToLocation) {
       await connection.query(
         `
@@ -6013,11 +6018,11 @@ const handleInternalTransferApproval = async (
           (id_machine, id_from_location, id_to_location, move_date, created_by, updated_by)
         VALUES (?, ?, ?, CURDATE(), ?, ?)
         `,
-        [idMachine, idFromLocation, idToLocation, userId, userId]
+        [idMachine, idFromLocation, idToLocation, creatorId, creatorId]
       );
     }
 
-    // c. Cập nhật/Thêm vào tb_machine_location
+    // c. Cập nhật/Thêm vào tb_machine_location (created_by, updated_by = người tạo phiếu)
     if (currentLocResult.length === 0) {
       // INSERT nếu máy chưa có vị trí
       await connection.query(
@@ -6026,7 +6031,7 @@ const handleInternalTransferApproval = async (
           (id_machine, id_location, created_by, updated_by)
         VALUES (?, ?, ?, ?)
         `,
-        [idMachine, idToLocation, userId, userId]
+        [idMachine, idToLocation, creatorId, creatorId]
       );
     } else if (idFromLocation !== idToLocation) {
       // UPDATE nếu vị trí thay đổi
@@ -6036,7 +6041,7 @@ const handleInternalTransferApproval = async (
         SET id_location = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id_machine = ?
         `,
-        [idToLocation, userId, idMachine]
+        [idToLocation, creatorId, idMachine]
       );
     } else {
       // Vị trí không thay đổi, chỉ cập nhật (touch)
@@ -6046,11 +6051,11 @@ const handleInternalTransferApproval = async (
         SET updated_by = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id_machine = ?
         `,
-        [userId, idMachine]
+        [creatorId, idMachine]
       );
     }
 
-    // d. Cập nhật trạng thái máy (tb_machine)
+    // d. Cập nhật trạng thái máy (tb_machine) – updated_by = người tạo phiếu
     await connection.query(
       `
       UPDATE tb_machine
@@ -6060,7 +6065,7 @@ const handleInternalTransferApproval = async (
         updated_at = CURRENT_TIMESTAMP
       WHERE id_machine = ?
       `,
-      [newMachineStatus, userId, idMachine]
+      [newMachineStatus, creatorId, idMachine]
     );
   }
 };
@@ -8179,7 +8184,9 @@ app.post(
       let targetUidProposalType = "8622ae80-4345-4efd-9a8a-62a1308d5a3f";
       let expansionField = [];
       const proposalName = getProposalName(category, type, date);
-      const reasonName = (getProposalName(category, type, null) || "").replace(/^Phiếu\s*/i, "").trim();
+      const reasonName = (getProposalName(category, type, null) || "")
+        .replace(/^Phiếu\s*/i, "")
+        .trim();
 
       // A. Phiếu Nhập
       if (category === "import") {
