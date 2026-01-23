@@ -216,6 +216,7 @@ const MachineQRScanner = ({
   showNotification, // Hàm thông báo từ parent
 }) => {
   const videoRef = useRef(null);
+  const resumeScanningRef = useRef(null); // Ref để lưu hàm resumeScanning
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
@@ -244,7 +245,9 @@ const MachineQRScanner = ({
         // Tự động reset sau 2 giây để quét tiếp
         setTimeout(() => {
           setOverlayState({ status: "idle", message: "" });
-          logic.resumeScanning();
+          if (resumeScanningRef.current) {
+            resumeScanningRef.current();
+          }
         }, 2000);
         return;
       }
@@ -267,19 +270,25 @@ const MachineQRScanner = ({
             // Lỗi: Trùng lặp
             setOverlayState({
               status: "error",
-              message: `Máy ${machine.code_machine} đã có trong phiếu!`,
+              message: `${machine.serial_machine} - ${machine.type_machine} ${
+                machine.attribute_machine || ""
+              } - ${machine.model_machine} đã có trong phiếu!`,
             });
             setTimeout(() => {
               setOverlayState({ status: "idle", message: "" });
-              logic.resumeScanning();
-            }, 2000);
+              if (resumeScanningRef.current) {
+                resumeScanningRef.current();
+              }
+            }, 5000);
           } else {
             // THÀNH CÔNG
             onMachineAdd({ ...machine, note: "" }); // Thêm máy vào form
             showNotification(
               "success",
               "Thành công",
-              `Đã thêm máy: ${machine.code_machine}`
+              `Đã thêm máy: ${machine.type_machine} ${
+                machine.attribute_machine || ""
+              } - ${machine.model_machine}`
             );
             onClose(); // Tự động đóng dialog
           }
@@ -292,7 +301,9 @@ const MachineQRScanner = ({
           });
           setTimeout(() => {
             setOverlayState({ status: "idle", message: "" });
-            logic.resumeScanning();
+            if (resumeScanningRef.current) {
+              resumeScanningRef.current();
+            }
           }, 2000);
         }
       } catch (error) {
@@ -302,27 +313,39 @@ const MachineQRScanner = ({
         setOverlayState({ status: "error", message: errorMessage });
         setTimeout(() => {
           setOverlayState({ status: "idle", message: "" });
-          logic.resumeScanning();
+          if (resumeScanningRef.current) {
+            resumeScanningRef.current();
+          }
         }, 2000);
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [apiParams, selectedMachines, onMachineAdd, onClose, showNotification]
   );
 
   // --- Sử dụng Hook ---
   const logic = useAppQRScanner(videoRef, handleScanAPI);
 
+  // Cập nhật ref khi logic thay đổi
+  useEffect(() => {
+    resumeScanningRef.current = logic.resumeScanning;
+  }, [logic.resumeScanning]);
+
   // --- Effect quản lý mở/đóng ---
   useEffect(() => {
     if (isOpen) {
-      logic.startScanning();
+      // Đợi một chút để đảm bảo video element đã được mount trong DOM
+      const timer = setTimeout(() => {
+        if (videoRef.current) {
+          logic.startScanning();
+        }
+      }, 100);
+      return () => clearTimeout(timer);
     } else {
       logic.stopScanning();
       setOverlayState({ status: "idle", message: "" }); // Reset lỗi khi đóng
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, logic.startScanning, logic.stopScanning]);
+  }, [isOpen]);
 
   // --- Text hiển thị trạng thái camera ---
   const cameraStatusText = logic.isInitializing
