@@ -8056,32 +8056,36 @@ app.post(
 
           // Chuyển về số để so sánh cho chính xác
           const pId = Number(user_phongban_id);
+          // Mảng các người duyệt: [{ ma_nv, display_name }, ...]
+          let approvers = [];
 
           if (pId === 10) {
-            approverMaNv = "00184";
-            approverName = "Quản đốc Xưởng 1";
+            approvers = [{ ma_nv: "00184", display_name: "Quản đốc Xưởng 1" }];
           } else if (pId === 30) {
-            approverMaNv = "00160";
-            approverName = "Quản đốc Xưởng 2";
+            approvers = [{ ma_nv: "01613", display_name: "Quản đốc Xưởng 2" }];
           } else if (pId === 24) {
-            approverMaNv = "00023";
-            approverName = "Quản đốc Xưởng 3";
+            approvers = [{ ma_nv: "00023", display_name: "Quản đốc Xưởng 3" }];
           } else if (pId === 31) {
-            approverMaNv = "01949";
-            approverName = "Quản đốc Xưởng 4";
+            approvers = [
+              { ma_nv: "01949", display_name: "Quản đốc Xưởng 4" },
+              { ma_nv: "01589", display_name: "Quản đốc Xưởng 4" },
+            ];
+          } else {
+            // Mặc định
+            approvers = [{ ma_nv: approverMaNv, display_name: approverName }];
           }
-          approvalFlowForDB = [
-            {
-              ma_nv: approverMaNv,
-              step_flow: 0,
-              isFinalFlow: 1,
-              status_text: "Đang chờ duyệt",
-              is_forward: 0,
-              display_name: approverName,
-              is_flow: 1,
-              indexOf: 1,
-            },
-          ];
+
+          // Tạo luồng duyệt từ mảng approvers
+          approvalFlowForDB = approvers.map((approver) => ({
+            ma_nv: approver.ma_nv,
+            step_flow: 0,
+            isFinalFlow: 1,
+            status_text: "Đang chờ duyệt",
+            is_forward: 0,
+            display_name: approver.display_name,
+            is_flow: 1,
+            indexOf: 1,
+          }));
         } else {
           const [destUsers] = await dataHiTimesheetConnection.query(
             `SELECT nv.id, nv.ma_nv FROM sync_nhan_vien nv JOIN sync_bo_phan bp ON nv.id_bo_phan = bp.id WHERE bp.id_phong_ban = ?`,
