@@ -8066,10 +8066,7 @@ app.post(
           } else if (pId === 24) {
             approvers = [{ ma_nv: "00023", display_name: "Quản đốc Xưởng 3" }];
           } else if (pId === 31) {
-            approvers = [
-              { ma_nv: "01949", display_name: "Quản đốc Xưởng 4" },
-              { ma_nv: "01589", display_name: "Quản đốc Xưởng 4" },
-            ];
+            approvers = [{ ma_nv: "01589", display_name: "Quản đốc Xưởng 4" }];
           } else {
             // Mặc định
             approvers = [{ ma_nv: approverMaNv, display_name: approverName }];
