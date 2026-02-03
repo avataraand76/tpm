@@ -171,11 +171,10 @@ const InventoryLocationItem = ({
                 label={`Khác ĐV: ${countDiff}`}
                 size="small"
                 sx={{
-                  bgcolor: countDiff > 0 ? "#fff3e0" : "#f5f5f5",
-                  color: countDiff > 0 ? "#ed6c02" : "#bdbdbd",
+                  bgcolor: "#fff3e0",
+                  color: "#ed6c02",
                   fontWeight: 600,
-                  border:
-                    countDiff > 0 ? "1px solid #ffe0b2" : "1px solid #e0e0e0",
+                  border: "1px solid #ffe0b2",
                 }}
               />
             </Tooltip>
@@ -185,11 +184,10 @@ const InventoryLocationItem = ({
                 label={`Chênh lệch: ${countGap}`}
                 size="small"
                 sx={{
-                  bgcolor: countGap !== 0 ? "#ffebee" : "#f5f5f5",
-                  color: countGap !== 0 ? "#d32f2f" : "#bdbdbd",
+                  bgcolor: "#ffebee",
+                  color: "#d32f2f",
                   fontWeight: 600,
-                  border:
-                    countGap !== 0 ? "1px solid #ffcdd2" : "1px solid #e0e0e0",
+                  border: "1px solid #ffcdd2",
                 }}
               />
             </Tooltip>
@@ -4732,11 +4730,8 @@ const TestProposalPage = () => {
                                                   <TableCell
                                                     align="center"
                                                     sx={{
-                                                      fontWeight: "bold",
-                                                      color:
-                                                        row.diff !== 0
-                                                          ? "#d32f2f"
-                                                          : "#bdbdbd",
+                                                      fontWeight: 600,
+                                                      color: "#d32f2f",
                                                     }}
                                                   >
                                                     {new Intl.NumberFormat(
@@ -8030,8 +8025,7 @@ const TestProposalPage = () => {
                                   <TableCell
                                     align="center"
                                     sx={{
-                                      color:
-                                        row.misDept > 0 ? "#ed6c02" : "#bdbdbd",
+                                      color: "#ed6c02",
                                       fontWeight: 600,
                                     }}
                                   >
@@ -8045,9 +8039,8 @@ const TestProposalPage = () => {
                                   <TableCell
                                     align="center"
                                     sx={{
-                                      fontWeight: "bold",
-                                      color:
-                                        row.diff !== 0 ? "#d32f2f" : "#bdbdbd",
+                                      fontWeight: 600,
+                                      color: "#d32f2f",
                                     }}
                                   >
                                     {row.isScanned

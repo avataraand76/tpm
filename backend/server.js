@@ -9100,6 +9100,30 @@ app.get("/api/inventory-checks/stats", authenticateToken, async (req, res) => {
   }
 });
 
+// Helper: Loại máy có uuid/uuid_machine bắt đầu "NOT_FOUND" khỏi scanned_result (không đếm trong thống kê)
+function filterScannedResultExcludeNotFound(scannedResult) {
+  if (scannedResult == null) return scannedResult;
+  try {
+    let parsed =
+      typeof scannedResult === "string"
+        ? JSON.parse(scannedResult)
+        : scannedResult;
+    const excludeNotFound = (m) => {
+      const u = m?.uuid ?? m?.uuid_machine;
+      return !u || !String(u).startsWith("NOT_FOUND");
+    };
+    let locations = Array.isArray(parsed) ? parsed : parsed?.locations || [];
+    locations = locations.map((loc) => ({
+      ...loc,
+      scanned_machine: (loc.scanned_machine || []).filter(excludeNotFound),
+    }));
+    if (Array.isArray(parsed)) return locations;
+    return { ...parsed, locations };
+  } catch (e) {
+    return scannedResult;
+  }
+}
+
 // GET /api/inventory-checks/:uuid - Lấy chi tiết phiếu kiểm kê
 app.get("/api/inventory-checks/:uuid", authenticateToken, async (req, res) => {
   try {
@@ -9181,11 +9205,20 @@ app.get("/api/inventory-checks/:uuid", authenticateToken, async (req, res) => {
       [idInventory]
     );
 
+    // Loại máy uuid bắt đầu NOT_FOUND khỏi scanned_result để không đếm trong thống kê
+    const detailsForResponse = details.map((d) => {
+      const filtered =
+        d.scanned_result != null
+          ? filterScannedResultExcludeNotFound(d.scanned_result)
+          : d.scanned_result;
+      return { ...d, scanned_result: filtered };
+    });
+
     res.json({
       success: true,
       data: {
         inventory: ticket,
-        details: details,
+        details: detailsForResponse,
       },
     });
   } catch (error) {
