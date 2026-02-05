@@ -8521,7 +8521,7 @@ app.post(
         );
         const externalResponse = await axios.post(
           // "https://servertienich.vietlonghung.com.vn/api/fw/create-proposal-reality-outdoor",
-          "http://192.168.0.43:16002/api/fw/create-proposal-reality-outdoor",
+          "http://192.168.0.94:16002/api/fw/create-proposal-reality-outdoor",
           externalPayload
         );
         console.log("External API Response:", externalResponse.data);
@@ -9779,7 +9779,6 @@ app.put(
               ? JSON.parse(det.scanned_result)
               : det.scanned_result;
 
-          // --- SỬA LỖI: Xử lý cả dạng Array (cũ) và Object (mới) ---
           if (Array.isArray(parsed)) {
             scannedArr = parsed;
           } else if (
@@ -9791,7 +9790,6 @@ app.put(
           } else {
             scannedArr = [];
           }
-          // -------------------------------------------------------
         } catch (e) {
           scannedArr = [];
         }
@@ -9832,55 +9830,197 @@ app.put(
       );
 
       // 4. Send to FastWork
+      // Lấy thông tin đơn vị từ DB
+      const [departmentDetails] = await connection.query(
+        `
+        SELECT 
+          d.id_department,
+          d.scanned_result,
+          dep.name_department,
+          dep.uuid_department
+        FROM tb_inventory_check_detail d
+        JOIN tb_department dep ON dep.id_department = d.id_department
+        WHERE d.id_inventory_check = ?
+        `,
+        [ticket.id_inventory_check]
+      );
+
       let tableRows = [];
       let stt = 1;
 
-      details.forEach((det) => {
-        if (det.scanned_result) {
-          let locationsArr = [];
-          try {
-            const parsed =
-              typeof det.scanned_result === "string"
-                ? JSON.parse(det.scanned_result)
-                : det.scanned_result;
+      departmentDetails.forEach((dept) => {
+        let locationsArr = [];
+        try {
+          const parsed =
+            typeof dept.scanned_result === "string"
+              ? JSON.parse(dept.scanned_result)
+              : dept.scanned_result;
 
-            // --- SỬA LỖI: Xử lý tương tự khi tạo bảng ---
-            if (Array.isArray(parsed)) {
-              locationsArr = parsed;
-            } else if (
-              parsed &&
-              parsed.locations &&
-              Array.isArray(parsed.locations)
-            ) {
-              locationsArr = parsed.locations;
-            }
-            // ------------------------------------------
-          } catch (e) {
-            locationsArr = [];
-          }
+          locationsArr = Array.isArray(parsed)
+            ? parsed
+            : parsed?.locations || [];
+        } catch (e) {
+          locationsArr = [];
+        }
 
-          if (Array.isArray(locationsArr)) {
-            locationsArr.forEach((loc) => {
-              const locationName = loc.location_name;
-              if (loc.scanned_machine && Array.isArray(loc.scanned_machine)) {
-                loc.scanned_machine.forEach((m) => {
-                  // Chỉ đưa vào bảng các máy SAI VỊ TRÍ (mislocation) hoặc tùy logic của bạn
-                  if (m.mislocation === "1") {
-                    tableRows.push([
-                      stt++,
-                      m.name,
-                      m.serial,
-                      "Máy",
-                      1,
-                      m.current_location || "-",
-                      locationName,
-                      "Sai vị trí",
-                      "",
-                    ]);
-                  }
-                });
+        // Phân loại máy theo cùng đơn vị hoặc khác đơn vị
+        const sameDeptMislocations = {};
+        const diffDeptMislocations = {};
+
+        locationsArr.forEach((loc) => {
+          const locationScannedName = loc.location_name;
+          if (loc.scanned_machine && Array.isArray(loc.scanned_machine)) {
+            loc.scanned_machine.forEach((m) => {
+              const u = m.uuid || m.uuid_machine;
+              // Bỏ qua máy không tồn tại hoặc máy đúng vị trí
+              if (
+                (u && String(u).startsWith("NOT_FOUND")) ||
+                m.mislocation !== "1"
+              ) {
+                return;
+              }
+
+              const currentLoc = m.current_location || "Không xác định";
+              const groupKey = `${m.name}|${currentLoc}|${locationScannedName}`;
+              const isSameDept = m.misdepartment === "0";
+
+              const targetGroup = isSameDept
+                ? sameDeptMislocations
+                : diffDeptMislocations;
+
+              if (!targetGroup[groupKey]) {
+                targetGroup[groupKey] = {
+                  name: m.name,
+                  current_location: currentLoc,
+                  scanned_location: locationScannedName,
+                  serials: [],
+                  count: 0,
+                };
+              }
+
+              targetGroup[groupKey].count += 1;
+              if (m.serial) {
+                targetGroup[groupKey].serials.push(m.serial);
               }
             });
+          }
+        });
+
+        // Chỉ thêm đơn vị nếu có máy sai vị trí
+        const hasMislocations =
+          Object.keys(sameDeptMislocations).length > 0 ||
+          Object.keys(diffDeptMislocations).length > 0;
+
+        if (hasMislocations) {
+          // Tính tổng số lượng máy từng loại
+          const sameDeptTotal = Object.values(sameDeptMislocations).reduce(
+            (sum, group) => sum + group.count,
+            0
+          );
+          const diffDeptTotal = Object.values(diffDeptMislocations).reduce(
+            (sum, group) => sum + group.count,
+            0
+          );
+
+          // 1. Thêm hàng tiêu đề đơn vị
+          tableRows.push([
+            dept.name_department,
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+          ]);
+
+          // 2. Thêm các máy sai vị trí CÙNG đơn vị
+          if (Object.keys(sameDeptMislocations).length > 0) {
+            tableRows.push([
+              "Các máy sai vị trí cùng đơn vị",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+            ]);
+
+            Object.values(sameDeptMislocations).forEach((group) => {
+              tableRows.push([
+                stt++,
+                group.name,
+                group.serials.join(", "),
+                "Máy",
+                group.count,
+                group.current_location,
+                group.scanned_location,
+                "Sai vị trí",
+                "",
+              ]);
+            });
+          }
+
+          // 3. Thêm các máy sai vị trí KHÁC đơn vị
+          if (Object.keys(diffDeptMislocations).length > 0) {
+            tableRows.push([
+              "Các máy sai vị trí khác đơn vị",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+            ]);
+
+            Object.values(diffDeptMislocations).forEach((group) => {
+              tableRows.push([
+                stt++,
+                group.name,
+                group.serials.join(", "),
+                "Máy",
+                group.count,
+                group.current_location,
+                group.scanned_location,
+                "Sai vị trí",
+                "",
+              ]);
+            });
+          }
+
+          // 4. Thêm hàng thống kê SL máy sai vị trí cùng đơn vị
+          if (Object.keys(sameDeptMislocations).length > 0) {
+            tableRows.push([
+              `Tổng SL máy sai vị trí cùng đơn vị ${dept.name_department}`,
+              "",
+              "",
+              "",
+              sameDeptTotal,
+              "",
+              "",
+              "",
+              "",
+            ]);
+          }
+
+          // 5. Thêm hàng thống kê SL máy sai vị trí khác đơn vị
+          if (Object.keys(diffDeptMislocations).length > 0) {
+            tableRows.push([
+              `Tổng SL máy sai vị trí khác đơn vị ${dept.name_department}`,
+              "",
+              "",
+              "",
+              diffDeptTotal,
+              "",
+              "",
+              "",
+              "",
+            ]);
           }
         }
       });
@@ -9937,7 +10077,7 @@ app.put(
         );
         const externalResponse = await axios.post(
           // "https://servertienich.vietlonghung.com.vn/api/fw/create-proposal-reality-outdoor",
-          "http://192.168.0.43:16002/api/fw/create-proposal-reality-outdoor",
+          "http://192.168.0.94:16002/api/fw/create-proposal-reality-outdoor",
           externalPayload
         );
         console.log("External API Response:", externalResponse.data);

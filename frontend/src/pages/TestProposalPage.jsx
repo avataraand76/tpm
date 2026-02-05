@@ -7556,184 +7556,273 @@ const TestProposalPage = () => {
                             Dò tìm các RFID trùng/không có trong hệ thống
                           </Button>
                         </Stack>
-                        <TableContainer
-                          component={Paper}
-                          variant="outlined"
+                        <Box
                           sx={{
-                            borderRadius: "12px",
                             mb: 2,
-                            maxHeight: 400,
+                            maxHeight: 500,
                             overflow: "auto",
                           }}
                         >
-                          <Table size="small" stickyHeader>
-                            <TableHead>
-                              <TableRow>
-                                {/* <TableCell sx={{ fontWeight: 600 }}>
-                                  Mã máy
-                                </TableCell> */}
-                                <TableCell sx={{ fontWeight: 600 }}>
-                                  Tên máy
-                                </TableCell>
-                                <TableCell sx={{ fontWeight: 600 }}>
-                                  Serial
-                                </TableCell>
-                                <TableCell sx={{ fontWeight: 600 }}>
-                                  RFID
-                                </TableCell>
-                                {/* <TableCell sx={{ fontWeight: 600 }}>
-                                  NFC
-                                </TableCell> */}
-                                <TableCell sx={{ fontWeight: 600 }}>
-                                  Vị trí hiện tại
-                                </TableCell>
-                                <TableCell sx={{ fontWeight: 600 }}>
-                                  Trạng thái
-                                </TableCell>
-                                <TableCell
-                                  sx={{ fontWeight: 600 }}
-                                  align="center"
-                                >
-                                  Xóa
-                                </TableCell>
-                              </TableRow>
-                            </TableHead>
-                            <TableBody>
-                              {inventoryScannedList.map((machine, index) => {
-                                const isMislocation =
-                                  machine.uuid_location !==
-                                  selectedLocationForScan?.uuid_location;
-                                const isDuplicate =
-                                  machine.isDuplicateInCurrentDept;
-                                // Kiểm tra máy placeholder: có flag isNotFound hoặc uuid_machine bắt đầu bằng "NOT_FOUND_"
-                                const isNotFound =
-                                  machine.isNotFound === true ||
-                                  (machine.uuid_machine &&
-                                    machine.uuid_machine.startsWith(
-                                      "NOT_FOUND_"
-                                    ));
-                                const machineName = isNotFound
-                                  ? "Không tìm thấy trong hệ thống"
-                                  : machine.type_machine &&
-                                    machine.model_machine
-                                  ? `${machine.type_machine} ${
-                                      machine.attribute_machine || ""
-                                    } - ${machine.model_machine}`
-                                  : machine.type_machine ||
-                                    machine.model_machine ||
-                                    "-";
-                                return (
-                                  <TableRow
-                                    key={index}
+                          {(() => {
+                            // Phân loại máy thành 4 nhóm
+                            const correctLocation = [];
+                            const wrongLocation = [];
+                            const notFound = [];
+                            const alreadyScanned = [];
+
+                            inventoryScannedList.forEach((machine) => {
+                              const isMislocation =
+                                machine.uuid_location !==
+                                selectedLocationForScan?.uuid_location;
+                              const isDuplicate =
+                                machine.isDuplicateInCurrentDept;
+                              const isNotFound =
+                                machine.isNotFound === true ||
+                                (machine.uuid_machine &&
+                                  machine.uuid_machine.startsWith(
+                                    "NOT_FOUND_"
+                                  ));
+
+                              if (isDuplicate) {
+                                alreadyScanned.push(machine);
+                              } else if (isNotFound) {
+                                notFound.push(machine);
+                              } else if (isMislocation) {
+                                wrongLocation.push(machine);
+                              } else {
+                                correctLocation.push(machine);
+                              }
+                            });
+
+                            const renderMachineGroup = (
+                              title,
+                              machines,
+                              groupColor
+                            ) => {
+                              if (machines.length === 0) return null;
+
+                              return (
+                                <Box key={title} sx={{ mb: 3 }}>
+                                  <Typography
+                                    variant="subtitle1"
                                     sx={{
-                                      backgroundColor: isDuplicate
-                                        ? "#ffebee"
-                                        : isMislocation
-                                        ? "#fff3e0"
-                                        : isNotFound
-                                        ? "#e3f2fd"
-                                        : "inherit",
+                                      fontWeight: 600,
+                                      mb: 1,
+                                      color: groupColor,
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 1,
                                     }}
                                   >
-                                    {/* <TableCell>
-                                      {machine.code_machine}
-                                    </TableCell> */}
-                                    <TableCell>{machineName}</TableCell>
-                                    <TableCell>
-                                      {machine.serial_machine || "-"}
-                                    </TableCell>
-                                    <TableCell>
-                                      {machine.RFID_machine || "-"}
-                                    </TableCell>
-                                    {/* <TableCell>
-                                      {machine.NFC_machine || "-"}
-                                    </TableCell> */}
-                                    <TableCell>
-                                      {machine.name_location || "-"}
-                                    </TableCell>
-                                    <TableCell>
-                                      <Stack direction="column" spacing={0.5}>
-                                        {isNotFound ? (
-                                          <Chip
-                                            label="Không tìm thấy trong hệ thống"
-                                            color="info"
-                                            size="small"
-                                          />
-                                        ) : isDuplicate ? (
-                                          <>
-                                            <Stack
-                                              direction="row"
-                                              spacing={0.5}
-                                              alignItems="center"
+                                    {title}
+                                    <Chip
+                                      label={machines.length}
+                                      size="small"
+                                      sx={{
+                                        bgcolor: groupColor,
+                                        color: "#fff",
+                                        fontWeight: 600,
+                                      }}
+                                    />
+                                  </Typography>
+                                  <TableContainer
+                                    component={Paper}
+                                    variant="outlined"
+                                    sx={{
+                                      borderRadius: "12px",
+                                    }}
+                                  >
+                                    <Table size="small">
+                                      <TableHead>
+                                        <TableRow>
+                                          <TableCell sx={{ fontWeight: 600 }}>
+                                            Tên máy
+                                          </TableCell>
+                                          <TableCell sx={{ fontWeight: 600 }}>
+                                            Serial
+                                          </TableCell>
+                                          <TableCell sx={{ fontWeight: 600 }}>
+                                            RFID
+                                          </TableCell>
+                                          <TableCell sx={{ fontWeight: 600 }}>
+                                            Vị trí hiện tại
+                                          </TableCell>
+                                          <TableCell sx={{ fontWeight: 600 }}>
+                                            Trạng thái
+                                          </TableCell>
+                                          <TableCell
+                                            sx={{ fontWeight: 600 }}
+                                            align="center"
+                                          >
+                                            Xóa
+                                          </TableCell>
+                                        </TableRow>
+                                      </TableHead>
+                                      <TableBody>
+                                        {machines.map((machine, index) => {
+                                          const isMislocation =
+                                            machine.uuid_location !==
+                                            selectedLocationForScan?.uuid_location;
+                                          const isDuplicate =
+                                            machine.isDuplicateInCurrentDept;
+                                          const isNotFound =
+                                            machine.isNotFound === true ||
+                                            (machine.uuid_machine &&
+                                              machine.uuid_machine.startsWith(
+                                                "NOT_FOUND_"
+                                              ));
+                                          const machineName = isNotFound
+                                            ? "Không tìm thấy trong hệ thống"
+                                            : machine.type_machine &&
+                                              machine.model_machine
+                                            ? `${machine.type_machine} ${
+                                                machine.attribute_machine || ""
+                                              } - ${machine.model_machine}`
+                                            : machine.type_machine ||
+                                              machine.model_machine ||
+                                              "-";
+                                          return (
+                                            <TableRow
+                                              key={index}
+                                              sx={{
+                                                backgroundColor: isDuplicate
+                                                  ? "#ffebee"
+                                                  : isMislocation
+                                                  ? "#fff3e0"
+                                                  : isNotFound
+                                                  ? "#e3f2fd"
+                                                  : "inherit",
+                                              }}
                                             >
-                                              <Chip
-                                                label={`Đã quét tại ${machine.duplicateLocationName}`}
-                                                color="error"
-                                                size="small"
-                                              />
-                                              <Chip
-                                                label={`Xóa tại ${machine.duplicateLocationName}`}
-                                                color="error"
-                                                size="small"
-                                                icon={
+                                              <TableCell>
+                                                {machineName}
+                                              </TableCell>
+                                              <TableCell>
+                                                {machine.serial_machine || "-"}
+                                              </TableCell>
+                                              <TableCell>
+                                                {machine.RFID_machine || "-"}
+                                              </TableCell>
+                                              <TableCell>
+                                                {machine.name_location || "-"}
+                                              </TableCell>
+                                              <TableCell>
+                                                <Stack
+                                                  direction="column"
+                                                  spacing={0.5}
+                                                >
+                                                  {isNotFound ? (
+                                                    <Chip
+                                                      label="Không tìm thấy trong hệ thống"
+                                                      color="info"
+                                                      size="small"
+                                                    />
+                                                  ) : isDuplicate ? (
+                                                    <>
+                                                      <Stack
+                                                        direction="row"
+                                                        spacing={0.5}
+                                                        alignItems="center"
+                                                      >
+                                                        <Chip
+                                                          label={`Đã quét tại ${machine.duplicateLocationName}`}
+                                                          color="error"
+                                                          size="small"
+                                                        />
+                                                        <Chip
+                                                          label={`Xóa tại ${machine.duplicateLocationName}`}
+                                                          color="error"
+                                                          size="small"
+                                                          icon={
+                                                            <Delete fontSize="small" />
+                                                          }
+                                                          onClick={() =>
+                                                            handleRemoveInventoryScannedMachine(
+                                                              machine.uuid_machine
+                                                            )
+                                                          }
+                                                          sx={{
+                                                            cursor: "pointer",
+                                                            "&:hover": {
+                                                              backgroundColor:
+                                                                "#d32f2f",
+                                                              color: "#fff",
+                                                            },
+                                                          }}
+                                                        />
+                                                      </Stack>
+                                                      {isMislocation && (
+                                                        <Chip
+                                                          label="Sai vị trí"
+                                                          color="warning"
+                                                          size="small"
+                                                        />
+                                                      )}
+                                                    </>
+                                                  ) : isMislocation ? (
+                                                    <Chip
+                                                      label="Sai vị trí"
+                                                      color="warning"
+                                                      size="small"
+                                                    />
+                                                  ) : (
+                                                    <Chip
+                                                      label="Đúng vị trí"
+                                                      color="success"
+                                                      size="small"
+                                                    />
+                                                  )}
+                                                </Stack>
+                                              </TableCell>
+                                              <TableCell align="center">
+                                                <IconButton
+                                                  size="small"
+                                                  color="error"
+                                                  onClick={() =>
+                                                    handleRemoveInventoryScannedMachine(
+                                                      machine.uuid_machine
+                                                    )
+                                                  }
+                                                >
                                                   <Delete fontSize="small" />
-                                                }
-                                                onClick={() =>
-                                                  handleRemoveInventoryScannedMachine(
-                                                    machine.uuid_machine
-                                                  )
-                                                }
-                                                sx={{
-                                                  cursor: "pointer",
-                                                  "&:hover": {
-                                                    backgroundColor: "#d32f2f",
-                                                    color: "#fff",
-                                                  },
-                                                }}
-                                              />
-                                            </Stack>
-                                            {isMislocation && (
-                                              <Chip
-                                                label="Sai vị trí"
-                                                color="warning"
-                                                size="small"
-                                              />
-                                            )}
-                                          </>
-                                        ) : isMislocation ? (
-                                          <Chip
-                                            label="Sai vị trí"
-                                            color="warning"
-                                            size="small"
-                                          />
-                                        ) : (
-                                          <Chip
-                                            label="Đúng vị trí"
-                                            color="success"
-                                            size="small"
-                                          />
-                                        )}
-                                      </Stack>
-                                    </TableCell>
-                                    <TableCell align="center">
-                                      <IconButton
-                                        size="small"
-                                        color="error"
-                                        onClick={() =>
-                                          handleRemoveInventoryScannedMachine(
-                                            machine.uuid_machine
-                                          )
-                                        }
-                                      >
-                                        <Delete fontSize="small" />
-                                      </IconButton>
-                                    </TableCell>
-                                  </TableRow>
-                                );
-                              })}
-                            </TableBody>
-                          </Table>
-                        </TableContainer>
+                                                </IconButton>
+                                              </TableCell>
+                                            </TableRow>
+                                          );
+                                        })}
+                                      </TableBody>
+                                    </Table>
+                                  </TableContainer>
+                                </Box>
+                              );
+                            };
+
+                            return (
+                              <Box>
+                                {renderMachineGroup(
+                                  "Đúng vị trí",
+                                  correctLocation,
+                                  "#2e7d32"
+                                )}
+                                {renderMachineGroup(
+                                  "Sai vị trí",
+                                  wrongLocation,
+                                  "#ed6c02"
+                                )}
+                                {renderMachineGroup(
+                                  "Không tìm thấy trong hệ thống",
+                                  notFound,
+                                  "#0288d1"
+                                )}
+                                {renderMachineGroup(
+                                  "Đã quét ở vị trí khác",
+                                  alreadyScanned,
+                                  "#d32f2f"
+                                )}
+                              </Box>
+                            );
+                          })()}
+                        </Box>
                         <Button
                           onClick={handleInventoryScanComplete}
                           variant="contained"
