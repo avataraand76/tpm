@@ -355,13 +355,15 @@ const TestProposalPage = () => {
 
   const phongCoDienId = 14;
   const coDienXuongIds = [10, 30, 24, 31];
+  const baoVeId = 11;
 
   const isPhongCoDien =
     canEdit && !isAdmin && user?.phongban_id === phongCoDienId;
   const isCoDienXuong =
     canEdit && !isAdmin && coDienXuongIds.includes(user?.phongban_id);
+  const isBaoVe = canEdit && !isAdmin && Number(user?.phongban_id) === baoVeId;
   const isViewOnly = permissions.includes("view") && !isAdmin && !canEdit;
-  const hasImportExportTabs = isAdmin || isPhongCoDien || isViewOnly;
+  const hasImportExportTabs = isAdmin || isPhongCoDien || isViewOnly || isBaoVe;
   const canCreateOrImportMachines = isAdmin || isPhongCoDien;
 
   // Phân quyền cho Kiểm kê
@@ -369,8 +371,10 @@ const TestProposalPage = () => {
     isAdmin || isPhongCoDien || isCoDienXuong || isViewOnly;
   const canCreateInventory = isAdmin || isPhongCoDien;
 
-  // Tab state
-  const [activeTab, setActiveTab] = useState(isCoDienXuong ? 2 : 0); // 0: Import, 1: Export, 2: Internal, 3: Inventory
+  // Tab state (bảo vệ id_phong_ban=11 chỉ xem tab Phiếu nhập)
+  const [activeTab, setActiveTab] = useState(
+    isBaoVe ? 0 : isCoDienXuong ? 2 : 0
+  ); // 0: Import, 1: Export, 2: Internal, 3: Inventory
 
   // Data states
   const [imports, setImports] = useState([]);
@@ -769,6 +773,11 @@ const TestProposalPage = () => {
     fetchStatistics();
   }, [fetchStatistics]);
 
+  // Bảo vệ (id_phong_ban=11) chỉ được ở tab Phiếu nhập
+  useEffect(() => {
+    if (isBaoVe && activeTab !== 0) setActiveTab(0);
+  }, [isBaoVe, activeTab]);
+
   useEffect(() => {
     fetchExternalLocations();
   }, [fetchExternalLocations, showNotification]);
@@ -991,6 +1000,15 @@ const TestProposalPage = () => {
         }
         setSelectedTicket(ticketDetails);
 
+        // Nếu phiếu là draft và user là admin/cơ điện, chuyển sang mode edit
+        if (
+          ticketDetails.status === "draft" &&
+          type === "import" &&
+          (isAdmin || isPhongCoDien)
+        ) {
+          setDialogMode("edit");
+        }
+
         const ticketType =
           ticketDetails.import_type || ticketDetails.export_type || "internal";
         let filter =
@@ -998,7 +1016,16 @@ const TestProposalPage = () => {
             ? "internal"
             : getLocationFilterForType(ticketType);
 
-        await fetchLocations(filter);
+        // Nếu là phiếu draft import và chưa có type, load tất cả locations
+        if (
+          ticketDetails.status === "draft" &&
+          type === "import" &&
+          !ticketType
+        ) {
+          await fetchLocations();
+        } else {
+          await fetchLocations(filter);
+        }
 
         let expansionData = [];
         try {
@@ -1534,7 +1561,49 @@ const TestProposalPage = () => {
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      // 1. Validate machines
+      // Nếu là bảo vệ tạo phiếu nhập, validate ngày + (note hoặc file)
+      if (isBaoVe && dialogType === "import") {
+        if (!formData.date) {
+          showNotification(
+            "error",
+            "Lỗi nhập liệu",
+            "Vui lòng chọn ngày tạo phiếu."
+          );
+          setLoading(false);
+          return;
+        }
+
+        if (!formData.note && filesToUpload.length === 0) {
+          showNotification(
+            "error",
+            "Lỗi nhập liệu",
+            "Vui lòng nhập ghi chú hoặc đính kèm file."
+          );
+          setLoading(false);
+          return;
+        }
+
+        // Tạo FormData cho bảo vệ
+        const data = new FormData();
+        data.append("category", "import");
+        data.append("date", formData.date);
+        data.append("note", formData.note);
+        data.append("machines", JSON.stringify([]));
+        filesToUpload.forEach((f) => data.append("attachments", f));
+
+        await api.test_proposals.create(data);
+        showNotification(
+          "success",
+          "Thành công",
+          "Đã tạo phiếu nháp thành công!."
+        );
+        handleCloseDialog();
+        fetchData();
+        setLoading(false);
+        return;
+      }
+
+      // 1. Validate machines (không áp dụng cho bảo vệ)
       const machinesToSend = formData.machines
         .map((m) => ({
           uuid_machine: m.uuid_machine,
@@ -1664,6 +1733,154 @@ const TestProposalPage = () => {
   const handleCloseNotification = (event, reason) => {
     if (reason === "clickaway") return;
     setNotification({ ...notification, open: false });
+  };
+
+  // --- Draft Import Handlers ---
+  const handleUpdateDraft = async () => {
+    setLoading(true);
+    try {
+      // Validate
+      const machinesToSend = formData.machines
+        .map((m) => ({
+          uuid_machine: m.uuid_machine,
+          note: m.note,
+          type_machine: m.type_machine,
+          model_machine: m.model_machine,
+          serial_machine: m.serial_machine,
+          code_machine: m.code_machine,
+        }))
+        .filter((m) => m.uuid_machine);
+
+      // Tạo FormData (gửi loại phiếu, vị trí nhập, ghi chú, file, danh sách máy - KHÔNG gửi date)
+      const data = new FormData();
+      data.append("to_location_uuid", formData.to_location_uuid || "");
+      data.append("import_type", formData.type || "");
+      data.append("note", formData.note || "");
+      data.append("machines", JSON.stringify(machinesToSend));
+
+      if (formData.is_borrowed_or_rented_or_borrowed_out_name)
+        data.append(
+          "is_borrowed_or_rented_or_borrowed_out_name",
+          formData.is_borrowed_or_rented_or_borrowed_out_name
+        );
+      if (formData.is_borrowed_or_rented_or_borrowed_out_date)
+        data.append(
+          "is_borrowed_or_rented_or_borrowed_out_date",
+          formData.is_borrowed_or_rented_or_borrowed_out_date
+        );
+      if (formData.is_borrowed_or_rented_or_borrowed_out_return_date)
+        data.append(
+          "is_borrowed_or_rented_or_borrowed_out_return_date",
+          formData.is_borrowed_or_rented_or_borrowed_out_return_date || ""
+        );
+
+      filesToUpload.forEach((f) => data.append("attachments", f));
+
+      const uuid = selectedTicket.uuid_machine_import;
+      await api.imports.update(uuid, data);
+
+      showNotification("success", "Thành công", "Đã lưu thay đổi phiếu nháp");
+      handleCloseDialog();
+      fetchData();
+    } catch (error) {
+      console.error("Error updating draft:", error);
+      showNotification(
+        "error",
+        "Thao tác thất bại",
+        error.response?.data?.message || "Lỗi khi cập nhật phiếu"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCompleteDraft = async () => {
+    setLoading(true);
+    try {
+      // Validate đầy đủ
+      const machinesToSend = formData.machines
+        .map((m) => ({
+          uuid_machine: m.uuid_machine,
+          note: m.note,
+        }))
+        .filter((m) => m.uuid_machine);
+
+      if (machinesToSend.length === 0) {
+        showNotification(
+          "error",
+          "Lỗi nhập liệu",
+          "Vui lòng chọn ít nhất một máy móc."
+        );
+        setLoading(false);
+        return;
+      }
+
+      if (!formData.to_location_uuid) {
+        showNotification(
+          "error",
+          "Lỗi nhập liệu",
+          "Vui lòng chọn vị trí nhập."
+        );
+        setLoading(false);
+        return;
+      }
+
+      if (!formData.type) {
+        showNotification("error", "Lỗi nhập liệu", "Vui lòng chọn loại phiếu.");
+        setLoading(false);
+        return;
+      }
+
+      // Trước khi đóng phiếu, lưu lại các thay đổi (loại phiếu, vị trí, ghi chú, file, máy móc)
+      const updateData = new FormData();
+      updateData.append("to_location_uuid", formData.to_location_uuid);
+      updateData.append("import_type", formData.type);
+      updateData.append("note", formData.note || "");
+      updateData.append("machines", JSON.stringify(machinesToSend));
+
+      if (formData.is_borrowed_or_rented_or_borrowed_out_name)
+        updateData.append(
+          "is_borrowed_or_rented_or_borrowed_out_name",
+          formData.is_borrowed_or_rented_or_borrowed_out_name
+        );
+      if (formData.is_borrowed_or_rented_or_borrowed_out_date)
+        updateData.append(
+          "is_borrowed_or_rented_or_borrowed_out_date",
+          formData.is_borrowed_or_rented_or_borrowed_out_date
+        );
+      if (formData.is_borrowed_or_rented_or_borrowed_out_return_date)
+        updateData.append(
+          "is_borrowed_or_rented_or_borrowed_out_return_date",
+          formData.is_borrowed_or_rented_or_borrowed_out_return_date || ""
+        );
+
+      filesToUpload.forEach((f) => updateData.append("attachments", f));
+
+      const uuid = selectedTicket.uuid_machine_import;
+
+      // Lưu trước
+      await api.imports.update(uuid, updateData);
+
+      // Sau đó đóng phiếu và gửi Fastwork
+      await api.imports.complete(uuid);
+
+      showNotification(
+        "success",
+        "Thành công",
+        "Đã đóng phiếu và gửi duyệt thành công!"
+      );
+      handleCloseDialog();
+      fetchData();
+    } catch (error) {
+      console.error("Error completing draft:", error);
+      showNotification(
+        "error",
+        "Thao tác thất bại",
+        error.response?.data?.message || "Lỗi khi đóng phiếu"
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   // --- Inventory Handlers ---
@@ -2508,7 +2725,7 @@ const TestProposalPage = () => {
   // --- Render Helpers ---
   const getStatusColor = (status) =>
     ({
-      draft: "primary",
+      draft: "info",
       pending: "warning",
       pending_confirmation: "warning",
       pending_approval: "warning",
@@ -2517,7 +2734,7 @@ const TestProposalPage = () => {
     }[status] || "default");
   const getStatusLabel = (status) =>
     ({
-      draft: "Nháp (đang kiểm)",
+      draft: "Nháp",
       pending: "Chờ duyệt",
       pending_confirmation: "Chờ xác nhận",
       pending_approval: "Chờ duyệt",
@@ -3062,7 +3279,7 @@ const TestProposalPage = () => {
                       </Button>
                     </Grid>
                   )}
-                  {hasImportExportTabs && (
+                  {hasImportExportTabs && !isBaoVe && (
                     <Grid size={{ xs: 6 }} sx={{ display: "flex" }}>
                       <Button
                         fullWidth
@@ -3110,55 +3327,57 @@ const TestProposalPage = () => {
                       </Button>
                     </Grid>
                   )}
-                  <Grid size={{ xs: 6 }} sx={{ display: "flex" }}>
-                    <Button
-                      fullWidth
-                      variant={activeTab === 2 ? "contained" : "outlined"}
-                      startIcon={<Autorenew />}
-                      onClick={(e) =>
-                        handleTabChange(e, hasImportExportTabs ? 2 : 0)
-                      }
-                      sx={{
-                        minHeight: "80px",
-                        py: 2,
-                        borderRadius: "12px",
-                        fontWeight: 600,
-                        fontSize: "0.9rem",
-                        textTransform: "none",
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: 0.5,
-                        "& .MuiButton-startIcon": {
-                          margin: 0,
-                          marginBottom: "4px",
-                        },
-                        ...(activeTab === 2
-                          ? {
-                              background:
-                                "linear-gradient(45deg, #667eea, #764ba2)",
-                              color: "white",
-                              "&:hover": {
+                  {!isBaoVe && (
+                    <Grid size={{ xs: 6 }} sx={{ display: "flex" }}>
+                      <Button
+                        fullWidth
+                        variant={activeTab === 2 ? "contained" : "outlined"}
+                        startIcon={<Autorenew />}
+                        onClick={(e) =>
+                          handleTabChange(e, hasImportExportTabs ? 2 : 0)
+                        }
+                        sx={{
+                          minHeight: "80px",
+                          py: 2,
+                          borderRadius: "12px",
+                          fontWeight: 600,
+                          fontSize: "0.9rem",
+                          textTransform: "none",
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: 0.5,
+                          "& .MuiButton-startIcon": {
+                            margin: 0,
+                            marginBottom: "4px",
+                          },
+                          ...(activeTab === 2
+                            ? {
                                 background:
-                                  "linear-gradient(45deg, #5568d3, #6a3f8f)",
-                              },
-                            }
-                          : {
-                              borderColor: "#667eea",
-                              color: "#667eea",
-                              "&:hover": {
-                                borderColor: "#5568d3",
-                                background: "rgba(102, 126, 234, 0.05)",
-                              },
-                            }),
-                        transition: "all 0.3s ease",
-                      }}
-                    >
-                      Điều chuyển
-                    </Button>
-                  </Grid>
-                  {canViewInventoryTab && (
+                                  "linear-gradient(45deg, #667eea, #764ba2)",
+                                color: "white",
+                                "&:hover": {
+                                  background:
+                                    "linear-gradient(45deg, #5568d3, #6a3f8f)",
+                                },
+                              }
+                            : {
+                                borderColor: "#667eea",
+                                color: "#667eea",
+                                "&:hover": {
+                                  borderColor: "#5568d3",
+                                  background: "rgba(102, 126, 234, 0.05)",
+                                },
+                              }),
+                          transition: "all 0.3s ease",
+                        }}
+                      >
+                        Điều chuyển
+                      </Button>
+                    </Grid>
+                  )}
+                  {canViewInventoryTab && !isBaoVe && (
                     <Grid size={{ xs: 6 }} sx={{ display: "flex" }}>
                       <Button
                         fullWidth
@@ -3239,7 +3458,7 @@ const TestProposalPage = () => {
                       iconPosition="start"
                     />
                   )}
-                  {hasImportExportTabs && (
+                  {hasImportExportTabs && !isBaoVe && (
                     <Tab
                       icon={<FileUpload />}
                       label="Phiếu xuất"
@@ -3247,12 +3466,14 @@ const TestProposalPage = () => {
                     />
                   )}
 
-                  <Tab
-                    icon={<Autorenew />}
-                    label="Điều chuyển / Cập nhật vị trí"
-                    iconPosition="start"
-                  />
-                  {canViewInventoryTab && (
+                  {!isBaoVe && (
+                    <Tab
+                      icon={<Autorenew />}
+                      label="Điều chuyển / Cập nhật vị trí"
+                      iconPosition="start"
+                    />
+                  )}
+                  {canViewInventoryTab && !isBaoVe && (
                     <Tab
                       icon={<FactCheck />}
                       label="Kiểm kê"
@@ -3370,14 +3591,18 @@ const TestProposalPage = () => {
                   spacing={2}
                   sx={{ width: { xs: "100%", md: "auto" } }}
                 >
-                  {(isAdmin || isPhongCoDien) && ( // Chỉ Admin/PCD mới thấy nút tạo
+                  {(isAdmin || isPhongCoDien || isBaoVe) && ( // Admin/PCD/Bảo vệ (chỉ tạo phiếu nhập)
                     <Button
                       variant="contained"
                       startIcon={<Add />}
                       onClick={() =>
                         handleOpenDialog(
                           "create",
-                          activeTab === 0 ? "import" : "export"
+                          isBaoVe
+                            ? "import"
+                            : activeTab === 0
+                            ? "import"
+                            : "export"
                         )
                       }
                       sx={{
@@ -3442,6 +3667,15 @@ const TestProposalPage = () => {
                     </Typography>
                     {/* Hàng 1: Trạng thái */}
                     <Grid container spacing={2} sx={{ mb: 2 }}>
+                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <Chip
+                          label={`Nháp: ${
+                            importStats.byStatus?.draft || 0
+                          }`}
+                          color="info"
+                          sx={{ fontWeight: 600 }}
+                        />
+                      </Grid>
                       <Grid size={{ xs: 12, sm: 6, md: 3 }}>
                         <Chip
                           label={`Chờ duyệt: ${
@@ -3804,6 +4038,9 @@ const TestProposalPage = () => {
                         </MenuItem>,
                       ]
                     : [
+                        <MenuItem key="draft" value="draft">
+                          Nháp
+                        </MenuItem>,
                         <MenuItem key="pending" value="pending">
                           Chờ duyệt
                         </MenuItem>,
@@ -4075,15 +4312,69 @@ const TestProposalPage = () => {
                     dialogType !== "internal" && !formData.type;
 
                   const isSpecialImport =
-                    dialogMode === "create" &&
+                    (dialogMode === "create" || dialogMode === "edit") &&
                     dialogType === "import" &&
                     ["purchased", "rented", "borrowed"].includes(formData.type);
 
+                  // Form đơn giản cho bảo vệ tạo phiếu nhập
+                  const isSecurityCreateImport =
+                    isBaoVe &&
+                    dialogMode === "create" &&
+                    dialogType === "import";
+
                   return (
                     <>
-                      {/* --- PHẦN RIÊNG CHO PHIẾU KIỂM KÊ (INVENTORY) --- */}
-                      {dialogType === "inventory" ? (
+                      {/* --- FORM ĐƠN GIẢN CHO BẢO VỆ TẠO PHIẾU NHẬP --- */}
+                      {isSecurityCreateImport ? (
                         <>
+                          <Alert severity="info" sx={{ borderRadius: "12px" }}>
+                            <Typography variant="body2">
+                              <strong>Lưu ý:</strong> Bạn chỉ cần điền ngày, ghi
+                              chú và đính kèm file. Admin hoặc Phòng Cơ điện sẽ
+                              hoàn thiện thông tin phiếu sau.
+                            </Typography>
+                          </Alert>
+                          <TextField
+                            fullWidth
+                            type="date"
+                            label="Ngày tạo phiếu"
+                            value={formData.date}
+                            onChange={(e) =>
+                              handleFormChange("date", e.target.value)
+                            }
+                            required
+                            InputLabelProps={{ shrink: true }}
+                            sx={{
+                              "& .MuiOutlinedInput-root": {
+                                borderRadius: "12px",
+                              },
+                            }}
+                          />
+                          <TextField
+                            fullWidth
+                            multiline
+                            rows={4}
+                            label="Ghi chú"
+                            value={formData.note}
+                            onChange={(e) =>
+                              handleFormChange("note", e.target.value)
+                            }
+                            sx={{
+                              "& .MuiOutlinedInput-root": {
+                                borderRadius: "12px",
+                              },
+                            }}
+                          />
+                          <FileUploadComponent
+                            onFilesChange={setFilesToUpload}
+                            existingFiles={formData.attached_file}
+                            disabled={false}
+                            showNotification={showNotification}
+                          />
+                        </>
+                      ) : dialogType === "inventory" ? (
+                        <>
+                          {/* --- PHẦN RIÊNG CHO PHIẾU KIỂM KÊ (INVENTORY) --- */}
                           <TextField
                             fullWidth
                             type="date"
@@ -5089,7 +5380,7 @@ const TestProposalPage = () => {
                             }
                             disabled={dialogMode === "view"}
                             required
-                            sx={DISABLED_VIEW_SX}
+                            sx={dialogMode === "view" ? DISABLED_VIEW_SX : {}}
                           >
                             {dialogType === "import"
                               ? [
@@ -5322,8 +5613,8 @@ const TestProposalPage = () => {
                         </Card>
                       )}
 
-                      {/* --- ẨN CÁC FIELD DƯ THỪA KHI LÀ INVENTORY --- */}
-                      {dialogType !== "inventory" && (
+                      {/* --- ẨN CÁC FIELD DƯ THỪA KHI LÀ INVENTORY HOẶC BẢO VỆ TẠO PHIẾU --- */}
+                      {dialogType !== "inventory" && !isSecurityCreateImport && (
                         <>
                           <TextField
                             fullWidth
@@ -5337,10 +5628,18 @@ const TestProposalPage = () => {
                             onChange={(e) =>
                               handleFormChange("date", e.target.value)
                             }
-                            disabled={isFormDisabled || dialogMode === "view"}
+                            disabled={
+                              (dialogMode !== "edit" && isFormDisabled) ||
+                              dialogMode === "view" ||
+                              dialogMode === "edit"
+                            }
                             required
                             InputLabelProps={{ shrink: true }}
-                            sx={DISABLED_VIEW_SX}
+                            sx={
+                              dialogMode === "view" || dialogMode === "edit"
+                                ? DISABLED_VIEW_SX
+                                : {}
+                            }
                           />
                           <Autocomplete
                             fullWidth
@@ -5362,7 +5661,7 @@ const TestProposalPage = () => {
                               ) || null
                             }
                             disabled={
-                              isFormDisabled ||
+                              (dialogMode !== "edit" && isFormDisabled) ||
                               dialogMode === "view" ||
                               locationLoading ||
                               formData.type === "borrowed_out"
@@ -5542,10 +5841,11 @@ const TestProposalPage = () => {
                           </Box>
                         )}
 
-                      {/* --- CHỌN MÁY MÓC (CREATE IMPORT/EXPORT/INTERNAL) --- */}
-                      {/* ẨN KHI LÀ INVENTORY */}
-                      {dialogMode === "create" &&
-                        dialogType !== "inventory" && (
+                      {/* --- CHỌN MÁY MÓC (CREATE/EDIT IMPORT/EXPORT/INTERNAL) --- */}
+                      {/* ẨN KHI LÀ INVENTORY HOẶC BẢO VỆ TẠO PHIẾU */}
+                      {(dialogMode === "create" || dialogMode === "edit") &&
+                        dialogType !== "inventory" &&
+                        !isSecurityCreateImport && (
                           <Card
                             variant="outlined"
                             sx={{ borderRadius: "12px" }}
@@ -6102,8 +6402,8 @@ const TestProposalPage = () => {
                         )}
 
                       {/* --- GHI CHÚ & FILE ĐÍNH KÈM (CHUNG CHO IMPORT/EXPORT) --- */}
-                      {/* ẨN KHI LÀ INVENTORY (Vì Inventory đã có Ghi chú riêng ở trên) */}
-                      {dialogType !== "inventory" && (
+                      {/* ẨN KHI LÀ INVENTORY (Vì Inventory đã có Ghi chú riêng ở trên) HOẶC BẢO VỆ TẠO PHIẾU */}
+                      {dialogType !== "inventory" && !isSecurityCreateImport && (
                         <>
                           <TextField
                             fullWidth
@@ -6115,7 +6415,7 @@ const TestProposalPage = () => {
                               handleFormChange("note", e.target.value)
                             }
                             disabled={isFormDisabled || dialogMode === "view"}
-                            sx={DISABLED_VIEW_SX}
+                            sx={dialogMode === "view" ? DISABLED_VIEW_SX : {}}
                           />
                           <FileUploadComponent
                             onFilesChange={setFilesToUpload}
@@ -6630,8 +6930,43 @@ const TestProposalPage = () => {
                   width: { xs: "100%", sm: "auto" },
                 }}
               >
-                Đóng
+                {dialogMode === "edit" ? "Hủy" : "Đóng"}
               </Button>
+              {dialogMode === "edit" && dialogType === "import" && (
+                <>
+                  <Button
+                    variant="outlined"
+                    onClick={handleUpdateDraft}
+                    disabled={loading}
+                    startIcon={<Save />}
+                    sx={{
+                      borderRadius: "12px",
+                      px: 3,
+                      width: { xs: "100%", sm: "auto" },
+                    }}
+                  >
+                    {loading ? <CircularProgress size={24} /> : "Lưu"}
+                  </Button>
+                  <Button
+                    variant="contained"
+                    onClick={handleCompleteDraft}
+                    disabled={loading}
+                    startIcon={<CheckCircleOutline />}
+                    sx={{
+                      borderRadius: "12px",
+                      background: "linear-gradient(45deg, #667eea, #764ba2)",
+                      px: 3,
+                      width: { xs: "100%", sm: "auto" },
+                    }}
+                  >
+                    {loading ? (
+                      <CircularProgress size={24} />
+                    ) : (
+                      "Đóng phiếu & Gửi duyệt"
+                    )}
+                  </Button>
+                </>
+              )}
               {dialogMode === "create" && dialogType === "inventory" && (
                 <Button
                   variant="contained"
@@ -6664,7 +6999,13 @@ const TestProposalPage = () => {
                     width: { xs: "100%", sm: "auto" },
                   }}
                 >
-                  {loading ? <CircularProgress size={24} /> : "Tạo Phiếu"}
+                  {loading ? (
+                    <CircularProgress size={24} />
+                  ) : isBaoVe && dialogType === "import" ? (
+                    "Tạo Phiếu Nháp"
+                  ) : (
+                    "Tạo Phiếu"
+                  )}
                 </Button>
               )}
               {dialogMode === "view" &&

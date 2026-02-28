@@ -3788,6 +3788,7 @@ app.get("/api/imports/stats", authenticateToken, async (req, res) => {
     // Transform to object format
     const stats = {
       byStatus: {
+        draft: 0,
         pending: 0,
         completed: 0,
         cancelled: 0,
@@ -3802,7 +3803,12 @@ app.get("/api/imports/stats", authenticateToken, async (req, res) => {
     };
 
     statusStats.forEach((row) => {
-      if (row.status === "pending" || row.status === "pending_approval") {
+      if (row.status === "draft") {
+        stats.byStatus.draft += row.count;
+      } else if (
+        row.status === "pending" ||
+        row.status === "pending_approval"
+      ) {
         stats.byStatus.pending += row.count;
       } else if (row.status === "completed") {
         stats.byStatus.completed += row.count;
@@ -3997,7 +4003,10 @@ app.put("/api/imports/:uuid/status", authenticateToken, async (req, res) => {
     const { uuid } = req.params;
     const { status } = req.body;
 
-    if (!status || !["pending", "completed", "cancelled"].includes(status)) {
+    if (
+      !status ||
+      !["draft", "pending", "completed", "cancelled"].includes(status)
+    ) {
       await connection.rollback();
       return res.status(400).json({
         success: false,
@@ -4120,6 +4129,503 @@ app.put("/api/imports/:uuid/status", authenticateToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Internal server error",
+      error: error.message,
+    });
+  } finally {
+    connection.release();
+  }
+});
+
+// PUT /api/imports/:uuid - Update draft import ticket
+app.put(
+  "/api/imports/:uuid",
+  authenticateToken,
+  upload.array("attachments"),
+  async (req, res) => {
+    const connection = await tpmConnection.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      const { uuid } = req.params;
+      const {
+        to_location_uuid,
+        import_type,
+        import_date,
+        note,
+        machines: machinesJson,
+        is_borrowed_or_rented_or_borrowed_out_name,
+        is_borrowed_or_rented_or_borrowed_out_date,
+        is_borrowed_or_rented_or_borrowed_out_return_date,
+      } = req.body;
+
+      const machines = JSON.parse(machinesJson || "[]");
+      const userId = req.user.id;
+
+      // Kiểm tra quyền: chỉ admin hoặc phòng cơ điện
+      let user_phongban_id = null;
+      if (userId >= 90000) {
+        user_phongban_id = req.user.phongban_id;
+      } else {
+        const [userInfo] = await dataHiTimesheetConnection.query(
+          `SELECT pb.id AS id_phong_ban 
+           FROM sync_nhan_vien nv 
+           LEFT JOIN sync_bo_phan bp ON bp.id = nv.id_bo_phan 
+           LEFT JOIN sync_phong_ban pb ON pb.id = bp.id_phong_ban 
+           WHERE nv.id = ?`,
+          [userId]
+        );
+        user_phongban_id = userInfo[0]?.id_phong_ban;
+      }
+
+      const [perms] = await connection.query(
+        "SELECT p.name_permission FROM tb_user_permission up JOIN tb_permission p ON up.id_permission = p.id_permission WHERE up.id_nhan_vien = ?",
+        [userId]
+      );
+      const isAdmin = perms.map((p) => p.name_permission).includes("admin");
+      const isPhongCoDien = Number(user_phongban_id) === 14;
+
+      if (!isAdmin && !isPhongCoDien) {
+        await connection.rollback();
+        return res.status(403).json({
+          success: false,
+          message: "Bạn không có quyền chỉnh sửa phiếu này",
+        });
+      }
+
+      // Kiểm tra phiếu tồn tại và ở trạng thái draft
+      const [existing] = await connection.query(
+        "SELECT id_machine_import, status, attached_file FROM tb_machine_import WHERE uuid_machine_import = ?",
+        [uuid]
+      );
+
+      if (existing.length === 0) {
+        await connection.rollback();
+        return res.status(404).json({
+          success: false,
+          message: "Không tìm thấy phiếu nhập",
+        });
+      }
+
+      if (existing[0].status !== "draft") {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Chỉ có thể chỉnh sửa phiếu ở trạng thái nháp",
+        });
+      }
+
+      const id_machine_import = existing[0].id_machine_import;
+      const oldAttachedFile = existing[0].attached_file;
+
+      // Xử lý location
+      let to_location_id = null;
+      if (to_location_uuid) {
+        const [locRes] = await connection.query(
+          "SELECT id_location FROM tb_location WHERE uuid_location = ?",
+          [to_location_uuid]
+        );
+        if (locRes.length === 0) {
+          await connection.rollback();
+          return res.status(404).json({
+            success: false,
+            message: "Không tìm thấy vị trí nhập",
+          });
+        }
+        to_location_id = locRes[0].id_location;
+      }
+
+      // Xử lý file đính kèm mới
+      let attachedFileString = oldAttachedFile;
+      if (req.files && req.files.length > 0) {
+        const uploadPromises = req.files.map((file) => uploadFileToDrive(file));
+        const fileInfos = await Promise.all(uploadPromises);
+        const validFiles = fileInfos.filter((f) => f && f.link);
+        const newFilesString = validFiles
+          .map((f) => `${f.name}|${f.link}`)
+          .join("; ");
+
+        // Merge với file cũ
+        if (oldAttachedFile && newFilesString) {
+          attachedFileString = `${oldAttachedFile}; ${newFilesString}`;
+        } else if (newFilesString) {
+          attachedFileString = newFilesString;
+        }
+      }
+
+      const isBorrowOrRent = ["borrowed", "rented"].includes(import_type);
+
+      // Cập nhật thông tin phiếu (location, type, note, file, created_by - KHÔNG cập nhật date)
+      await connection.query(
+        `UPDATE tb_machine_import 
+         SET to_location_id = ?, 
+             import_type = ?, 
+             note = ?,
+             created_by = ?,
+             updated_by = ?, 
+             updated_at = CURRENT_TIMESTAMP,
+             attached_file = ?,
+             is_borrowed_or_rented_or_borrowed_out_name = ?,
+             is_borrowed_or_rented_or_borrowed_out_date = ?,
+             is_borrowed_or_rented_or_borrowed_out_return_date = ?
+         WHERE uuid_machine_import = ?`,
+        [
+          to_location_id,
+          import_type || null,
+          note || null,
+          userId,
+          userId,
+          attachedFileString,
+          isBorrowOrRent ? is_borrowed_or_rented_or_borrowed_out_name : null,
+          isBorrowOrRent ? is_borrowed_or_rented_or_borrowed_out_date : null,
+          isBorrowOrRent
+            ? is_borrowed_or_rented_or_borrowed_out_return_date || null
+            : null,
+          uuid,
+        ]
+      );
+
+      // Xóa các máy móc cũ
+      await connection.query(
+        "DELETE FROM tb_machine_import_detail WHERE id_machine_import = ?",
+        [id_machine_import]
+      );
+
+      // Thêm máy móc mới
+      if (machines && machines.length > 0) {
+        for (const machine of machines) {
+          if (!machine.uuid_machine) continue;
+
+          const [machineResult] = await connection.query(
+            "SELECT id_machine FROM tb_machine WHERE uuid_machine = ?",
+            [machine.uuid_machine]
+          );
+
+          if (machineResult.length > 0) {
+            await connection.query(
+              `INSERT INTO tb_machine_import_detail (id_machine_import, id_machine, note, created_by, updated_by) VALUES (?, ?, ?, ?, ?)`,
+              [
+                id_machine_import,
+                machineResult[0].id_machine,
+                machine.note || null,
+                userId,
+                userId,
+              ]
+            );
+          }
+        }
+      }
+
+      await connection.commit();
+      res.json({
+        success: true,
+        message: "Cập nhật phiếu nháp thành công",
+      });
+    } catch (error) {
+      await connection.rollback();
+      console.error("Error updating draft import:", error);
+      res.status(500).json({
+        success: false,
+        message: "Lỗi khi cập nhật phiếu",
+        error: error.message,
+      });
+    } finally {
+      connection.release();
+    }
+  }
+);
+
+// PUT /api/imports/:uuid/complete - Complete draft and send to Fastwork
+app.put("/api/imports/:uuid/complete", authenticateToken, async (req, res) => {
+  const connection = await tpmConnection.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const { uuid } = req.params;
+    const userId = req.user.id;
+    const ma_nv_login = req.user.ma_nv;
+
+    // Kiểm tra quyền: chỉ admin hoặc phòng cơ điện
+    let user_phongban_id = null;
+    let id_department_str = "1-14";
+    if (userId >= 90000) {
+      user_phongban_id = req.user.phongban_id;
+      id_department_str = `1-${user_phongban_id}`;
+    } else {
+      const [userInfo] = await dataHiTimesheetConnection.query(
+        `SELECT CONCAT(com.id_company, '-', pb.id) AS id_department_str, pb.id AS id_phong_ban 
+         FROM sync_nhan_vien nv 
+         LEFT JOIN sync_bo_phan bp ON bp.id = nv.id_bo_phan 
+         LEFT JOIN sync_phong_ban pb ON pb.id = bp.id_phong_ban 
+         LEFT JOIN sync_company com ON com.id_company = pb.id_company 
+         WHERE nv.id = ?`,
+        [userId]
+      );
+      user_phongban_id = userInfo[0]?.id_phong_ban;
+      id_department_str = userInfo[0]?.id_department_str || "1-14";
+    }
+
+    const [perms] = await connection.query(
+      "SELECT p.name_permission FROM tb_user_permission up JOIN tb_permission p ON up.id_permission = p.id_permission WHERE up.id_nhan_vien = ?",
+      [userId]
+    );
+    const isAdmin = perms.map((p) => p.name_permission).includes("admin");
+    const isPhongCoDien = Number(user_phongban_id) === 14;
+
+    if (!isAdmin && !isPhongCoDien) {
+      await connection.rollback();
+      return res.status(403).json({
+        success: false,
+        message: "Bạn không có quyền hoàn thiện phiếu này",
+      });
+    }
+
+    // Lấy thông tin phiếu
+    const [importTicket] = await connection.query(
+      `SELECT i.id_machine_import, i.status, i.to_location_id, i.import_type, i.import_date, i.note, i.attached_file,
+              i.is_borrowed_or_rented_or_borrowed_out_name, i.is_borrowed_or_rented_or_borrowed_out_date, i.is_borrowed_or_rented_or_borrowed_out_return_date,
+              l.name_location, l.uuid_location
+       FROM tb_machine_import i
+       LEFT JOIN tb_location l ON l.id_location = i.to_location_id
+       WHERE i.uuid_machine_import = ?`,
+      [uuid]
+    );
+
+    if (importTicket.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy phiếu nhập",
+      });
+    }
+
+    const ticket = importTicket[0];
+
+    if (ticket.status !== "draft") {
+      await connection.rollback();
+      return res.status(400).json({
+        success: false,
+        message: "Chỉ có thể hoàn thiện phiếu ở trạng thái nháp",
+      });
+    }
+
+    // Validate thông tin đầy đủ
+    if (!ticket.to_location_id || !ticket.import_type || !ticket.import_date) {
+      await connection.rollback();
+      return res.status(400).json({
+        success: false,
+        message: "Phiếu chưa đầy đủ thông tin (vị trí nhập, loại phiếu, ngày)",
+      });
+    }
+
+    // Lấy danh sách máy móc
+    const [machineDetails] = await connection.query(
+      `SELECT d.id_machine, d.note, m.uuid_machine, m.type_machine, m.attribute_machine, m.model_machine, m.serial_machine
+       FROM tb_machine_import_detail d
+       JOIN tb_machine m ON m.id_machine = d.id_machine
+       WHERE d.id_machine_import = ?`,
+      [ticket.id_machine_import]
+    );
+
+    if (machineDetails.length === 0) {
+      await connection.rollback();
+      return res.status(400).json({
+        success: false,
+        message: "Phiếu chưa có máy móc nào",
+      });
+    }
+
+    // Tạo approval flow cho phiếu nhập
+    const approvalFlowForDB = [
+      {
+        // ma_nv: "06264",
+        ma_nv: "09802",
+        step_flow: 0,
+        isFinalFlow: 1,
+        status_text: "Đang chờ duyệt",
+        is_forward: 0,
+        display_name: "Trưởng phòng Cơ điện",
+        is_flow: 1,
+        indexOf: 1,
+      },
+    ];
+
+    const approvalFlowForExternal = approvalFlowForDB.map(
+      ({ status_text, is_forward, ...rest }) => rest
+    );
+    const approvalFlowJson = JSON.stringify(approvalFlowForDB);
+
+    // Nhóm máy móc theo Type + Attribute + Model
+    const groupedMachines = {};
+    machineDetails.forEach((m) => {
+      const typeMachine = m.type_machine || "";
+      const attributeMachine = m.attribute_machine || "";
+      const modelMachine = m.model_machine || "";
+      const serialMachine = m.serial_machine || "";
+
+      const key = `${typeMachine}|${attributeMachine}|${modelMachine}`;
+
+      if (!groupedMachines[key]) {
+        let deviceName = typeMachine;
+        if (attributeMachine) {
+          deviceName = `${deviceName} ${attributeMachine}`;
+        }
+
+        groupedMachines[key] = {
+          name: deviceName.trim() || "",
+          model: modelMachine,
+          unit: "Máy",
+          count: 0,
+          serials: [],
+          notes: [],
+        };
+      }
+
+      groupedMachines[key].count += 1;
+      if (serialMachine) {
+        groupedMachines[key].serials.push(serialMachine);
+      }
+      if (m.note) {
+        groupedMachines[key].notes.push(m.note);
+      }
+    });
+
+    // Tạo table rows
+    const tableRows = Object.values(groupedMachines).map((group, index) => {
+      const serialsString = group.serials.join(", ");
+      const notesString = [...new Set(group.notes)].join("; ");
+
+      return [
+        index + 1,
+        group.name,
+        group.model,
+        serialsString,
+        group.unit,
+        group.count,
+        group.count,
+        notesString,
+      ];
+    });
+
+    const totalMachines = machineDetails.length;
+    tableRows.push([
+      "",
+      "Tổng",
+      "",
+      "",
+      "Máy",
+      totalMachines,
+      totalMachines,
+      "",
+    ]);
+
+    // Parse attached files
+    let attachedLinksForExternal = [];
+    if (ticket.attached_file) {
+      const filePairs = ticket.attached_file.split("; ");
+      attachedLinksForExternal = filePairs
+        .map((pair) => {
+          const [name, link] = pair.split("|");
+          if (name && link) {
+            return { url: link, id: "", filename: name };
+          }
+          return null;
+        })
+        .filter((f) => f !== null);
+    }
+
+    // Tạo expansion field
+    const expansionField = [
+      { "Từ đơn vị:": ticket.is_borrowed_or_rented_or_borrowed_out_name || "" },
+      { "Đến đơn vị:": "Việt Long Hưng" },
+      {
+        "Thời hạn:":
+          ticket.is_borrowed_or_rented_or_borrowed_out_return_date || "",
+      },
+    ];
+
+    const proposalName = `Phiếu nhập ${
+      ticket.import_type === "purchased"
+        ? "mua mới"
+        : ticket.import_type === "borrowed"
+        ? "mượn"
+        : ticket.import_type === "rented"
+        ? "thuê"
+        : ticket.import_type === "maintenance_return"
+        ? "sau bảo trì"
+        : "trả (máy cho mượn)"
+    } - ${new Date(ticket.import_date).toLocaleDateString("vi-VN")}`;
+
+    // Tạo payload Fastwork
+    const externalPayload = {
+      uid_proposal_type: "188b0afe-fc1d-4b19-b030-e437a846aec6",
+      ma_nv: ma_nv_login,
+      name_proposal_reality: proposalName,
+      id_department: id_department_str,
+      uid_reference_success:
+        // "https://sveffmachine.vietlonghung.com.vn/api/tpm/api/test-proposals/callback",
+        "http://192.168.1.61:8081/api/test-proposals/callback",
+      id_reference_outside: uuid,
+      group_people_flow: approvalFlowForExternal,
+      attacted_file:
+        attachedLinksForExternal.length > 0 ? attachedLinksForExternal : null,
+      table: {
+        columns: [
+          "STT",
+          "Tên thiết bị",
+          "Số hiệu/Model",
+          "Số máy/Serial",
+          "ĐVT",
+          "SL Yêu cầu",
+          "SL Thực xuất",
+          "Ghi chú",
+        ],
+        columnWidths: [2.0, 3.0, 4.0, 4.0, 2.0, 2.0, 2.0, 5.0],
+        rows: tableRows,
+      },
+      expansion_field: expansionField,
+    };
+
+    // Gửi sang Fastwork
+    try {
+      console.log(
+        "Sending to External API:",
+        JSON.stringify(externalPayload, null, 2)
+      );
+      const externalResponse = await axios.post(
+        // "https://servertienich.vietlonghung.com.vn/api/fw/create-proposal-reality-outdoor",
+        "http://192.168.0.94:16002/api/fw/create-proposal-reality-outdoor",
+        externalPayload
+      );
+      console.log("External API Response:", externalResponse.data);
+    } catch (extError) {
+      console.error("Error calling External API:", extError.message);
+      await connection.rollback();
+      return res.status(500).json({
+        success: false,
+        message: "Lỗi khi gửi phiếu sang hệ thống Fastwork, vui lòng thử lại.",
+        error: extError.message,
+      });
+    }
+
+    // Cập nhật phiếu: chuyển từ draft sang pending, thêm approval_flow
+    await connection.query(
+      `UPDATE tb_machine_import 
+       SET status = 'pending', approval_flow = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE uuid_machine_import = ?`,
+      [approvalFlowJson, userId, uuid]
+    );
+
+    await connection.commit();
+    res.json({
+      success: true,
+      message: "Hoàn thiện phiếu và gửi duyệt thành công",
+    });
+  } catch (error) {
+    await connection.rollback();
+    console.error("Error completing draft import:", error);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi hoàn thiện phiếu",
       error: error.message,
     });
   } finally {
@@ -7959,6 +8465,48 @@ app.post(
         );
         user_phongban_id = userInfo[0]?.id_phong_ban;
         id_department_str = userInfo[0]?.id_department_str || "1-14";
+      }
+
+      // Kiểm tra xem người dùng có phải là bảo vệ không (phongban_id = 11)
+      const isBaoVe = Number(user_phongban_id) === 11;
+
+      // Nếu là bảo vệ và category là import, tạo phiếu draft
+      if (isBaoVe && category === "import") {
+        // Xử lý file đính kèm
+        let attachedFileString = null;
+        if (req.files && req.files.length > 0) {
+          const uploadPromises = req.files.map((file) =>
+            uploadFileToDrive(file)
+          );
+          const fileInfos = await Promise.all(uploadPromises);
+          const validFiles = fileInfos.filter((f) => f && f.link);
+          attachedFileString = validFiles
+            .map((f) => `${f.name}|${f.link}`)
+            .join("; ");
+        }
+
+        // Format date
+        let formattedDate = null;
+        if (date) {
+          const dateObj = new Date(date);
+          formattedDate = `${dateObj.getFullYear()}-${String(
+            dateObj.getMonth() + 1
+          ).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")}`;
+        }
+
+        // Tạo phiếu draft (có ngày, note, file - không có location, type, machines)
+        const [resImport] = await connection.query(
+          `INSERT INTO tb_machine_import (status, import_date, note, created_by, updated_by, attached_file) VALUES ('draft', ?, ?, ?, ?, ?)`,
+          [formattedDate, note || null, userId, userId, attachedFileString]
+        );
+
+        await connection.commit();
+        return res.json({
+          success: true,
+          message:
+            "Tạo phiếu nháp thành công. Admin/Cơ điện sẽ hoàn thiện phiếu.",
+          data: { id_machine_import: resImport.insertId },
+        });
       }
 
       let dest_phongban_id = null;

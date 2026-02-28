@@ -271,6 +271,14 @@ export const api = {
       const response = await httpConnect.post("/api/imports", data);
       return response.data;
     },
+    update: async (uuid, data) => {
+      const response = await httpConnect.put(`/api/imports/${uuid}`, data);
+      return response.data;
+    },
+    complete: async (uuid) => {
+      const response = await httpConnect.put(`/api/imports/${uuid}/complete`);
+      return response.data;
+    },
     updateStatus: async (uuid, status) => {
       const response = await httpConnect.put(`/api/imports/${uuid}/status`, {
         status,
