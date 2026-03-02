@@ -9008,28 +9008,21 @@ app.post(
       if (category === "internal" && to_department_name) {
         const deptNameLower = to_department_name.toLowerCase();
 
-        // Nhóm Xưởng 1, 2, 3 -> Gửi cho 00024 (Theo yêu cầu của bạn)
-        if (
-          deptNameLower.includes("xưởng 1") ||
-          deptNameLower.includes("xưởng 2") ||
-          deptNameLower.includes("xưởng 3")
-        ) {
-          // idGroupNotification = ["00024"];
-          idGroupNotification = ["10107"];
-        }
-        // Nhóm Xưởng 4 -> Gửi cho 09802
-        else if (deptNameLower.includes("xưởng 4")) {
-          // idGroupNotification = ["02722"];
-          idGroupNotification = ["09802"];
-        } else if (deptNameLower.includes("kho thành phẩm")) {
-          // idGroupNotification = ["00253"];
-          idGroupNotification = ["09802"];
-        } else if (
-          deptNameLower.includes("kho nguyên phụ liệu") ||
-          deptNameLower.includes("xưởng cắt")
-        ) {
-          // idGroupNotification = ["90200"];
-          idGroupNotification = ["09802"];
+        const deptMapping = {
+          "xưởng 1": ["00024", "00184"], // 10107
+          "xưởng 2": ["00024", "01613"],
+          "xưởng 3": ["00024", "00023"],
+          "xưởng 4": ["02722", "01589"], // 09802
+          "kho thành phẩm": ["00253"], // 09802
+          "kho nguyên phụ liệu": ["90200"], // 09802
+          "xưởng cắt": ["90200"], // 09802
+        };
+
+        for (const key in deptMapping) {
+          if (deptNameLower.includes(key)) {
+            idGroupNotification = deptMapping[key];
+            break;
+          }
         }
       }
 
