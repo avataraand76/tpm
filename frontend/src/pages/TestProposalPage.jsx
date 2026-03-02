@@ -3669,9 +3669,7 @@ const TestProposalPage = () => {
                     <Grid container spacing={2} sx={{ mb: 2 }}>
                       <Grid size={{ xs: 12, sm: 6, md: 3 }}>
                         <Chip
-                          label={`Nháp: ${
-                            importStats.byStatus?.draft || 0
-                          }`}
+                          label={`Nháp: ${importStats.byStatus?.draft || 0}`}
                           color="info"
                           sx={{ fontWeight: 600 }}
                         />
@@ -4327,13 +4325,6 @@ const TestProposalPage = () => {
                       {/* --- FORM ĐƠN GIẢN CHO BẢO VỆ TẠO PHIẾU NHẬP --- */}
                       {isSecurityCreateImport ? (
                         <>
-                          <Alert severity="info" sx={{ borderRadius: "12px" }}>
-                            <Typography variant="body2">
-                              <strong>Lưu ý:</strong> Bạn chỉ cần điền ngày, ghi
-                              chú và đính kèm file. Admin hoặc Phòng Cơ điện sẽ
-                              hoàn thiện thông tin phiếu sau.
-                            </Typography>
-                          </Alert>
                           <TextField
                             fullWidth
                             type="date"
@@ -5614,100 +5605,101 @@ const TestProposalPage = () => {
                       )}
 
                       {/* --- ẨN CÁC FIELD DƯ THỪA KHI LÀ INVENTORY HOẶC BẢO VỆ TẠO PHIẾU --- */}
-                      {dialogType !== "inventory" && !isSecurityCreateImport && (
-                        <>
-                          <TextField
-                            fullWidth
-                            type="date"
-                            label={
-                              dialogType === "internal"
-                                ? "Ngày điều chuyển"
-                                : "Ngày Tạo phiếu"
-                            }
-                            value={formData.date}
-                            onChange={(e) =>
-                              handleFormChange("date", e.target.value)
-                            }
-                            disabled={
-                              (dialogMode !== "edit" && isFormDisabled) ||
-                              dialogMode === "view" ||
-                              dialogMode === "edit"
-                            }
-                            required
-                            InputLabelProps={{ shrink: true }}
-                            sx={
-                              dialogMode === "view" || dialogMode === "edit"
-                                ? DISABLED_VIEW_SX
-                                : {}
-                            }
-                          />
-                          <Autocomplete
-                            fullWidth
-                            options={filteredLocations}
-                            getOptionLabel={(option) =>
-                              option.name_location || ""
-                            }
-                            onChange={(event, newValue) =>
-                              handleFormChange(
-                                "to_location_uuid",
-                                newValue ? newValue.uuid_location : ""
-                              )
-                            }
-                            value={
-                              filteredLocations.find(
-                                (loc) =>
-                                  loc.uuid_location ===
-                                  formData.to_location_uuid
-                              ) || null
-                            }
-                            disabled={
-                              (dialogMode !== "edit" && isFormDisabled) ||
-                              dialogMode === "view" ||
-                              locationLoading ||
-                              formData.type === "borrowed_out"
-                            }
-                            loading={locationLoading}
-                            renderInput={(params) => (
-                              <TextField
-                                {...params}
-                                label={
-                                  dialogType === "import"
-                                    ? "Nhập vào"
-                                    : dialogType === "export"
-                                    ? "Xuất đến"
-                                    : "Đến vị trí"
-                                }
-                                required
-                                sx={{
-                                  "& .MuiOutlinedInput-root": {
-                                    borderRadius: "12px",
-                                  },
-                                }}
-                                InputProps={{
-                                  ...params.InputProps,
-                                  endAdornment: (
-                                    <>
-                                      {locationLoading ? (
-                                        <CircularProgress
-                                          color="inherit"
-                                          size={20}
-                                        />
-                                      ) : null}
-                                      {params.InputProps.endAdornment}
-                                    </>
-                                  ),
-                                }}
-                              />
-                            )}
-                            sx={
-                              formData.type === "borrowed_out" ||
-                              dialogMode === "view"
-                                ? DISABLED_VIEW_SX
-                                : {}
-                            }
-                          />
-                        </>
-                      )}
+                      {dialogType !== "inventory" &&
+                        !isSecurityCreateImport && (
+                          <>
+                            <TextField
+                              fullWidth
+                              type="date"
+                              label={
+                                dialogType === "internal"
+                                  ? "Ngày điều chuyển"
+                                  : "Ngày Tạo phiếu"
+                              }
+                              value={formData.date}
+                              onChange={(e) =>
+                                handleFormChange("date", e.target.value)
+                              }
+                              disabled={
+                                (dialogMode !== "edit" && isFormDisabled) ||
+                                dialogMode === "view" ||
+                                dialogMode === "edit"
+                              }
+                              required
+                              InputLabelProps={{ shrink: true }}
+                              sx={
+                                dialogMode === "view" || dialogMode === "edit"
+                                  ? DISABLED_VIEW_SX
+                                  : {}
+                              }
+                            />
+                            <Autocomplete
+                              fullWidth
+                              options={filteredLocations}
+                              getOptionLabel={(option) =>
+                                option.name_location || ""
+                              }
+                              onChange={(event, newValue) =>
+                                handleFormChange(
+                                  "to_location_uuid",
+                                  newValue ? newValue.uuid_location : ""
+                                )
+                              }
+                              value={
+                                filteredLocations.find(
+                                  (loc) =>
+                                    loc.uuid_location ===
+                                    formData.to_location_uuid
+                                ) || null
+                              }
+                              disabled={
+                                (dialogMode !== "edit" && isFormDisabled) ||
+                                dialogMode === "view" ||
+                                locationLoading ||
+                                formData.type === "borrowed_out"
+                              }
+                              loading={locationLoading}
+                              renderInput={(params) => (
+                                <TextField
+                                  {...params}
+                                  label={
+                                    dialogType === "import"
+                                      ? "Nhập vào"
+                                      : dialogType === "export"
+                                      ? "Xuất đến"
+                                      : "Đến vị trí"
+                                  }
+                                  required
+                                  sx={{
+                                    "& .MuiOutlinedInput-root": {
+                                      borderRadius: "12px",
+                                    },
+                                  }}
+                                  InputProps={{
+                                    ...params.InputProps,
+                                    endAdornment: (
+                                      <>
+                                        {locationLoading ? (
+                                          <CircularProgress
+                                            color="inherit"
+                                            size={20}
+                                          />
+                                        ) : null}
+                                        {params.InputProps.endAdornment}
+                                      </>
+                                    ),
+                                  }}
+                                />
+                              )}
+                              sx={
+                                formData.type === "borrowed_out" ||
+                                dialogMode === "view"
+                                  ? DISABLED_VIEW_SX
+                                  : {}
+                              }
+                            />
+                          </>
+                        )}
 
                       {/* --- LOGIC TRẠNG THÁI (INTERNAL) - Giữ nguyên --- */}
                       {dialogType === "internal" &&
@@ -6403,28 +6395,29 @@ const TestProposalPage = () => {
 
                       {/* --- GHI CHÚ & FILE ĐÍNH KÈM (CHUNG CHO IMPORT/EXPORT) --- */}
                       {/* ẨN KHI LÀ INVENTORY (Vì Inventory đã có Ghi chú riêng ở trên) HOẶC BẢO VỆ TẠO PHIẾU */}
-                      {dialogType !== "inventory" && !isSecurityCreateImport && (
-                        <>
-                          <TextField
-                            fullWidth
-                            multiline
-                            rows={4}
-                            label="Ghi chú"
-                            value={formData.note}
-                            onChange={(e) =>
-                              handleFormChange("note", e.target.value)
-                            }
-                            disabled={isFormDisabled || dialogMode === "view"}
-                            sx={dialogMode === "view" ? DISABLED_VIEW_SX : {}}
-                          />
-                          <FileUploadComponent
-                            onFilesChange={setFilesToUpload}
-                            existingFiles={formData.attached_file}
-                            disabled={dialogMode === "view"}
-                            showNotification={showNotification}
-                          />
-                        </>
-                      )}
+                      {dialogType !== "inventory" &&
+                        !isSecurityCreateImport && (
+                          <>
+                            <TextField
+                              fullWidth
+                              multiline
+                              rows={4}
+                              label="Ghi chú"
+                              value={formData.note}
+                              onChange={(e) =>
+                                handleFormChange("note", e.target.value)
+                              }
+                              disabled={isFormDisabled || dialogMode === "view"}
+                              sx={dialogMode === "view" ? DISABLED_VIEW_SX : {}}
+                            />
+                            <FileUploadComponent
+                              onFilesChange={setFilesToUpload}
+                              existingFiles={formData.attached_file}
+                              disabled={dialogMode === "view"}
+                              showNotification={showNotification}
+                            />
+                          </>
+                        )}
 
                       {/* --- DANH SÁCH MÁY MÓC (VIEW IMPORT/EXPORT/INTERNAL) --- */}
                       {/* ẨN KHI LÀ INVENTORY (Vì Inventory dùng Table Location) */}

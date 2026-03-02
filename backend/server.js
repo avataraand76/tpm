@@ -1375,14 +1375,18 @@ app.get(
 // GET /api/machines/stats-by-type - Get machine counts by type
 app.get("/api/machines/stats-by-type", authenticateToken, async (req, res) => {
   try {
-    // Lấy 8 loại máy móc phổ biến nhất
+    // Lấy 8 loại máy móc phổ biến nhất (trừ máy temporary, borrowed_return, rented_return)
     const [stats] = await tpmConnection.execute(
       `
       SELECT 
         type_machine,
         COUNT(*) as count
       FROM tb_machine
-      WHERE type_machine IS NOT NULL AND type_machine != '' AND current_status != 'temporary'
+      WHERE type_machine IS NOT NULL 
+        AND type_machine != '' 
+        AND current_status != 'temporary'
+        AND (is_borrowed_or_rented_or_borrowed_out IS NULL 
+             OR is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))
       GROUP BY type_machine
       `
     );
@@ -6930,7 +6934,6 @@ app.get(
           AND m.type_machine != ''
         GROUP BY m.type_machine
         ORDER BY count DESC
-        LIMIT 8
         `,
         [idLocation]
       );
