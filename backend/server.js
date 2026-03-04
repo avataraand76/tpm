@@ -9876,6 +9876,8 @@ app.post(
   async (req, res) => {
     const connection = await tpmConnection.getConnection();
     try {
+      await connection.beginTransaction();
+
       const { uuid } = req.params;
       const { department_uuid, location_uuid, scanned_machines } = req.body;
       const userId = req.user.id;
@@ -9885,15 +9887,19 @@ app.post(
         "SELECT id_inventory_check, status FROM tb_inventory_check WHERE uuid_inventory_check = ?",
         [uuid]
       );
-      if (invRes.length === 0)
+      if (invRes.length === 0) {
+        await connection.rollback();
         return res
           .status(404)
           .json({ success: false, message: "Phiếu không tồn tại" });
-      if (invRes[0].status !== "draft")
+      }
+      if (invRes[0].status !== "draft") {
+        await connection.rollback();
         return res.status(400).json({
           success: false,
           message: "Phiếu không ở trạng thái nháp, không thể cập nhật",
         });
+      }
 
       const idInventory = invRes[0].id_inventory_check;
 
@@ -9902,10 +9908,12 @@ app.post(
         "SELECT id_department FROM tb_department WHERE uuid_department = ?",
         [department_uuid]
       );
-      if (depRes.length === 0)
+      if (depRes.length === 0) {
+        await connection.rollback();
         return res
           .status(404)
           .json({ success: false, message: "Đơn vị không tồn tại" });
+      }
       const idDepartment = depRes[0].id_department;
 
       // 3. Resolve Location
@@ -9913,10 +9921,12 @@ app.post(
         "SELECT id_location, name_location FROM tb_location WHERE uuid_location = ?",
         [location_uuid]
       );
-      if (locRes.length === 0)
+      if (locRes.length === 0) {
+        await connection.rollback();
         return res
           .status(404)
           .json({ success: false, message: "Vị trí không tồn tại" });
+      }
       const idLocation = locRes[0].id_location;
       const locationName = locRes[0].name_location;
 
@@ -9987,10 +9997,10 @@ app.post(
         }),
       };
 
-      // 6. Update JSON Array trong DB
-      // Lấy scanned_result cũ
+      // 6. Update JSON Array trong DB với row-level lock
+      // Lấy scanned_result cũ với FOR UPDATE để lock row này
       const [currentDetail] = await connection.query(
-        "SELECT scanned_result FROM tb_inventory_check_detail WHERE id_inventory_check = ? AND id_department = ?",
+        "SELECT scanned_result FROM tb_inventory_check_detail WHERE id_inventory_check = ? AND id_department = ? FOR UPDATE",
         [idInventory, idDepartment]
       );
 
@@ -10056,8 +10066,10 @@ app.post(
         [JSON.stringify(finalData), userId, idInventory, idDepartment]
       );
 
+      await connection.commit();
       res.json({ success: true, message: "Lưu kết quả kiểm kê thành công" });
     } catch (error) {
+      await connection.rollback();
       console.error("Error saving scan result:", error);
       res.status(500).json({ success: false, message: error.message });
     } finally {

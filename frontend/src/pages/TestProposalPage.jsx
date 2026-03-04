@@ -90,7 +90,7 @@ const InventoryLocationItem = ({
   canEdit,
   onRemoveMachine,
 }) => {
-  const [filter, setFilter] = useState("all"); // 'all', 'same', 'diff'
+  const [filter, setFilter] = useState("all"); // 'all', 'same', 'diff', 'wrong_location', 'wrong_same', 'wrong_diff'
 
   // 1. Phân loại máy
   const allMachines = location.scanned_machine || [];
@@ -104,13 +104,35 @@ const InventoryLocationItem = ({
   const countDiff = diffDeptMachines.length;
   const countGap = countSystem - countActualTotal; // Chênh lệch = Sổ sách - Tổng thực tế
 
-  // 3. Lọc danh sách hiển thị
+  // 3. Thống kê máy sai vị trí
+  const wrongLocationMachines = allMachines.filter(
+    (m) => m.mislocation === "1"
+  );
+  const wrongLocationSameDept = wrongLocationMachines.filter(
+    (m) => m.misdepartment !== "1"
+  );
+  const wrongLocationDiffDept = wrongLocationMachines.filter(
+    (m) => m.misdepartment === "1"
+  );
+  const countWrongLocation = wrongLocationMachines.length;
+  const countWrongLocationSameDept = wrongLocationSameDept.length;
+  const countWrongLocationDiffDept = wrongLocationDiffDept.length;
+
+  // 4. Lọc danh sách hiển thị
   const displayedMachines =
     filter === "all"
       ? allMachines
       : filter === "same"
       ? sameDeptMachines
-      : diffDeptMachines;
+      : filter === "diff"
+      ? diffDeptMachines
+      : filter === "wrong_location"
+      ? wrongLocationMachines
+      : filter === "wrong_same"
+      ? wrongLocationSameDept
+      : filter === "wrong_diff"
+      ? wrongLocationDiffDept
+      : allMachines;
 
   return (
     <Accordion
@@ -191,39 +213,204 @@ const InventoryLocationItem = ({
                 }}
               />
             </Tooltip>
+
+            {/* Thống kê máy sai vị trí */}
+            {countWrongLocation > 0 && (
+              <>
+                <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
+                <Tooltip title="Tổng số máy sai vị trí">
+                  <Chip
+                    label={`Sai vị trí: ${countWrongLocation}`}
+                    size="small"
+                    sx={{
+                      bgcolor: "#fce4ec",
+                      color: "#c2185b",
+                      fontWeight: 700,
+                      border: "2px solid #f48fb1",
+                    }}
+                  />
+                </Tooltip>
+
+                {countWrongLocationSameDept > 0 && (
+                  <Tooltip title="Máy sai vị trí (Cùng đơn vị)">
+                    <Chip
+                      label={`Cùng ĐV: ${countWrongLocationSameDept}`}
+                      size="small"
+                      sx={{
+                        bgcolor: "#fff9c4",
+                        color: "#f57f17",
+                        fontWeight: 600,
+                        border: "1px solid #fff59d",
+                      }}
+                    />
+                  </Tooltip>
+                )}
+
+                {countWrongLocationDiffDept > 0 && (
+                  <Tooltip title="Máy sai vị trí (Khác đơn vị)">
+                    <Chip
+                      label={`Khác ĐV: ${countWrongLocationDiffDept}`}
+                      size="small"
+                      sx={{
+                        bgcolor: "#ffccbc",
+                        color: "#bf360c",
+                        fontWeight: 600,
+                        border: "1px solid #ff8a65",
+                      }}
+                    />
+                  </Tooltip>
+                )}
+              </>
+            )}
           </Stack>
         </Stack>
       </AccordionSummary>
 
       <AccordionDetails sx={{ bgcolor: "#fafafa", p: 2 }}>
         {/* Bộ lọc */}
-        <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
-          <Button
-            size="small"
-            variant={filter === "all" ? "contained" : "outlined"}
-            onClick={() => setFilter("all")}
-            sx={{ borderRadius: "8px", textTransform: "none" }}
-          >
-            Tất cả ({countActualTotal})
-          </Button>
-          <Button
-            size="small"
-            variant={filter === "same" ? "contained" : "outlined"}
-            color="success"
-            onClick={() => setFilter("same")}
-            sx={{ borderRadius: "8px", textTransform: "none" }}
-          >
-            Cùng ĐV ({countSame})
-          </Button>
-          <Button
-            size="small"
-            variant={filter === "diff" ? "contained" : "outlined"}
-            color="warning"
-            onClick={() => setFilter("diff")}
-            sx={{ borderRadius: "8px", textTransform: "none" }}
-          >
-            Khác ĐV ({countDiff})
-          </Button>
+        <Stack spacing={1} sx={{ mb: 2 }}>
+          {/* Dòng 1: Lọc theo đơn vị */}
+          <Stack direction="row" spacing={1} flexWrap="wrap" gap={1}>
+            <Button
+              size="small"
+              variant={filter === "all" ? "contained" : "outlined"}
+              onClick={() => setFilter("all")}
+              sx={{
+                borderRadius: "8px",
+                textTransform: "none",
+                borderColor: filter === "all" ? "#1976d2" : "#e0e0e0",
+                bgcolor: filter === "all" ? "#1976d2" : "transparent",
+                color: filter === "all" ? "#fff" : "#666",
+                "&:hover": {
+                  bgcolor: filter === "all" ? "#1565c0" : "rgba(0, 0, 0, 0.04)",
+                  borderColor: filter === "all" ? "#1565c0" : "#bdbdbd",
+                },
+              }}
+            >
+              Tất cả ({countActualTotal})
+            </Button>
+            <Button
+              size="small"
+              variant={filter === "same" ? "contained" : "outlined"}
+              onClick={() => setFilter("same")}
+              sx={{
+                borderRadius: "8px",
+                textTransform: "none",
+                borderColor: filter === "same" ? "#2e7d32" : "#c8e6c9",
+                bgcolor: filter === "same" ? "#2e7d32" : "transparent",
+                color: filter === "same" ? "#fff" : "#2e7d32",
+                "&:hover": {
+                  bgcolor:
+                    filter === "same" ? "#1b5e20" : "rgba(46, 125, 50, 0.08)",
+                  borderColor: filter === "same" ? "#1b5e20" : "#2e7d32",
+                },
+              }}
+            >
+              Cùng ĐV ({countSame})
+            </Button>
+            <Button
+              size="small"
+              variant={filter === "diff" ? "contained" : "outlined"}
+              onClick={() => setFilter("diff")}
+              sx={{
+                borderRadius: "8px",
+                textTransform: "none",
+                borderColor: filter === "diff" ? "#ed6c02" : "#ffe0b2",
+                bgcolor: filter === "diff" ? "#ed6c02" : "transparent",
+                color: filter === "diff" ? "#fff" : "#ed6c02",
+                "&:hover": {
+                  bgcolor:
+                    filter === "diff" ? "#e65100" : "rgba(237, 108, 2, 0.08)",
+                  borderColor: filter === "diff" ? "#e65100" : "#ed6c02",
+                },
+              }}
+            >
+              Khác ĐV ({countDiff})
+            </Button>
+          </Stack>
+
+          {/* Dòng 2: Lọc máy sai vị trí */}
+          {countWrongLocation > 0 && (
+            <Stack direction="row" spacing={1} flexWrap="wrap" gap={1}>
+              <Button
+                size="small"
+                variant={filter === "wrong_location" ? "contained" : "outlined"}
+                onClick={() => setFilter("wrong_location")}
+                sx={{
+                  borderRadius: "8px",
+                  textTransform: "none",
+                  borderColor:
+                    filter === "wrong_location" ? "#c2185b" : "#f48fb1",
+                  bgcolor:
+                    filter === "wrong_location" ? "#c2185b" : "transparent",
+                  color: filter === "wrong_location" ? "#fff" : "#c2185b",
+                  fontWeight: 700,
+                  "&:hover": {
+                    bgcolor:
+                      filter === "wrong_location"
+                        ? "#880e4f"
+                        : "rgba(194, 24, 91, 0.08)",
+                    borderColor:
+                      filter === "wrong_location" ? "#880e4f" : "#c2185b",
+                  },
+                }}
+              >
+                Sai vị trí ({countWrongLocation})
+              </Button>
+              {countWrongLocationSameDept > 0 && (
+                <Button
+                  size="small"
+                  variant={filter === "wrong_same" ? "contained" : "outlined"}
+                  sx={{
+                    borderRadius: "8px",
+                    textTransform: "none",
+                    borderColor:
+                      filter === "wrong_same" ? "#f57f17" : "#fff59d",
+                    color: filter === "wrong_same" ? "#fff" : "#f57f17",
+                    bgcolor:
+                      filter === "wrong_same" ? "#f57f17" : "transparent",
+                    "&:hover": {
+                      bgcolor:
+                        filter === "wrong_same"
+                          ? "#e65100"
+                          : "rgba(245, 127, 23, 0.08)",
+                      borderColor:
+                        filter === "wrong_same" ? "#e65100" : "#f57f17",
+                    },
+                  }}
+                  onClick={() => setFilter("wrong_same")}
+                >
+                  Sai VT - Cùng ĐV ({countWrongLocationSameDept})
+                </Button>
+              )}
+              {countWrongLocationDiffDept > 0 && (
+                <Button
+                  size="small"
+                  variant={filter === "wrong_diff" ? "contained" : "outlined"}
+                  sx={{
+                    borderRadius: "8px",
+                    textTransform: "none",
+                    borderColor:
+                      filter === "wrong_diff" ? "#bf360c" : "#ff8a65",
+                    color: filter === "wrong_diff" ? "#fff" : "#bf360c",
+                    bgcolor:
+                      filter === "wrong_diff" ? "#bf360c" : "transparent",
+                    "&:hover": {
+                      bgcolor:
+                        filter === "wrong_diff"
+                          ? "#870000"
+                          : "rgba(191, 54, 12, 0.08)",
+                      borderColor:
+                        filter === "wrong_diff" ? "#870000" : "#bf360c",
+                    },
+                  }}
+                  onClick={() => setFilter("wrong_diff")}
+                >
+                  Sai VT - Khác ĐV ({countWrongLocationDiffDept})
+                </Button>
+              )}
+            </Stack>
+          )}
         </Stack>
 
         {/* Bảng dữ liệu */}
@@ -1960,12 +2147,6 @@ const TestProposalPage = () => {
         scanned_machines: inventoryScannedList,
       });
 
-      showNotification(
-        "success",
-        "Đã lưu",
-        `Đã lưu kết quả cho ${selectedLocationForScan.name_location}`
-      );
-
       // Refresh lại data
       const response = await api.inventory.getById(
         selectedTicket.uuid_inventory_check
@@ -2002,6 +2183,13 @@ const TestProposalPage = () => {
       setInventoryScannedList([]);
       setOpenScanDialog(false);
       setOpenRfidDialog(false);
+
+      // Hiển thị notification sau khi đã load xong tất cả dữ liệu
+      showNotification(
+        "success",
+        "Đã lưu",
+        `Đã lưu kết quả cho ${selectedLocationForScan.name_location}`
+      );
     } catch (error) {
       console.error("Error saving inventory scan:", error);
       showNotification(
@@ -2106,6 +2294,60 @@ const TestProposalPage = () => {
       );
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRefreshInventoryDepartment = async () => {
+    if (!selectedTicket || !currentDepartment) return;
+
+    try {
+      setDetailLoading(true);
+      const response = await api.inventory.getById(
+        selectedTicket.uuid_inventory_check
+      );
+      const ticketDetails = response.data.inventory;
+      setSelectedTicket(ticketDetails);
+      setFormData((prev) => ({
+        ...prev,
+        inventoryDetails: response.data.details || [],
+      }));
+
+      // Update lại state local cho department hiện tại
+      const updatedDept = response.data.details.find(
+        (d) => d.id_department === currentDepartment.id_department
+      );
+      if (updatedDept) {
+        let updatedScannedList = [];
+        try {
+          const parsed =
+            typeof updatedDept.scanned_result === "string"
+              ? JSON.parse(updatedDept.scanned_result)
+              : updatedDept.scanned_result;
+
+          updatedScannedList = Array.isArray(parsed)
+            ? parsed
+            : parsed?.locations || [];
+        } catch {
+          updatedScannedList = [];
+        }
+        setScannedLocationsList(updatedScannedList);
+        setCurrentDepartment(updatedDept);
+      }
+
+      // showNotification(
+      //   "success",
+      //   "Đã làm mới",
+      //   "Dữ liệu đã được cập nhật"
+      // );
+    } catch (error) {
+      console.error("Error refreshing inventory department:", error);
+      // showNotification(
+      //   "error",
+      //   "Làm mới thất bại",
+      //   error.response?.data?.message || "Lỗi khi tải dữ liệu"
+      // );
+    } finally {
+      setDetailLoading(false);
     }
   };
 
@@ -8210,29 +8452,54 @@ const TestProposalPage = () => {
                       bgcolor: "#f8f9fa",
                     }}
                   >
-                    <Stack direction="row" alignItems="center" spacing={2}>
-                      {/* Avatar icon giống bên ngoài */}
-                      <Avatar
+                    <Stack
+                      direction="row"
+                      alignItems="center"
+                      justifyContent="space-between"
+                    >
+                      <Stack direction="row" alignItems="center" spacing={2}>
+                        {/* Avatar icon giống bên ngoài */}
+                        <Avatar
+                          sx={{
+                            width: 40,
+                            height: 40,
+                            background:
+                              "linear-gradient(45deg, #ff9800, #ff5722)",
+                          }}
+                        >
+                          <Assessment sx={{ fontSize: 24 }} />
+                        </Avatar>
+                        <Box>
+                          <Typography
+                            variant="h6"
+                            sx={{ fontWeight: 700, color: "#ff5722" }}
+                          >
+                            Thống kê theo vị trí
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            Chi tiết từng vị trí trong đơn vị
+                          </Typography>
+                        </Box>
+                      </Stack>
+                      <IconButton
+                        onClick={handleRefreshInventoryDepartment}
+                        disabled={detailLoading}
                         sx={{
-                          width: 40,
-                          height: 40,
-                          background:
-                            "linear-gradient(45deg, #ff9800, #ff5722)",
+                          color: "#ff5722",
+                          "&:hover": {
+                            bgcolor: "rgba(255, 87, 34, 0.08)",
+                          },
                         }}
                       >
-                        <Assessment sx={{ fontSize: 24 }} />
-                      </Avatar>
-                      <Box>
-                        <Typography
-                          variant="h6"
-                          sx={{ fontWeight: 700, color: "#ff5722" }}
-                        >
-                          Thống kê theo vị trí
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          Chi tiết từng vị trí trong đơn vị
-                        </Typography>
-                      </Box>
+                        {detailLoading ? (
+                          <CircularProgress
+                            size={24}
+                            sx={{ color: "#ff5722" }}
+                          />
+                        ) : (
+                          <Refresh />
+                        )}
+                      </IconButton>
                     </Stack>
                   </Box>
 
@@ -8595,6 +8862,25 @@ const TestProposalPage = () => {
                         Các vị trí đã kiểm ({locationsWithMachines.length} vị
                         trí - {totalMachines} máy)
                       </Typography>
+                      <IconButton
+                        onClick={handleRefreshInventoryDepartment}
+                        disabled={detailLoading}
+                        sx={{
+                          color: "#ff5722",
+                          "&:hover": {
+                            bgcolor: "rgba(255, 87, 34, 0.08)",
+                          },
+                        }}
+                      >
+                        {detailLoading ? (
+                          <CircularProgress
+                            size={24}
+                            sx={{ color: "#ff5722" }}
+                          />
+                        ) : (
+                          <Refresh />
+                        )}
+                      </IconButton>
                     </Stack>
 
                     {locationsWithMachines.length === 0 ? (
