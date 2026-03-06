@@ -9879,7 +9879,7 @@ app.post(
       await connection.beginTransaction();
 
       const { uuid } = req.params;
-      const { department_uuid, location_uuid, scanned_machines } = req.body;
+      const { department_uuid, location_uuid, scanned_machines, machines_to_remove } = req.body;
       const userId = req.user.id;
 
       // 1. Get IDs
@@ -9999,10 +9999,18 @@ app.post(
 
       // 6. Update JSON Array trong DB với row-level lock
       // Lấy scanned_result cũ với FOR UPDATE để lock row này
+      console.log("=== [INVENTORY SCAN] START ===");
+      console.log("Inventory UUID:", uuid);
+      console.log("Department UUID:", department_uuid);
+      console.log("Location UUID:", location_uuid);
+      console.log("Scanned machines count:", scanned_machines.length);
+
       const [currentDetail] = await connection.query(
         "SELECT scanned_result FROM tb_inventory_check_detail WHERE id_inventory_check = ? AND id_department = ? FOR UPDATE",
         [idInventory, idDepartment]
       );
+
+      console.log("Current detail found:", currentDetail.length > 0);
 
       let resultArray = [];
       let currentData = {};
@@ -10014,6 +10022,8 @@ app.post(
               ? JSON.parse(currentDetail[0].scanned_result)
               : currentDetail[0].scanned_result;
 
+          console.log("Parsed type:", Array.isArray(parsed) ? "Array" : "Object");
+
           if (Array.isArray(parsed)) {
             resultArray = parsed;
             currentData = { locations: parsed }; // Fallback cho data cũ
@@ -10021,40 +10031,120 @@ app.post(
             resultArray = parsed.locations || [];
             currentData = parsed; // Giữ lại toàn bộ data cũ (snapshot_count, location_snapshots)
           }
+
+          console.log("Current locations count:", resultArray.length);
+          console.log("Current locations:", resultArray.map(loc => ({
+            location_uuid: loc.location_uuid,
+            location_name: loc.location_name,
+            machine_count: loc.scanned_machine?.length || 0
+          })));
         }
       } catch (e) {
+        console.error("Error parsing scanned_result:", e);
         resultArray = [];
         currentData = {};
+      }
+
+      // XỬ LÝ XÓA MÁY KHỎI CHUYỀN CŨ (nếu user chọn lưu vào chuyền mới)
+      if (machines_to_remove && Array.isArray(machines_to_remove) && machines_to_remove.length > 0) {
+        console.log("Machines to remove from previous locations:", machines_to_remove.length);
+        
+        machines_to_remove.forEach(({ machine_uuid, previous_location_uuid }) => {
+          if (!previous_location_uuid) return;
+          
+          // Tìm location cũ trong resultArray
+          const locationIndex = resultArray.findIndex(
+            loc => loc.location_uuid === previous_location_uuid
+          );
+          
+          if (locationIndex >= 0) {
+            // Xóa máy khỏi location cũ
+            const oldMachineCount = resultArray[locationIndex].scanned_machine?.length || 0;
+            resultArray[locationIndex].scanned_machine = 
+              (resultArray[locationIndex].scanned_machine || []).filter(
+                m => m.uuid !== machine_uuid
+              );
+            const newMachineCount = resultArray[locationIndex].scanned_machine.length;
+            console.log(`Removed machine ${machine_uuid} from ${resultArray[locationIndex].location_name}: ${oldMachineCount} -> ${newMachineCount}`);
+          }
+        });
       }
 
       // Tìm xem location này đã có trong mảng chưa
       const existingIndex = resultArray.findIndex(
         (item) => item.location_uuid === location_uuid
       );
+
+      console.log("Existing location index:", existingIndex);
+      console.log("Total locations before update:", resultArray.length);
+
       if (existingIndex >= 0) {
         // *** MERGE: Thêm máy mới vào danh sách cũ (không ghi đè) ***
         const existingMachines =
           resultArray[existingIndex].scanned_machine || [];
         const existingUuids = new Set(existingMachines.map((m) => m.uuid));
 
+        console.log("Existing machines in this location:", existingMachines.length);
+        console.log("Existing machine UUIDs:", Array.from(existingUuids));
+
         // Chỉ thêm những máy chưa có trong danh sách
         const newMachines = newLocationResult.scanned_machine.filter(
           (m) => !existingUuids.has(m.uuid)
         );
 
-        resultArray[existingIndex].scanned_machine = [
-          ...existingMachines,
-          ...newMachines,
-        ];
+        console.log("New machines to add:", newMachines.length);
+        console.log("New machine UUIDs:", newMachines.map(m => m.uuid));
+
+        // QUAN TRỌNG: Tạo mảng mới thay vì mutate trực tiếp
+        const mergedMachines = [...existingMachines, ...newMachines];
+        
+        // Cập nhật vị trí này với danh sách máy đã merge
+        resultArray[existingIndex] = {
+          ...resultArray[existingIndex],
+          scanned_machine: mergedMachines,
+        };
+
+        console.log("Total machines after merge:", resultArray[existingIndex].scanned_machine.length);
       } else {
         // Thêm mới
+        console.log("Adding new location with", newLocationResult.scanned_machine.length, "machines");
         resultArray.push(newLocationResult);
       }
+
+      console.log("Total locations after update:", resultArray.length);
+
+      // Validate resultArray trước khi lưu
+      if (!Array.isArray(resultArray)) {
+        console.error("ERROR: resultArray is not an array!", resultArray);
+        throw new Error("Invalid resultArray structure");
+      }
+
+      // Đảm bảo mỗi location có scanned_machine là array
+      resultArray = resultArray.map(loc => ({
+        ...loc,
+        scanned_machine: Array.isArray(loc.scanned_machine) ? loc.scanned_machine : []
+      }));
 
       const finalData = {
         ...currentData,
         locations: resultArray,
       };
+
+      console.log("Final locations count:", finalData.locations.length);
+      console.log("Final data summary:", finalData.locations.map(loc => ({
+        location_uuid: loc.location_uuid,
+        location_name: loc.location_name,
+        machine_count: loc.scanned_machine?.length || 0
+      })));
+
+      // Validate finalData trước khi stringify
+      if (!finalData.locations || !Array.isArray(finalData.locations)) {
+        console.error("ERROR: finalData.locations is invalid!", finalData);
+        throw new Error("Invalid finalData structure");
+      }
+
+      const jsonString = JSON.stringify(finalData);
+      console.log("JSON string length:", jsonString.length);
 
       await connection.query(
         `UPDATE tb_inventory_check_detail 
@@ -10063,98 +10153,16 @@ app.post(
              updated_by = ?, 
              updated_at = CURRENT_TIMESTAMP 
          WHERE id_inventory_check = ? AND id_department = ?`,
-        [JSON.stringify(finalData), userId, idInventory, idDepartment]
+        [jsonString, userId, idInventory, idDepartment]
       );
+
+      console.log("=== [INVENTORY SCAN] SAVED SUCCESSFULLY ===\n");
 
       await connection.commit();
       res.json({ success: true, message: "Lưu kết quả kiểm kê thành công" });
     } catch (error) {
       await connection.rollback();
       console.error("Error saving scan result:", error);
-      res.status(500).json({ success: false, message: error.message });
-    } finally {
-      connection.release();
-    }
-  }
-);
-
-// PUT /api/inventory-checks/:uuid/update-scanned - Cập nhật scanned_result (dùng khi xóa máy)
-app.put(
-  "/api/inventory-checks/:uuid/update-scanned",
-  authenticateToken,
-  async (req, res) => {
-    const connection = await tpmConnection.getConnection();
-    try {
-      const { uuid } = req.params;
-      const { department_uuid, scanned_result } = req.body;
-      const userId = req.user.id;
-
-      // 1. Get IDs
-      const [invRes] = await connection.query(
-        "SELECT id_inventory_check, status FROM tb_inventory_check WHERE uuid_inventory_check = ?",
-        [uuid]
-      );
-      if (invRes.length === 0)
-        return res
-          .status(404)
-          .json({ success: false, message: "Phiếu không tồn tại" });
-      if (invRes[0].status !== "draft")
-        return res.status(400).json({
-          success: false,
-          message: "Phiếu không ở trạng thái nháp, không thể cập nhật",
-        });
-
-      const idInventory = invRes[0].id_inventory_check;
-
-      // 2. Resolve Department
-      const [depRes] = await connection.query(
-        "SELECT id_department FROM tb_department WHERE uuid_department = ?",
-        [department_uuid]
-      );
-      if (depRes.length === 0)
-        return res
-          .status(404)
-          .json({ success: false, message: "Đơn vị không tồn tại" });
-      const idDepartment = depRes[0].id_department;
-
-      // 3. Update scanned_result
-      const [oldDataRes] = await connection.query(
-        "SELECT scanned_result FROM tb_inventory_check_detail WHERE id_inventory_check = ? AND id_department = ?",
-        [idInventory, idDepartment]
-      );
-
-      let currentData = {};
-      try {
-        if (oldDataRes.length > 0 && oldDataRes[0].scanned_result) {
-          const parsed =
-            typeof oldDataRes[0].scanned_result === "string"
-              ? JSON.parse(oldDataRes[0].scanned_result)
-              : oldDataRes[0].scanned_result;
-
-          if (!Array.isArray(parsed)) {
-            currentData = parsed;
-          }
-        }
-      } catch (e) {}
-
-      // scanned_result gửi lên từ frontend bây giờ chỉ là mảng locations (do frontend xử lý)
-      // Ta đóng gói lại
-      const finalData = {
-        ...currentData,
-        locations: scanned_result, // Body gửi lên là mảng locations sau khi xóa
-      };
-
-      await connection.query(
-        `UPDATE tb_inventory_check_detail SET scanned_result = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id_inventory_check = ? AND id_department = ?`,
-        [JSON.stringify(finalData), userId, idInventory, idDepartment]
-      );
-
-      res.json({
-        success: true,
-        message: "Cập nhật kết quả kiểm kê thành công",
-      });
-    } catch (error) {
-      console.error("Error updating scan result:", error);
       res.status(500).json({ success: false, message: error.message });
     } finally {
       connection.release();

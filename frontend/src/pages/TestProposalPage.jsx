@@ -84,12 +84,7 @@ import RfidSearch from "../components/RfidSearch";
 import { useAuth } from "../hooks/useAuth";
 
 // Component con để hiển thị từng vị trí kiểm kê (Accordion + Filter)
-const InventoryLocationItem = ({
-  location,
-  snapshotCount,
-  canEdit,
-  onRemoveMachine,
-}) => {
+const InventoryLocationItem = ({ location, snapshotCount }) => {
   const [filter, setFilter] = useState("all"); // 'all', 'same', 'diff', 'wrong_location', 'wrong_same', 'wrong_diff'
 
   // 1. Phân loại máy
@@ -426,11 +421,6 @@ const InventoryLocationItem = ({
                 <TableCell sx={{ fontWeight: 600 }}>Serial</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Vị trí hiện tại</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Trạng thái</TableCell>
-                {canEdit && (
-                  <TableCell align="center" sx={{ fontWeight: 600 }}>
-                    Xóa
-                  </TableCell>
-                )}
               </TableRow>
             </TableHead>
             <TableBody>
@@ -471,23 +461,6 @@ const InventoryLocationItem = ({
                           )}
                         </Stack>
                       </TableCell>
-
-                      {canEdit && (
-                        <TableCell align="center">
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={() =>
-                              onRemoveMachine(
-                                location.location_uuid,
-                                machine.uuid
-                              )
-                            }
-                          >
-                            <Delete fontSize="small" />
-                          </IconButton>
-                        </TableCell>
-                      )}
                     </TableRow>
                   );
                 })
@@ -675,6 +648,8 @@ const TestProposalPage = () => {
   // Inventory Scan Dialog State
   const [openInventoryScanDialog, setOpenInventoryScanDialog] = useState(false);
   const [inventoryScannedList, setInventoryScannedList] = useState([]);
+  const [duplicateMachineChoices, setDuplicateMachineChoices] = useState({}); // { uuid_machine: 'current' | 'previous' }
+  const [collapsedGroups, setCollapsedGroups] = useState({}); // { groupTitle: true/false }
   const [openInventoryRfidSearchDialog, setOpenInventoryRfidSearchDialog] =
     useState(false);
   const [inventoryRfidSearchTargets, setInventoryRfidSearchTargets] = useState(
@@ -1345,39 +1320,275 @@ const TestProposalPage = () => {
       }));
     }
   };
-  const handleAddMachinesFromRfid = (machinesToAdd) => {
+  const handleAddMachinesFromRfid = async (machinesToAdd) => {
     if (openInventoryScanDialog) {
-      const validMachines = [];
-      const duplicatesInCurrent = [];
-      const duplicatesInCurrentDept = [];
-      const duplicatesInOtherDept = [];
+      try {
+        setLoading(true);
 
-      machinesToAdd.forEach((machine) => {
-        // Lấy tên hiển thị cho máy (để dùng trong thông báo)
-        const machineDisplayName = machine.isNotFound
-          ? `RFID: ${machine.RFID_machine}`
-          : machine.code_machine ||
-            machine.serial_machine ||
-            "Máy không xác định";
+        const response = await api.inventory.getById(
+          selectedTicket.uuid_inventory_check
+        );
+        const ticketDetails = response.data.inventory;
+        setSelectedTicket(ticketDetails);
+        setFormData((prev) => ({
+          ...prev,
+          inventoryDetails: response.data.details || [],
+        }));
 
-        // 1. Kiểm tra trùng trong danh sách tạm
-        const existsInCurrent = inventoryScannedList.some(
+        // Update lại currentDepartment và scannedLocationsList
+        const updatedDept = response.data.details.find(
+          (d) => d.id_department === currentDepartment.id_department
+        );
+        if (updatedDept) {
+          let updatedScannedList = [];
+          try {
+            const parsed =
+              typeof updatedDept.scanned_result === "string"
+                ? JSON.parse(updatedDept.scanned_result)
+                : updatedDept.scanned_result;
+
+            updatedScannedList = Array.isArray(parsed)
+              ? parsed
+              : parsed?.locations || [];
+          } catch {
+            updatedScannedList = [];
+          }
+          setScannedLocationsList(updatedScannedList);
+          setCurrentDepartment(updatedDept);
+        }
+
+        // SAU KHI REFRESH, BẮT ĐẦU KIỂM TRA TRÙNG
+        const validMachines = [];
+        const duplicatesInCurrent = [];
+        const duplicatesInCurrentDept = [];
+        const duplicatesInOtherDept = [];
+
+        // Sử dụng updatedScannedList thay vì scannedLocationsList cũ
+        const latestScannedLocations = updatedDept?.scanned_result
+          ? Array.isArray(updatedDept.scanned_result)
+            ? updatedDept.scanned_result
+            : updatedDept.scanned_result?.locations || []
+          : [];
+
+        machinesToAdd.forEach((machine) => {
+          // Lấy tên hiển thị cho máy (để dùng trong thông báo)
+          const machineDisplayName = machine.isNotFound
+            ? `RFID: ${machine.RFID_machine}`
+            : machine.code_machine ||
+              machine.serial_machine ||
+              "Máy không xác định";
+
+          // 1. Kiểm tra trùng trong danh sách tạm
+          const existsInCurrent = inventoryScannedList.some(
+            (m) => m.uuid_machine === machine.uuid_machine
+          );
+          if (existsInCurrent) {
+            duplicatesInCurrent.push(machineDisplayName);
+            return;
+          }
+
+          // 2. Kiểm tra trùng ở chuyền khác trong ĐƠN VỊ HIỆN TẠI (dùng data vừa refresh)
+          const foundInOther = latestScannedLocations.find((loc) =>
+            loc.scanned_machine?.some((m) => m.uuid === machine.uuid_machine)
+          );
+
+          // 3. Kiểm tra trùng ở ĐƠN VỊ KHÁC
+          const foundInOtherDept = formData.inventoryDetails?.find((dept) => {
+            if (dept.id_department === currentDepartment?.id_department) {
+              return false;
+            }
+            let scannedArr = [];
+            try {
+              const parsed =
+                typeof dept.scanned_result === "string"
+                  ? JSON.parse(dept.scanned_result)
+                  : dept.scanned_result;
+
+              if (Array.isArray(parsed)) {
+                scannedArr = parsed;
+              } else {
+                scannedArr = parsed?.locations || [];
+              }
+            } catch {
+              scannedArr = [];
+            }
+            // Thêm optional chaining (?.) cho an toàn
+            return scannedArr?.some((loc) =>
+              loc.scanned_machine?.some((m) => m.uuid === machine.uuid_machine)
+            );
+          });
+
+          if (foundInOtherDept) {
+            let locationName = "";
+            try {
+              const parsed =
+                typeof foundInOtherDept.scanned_result === "string"
+                  ? JSON.parse(foundInOtherDept.scanned_result)
+                  : foundInOtherDept.scanned_result;
+
+              const scannedArr = Array.isArray(parsed)
+                ? parsed
+                : parsed?.locations || [];
+
+              const foundLoc = scannedArr.find((loc) =>
+                loc.scanned_machine?.some(
+                  (m) => m.uuid === machine.uuid_machine
+                )
+              );
+              locationName = foundLoc?.location_name || "không rõ";
+            } catch {
+              locationName = "không rõ";
+            }
+            duplicatesInOtherDept.push({
+              code: machineDisplayName,
+              location: locationName,
+              department: foundInOtherDept.name_department,
+            });
+            return;
+          }
+
+          // Thêm thông tin vị trí trùng (nếu có trong cùng đơn vị)
+          if (foundInOther) {
+            duplicatesInCurrentDept.push({
+              code: machineDisplayName,
+              location: foundInOther.location_name,
+              department: currentDepartment?.name_department,
+            });
+            validMachines.push({
+              ...machine,
+              isDuplicateInCurrentDept: true,
+              duplicateLocationName: foundInOther.location_name,
+            });
+          } else {
+            validMachines.push(machine);
+          }
+        });
+
+        // Hiển thị thông báo
+        if (duplicatesInCurrent.length > 0) {
+          showNotification(
+            "warning",
+            "Có máy đã được quét ở chuyền này",
+            `${
+              duplicatesInCurrent.length
+            } máy đã có trong danh sách: ${duplicatesInCurrent.join(", ")}`
+          );
+        }
+        if (duplicatesInCurrentDept.length > 0) {
+          const details = duplicatesInCurrentDept
+            .map((d) => `${d.code} (tại ${d.location})`)
+            .join(", ");
+          showNotification(
+            "warning",
+            "Có máy đã được quét ở vị trí khác trong đơn vị này",
+            `${duplicatesInCurrentDept.length} máy: ${details}. Hãy chọn checkbox để quyết định lưu vào chuyền nào.`
+          );
+        }
+        if (duplicatesInOtherDept.length > 0) {
+          const details = duplicatesInOtherDept
+            .map((d) => `${d.code} (${d.department} - ${d.location})`)
+            .join(", ");
+          showNotification(
+            "error",
+            "Có máy đã được quét ở đơn vị khác",
+            `${duplicatesInOtherDept.length} máy: ${details}`
+          );
+        }
+        if (validMachines.length > 0) {
+          showNotification(
+            "success",
+            "Đã thêm máy",
+            `Đã thêm ${validMachines.length} máy vào danh sách`
+          );
+        }
+
+        // Thêm máy hợp lệ (bao gồm cả máy trùng trong cùng đơn vị)
+        setInventoryScannedList((prev) => [...prev, ...validMachines]);
+      } catch (error) {
+        console.error("Error refreshing before check:", error);
+        showNotification(
+          "error",
+          "Lỗi",
+          "Không thể làm mới dữ liệu. Vui lòng thử lại."
+        );
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      setFormData((prev) => {
+        const newMachinesWithNote = machinesToAdd.map((m) => ({
+          ...m,
+          note: "",
+        }));
+        return {
+          ...prev,
+          machines: [...prev.machines, ...newMachinesWithNote],
+        };
+      });
+    }
+  };
+  const handleAddMachineFromScanner = async (machine) => {
+    if (openInventoryScanDialog) {
+      try {
+        setLoading(true);
+
+        const response = await api.inventory.getById(
+          selectedTicket.uuid_inventory_check
+        );
+        const ticketDetails = response.data.inventory;
+        setSelectedTicket(ticketDetails);
+        setFormData((prev) => ({
+          ...prev,
+          inventoryDetails: response.data.details || [],
+        }));
+
+        // Update lại currentDepartment và scannedLocationsList
+        const updatedDept = response.data.details.find(
+          (d) => d.id_department === currentDepartment.id_department
+        );
+        let latestScannedLocations = [];
+        if (updatedDept) {
+          let updatedScannedList = [];
+          try {
+            const parsed =
+              typeof updatedDept.scanned_result === "string"
+                ? JSON.parse(updatedDept.scanned_result)
+                : updatedDept.scanned_result;
+
+            updatedScannedList = Array.isArray(parsed)
+              ? parsed
+              : parsed?.locations || [];
+          } catch {
+            updatedScannedList = [];
+          }
+          setScannedLocationsList(updatedScannedList);
+          setCurrentDepartment(updatedDept);
+          latestScannedLocations = updatedScannedList;
+        }
+
+        // SAU KHI REFRESH, KIỂM TRA TRÙNG
+        // Kiểm tra máy đã quét trong chuyền hiện tại (danh sách tạm)
+        const existsInCurrentList = inventoryScannedList.some(
           (m) => m.uuid_machine === machine.uuid_machine
         );
-        if (existsInCurrent) {
-          duplicatesInCurrent.push(machineDisplayName);
+        if (existsInCurrentList) {
+          showNotification(
+            "warning",
+            "Máy đã có trong danh sách",
+            `Máy "${machine.code_machine}" đã được quét ở chuyền này rồi.`
+          );
           return;
         }
 
-        // 2. Kiểm tra trùng ở chuyền khác trong ĐƠN VỊ HIỆN TẠI
-        const foundInOther = scannedLocationsList.find((loc) =>
+        // Kiểm tra máy đã quét ở chuyền khác trong ĐƠN VỊ HIỆN TẠI (dùng data vừa refresh)
+        const foundInOtherLocation = latestScannedLocations.find((loc) =>
           loc.scanned_machine?.some((m) => m.uuid === machine.uuid_machine)
         );
 
-        // 3. Kiểm tra trùng ở ĐƠN VỊ KHÁC
-        const foundInOtherDept = formData.inventoryDetails?.find((dept) => {
+        // Kiểm tra máy đã quét ở ĐƠN VỊ KHÁC (trong toàn bộ phiếu kiểm kê)
+        const foundInOtherDepartment = response.data.details?.find((dept) => {
           if (dept.id_department === currentDepartment?.id_department) {
-            return false;
+            return false; // Bỏ qua đơn vị hiện tại (đã check ở trên)
           }
           let scannedArr = [];
           try {
@@ -1394,19 +1605,20 @@ const TestProposalPage = () => {
           } catch {
             scannedArr = [];
           }
-          // Thêm optional chaining (?.) cho an toàn
+          // Kiểm tra xem có máy nào trùng không
           return scannedArr?.some((loc) =>
             loc.scanned_machine?.some((m) => m.uuid === machine.uuid_machine)
           );
         });
 
-        if (foundInOtherDept) {
+        if (foundInOtherDepartment) {
+          // Tìm vị trí cụ thể
           let locationName = "";
           try {
             const parsed =
-              typeof foundInOtherDept.scanned_result === "string"
-                ? JSON.parse(foundInOtherDept.scanned_result)
-                : foundInOtherDept.scanned_result;
+              typeof foundInOtherDepartment.scanned_result === "string"
+                ? JSON.parse(foundInOtherDepartment.scanned_result)
+                : foundInOtherDepartment.scanned_result;
 
             const scannedArr = Array.isArray(parsed)
               ? parsed
@@ -1419,175 +1631,41 @@ const TestProposalPage = () => {
           } catch {
             locationName = "không rõ";
           }
-          duplicatesInOtherDept.push({
-            code: machineDisplayName,
-            location: locationName,
-            department: foundInOtherDept.name_department,
-          });
+
+          showNotification(
+            "error",
+            "Máy đã được quét ở đơn vị khác",
+            `Máy "${machine.code_machine}" đã được quét tại "${locationName}" thuộc đơn vị "${foundInOtherDepartment.name_department}". Vui lòng xóa khỏi đơn vị đó trước.`
+          );
           return;
         }
 
-        // Thêm thông tin vị trí trùng (nếu có trong cùng đơn vị)
-        if (foundInOther) {
-          duplicatesInCurrentDept.push({
-            code: machineDisplayName,
-            location: foundInOther.location_name,
-            department: currentDepartment?.name_department,
-          });
-          validMachines.push({
-            ...machine,
-            isDuplicateInCurrentDept: true,
-            duplicateLocationName: foundInOther.location_name,
-          });
-        } else {
-          validMachines.push(machine);
-        }
-      });
-
-      // Hiển thị thông báo
-      if (duplicatesInCurrent.length > 0) {
-        showNotification(
-          "warning",
-          "Có máy đã được quét ở chuyền này",
-          `${
-            duplicatesInCurrent.length
-          } máy đã có trong danh sách: ${duplicatesInCurrent.join(", ")}`
-        );
-      }
-      if (duplicatesInCurrentDept.length > 0) {
-        const details = duplicatesInCurrentDept
-          .map((d) => `${d.code} (tại ${d.location})`)
-          .join(", ");
-        showNotification(
-          "warning",
-          "Có máy đã được quét ở vị trí khác trong đơn vị này",
-          `${duplicatesInCurrentDept.length} máy: ${details}. Bạn không thể lưu kết quả cho đến khi xóa các máy này khỏi danh sách.`
-        );
-      }
-      if (duplicatesInOtherDept.length > 0) {
-        const details = duplicatesInOtherDept
-          .map((d) => `${d.code} (${d.department} - ${d.location})`)
-          .join(", ");
-        showNotification(
-          "error",
-          "Có máy đã được quét ở đơn vị khác",
-          `${duplicatesInOtherDept.length} máy: ${details}`
-        );
-      }
-      if (validMachines.length > 0) {
-        showNotification(
-          "success",
-          "Đã thêm máy",
-          `Đã thêm ${validMachines.length} máy vào danh sách`
-        );
-      }
-
-      // Thêm máy hợp lệ (bao gồm cả máy trùng trong cùng đơn vị)
-      setInventoryScannedList((prev) => [...prev, ...validMachines]);
-    } else {
-      setFormData((prev) => {
-        const newMachinesWithNote = machinesToAdd.map((m) => ({
-          ...m,
-          note: "",
-        }));
-        return {
-          ...prev,
-          machines: [...prev.machines, ...newMachinesWithNote],
+        // Thêm vào danh sách với thông tin vị trí trùng (nếu có)
+        const machineWithDuplicateInfo = {
+          ...machine,
+          isDuplicateInCurrentDept: !!foundInOtherLocation,
+          duplicateLocationName: foundInOtherLocation?.location_name || null,
         };
-      });
-    }
-  };
-  const handleAddMachineFromScanner = (machine) => {
-    if (openInventoryScanDialog) {
-      // Kiểm tra máy đã quét trong chuyền hiện tại (danh sách tạm)
-      const existsInCurrentList = inventoryScannedList.some(
-        (m) => m.uuid_machine === machine.uuid_machine
-      );
-      if (existsInCurrentList) {
-        showNotification(
-          "warning",
-          "Máy đã có trong danh sách",
-          `Máy "${machine.code_machine}" đã được quét ở chuyền này rồi.`
-        );
-        return;
-      }
 
-      // Kiểm tra máy đã quét ở chuyền khác trong ĐƠN VỊ HIỆN TẠI
-      const foundInOtherLocation = scannedLocationsList.find((loc) =>
-        loc.scanned_machine?.some((m) => m.uuid === machine.uuid_machine)
-      );
+        setInventoryScannedList((prev) => [...prev, machineWithDuplicateInfo]);
 
-      // Kiểm tra máy đã quét ở ĐƠN VỊ KHÁC (trong toàn bộ phiếu kiểm kê)
-      const foundInOtherDepartment = formData.inventoryDetails?.find((dept) => {
-        if (dept.id_department === currentDepartment?.id_department) {
-          return false; // Bỏ qua đơn vị hiện tại (đã check ở trên)
-        }
-        let scannedArr = [];
-        try {
-          const parsed =
-            typeof dept.scanned_result === "string"
-              ? JSON.parse(dept.scanned_result)
-              : dept.scanned_result;
-
-          if (Array.isArray(parsed)) {
-            scannedArr = parsed;
-          } else {
-            scannedArr = parsed?.locations || [];
-          }
-        } catch {
-          scannedArr = [];
-        }
-        // Kiểm tra xem có máy nào trùng không
-        return scannedArr?.some((loc) =>
-          loc.scanned_machine?.some((m) => m.uuid === machine.uuid_machine)
-        );
-      });
-
-      if (foundInOtherDepartment) {
-        // Tìm vị trí cụ thể
-        let locationName = "";
-        try {
-          const parsed =
-            typeof foundInOtherDepartment.scanned_result === "string"
-              ? JSON.parse(foundInOtherDepartment.scanned_result)
-              : foundInOtherDepartment.scanned_result;
-
-          const scannedArr = Array.isArray(parsed)
-            ? parsed
-            : parsed?.locations || [];
-
-          const foundLoc = scannedArr.find((loc) =>
-            loc.scanned_machine?.some((m) => m.uuid === machine.uuid_machine)
+        // Hiển thị cảnh báo nếu trùng
+        if (foundInOtherLocation) {
+          showNotification(
+            "warning",
+            "Cảnh báo: Máy đã được quét ở vị trí khác",
+            `Máy "${machine.code_machine}" đã được quét tại "${foundInOtherLocation.location_name}". Hãy chọn checkbox để quyết định lưu vào chuyền nào.`
           );
-          locationName = foundLoc?.location_name || "không rõ";
-        } catch {
-          locationName = "không rõ";
         }
-
+      } catch (error) {
+        console.error("Error refreshing before check single:", error);
         showNotification(
           "error",
-          "Máy đã được quét ở đơn vị khác",
-          `Máy "${machine.code_machine}" đã được quét tại "${locationName}" thuộc đơn vị "${foundInOtherDepartment.name_department}". Vui lòng xóa khỏi đơn vị đó trước.`
+          "Lỗi",
+          "Không thể làm mới dữ liệu. Vui lòng thử lại."
         );
-        return;
-      }
-
-      // Thêm vào danh sách với thông tin vị trí trùng (nếu có)
-      const machineWithDuplicateInfo = {
-        ...machine,
-        isDuplicateInCurrentDept: !!foundInOtherLocation,
-        duplicateLocationName: foundInOtherLocation?.location_name || null,
-      };
-
-      setInventoryScannedList((prev) => [...prev, machineWithDuplicateInfo]);
-
-      // Hiển thị cảnh báo nếu trùng
-      if (foundInOtherLocation) {
-        showNotification(
-          "warning",
-          "Cảnh báo: Máy đã được quét ở vị trí khác",
-          `Máy "${machine.code_machine}" đã được quét tại "${foundInOtherLocation.location_name}". Bạn không thể lưu kết quả cho đến khi xóa máy này khỏi danh sách.`
-        );
+      } finally {
+        setLoading(false);
       }
     } else {
       setFormData((prev) => ({
@@ -1602,140 +1680,6 @@ const TestProposalPage = () => {
       machines: prev.machines.filter((m) => m.uuid_machine !== uuid_machine),
     }));
 
-  const handleRemoveInventoryScannedMachine = async (uuid_machine) => {
-    // Xóa khỏi danh sách quét tạm
-    const machineToRemove = inventoryScannedList.find(
-      (m) => m.uuid_machine === uuid_machine
-    );
-
-    setInventoryScannedList((prev) =>
-      prev.filter((m) => m.uuid_machine !== uuid_machine)
-    );
-
-    // Nếu máy này đã được lưu trong scannedLocationsList (có duplicate), cần xóa cả ở đó
-    if (machineToRemove?.isDuplicateInCurrentDept) {
-      // Tìm location chứa máy này trong scannedLocationsList
-      const locationContainingMachine = scannedLocationsList.find((loc) =>
-        loc.scanned_machine?.some((m) => m.uuid === uuid_machine)
-      );
-
-      if (locationContainingMachine && currentDepartment && selectedTicket) {
-        // Gọi hàm xóa máy khỏi danh sách đã lưu
-        await handleRemoveSavedMachine(
-          locationContainingMachine.location_uuid,
-          uuid_machine
-        );
-      }
-    }
-  };
-
-  // Xóa máy khỏi danh sách đã lưu (scannedLocationsList)
-  const handleRemoveSavedMachine = async (locationUuid, machineUuid) => {
-    if (!currentDepartment || !selectedTicket) return;
-
-    try {
-      setLoading(true);
-
-      // Tìm vị trí trong danh sách
-      const updatedLocationsList = scannedLocationsList.map((loc) => {
-        if (loc.location_uuid === locationUuid) {
-          return {
-            ...loc,
-            scanned_machine: loc.scanned_machine.filter(
-              (m) => m.uuid !== machineUuid
-            ),
-          };
-        }
-        return loc;
-      });
-
-      // Gọi API để cập nhật lại DB
-      await api.inventory.updateScannedResult(
-        selectedTicket.uuid_inventory_check,
-        {
-          department_uuid: currentDepartment.uuid_department,
-          scanned_result: updatedLocationsList,
-        }
-      );
-
-      // showNotification(
-      //   "success",
-      //   "Đã xóa",
-      //   "Đã xóa máy khỏi danh sách kiểm kê"
-      // );
-
-      // Cập nhật state local
-      setScannedLocationsList(updatedLocationsList);
-
-      // Refresh lại data từ server
-      const response = await api.inventory.getById(
-        selectedTicket.uuid_inventory_check
-      );
-      const ticketDetails = response.data.inventory;
-      setSelectedTicket(ticketDetails);
-      setFormData((prev) => ({
-        ...prev,
-        inventoryDetails: response.data.details || [],
-      }));
-
-      // Update lại currentDepartment
-      const updatedDept = response.data.details.find(
-        (d) => d.id_department === currentDepartment.id_department
-      );
-      if (updatedDept) {
-        let updatedScannedList = [];
-        try {
-          const parsed =
-            typeof updatedDept.scanned_result === "string"
-              ? JSON.parse(updatedDept.scanned_result)
-              : updatedDept.scanned_result;
-
-          updatedScannedList = Array.isArray(parsed)
-            ? parsed
-            : parsed?.locations || [];
-        } catch {
-          updatedScannedList = [];
-        }
-        setScannedLocationsList(updatedScannedList);
-        setCurrentDepartment(updatedDept);
-      }
-
-      // ✅ KIỂM TRA LẠI CÁC MÁY TRONG DANH SÁCH TẠM (inventoryScannedList)
-      // Nếu máy vừa xóa trùng với máy nào đó trong danh sách tạm, thì bỏ flag duplicate
-      if (inventoryScannedList.length > 0) {
-        const refreshedList = inventoryScannedList.map((machine) => {
-          // Nếu máy này đang bị đánh dấu duplicate
-          if (machine.isDuplicateInCurrentDept) {
-            // Kiểm tra lại xem nó có còn trùng với vị trí nào khác không
-            const stillDuplicate = updatedLocationsList.some((loc) =>
-              loc.scanned_machine?.some((m) => m.uuid === machine.uuid_machine)
-            );
-
-            if (!stillDuplicate) {
-              // Không còn trùng nữa -> bỏ flag
-              const {
-                isDuplicateInCurrentDept: _isDup,
-                duplicateLocationName: _dupLoc,
-                ...rest
-              } = machine;
-              return rest;
-            }
-          }
-          return machine;
-        });
-        setInventoryScannedList(refreshedList);
-      }
-    } catch (error) {
-      console.error("Error removing machine:", error);
-      showNotification(
-        "error",
-        "Xóa thất bại",
-        error.response?.data?.message || "Lỗi khi xóa máy"
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
   const handleUpdateMachineNote = (uuid_machine, note) =>
     setFormData((prev) => ({
       ...prev,
@@ -2077,6 +2021,8 @@ const TestProposalPage = () => {
     setSelectedLocationForScan(null);
     setInventoryScannedList([]);
     setScannedLocationsList([]);
+    setDuplicateMachineChoices({});
+    setCollapsedGroups({});
   };
 
   // Helper: Kiểm tra quyền chỉnh sửa trong đơn vị kiểm kê
@@ -2141,10 +2087,136 @@ const TestProposalPage = () => {
 
     try {
       setLoading(true);
+
+      // KIỂM TRA LẠI TRÙNG LẶP TRƯỚC KHI LƯU (để tránh race condition)
+      const finalCheckResponse = await api.inventory.getById(
+        selectedTicket.uuid_inventory_check
+      );
+
+      // Parse dữ liệu mới nhất từ server
+      const latestDept = finalCheckResponse.data.details.find(
+        (d) => d.id_department === currentDepartment.id_department
+      );
+
+      let latestScannedLocations = [];
+      if (latestDept) {
+        try {
+          const parsed =
+            typeof latestDept.scanned_result === "string"
+              ? JSON.parse(latestDept.scanned_result)
+              : latestDept.scanned_result;
+
+          latestScannedLocations = Array.isArray(parsed)
+            ? parsed
+            : parsed?.locations || [];
+        } catch {
+          latestScannedLocations = [];
+        }
+      }
+
+      // Kiểm tra xem có máy nào trong danh sách chuẩn bị lưu đã bị quét ở chuyền khác chưa
+      const newDuplicates = [];
+      inventoryScannedList.forEach((machine) => {
+        // Bỏ qua máy đã được đánh dấu trùng từ trước
+        if (machine.isDuplicateInCurrentDept) return;
+
+        // Kiểm tra với data mới nhất
+        const foundInLatest = latestScannedLocations.find((loc) =>
+          loc.scanned_machine?.some((m) => m.uuid === machine.uuid_machine)
+        );
+
+        if (foundInLatest) {
+          newDuplicates.push({
+            machine: machine,
+            location: foundInLatest.location_name,
+          });
+        }
+      });
+
+      // Nếu phát hiện máy trùng mới -> Cập nhật state và yêu cầu user chọn
+      if (newDuplicates.length > 0) {
+        // Cập nhật state với dữ liệu mới nhất
+        setSelectedTicket(finalCheckResponse.data.inventory);
+        setFormData((prev) => ({
+          ...prev,
+          inventoryDetails: finalCheckResponse.data.details || [],
+        }));
+        setScannedLocationsList(latestScannedLocations);
+        setCurrentDepartment(latestDept);
+
+        // Cập nhật inventoryScannedList với thông tin trùng lặp
+        setInventoryScannedList((prev) =>
+          prev.map((machine) => {
+            const duplicate = newDuplicates.find(
+              (d) => d.machine.uuid_machine === machine.uuid_machine
+            );
+            if (duplicate) {
+              return {
+                ...machine,
+                isDuplicateInCurrentDept: true,
+                duplicateLocationName: duplicate.location,
+              };
+            }
+            return machine;
+          })
+        );
+
+        // Hiển thị thông báo
+        const details = newDuplicates
+          .map(
+            (d) =>
+              `${d.machine.code_machine || d.machine.serial_machine} (tại ${
+                d.location
+              })`
+          )
+          .join(", ");
+
+        showNotification(
+          "warning",
+          "Phát hiện máy trùng",
+          `${newDuplicates.length} máy đã được quét ở vị trí khác: ${details}. Vui lòng chọn checkbox để quyết định lưu vào chuyền nào.`
+        );
+
+        setLoading(false);
+        return; // Dừng lại, không lưu
+      }
+
+      // Xử lý các máy trùng lặp
+      const machinesToSaveInCurrent = [];
+      const machinesToRemoveFromPrevious = [];
+
+      inventoryScannedList.forEach((machine) => {
+        if (machine.isDuplicateInCurrentDept) {
+          const choice = duplicateMachineChoices[machine.uuid_machine];
+
+          if (choice === "current") {
+            // User check "Chuyển sang chuyền mới" -> Lưu vào chuyền hiện tại
+            machinesToSaveInCurrent.push(machine);
+            // Đánh dấu cần xóa khỏi chuyền cũ
+            machinesToRemoveFromPrevious.push({
+              machine_uuid: machine.uuid_machine,
+              previous_location_uuid: scannedLocationsList.find((loc) =>
+                loc.scanned_machine?.some(
+                  (m) => m.uuid === machine.uuid_machine
+                )
+              )?.location_uuid,
+            });
+          } else {
+            // Không check -> Giữ ở chuyền cũ, không thêm vào chuyền hiện tại
+            // Không làm gì
+          }
+        } else {
+          // Máy không trùng -> lưu bình thường
+          machinesToSaveInCurrent.push(machine);
+        }
+      });
+
+      // Gọi API lưu với thông tin máy cần xóa
       await api.inventory.scanLocation(selectedTicket.uuid_inventory_check, {
         department_uuid: currentDepartment.uuid_department,
         location_uuid: selectedLocationForScan.uuid_location,
-        scanned_machines: inventoryScannedList,
+        scanned_machines: machinesToSaveInCurrent,
+        machines_to_remove: machinesToRemoveFromPrevious, // Danh sách máy cần xóa khỏi chuyền cũ
       });
 
       // Refresh lại data
@@ -2181,6 +2253,7 @@ const TestProposalPage = () => {
       }
 
       setInventoryScannedList([]);
+      setDuplicateMachineChoices({}); // Reset lựa chọn
       setOpenScanDialog(false);
       setOpenRfidDialog(false);
 
@@ -8074,7 +8147,12 @@ const TestProposalPage = () => {
                         fullWidth
                         options={departmentLocations}
                         getOptionLabel={(opt) => opt.name_location}
-                        onChange={(e, val) => setSelectedLocationForScan(val)}
+                        onChange={(e, val) => {
+                          setSelectedLocationForScan(val);
+                          setInventoryScannedList([]);
+                          setDuplicateMachineChoices({});
+                          setCollapsedGroups({});
+                        }}
                         value={selectedLocationForScan}
                         renderInput={(params) => (
                           <TextField
@@ -8177,37 +8255,69 @@ const TestProposalPage = () => {
                             ) => {
                               if (machines.length === 0) return null;
 
+                              const isCollapsed = collapsedGroups[title] || false;
+
                               return (
                                 <Box key={title} sx={{ mb: 3 }}>
-                                  <Typography
-                                    variant="subtitle1"
+                                  <Stack
+                                    direction="row"
+                                    alignItems="center"
+                                    justifyContent="space-between"
                                     sx={{
-                                      fontWeight: 600,
+                                      cursor: "pointer",
                                       mb: 1,
-                                      color: groupColor,
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: 1,
+                                      p: 1,
+                                      borderRadius: "8px",
+                                      "&:hover": {
+                                        bgcolor: "rgba(0, 0, 0, 0.04)",
+                                      },
+                                    }}
+                                    onClick={() => {
+                                      setCollapsedGroups((prev) => ({
+                                        ...prev,
+                                        [title]: !prev[title],
+                                      }));
                                     }}
                                   >
-                                    {title}
-                                    <Chip
-                                      label={machines.length}
-                                      size="small"
+                                    <Stack direction="row" alignItems="center" gap={1}>
+                                      <Typography
+                                        variant="subtitle1"
+                                        sx={{
+                                          fontWeight: 600,
+                                          color: groupColor,
+                                        }}
+                                      >
+                                        {title}
+                                      </Typography>
+                                      <Chip
+                                        label={machines.length}
+                                        size="small"
+                                        sx={{
+                                          bgcolor: groupColor,
+                                          color: "#fff",
+                                          fontWeight: 600,
+                                        }}
+                                      />
+                                    </Stack>
+                                    <IconButton size="small">
+                                      <ExpandMore
+                                        sx={{
+                                          transform: isCollapsed ? "rotate(0deg)" : "rotate(180deg)",
+                                          transition: "transform 0.3s",
+                                          color: groupColor,
+                                        }}
+                                      />
+                                    </IconButton>
+                                  </Stack>
+
+                                  {!isCollapsed && (
+                                    <TableContainer
+                                      component={Paper}
+                                      variant="outlined"
                                       sx={{
-                                        bgcolor: groupColor,
-                                        color: "#fff",
-                                        fontWeight: 600,
+                                        borderRadius: "12px",
                                       }}
-                                    />
-                                  </Typography>
-                                  <TableContainer
-                                    component={Paper}
-                                    variant="outlined"
-                                    sx={{
-                                      borderRadius: "12px",
-                                    }}
-                                  >
+                                    >
                                     <Table size="small">
                                       <TableHead>
                                         <TableRow>
@@ -8230,7 +8340,7 @@ const TestProposalPage = () => {
                                             sx={{ fontWeight: 600 }}
                                             align="center"
                                           >
-                                            Xóa
+                                            Lưu vào
                                           </TableCell>
                                         </TableRow>
                                       </TableHead>
@@ -8295,38 +8405,11 @@ const TestProposalPage = () => {
                                                     />
                                                   ) : isDuplicate ? (
                                                     <>
-                                                      <Stack
-                                                        direction="row"
-                                                        spacing={0.5}
-                                                        alignItems="center"
-                                                      >
-                                                        <Chip
-                                                          label={`Đã quét tại ${machine.duplicateLocationName}`}
-                                                          color="error"
-                                                          size="small"
-                                                        />
-                                                        <Chip
-                                                          label={`Xóa tại ${machine.duplicateLocationName}`}
-                                                          color="error"
-                                                          size="small"
-                                                          icon={
-                                                            <Delete fontSize="small" />
-                                                          }
-                                                          onClick={() =>
-                                                            handleRemoveInventoryScannedMachine(
-                                                              machine.uuid_machine
-                                                            )
-                                                          }
-                                                          sx={{
-                                                            cursor: "pointer",
-                                                            "&:hover": {
-                                                              backgroundColor:
-                                                                "#d32f2f",
-                                                              color: "#fff",
-                                                            },
-                                                          }}
-                                                        />
-                                                      </Stack>
+                                                      <Chip
+                                                        label={`Đã quét tại ${machine.duplicateLocationName}`}
+                                                        color="error"
+                                                        size="small"
+                                                      />
                                                       {isMislocation && (
                                                         <Chip
                                                           label="Sai vị trí"
@@ -8351,17 +8434,64 @@ const TestProposalPage = () => {
                                                 </Stack>
                                               </TableCell>
                                               <TableCell align="center">
-                                                <IconButton
-                                                  size="small"
-                                                  color="error"
-                                                  onClick={() =>
-                                                    handleRemoveInventoryScannedMachine(
-                                                      machine.uuid_machine
-                                                    )
-                                                  }
-                                                >
-                                                  <Delete fontSize="small" />
-                                                </IconButton>
+                                                {isDuplicate ? (
+                                                  <Typography
+                                                    variant="caption"
+                                                    sx={{
+                                                      color: "#2e7d32",
+                                                      fontWeight: 600,
+                                                    }}
+                                                  >
+                                                    <Checkbox
+                                                      size="small"
+                                                      checked={
+                                                        duplicateMachineChoices[
+                                                          machine.uuid_machine
+                                                        ] === "current"
+                                                      }
+                                                      onChange={(e) => {
+                                                        if (e.target.checked) {
+                                                          setDuplicateMachineChoices(
+                                                            (prev) => ({
+                                                              ...prev,
+                                                              [machine.uuid_machine]:
+                                                                "current",
+                                                            })
+                                                          );
+                                                        } else {
+                                                          setDuplicateMachineChoices(
+                                                            (prev) => {
+                                                              const newChoices =
+                                                                { ...prev };
+                                                              delete newChoices[
+                                                                machine
+                                                                  .uuid_machine
+                                                              ];
+                                                              return newChoices;
+                                                            }
+                                                          );
+                                                        }
+                                                      }}
+                                                      sx={{
+                                                        color: "#2e7d32",
+                                                        "&.Mui-checked": {
+                                                          color: "#2e7d32",
+                                                        },
+                                                      }}
+                                                    />
+                                                    Chuyển sang{" "}
+                                                    {
+                                                      selectedLocationForScan?.name_location
+                                                    }
+                                                  </Typography>
+                                                ) : (
+                                                  <Typography
+                                                    variant="caption"
+                                                    color="text.secondary"
+                                                  >
+                                                    -
+                                                  </Typography>
+                                                )}
                                               </TableCell>
                                             </TableRow>
                                           );
@@ -8369,6 +8499,7 @@ const TestProposalPage = () => {
                                       </TableBody>
                                     </Table>
                                   </TableContainer>
+                                  )}
                                 </Box>
                               );
                             };
@@ -8404,12 +8535,7 @@ const TestProposalPage = () => {
                           variant="contained"
                           color="success"
                           startIcon={<Save />}
-                          disabled={
-                            loading ||
-                            inventoryScannedList.some(
-                              (m) => m.isDuplicateInCurrentDept
-                            )
-                          }
+                          disabled={loading}
                           sx={{ borderRadius: "12px" }}
                         >
                           {loading ? (
@@ -8418,19 +8544,6 @@ const TestProposalPage = () => {
                             "Lưu kết quả"
                           )}
                         </Button>
-                        {inventoryScannedList.some(
-                          (m) => m.isDuplicateInCurrentDept
-                        ) && (
-                          <Alert
-                            severity="error"
-                            sx={{ mt: 2, borderRadius: "12px" }}
-                          >
-                            <AlertTitle>Không thể lưu kết quả</AlertTitle>
-                            Có máy đã được quét ở vị trí khác trong đơn vị này.
-                            Vui lòng xóa các máy có chip đỏ "Đã quét tại..."
-                            khỏi danh sách trước khi lưu.
-                          </Alert>
-                        )}
                       </Box>
                     )}
                   </Card>
@@ -8899,11 +9012,6 @@ const TestProposalPage = () => {
                               key={idx}
                               location={loc}
                               snapshotCount={snapshotCount}
-                              canEdit={
-                                selectedTicket?.status === "draft" &&
-                                canEditInventoryDepartment(currentDepartment)
-                              }
-                              onRemoveMachine={handleRemoveSavedMachine}
                             />
                           );
                         })}

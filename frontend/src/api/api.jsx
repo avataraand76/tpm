@@ -670,14 +670,6 @@ export const api = {
       );
       return response.data;
     },
-    updateScannedResult: async (uuid, data) => {
-      // data: { department_uuid, scanned_result: [...] }
-      const response = await httpConnect.put(
-        `/api/inventory-checks/${uuid}/update-scanned`,
-        data
-      );
-      return response.data;
-    },
     addDepartments: async (uuid, data) => {
       // data: { department_uuids: [] }
       const response = await httpConnect.post(
