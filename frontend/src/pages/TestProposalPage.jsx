@@ -8255,7 +8255,10 @@ const TestProposalPage = () => {
                             ) => {
                               if (machines.length === 0) return null;
 
-                              const isCollapsed = collapsedGroups[title] || false;
+                              const isCollapsed =
+                                collapsedGroups[title] === undefined
+                                  ? true
+                                  : collapsedGroups[title];
 
                               return (
                                 <Box key={title} sx={{ mb: 3 }}>
@@ -8275,11 +8278,18 @@ const TestProposalPage = () => {
                                     onClick={() => {
                                       setCollapsedGroups((prev) => ({
                                         ...prev,
-                                        [title]: !prev[title],
+                                        [title]:
+                                          prev[title] === undefined
+                                            ? false
+                                            : !prev[title],
                                       }));
                                     }}
                                   >
-                                    <Stack direction="row" alignItems="center" gap={1}>
+                                    <Stack
+                                      direction="row"
+                                      alignItems="center"
+                                      gap={1}
+                                    >
                                       <Typography
                                         variant="subtitle1"
                                         sx={{
@@ -8302,7 +8312,9 @@ const TestProposalPage = () => {
                                     <IconButton size="small">
                                       <ExpandMore
                                         sx={{
-                                          transform: isCollapsed ? "rotate(0deg)" : "rotate(180deg)",
+                                          transform: isCollapsed
+                                            ? "rotate(0deg)"
+                                            : "rotate(180deg)",
                                           transition: "transform 0.3s",
                                           color: groupColor,
                                         }}
@@ -8318,187 +8330,191 @@ const TestProposalPage = () => {
                                         borderRadius: "12px",
                                       }}
                                     >
-                                    <Table size="small">
-                                      <TableHead>
-                                        <TableRow>
-                                          <TableCell sx={{ fontWeight: 600 }}>
-                                            Tên máy
-                                          </TableCell>
-                                          <TableCell sx={{ fontWeight: 600 }}>
-                                            Serial
-                                          </TableCell>
-                                          <TableCell sx={{ fontWeight: 600 }}>
-                                            RFID
-                                          </TableCell>
-                                          <TableCell sx={{ fontWeight: 600 }}>
-                                            Vị trí hiện tại
-                                          </TableCell>
-                                          <TableCell sx={{ fontWeight: 600 }}>
-                                            Trạng thái
-                                          </TableCell>
-                                          <TableCell
-                                            sx={{ fontWeight: 600 }}
-                                            align="center"
-                                          >
-                                            Lưu vào
-                                          </TableCell>
-                                        </TableRow>
-                                      </TableHead>
-                                      <TableBody>
-                                        {machines.map((machine, index) => {
-                                          const isMislocation =
-                                            machine.uuid_location !==
-                                            selectedLocationForScan?.uuid_location;
-                                          const isDuplicate =
-                                            machine.isDuplicateInCurrentDept;
-                                          const isNotFound =
-                                            machine.isNotFound === true ||
-                                            (machine.uuid_machine &&
-                                              machine.uuid_machine.startsWith(
-                                                "NOT_FOUND_"
-                                              ));
-                                          const machineName = isNotFound
-                                            ? "Không tìm thấy trong hệ thống"
-                                            : machine.type_machine &&
-                                              machine.model_machine
-                                            ? `${machine.type_machine} ${
-                                                machine.attribute_machine || ""
-                                              } - ${machine.model_machine}`
-                                            : machine.type_machine ||
-                                              machine.model_machine ||
-                                              "-";
-                                          return (
-                                            <TableRow
-                                              key={index}
-                                              sx={{
-                                                backgroundColor: isDuplicate
-                                                  ? "#ffebee"
-                                                  : isMislocation
-                                                  ? "#fff3e0"
-                                                  : isNotFound
-                                                  ? "#e3f2fd"
-                                                  : "inherit",
-                                              }}
+                                      <Table size="small">
+                                        <TableHead>
+                                          <TableRow>
+                                            <TableCell sx={{ fontWeight: 600 }}>
+                                              Tên máy
+                                            </TableCell>
+                                            <TableCell sx={{ fontWeight: 600 }}>
+                                              Serial
+                                            </TableCell>
+                                            <TableCell sx={{ fontWeight: 600 }}>
+                                              RFID
+                                            </TableCell>
+                                            <TableCell sx={{ fontWeight: 600 }}>
+                                              Vị trí hiện tại
+                                            </TableCell>
+                                            <TableCell sx={{ fontWeight: 600 }}>
+                                              Trạng thái
+                                            </TableCell>
+                                            <TableCell
+                                              sx={{ fontWeight: 600 }}
+                                              align="center"
                                             >
-                                              <TableCell>
-                                                {machineName}
-                                              </TableCell>
-                                              <TableCell>
-                                                {machine.serial_machine || "-"}
-                                              </TableCell>
-                                              <TableCell>
-                                                {machine.RFID_machine || "-"}
-                                              </TableCell>
-                                              <TableCell>
-                                                {machine.name_location || "-"}
-                                              </TableCell>
-                                              <TableCell>
-                                                <Stack
-                                                  direction="column"
-                                                  spacing={0.5}
-                                                >
-                                                  {isNotFound ? (
-                                                    <Chip
-                                                      label="Không tìm thấy trong hệ thống"
-                                                      color="info"
-                                                      size="small"
-                                                    />
-                                                  ) : isDuplicate ? (
-                                                    <>
+                                              Lưu vào
+                                            </TableCell>
+                                          </TableRow>
+                                        </TableHead>
+                                        <TableBody>
+                                          {machines.map((machine, index) => {
+                                            const isMislocation =
+                                              machine.uuid_location !==
+                                              selectedLocationForScan?.uuid_location;
+                                            const isDuplicate =
+                                              machine.isDuplicateInCurrentDept;
+                                            const isNotFound =
+                                              machine.isNotFound === true ||
+                                              (machine.uuid_machine &&
+                                                machine.uuid_machine.startsWith(
+                                                  "NOT_FOUND_"
+                                                ));
+                                            const machineName = isNotFound
+                                              ? "Không tìm thấy trong hệ thống"
+                                              : machine.type_machine &&
+                                                machine.model_machine
+                                              ? `${machine.type_machine} ${
+                                                  machine.attribute_machine ||
+                                                  ""
+                                                } - ${machine.model_machine}`
+                                              : machine.type_machine ||
+                                                machine.model_machine ||
+                                                "-";
+                                            return (
+                                              <TableRow
+                                                key={index}
+                                                sx={{
+                                                  backgroundColor: isDuplicate
+                                                    ? "#ffebee"
+                                                    : isMislocation
+                                                    ? "#fff3e0"
+                                                    : isNotFound
+                                                    ? "#e3f2fd"
+                                                    : "inherit",
+                                                }}
+                                              >
+                                                <TableCell>
+                                                  {machineName}
+                                                </TableCell>
+                                                <TableCell>
+                                                  {machine.serial_machine ||
+                                                    "-"}
+                                                </TableCell>
+                                                <TableCell>
+                                                  {machine.RFID_machine || "-"}
+                                                </TableCell>
+                                                <TableCell>
+                                                  {machine.name_location || "-"}
+                                                </TableCell>
+                                                <TableCell>
+                                                  <Stack
+                                                    direction="column"
+                                                    spacing={0.5}
+                                                  >
+                                                    {isNotFound ? (
                                                       <Chip
-                                                        label={`Đã quét tại ${machine.duplicateLocationName}`}
-                                                        color="error"
+                                                        label="Không tìm thấy trong hệ thống"
+                                                        color="info"
                                                         size="small"
                                                       />
-                                                      {isMislocation && (
+                                                    ) : isDuplicate ? (
+                                                      <>
                                                         <Chip
-                                                          label="Sai vị trí"
-                                                          color="warning"
+                                                          label={`Đã quét tại ${machine.duplicateLocationName}`}
+                                                          color="error"
                                                           size="small"
                                                         />
-                                                      )}
-                                                    </>
-                                                  ) : isMislocation ? (
-                                                    <Chip
-                                                      label="Sai vị trí"
-                                                      color="warning"
-                                                      size="small"
-                                                    />
-                                                  ) : (
-                                                    <Chip
-                                                      label="Đúng vị trí"
-                                                      color="success"
-                                                      size="small"
-                                                    />
-                                                  )}
-                                                </Stack>
-                                              </TableCell>
-                                              <TableCell align="center">
-                                                {isDuplicate ? (
-                                                  <Typography
-                                                    variant="caption"
-                                                    sx={{
-                                                      color: "#2e7d32",
-                                                      fontWeight: 600,
-                                                    }}
-                                                  >
-                                                    <Checkbox
-                                                      size="small"
-                                                      checked={
-                                                        duplicateMachineChoices[
-                                                          machine.uuid_machine
-                                                        ] === "current"
-                                                      }
-                                                      onChange={(e) => {
-                                                        if (e.target.checked) {
-                                                          setDuplicateMachineChoices(
-                                                            (prev) => ({
-                                                              ...prev,
-                                                              [machine.uuid_machine]:
-                                                                "current",
-                                                            })
-                                                          );
-                                                        } else {
-                                                          setDuplicateMachineChoices(
-                                                            (prev) => {
-                                                              const newChoices =
-                                                                { ...prev };
-                                                              delete newChoices[
-                                                                machine
-                                                                  .uuid_machine
-                                                              ];
-                                                              return newChoices;
-                                                            }
-                                                          );
-                                                        }
-                                                      }}
+                                                        {isMislocation && (
+                                                          <Chip
+                                                            label="Sai vị trí"
+                                                            color="warning"
+                                                            size="small"
+                                                          />
+                                                        )}
+                                                      </>
+                                                    ) : isMislocation ? (
+                                                      <Chip
+                                                        label="Sai vị trí"
+                                                        color="warning"
+                                                        size="small"
+                                                      />
+                                                    ) : (
+                                                      <Chip
+                                                        label="Đúng vị trí"
+                                                        color="success"
+                                                        size="small"
+                                                      />
+                                                    )}
+                                                  </Stack>
+                                                </TableCell>
+                                                <TableCell align="center">
+                                                  {isDuplicate ? (
+                                                    <Typography
+                                                      variant="caption"
                                                       sx={{
                                                         color: "#2e7d32",
-                                                        "&.Mui-checked": {
-                                                          color: "#2e7d32",
-                                                        },
+                                                        fontWeight: 600,
                                                       }}
-                                                    />
-                                                    Chuyển sang{" "}
-                                                    {
-                                                      selectedLocationForScan?.name_location
-                                                    }
-                                                  </Typography>
-                                                ) : (
-                                                  <Typography
-                                                    variant="caption"
-                                                    color="text.secondary"
-                                                  >
-                                                    -
-                                                  </Typography>
-                                                )}
-                                              </TableCell>
-                                            </TableRow>
-                                          );
-                                        })}
-                                      </TableBody>
-                                    </Table>
-                                  </TableContainer>
+                                                    >
+                                                      <Checkbox
+                                                        size="small"
+                                                        checked={
+                                                          duplicateMachineChoices[
+                                                            machine.uuid_machine
+                                                          ] === "current"
+                                                        }
+                                                        onChange={(e) => {
+                                                          if (
+                                                            e.target.checked
+                                                          ) {
+                                                            setDuplicateMachineChoices(
+                                                              (prev) => ({
+                                                                ...prev,
+                                                                [machine.uuid_machine]:
+                                                                  "current",
+                                                              })
+                                                            );
+                                                          } else {
+                                                            setDuplicateMachineChoices(
+                                                              (prev) => {
+                                                                const newChoices =
+                                                                  { ...prev };
+                                                                delete newChoices[
+                                                                  machine
+                                                                    .uuid_machine
+                                                                ];
+                                                                return newChoices;
+                                                              }
+                                                            );
+                                                          }
+                                                        }}
+                                                        sx={{
+                                                          color: "#2e7d32",
+                                                          "&.Mui-checked": {
+                                                            color: "#2e7d32",
+                                                          },
+                                                        }}
+                                                      />
+                                                      Chuyển sang{" "}
+                                                      {
+                                                        selectedLocationForScan?.name_location
+                                                      }
+                                                    </Typography>
+                                                  ) : (
+                                                    <Typography
+                                                      variant="caption"
+                                                      color="text.secondary"
+                                                    >
+                                                      -
+                                                    </Typography>
+                                                  )}
+                                                </TableCell>
+                                              </TableRow>
+                                            );
+                                          })}
+                                        </TableBody>
+                                      </Table>
+                                    </TableContainer>
                                   )}
                                 </Box>
                               );
