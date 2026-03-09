@@ -8660,35 +8660,99 @@ app.post(
                 indexOf: 1,
               }));
           }
+          // Kiểm tra xem đích có phải là Cơ điện không (giả sử id_phong_ban = 14)
+          const isDestCoDien = Number(dest_phongban_id) === 14;
+
           if (validApprovers.length > 0) {
-            approvalFlowForDB = [
-              ...validApprovers,
-              {
-                // ma_nv: "06264",
-                ma_nv: "09802",
-                step_flow: 1,
-                isFinalFlow: 1,
-                status_text: "Đang chờ duyệt",
-                is_forward: 0,
-                display_name: "Trưởng phòng Cơ điện",
-                is_flow: 1,
-                indexOf: 2,
-              },
-            ];
+            // Có Cơ điện xưởng đích
+            if (isDestCoDien) {
+              // Điều chuyển tới Cơ điện → chỉ 1 người cấp cuối
+              approvalFlowForDB = [
+                ...validApprovers,
+                {
+                  // ma_nv: "06264",
+                  ma_nv: "09802",
+                  step_flow: 1,
+                  isFinalFlow: 1,
+                  status_text: "Đang chờ duyệt",
+                  is_forward: 0,
+                  display_name: "Trưởng phòng Cơ điện",
+                  is_flow: 1,
+                  indexOf: 2,
+                },
+              ];
+            } else {
+              // Điều chuyển tới phòng ban khác → 2 người đồng cấp
+              approvalFlowForDB = [
+                ...validApprovers,
+                {
+                  // ma_nv: "06264",
+                  ma_nv: "09802",
+                  step_flow: 1,
+                  isFinalFlow: 1,
+                  status_text: "Đang chờ duyệt",
+                  is_forward: 0,
+                  display_name: "Trưởng phòng Cơ điện",
+                  is_flow: 1,
+                  indexOf: 2,
+                },
+                {
+                  // ma_nv: "04647",
+                  ma_nv: "10107",
+                  step_flow: 1,
+                  isFinalFlow: 1,
+                  status_text: "Đang chờ duyệt",
+                  is_forward: 0,
+                  display_name: "Thủ kho Cơ điện",
+                  is_flow: 1,
+                  indexOf: 2,
+                },
+              ];
+            }
           } else {
-            approvalFlowForDB = [
-              {
-                // ma_nv: "06264",
-                ma_nv: "09802",
-                step_flow: 0,
-                isFinalFlow: 1,
-                status_text: "Đang chờ duyệt",
-                is_forward: 0,
-                display_name: "Trưởng phòng Cơ điện",
-                is_flow: 1,
-                indexOf: 1,
-              },
-            ];
+            // Không có Cơ điện xưởng đích
+            if (isDestCoDien) {
+              // Điều chuyển tới Cơ điện → chỉ 1 người cấp cuối
+              approvalFlowForDB = [
+                {
+                  // ma_nv: "06264",
+                  ma_nv: "09802",
+                  step_flow: 0,
+                  isFinalFlow: 1,
+                  status_text: "Đang chờ duyệt",
+                  is_forward: 0,
+                  display_name: "Trưởng phòng Cơ điện",
+                  is_flow: 1,
+                  indexOf: 1,
+                },
+              ];
+            } else {
+              // Điều chuyển tới phòng ban khác → 2 người đồng cấp
+              approvalFlowForDB = [
+                {
+                  // ma_nv: "06264",
+                  ma_nv: "09802",
+                  step_flow: 0,
+                  isFinalFlow: 1,
+                  status_text: "Đang chờ duyệt",
+                  is_forward: 0,
+                  display_name: "Trưởng phòng Cơ điện",
+                  is_flow: 1,
+                  indexOf: 1,
+                },
+                {
+                  // ma_nv: "04647",
+                  ma_nv: "10107",
+                  step_flow: 0,
+                  isFinalFlow: 1,
+                  status_text: "Đang chờ duyệt",
+                  is_forward: 0,
+                  display_name: "Thủ kho Cơ điện",
+                  is_flow: 1,
+                  indexOf: 1,
+                },
+              ];
+            }
           }
         }
       } else {
@@ -9785,7 +9849,15 @@ app.get("/api/inventory-checks/:uuid", authenticateToken, async (req, res) => {
         dep.name_department,
         dep.uuid_department,
         dep.id_phong_ban,
-        (SELECT COUNT(*) FROM tb_location WHERE id_department = d.id_department) as total_locations,
+        (
+            SELECT COUNT(DISTINCT tl.id_location)
+            FROM tb_location tl
+            JOIN tb_machine_location ml ON tl.id_location = ml.id_location
+            JOIN tb_machine m ON ml.id_machine = m.id_machine
+            WHERE tl.id_department = d.id_department
+              AND m.current_status != 'liquidation'
+              AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))
+        ) as total_locations,
         (
             SELECT COUNT(m.id_machine) 
             FROM tb_machine_location ml

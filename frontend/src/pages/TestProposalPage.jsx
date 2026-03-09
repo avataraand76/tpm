@@ -118,16 +118,16 @@ const InventoryLocationItem = ({ location, snapshotCount }) => {
     filter === "all"
       ? allMachines
       : filter === "same"
-      ? sameDeptMachines
-      : filter === "diff"
-      ? diffDeptMachines
-      : filter === "wrong_location"
-      ? wrongLocationMachines
-      : filter === "wrong_same"
-      ? wrongLocationSameDept
-      : filter === "wrong_diff"
-      ? wrongLocationDiffDept
-      : allMachines;
+        ? sameDeptMachines
+        : filter === "diff"
+          ? diffDeptMachines
+          : filter === "wrong_location"
+            ? wrongLocationMachines
+            : filter === "wrong_same"
+              ? wrongLocationSameDept
+              : filter === "wrong_diff"
+                ? wrongLocationDiffDept
+                : allMachines;
 
   return (
     <Accordion
@@ -573,6 +573,24 @@ const TestProposalPage = () => {
   const [detailLoading, setDetailLoading] = useState(false);
   const [filesToUpload, setFilesToUpload] = useState([]);
   const [hoveredRowUuid, setHoveredRowUuid] = useState(null);
+
+  // Helper function to format date without timezone issues
+  const formatDateTicket = (dateString) => {
+    if (!dateString) return "";
+    // Nếu dateString đã ở dạng YYYY-MM-DD, trả về luôn
+    if (
+      typeof dateString === "string" &&
+      /^\d{4}-\d{2}-\d{2}$/.test(dateString)
+    ) {
+      return dateString;
+    }
+    // Nếu có timestamp hoặc format khác, parse và format lại
+    const date = new Date(dateString);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
 
   // Form states (for create/view dialog)
   const [formData, setFormData] = useState({
@@ -1120,9 +1138,7 @@ const TestProposalPage = () => {
 
         setFormData({
           ...initialFormData,
-          date: ticketDetails.check_date
-            ? new Date(ticketDetails.check_date).toISOString().split("T")[0]
-            : "",
+          date: formatDateTicket(ticketDetails.check_date),
           note: ticketDetails.note || "",
           inventoryDetails: response.data.details || [],
         });
@@ -1218,9 +1234,7 @@ const TestProposalPage = () => {
         setFormData({
           to_location_uuid: ticketDetails.to_location_uuid || "",
           type: ticketType || "",
-          date: ticketDate
-            ? new Date(ticketDate).toISOString().split("T")[0]
-            : "",
+          date: formatDateTicket(ticketDate),
           note: ticketDetails.note || "",
           machines: response.data.details.map((d) => ({ ...d })),
           creator_ma_nv: ticketDetails.creator_ma_nv,
@@ -3046,7 +3060,7 @@ const TestProposalPage = () => {
       pending_approval: "warning",
       completed: "success",
       cancelled: "error",
-    }[status] || "default");
+    })[status] || "default";
   const getStatusLabel = (status) =>
     ({
       draft: "Nháp",
@@ -3055,7 +3069,7 @@ const TestProposalPage = () => {
       pending_approval: "Chờ duyệt",
       completed: "Đã duyệt",
       cancelled: "Đã hủy",
-    }[status] || status);
+    })[status] || status;
   const getMachineStatusLabel = (status) => getStatusInfo(status).label;
   const getTypeLabel = (type) =>
     ({
@@ -3070,7 +3084,7 @@ const TestProposalPage = () => {
       liquidation: "Xuất thanh lý",
       borrowed_return: "Xuất trả (máy mượn)",
       rented_return: "Xuất trả (máy thuê)",
-    }[type] || type);
+    })[type] || type;
 
   // --- Helper vẽ luồng duyệt chi tiết (Full Name + MaNV) ---
   const renderDetailedFlow = (flow) => {
@@ -3288,10 +3302,10 @@ const TestProposalPage = () => {
       activeTab === 0
         ? imports
         : activeTab === 1
-        ? exports
-        : activeTab === 2
-        ? transfers
-        : inventories;
+          ? exports
+          : activeTab === 2
+            ? transfers
+            : inventories;
     if (loading)
       return (
         <TableRow>
@@ -3425,8 +3439,8 @@ const TestProposalPage = () => {
                 activeTab === 0
                   ? "import"
                   : activeTab === 1
-                  ? "export"
-                  : "internal",
+                    ? "export"
+                    : "internal",
                 item
               )
             }
@@ -3464,8 +3478,8 @@ const TestProposalPage = () => {
                 activeTab === 0
                   ? "import"
                   : activeTab === 1
-                  ? "export"
-                  : "internal",
+                    ? "export"
+                    : "internal",
                 item
               )
             }
@@ -3916,8 +3930,8 @@ const TestProposalPage = () => {
                           isBaoVe
                             ? "import"
                             : activeTab === 0
-                            ? "import"
-                            : "export"
+                              ? "import"
+                              : "export"
                         )
                       }
                       sx={{
@@ -4330,40 +4344,40 @@ const TestProposalPage = () => {
                         </MenuItem>,
                       ]
                     : activeTab === 2
-                    ? [
-                        <MenuItem
-                          key="pending_confirmation"
-                          value="pending_confirmation"
-                        >
-                          Chờ xác nhận
-                        </MenuItem>,
-                        <MenuItem
-                          key="pending_approval"
-                          value="pending_approval"
-                        >
-                          Chờ duyệt
-                        </MenuItem>,
-                        <MenuItem key="completed" value="completed">
-                          Đã duyệt
-                        </MenuItem>,
-                        <MenuItem key="cancelled" value="cancelled">
-                          Đã hủy
-                        </MenuItem>,
-                      ]
-                    : [
-                        <MenuItem key="draft" value="draft">
-                          Nháp
-                        </MenuItem>,
-                        <MenuItem key="pending" value="pending">
-                          Chờ duyệt
-                        </MenuItem>,
-                        <MenuItem key="completed" value="completed">
-                          Đã duyệt
-                        </MenuItem>,
-                        <MenuItem key="cancelled" value="cancelled">
-                          Đã hủy
-                        </MenuItem>,
-                      ]}
+                      ? [
+                          <MenuItem
+                            key="pending_confirmation"
+                            value="pending_confirmation"
+                          >
+                            Chờ xác nhận
+                          </MenuItem>,
+                          <MenuItem
+                            key="pending_approval"
+                            value="pending_approval"
+                          >
+                            Chờ duyệt
+                          </MenuItem>,
+                          <MenuItem key="completed" value="completed">
+                            Đã duyệt
+                          </MenuItem>,
+                          <MenuItem key="cancelled" value="cancelled">
+                            Đã hủy
+                          </MenuItem>,
+                        ]
+                      : [
+                          <MenuItem key="draft" value="draft">
+                            Nháp
+                          </MenuItem>,
+                          <MenuItem key="pending" value="pending">
+                            Chờ duyệt
+                          </MenuItem>,
+                          <MenuItem key="completed" value="completed">
+                            Đã duyệt
+                          </MenuItem>,
+                          <MenuItem key="cancelled" value="cancelled">
+                            Đã hủy
+                          </MenuItem>,
+                        ]}
                 </TextField>
               </Grid>
               {activeTab === 2 && (
@@ -4587,10 +4601,10 @@ const TestProposalPage = () => {
                       dialogType === "import"
                         ? "nhập"
                         : dialogType === "export"
-                        ? "xuất"
-                        : dialogType === "inventory"
-                        ? "kiểm kê"
-                        : "điều chuyển"
+                          ? "xuất"
+                          : dialogType === "inventory"
+                            ? "kiểm kê"
+                            : "điều chuyển"
                     }`
                   : "Chi tiết phiếu"}
               </Typography>
@@ -5981,8 +5995,8 @@ const TestProposalPage = () => {
                                     dialogType === "import"
                                       ? "Nhập vào"
                                       : dialogType === "export"
-                                      ? "Xuất đến"
-                                      : "Đến vị trí"
+                                        ? "Xuất đến"
+                                        : "Đến vị trí"
                                   }
                                   required
                                   sx={{
@@ -6925,9 +6939,9 @@ const TestProposalPage = () => {
                             selectedTicket.creator_ten_nv
                               ? `${selectedTicket.creator_ma_nv}: ${selectedTicket.creator_ten_nv}`
                               : formData.creator_ma_nv &&
-                                formData.creator_ten_nv
-                              ? `${formData.creator_ma_nv}: ${formData.creator_ten_nv}`
-                              : selectedTicket.created_by || "Không rõ"}
+                                  formData.creator_ten_nv
+                                ? `${formData.creator_ma_nv}: ${formData.creator_ten_nv}`
+                                : selectedTicket.created_by || "Không rõ"}
                           </Typography>
                           <Typography variant="body2">
                             <strong>Tạo lúc:</strong>{" "}
@@ -8372,14 +8386,14 @@ const TestProposalPage = () => {
                                             const machineName = isNotFound
                                               ? "Không tìm thấy trong hệ thống"
                                               : machine.type_machine &&
-                                                machine.model_machine
-                                              ? `${machine.type_machine} ${
-                                                  machine.attribute_machine ||
-                                                  ""
-                                                } - ${machine.model_machine}`
-                                              : machine.type_machine ||
-                                                machine.model_machine ||
-                                                "-";
+                                                  machine.model_machine
+                                                ? `${machine.type_machine} ${
+                                                    machine.attribute_machine ||
+                                                    ""
+                                                  } - ${machine.model_machine}`
+                                                : machine.type_machine ||
+                                                  machine.model_machine ||
+                                                  "-";
                                             return (
                                               <TableRow
                                                 key={index}
@@ -8387,10 +8401,10 @@ const TestProposalPage = () => {
                                                   backgroundColor: isDuplicate
                                                     ? "#ffebee"
                                                     : isMislocation
-                                                    ? "#fff3e0"
-                                                    : isNotFound
-                                                    ? "#e3f2fd"
-                                                    : "inherit",
+                                                      ? "#fff3e0"
+                                                      : isNotFound
+                                                        ? "#e3f2fd"
+                                                        : "inherit",
                                                 }}
                                               >
                                                 <TableCell>
@@ -8723,14 +8737,20 @@ const TestProposalPage = () => {
                             console.error(e);
                           }
 
-                          // 2. Tạo danh sách tất cả các vị trí
+                          // 2. Tạo danh sách tất cả các vị trí (chỉ vị trí có máy trong sổ sách)
                           const allLocations =
                             departmentLocations.length > 0
-                              ? departmentLocations
-                              : Object.keys(snapshots).map((uuid) => ({
-                                  uuid_location: uuid,
-                                  name_location: "Đang tải...",
-                                }));
+                              ? departmentLocations.filter(
+                                  (loc) =>
+                                    snapshots[loc.uuid_location] &&
+                                    snapshots[loc.uuid_location] > 0
+                                )
+                              : Object.keys(snapshots)
+                                  .filter((uuid) => snapshots[uuid] > 0)
+                                  .map((uuid) => ({
+                                    uuid_location: uuid,
+                                    name_location: "Đang tải...",
+                                  }));
 
                           // Các biến tổng
                           let grandTotalSystem = 0;
