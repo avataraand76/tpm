@@ -4551,12 +4551,12 @@ app.put("/api/imports/:uuid/complete", authenticateToken, async (req, res) => {
       ticket.import_type === "purchased"
         ? "mua mới"
         : ticket.import_type === "borrowed"
-        ? "mượn"
-        : ticket.import_type === "rented"
-        ? "thuê"
-        : ticket.import_type === "maintenance_return"
-        ? "sau bảo trì"
-        : "trả (máy cho mượn)"
+          ? "mượn"
+          : ticket.import_type === "rented"
+            ? "thuê"
+            : ticket.import_type === "maintenance_return"
+              ? "sau bảo trì"
+              : "trả (máy cho mượn)"
     } - ${new Date(ticket.import_date).toLocaleDateString("vi-VN")}`;
 
     // Tạo payload Fastwork
@@ -9005,23 +9005,76 @@ app.post(
       ]);
 
       let idGroupNotification = null;
-      if (category === "internal" && to_department_name) {
-        const deptNameLower = to_department_name.toLowerCase();
-
-        const deptMapping = {
-          "xưởng 1": ["00024", "00184"], // 10107
-          "xưởng 2": ["00024", "01613"],
-          "xưởng 3": ["00024", "00023"],
-          "xưởng 4": ["02722", "01589"], // 09802
-          "kho thành phẩm": ["00253"], // 09802
-          "kho nguyên phụ liệu": ["90200"], // 09802
-          "xưởng cắt": ["90200"], // 09802
+      if (category === "internal") {
+        // Mapping phòng ban ID sang danh sách người nhận thông báo
+        const phongbanMapping = {
+          10: ["00024", "00184"], // Xưởng 1
+          30: ["00024", "01613"], // Xưởng 2
+          24: ["00024", "00023"], // Xưởng 3
+          31: ["02722", "01589"], // Xưởng 4
+          42: ["00253"], // Kho thành phẩm
+          3202: ["90200"], // Kho nguyên phụ liệu
+          57: ["90200"], // Xưởng cắt
         };
 
-        for (const key in deptMapping) {
-          if (deptNameLower.includes(key)) {
-            idGroupNotification = deptMapping[key];
-            break;
+        const userPhongbanNum = Number(user_phongban_id);
+        const destPhongbanNum = Number(dest_phongban_id);
+
+        // Kiểm tra xem user có thuộc các phòng ban đã mapping không
+        const isUserInMapping = phongbanMapping.hasOwnProperty(userPhongbanNum);
+
+        if (isUserInMapping) {
+          // User thuộc phòng ban đã mapping → Thông báo cho cả nguồn và đích
+          const sourceNotifications = phongbanMapping[userPhongbanNum] || [];
+          const destNotifications = phongbanMapping[destPhongbanNum] || [];
+
+          // Gộp và loại bỏ trùng lặp
+          const combinedNotifications = [
+            ...new Set([...sourceNotifications, ...destNotifications]),
+          ];
+
+          if (combinedNotifications.length > 0) {
+            idGroupNotification = combinedNotifications;
+          }
+        } else {
+          // User KHÔNG thuộc các phòng ban đã mapping (VD: Cơ điện) → Dò theo nguồn gốc máy
+          if (machines.length > 0) {
+            const machineUuidsForLocation = machines.map((m) => m.uuid_machine);
+
+            // Query vị trí hiện tại của các máy
+            const [machineLocations] = await connection.query(
+              `SELECT DISTINCT td.id_phong_ban
+               FROM tb_machine m
+               LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
+               LEFT JOIN tb_location tl ON tl.id_location = ml.id_location
+               LEFT JOIN tb_department td ON td.id_department = tl.id_department
+               WHERE m.uuid_machine IN (?)`,
+              [machineUuidsForLocation]
+            );
+
+            // Lấy danh sách phòng ban nguồn (nơi máy đang ở)
+            const sourcePhongbanIds = machineLocations
+              .map((loc) => Number(loc.id_phong_ban))
+              .filter((id) => !isNaN(id));
+
+            // Lấy thông báo cho các phòng ban nguồn và đích
+            let allNotifications = [];
+            sourcePhongbanIds.forEach((pbId) => {
+              if (phongbanMapping[pbId]) {
+                allNotifications.push(...phongbanMapping[pbId]);
+              }
+            });
+
+            // Thêm thông báo cho phòng ban đích
+            if (phongbanMapping[destPhongbanNum]) {
+              allNotifications.push(...phongbanMapping[destPhongbanNum]);
+            }
+
+            // Loại bỏ trùng lặp
+            const uniqueNotifications = [...new Set(allNotifications)];
+            if (uniqueNotifications.length > 0) {
+              idGroupNotification = uniqueNotifications;
+            }
           }
         }
       }
@@ -9879,7 +9932,12 @@ app.post(
       await connection.beginTransaction();
 
       const { uuid } = req.params;
-      const { department_uuid, location_uuid, scanned_machines, machines_to_remove } = req.body;
+      const {
+        department_uuid,
+        location_uuid,
+        scanned_machines,
+        machines_to_remove,
+      } = req.body;
       const userId = req.user.id;
 
       // 1. Get IDs
@@ -10022,7 +10080,10 @@ app.post(
               ? JSON.parse(currentDetail[0].scanned_result)
               : currentDetail[0].scanned_result;
 
-          console.log("Parsed type:", Array.isArray(parsed) ? "Array" : "Object");
+          console.log(
+            "Parsed type:",
+            Array.isArray(parsed) ? "Array" : "Object"
+          );
 
           if (Array.isArray(parsed)) {
             resultArray = parsed;
@@ -10033,11 +10094,14 @@ app.post(
           }
 
           console.log("Current locations count:", resultArray.length);
-          console.log("Current locations:", resultArray.map(loc => ({
-            location_uuid: loc.location_uuid,
-            location_name: loc.location_name,
-            machine_count: loc.scanned_machine?.length || 0
-          })));
+          console.log(
+            "Current locations:",
+            resultArray.map((loc) => ({
+              location_uuid: loc.location_uuid,
+              location_name: loc.location_name,
+              machine_count: loc.scanned_machine?.length || 0,
+            }))
+          );
         }
       } catch (e) {
         console.error("Error parsing scanned_result:", e);
@@ -10046,28 +10110,40 @@ app.post(
       }
 
       // XỬ LÝ XÓA MÁY KHỎI CHUYỀN CŨ (nếu user chọn lưu vào chuyền mới)
-      if (machines_to_remove && Array.isArray(machines_to_remove) && machines_to_remove.length > 0) {
-        console.log("Machines to remove from previous locations:", machines_to_remove.length);
-        
-        machines_to_remove.forEach(({ machine_uuid, previous_location_uuid }) => {
-          if (!previous_location_uuid) return;
-          
-          // Tìm location cũ trong resultArray
-          const locationIndex = resultArray.findIndex(
-            loc => loc.location_uuid === previous_location_uuid
-          );
-          
-          if (locationIndex >= 0) {
-            // Xóa máy khỏi location cũ
-            const oldMachineCount = resultArray[locationIndex].scanned_machine?.length || 0;
-            resultArray[locationIndex].scanned_machine = 
-              (resultArray[locationIndex].scanned_machine || []).filter(
-                m => m.uuid !== machine_uuid
+      if (
+        machines_to_remove &&
+        Array.isArray(machines_to_remove) &&
+        machines_to_remove.length > 0
+      ) {
+        console.log(
+          "Machines to remove from previous locations:",
+          machines_to_remove.length
+        );
+
+        machines_to_remove.forEach(
+          ({ machine_uuid, previous_location_uuid }) => {
+            if (!previous_location_uuid) return;
+
+            // Tìm location cũ trong resultArray
+            const locationIndex = resultArray.findIndex(
+              (loc) => loc.location_uuid === previous_location_uuid
+            );
+
+            if (locationIndex >= 0) {
+              // Xóa máy khỏi location cũ
+              const oldMachineCount =
+                resultArray[locationIndex].scanned_machine?.length || 0;
+              resultArray[locationIndex].scanned_machine = (
+                resultArray[locationIndex].scanned_machine || []
+              ).filter((m) => m.uuid !== machine_uuid);
+              const newMachineCount =
+                resultArray[locationIndex].scanned_machine.length;
+              console.log(
+                `Removed machine ${machine_uuid} from ${resultArray[locationIndex].location_name}: ${oldMachineCount} -> ${newMachineCount}`
               );
-            const newMachineCount = resultArray[locationIndex].scanned_machine.length;
-            console.log(`Removed machine ${machine_uuid} from ${resultArray[locationIndex].location_name}: ${oldMachineCount} -> ${newMachineCount}`);
+            }
           }
-        });
+        );
       }
 
       // Tìm xem location này đã có trong mảng chưa
@@ -10084,7 +10160,10 @@ app.post(
           resultArray[existingIndex].scanned_machine || [];
         const existingUuids = new Set(existingMachines.map((m) => m.uuid));
 
-        console.log("Existing machines in this location:", existingMachines.length);
+        console.log(
+          "Existing machines in this location:",
+          existingMachines.length
+        );
         console.log("Existing machine UUIDs:", Array.from(existingUuids));
 
         // Chỉ thêm những máy chưa có trong danh sách
@@ -10093,21 +10172,31 @@ app.post(
         );
 
         console.log("New machines to add:", newMachines.length);
-        console.log("New machine UUIDs:", newMachines.map(m => m.uuid));
+        console.log(
+          "New machine UUIDs:",
+          newMachines.map((m) => m.uuid)
+        );
 
         // QUAN TRỌNG: Tạo mảng mới thay vì mutate trực tiếp
         const mergedMachines = [...existingMachines, ...newMachines];
-        
+
         // Cập nhật vị trí này với danh sách máy đã merge
         resultArray[existingIndex] = {
           ...resultArray[existingIndex],
           scanned_machine: mergedMachines,
         };
 
-        console.log("Total machines after merge:", resultArray[existingIndex].scanned_machine.length);
+        console.log(
+          "Total machines after merge:",
+          resultArray[existingIndex].scanned_machine.length
+        );
       } else {
         // Thêm mới
-        console.log("Adding new location with", newLocationResult.scanned_machine.length, "machines");
+        console.log(
+          "Adding new location with",
+          newLocationResult.scanned_machine.length,
+          "machines"
+        );
         resultArray.push(newLocationResult);
       }
 
@@ -10120,9 +10209,11 @@ app.post(
       }
 
       // Đảm bảo mỗi location có scanned_machine là array
-      resultArray = resultArray.map(loc => ({
+      resultArray = resultArray.map((loc) => ({
         ...loc,
-        scanned_machine: Array.isArray(loc.scanned_machine) ? loc.scanned_machine : []
+        scanned_machine: Array.isArray(loc.scanned_machine)
+          ? loc.scanned_machine
+          : [],
       }));
 
       const finalData = {
@@ -10131,11 +10222,14 @@ app.post(
       };
 
       console.log("Final locations count:", finalData.locations.length);
-      console.log("Final data summary:", finalData.locations.map(loc => ({
-        location_uuid: loc.location_uuid,
-        location_name: loc.location_name,
-        machine_count: loc.scanned_machine?.length || 0
-      })));
+      console.log(
+        "Final data summary:",
+        finalData.locations.map((loc) => ({
+          location_uuid: loc.location_uuid,
+          location_name: loc.location_name,
+          machine_count: loc.scanned_machine?.length || 0,
+        }))
+      );
 
       // Validate finalData trước khi stringify
       if (!finalData.locations || !Array.isArray(finalData.locations)) {
