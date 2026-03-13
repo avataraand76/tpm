@@ -681,6 +681,10 @@ const TestProposalPage = () => {
   const [departmentLocations, setDepartmentLocations] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [departmentLoading, setDepartmentLoading] = useState(false);
+  const [openMissingMachinesDialog, setOpenMissingMachinesDialog] =
+    useState(false);
+  const [missingMachines, setMissingMachines] = useState([]);
+  const [missingMachinesLocation, setMissingMachinesLocation] = useState(null);
 
   // Config statuses
   const STATUS_CONFIG = {
@@ -2359,6 +2363,30 @@ const TestProposalPage = () => {
     setOpenInventoryRfidSearchDialog(true);
   };
 
+  const handleRfidSearchFromMissingMachines = () => {
+    // Lọc các máy "Chưa quét" có RFID
+    const unscannedMachines = missingMachines.filter(
+      (m) => m.found_at === "Chưa quét"
+    );
+
+    const rfids = unscannedMachines
+      .map((m) => m.RFID_machine)
+      .filter((rfid) => rfid && rfid.trim() !== "");
+
+    if (rfids.length === 0) {
+      showNotification(
+        "info",
+        "Không có RFID",
+        "Các máy chưa quét không có thông tin RFID để dò tìm."
+      );
+      return;
+    }
+
+    const targets = rfids.map((rfid) => ({ RFID_machine: rfid }));
+    setInventoryRfidSearchTargets(targets);
+    setOpenInventoryRfidSearchDialog(true);
+  };
+
   const handleInventorySubmit = async () => {
     if (!selectedTicket) return;
 
@@ -2433,6 +2461,75 @@ const TestProposalPage = () => {
       //   "Làm mới thất bại",
       //   error.response?.data?.message || "Lỗi khi tải dữ liệu"
       // );
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const handleViewMissingMachines = async (
+    locationUuid,
+    locationName,
+    departmentUuid = null
+  ) => {
+    if (!selectedTicket) return;
+
+    const deptUuid = departmentUuid || currentDepartment?.uuid_department;
+    if (!deptUuid) return;
+
+    try {
+      setDetailLoading(true);
+      const response = await api.inventory.getMissingMachines(
+        selectedTicket.uuid_inventory_check,
+        {
+          department_uuid: deptUuid,
+          location_uuid: locationUuid,
+        }
+      );
+
+      setMissingMachines(response.data || []);
+      setMissingMachinesLocation(locationName);
+      setOpenMissingMachinesDialog(true);
+    } catch (error) {
+      console.error("Error fetching missing machines:", error);
+      showNotification(
+        "error",
+        "Lỗi",
+        error.response?.data?.message ||
+          "Không thể tải danh sách máy chưa xác định"
+      );
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const handleViewAllMissingMachines = async () => {
+    if (!selectedTicket || !formData.inventoryDetails) return;
+
+    try {
+      setDetailLoading(true);
+
+      const allPromises = formData.inventoryDetails.map((dept) =>
+        api.inventory.getMissingMachines(selectedTicket.uuid_inventory_check, {
+          department_uuid: dept.uuid_department,
+          location_uuid: null,
+        })
+      );
+
+      const results = await Promise.all(allPromises);
+
+      const allMissingMachines = results.flatMap((res) => res.data || []);
+
+      setMissingMachines(allMissingMachines);
+      setMissingMachinesLocation("Toàn bộ phiếu kiểm kê");
+      setOpenMissingMachinesDialog(true);
+    } catch (error) {
+      console.error("Error fetching all missing machines:", error);
+      showNotification(
+        "error",
+        "Lỗi",
+        error.response?.data?.message ||
+          "Không thể tải danh sách máy chưa xác định"
+      );
     } finally {
       setDetailLoading(false);
     }
@@ -4918,22 +5015,22 @@ const TestProposalPage = () => {
                                             } catch {
                                               scannedArr = [];
                                             }
-                                            const totalMachines =
-                                              scannedArr.reduce(
-                                                (acc, loc) =>
-                                                  acc +
-                                                  (loc.scanned_machine
-                                                    ?.length || 0),
-                                                0
-                                              );
-                                            const totalMis = scannedArr.reduce(
-                                              (acc, loc) =>
-                                                acc +
-                                                (loc.scanned_machine?.filter(
-                                                  (m) => m.mislocation === "1"
-                                                ).length || 0),
-                                              0
-                                            );
+                                            // const totalMachines =
+                                            //   scannedArr.reduce(
+                                            //     (acc, loc) =>
+                                            //       acc +
+                                            //       (loc.scanned_machine
+                                            //         ?.length || 0),
+                                            //     0
+                                            //   );
+                                            // const totalMis = scannedArr.reduce(
+                                            //   (acc, loc) =>
+                                            //     acc +
+                                            //     (loc.scanned_machine?.filter(
+                                            //       (m) => m.mislocation === "1"
+                                            //     ).length || 0),
+                                            //   0
+                                            // );
                                             const scannedLocationsCount =
                                               scannedArr.length;
                                             const totalLocationsCount =
@@ -4970,7 +5067,7 @@ const TestProposalPage = () => {
                                                   >
                                                     {/* Dòng thông tin chính */}
                                                     <Typography
-                                                      variant="caption"
+                                                      // variant="caption"
                                                       sx={{
                                                         whiteSpace: "nowrap",
                                                       }}
@@ -4983,7 +5080,7 @@ const TestProposalPage = () => {
                                                     </Typography>
 
                                                     {/* Các thẻ thông số */}
-                                                    <Stack
+                                                    {/* <Stack
                                                       direction="row"
                                                       spacing={0.5}
                                                     >
@@ -5009,7 +5106,7 @@ const TestProposalPage = () => {
                                                           height: "20px",
                                                         }}
                                                       />
-                                                    </Stack>
+                                                    </Stack> */}
                                                   </Stack>
                                                 </TableCell>
                                                 <TableCell align="center">
@@ -5121,7 +5218,6 @@ const TestProposalPage = () => {
                                             Sổ sách (Trước kiểm kê)
                                           </TableCell>
 
-                                          {/* CỘT MỚI: Cùng ĐV */}
                                           <TableCell
                                             sx={{
                                               fontWeight: "bold",
@@ -5129,18 +5225,11 @@ const TestProposalPage = () => {
                                             }}
                                             align="center"
                                           >
-                                            Thực tế (Cùng ĐV)
-                                          </TableCell>
-
-                                          {/* CỘT MỚI: Khác ĐV */}
-                                          <TableCell
-                                            sx={{
-                                              fontWeight: "bold",
-                                              color: "#ed6c02",
-                                            }}
-                                            align="center"
-                                          >
-                                            Thực tế (Khác ĐV)
+                                            Số máy hiện diện (CĐV +{" "}
+                                            <span style={{ color: "#ed6c02" }}>
+                                              KĐV
+                                            </span>
+                                            )
                                           </TableCell>
 
                                           <TableCell
@@ -5150,7 +5239,7 @@ const TestProposalPage = () => {
                                             }}
                                             align="center"
                                           >
-                                            Chênh lệch
+                                            Số máy chưa xác định
                                           </TableCell>
                                         </TableRow>
                                       </TableHead>
@@ -5159,18 +5248,55 @@ const TestProposalPage = () => {
                                           let totalCheckedLocs = 0;
                                           let grandTotalLocs = 0;
                                           let grandTotalSystem = 0;
+                                          let grandTotalScanned = 0;
+                                          let grandTotalCorrectDept = 0;
+                                          let grandTotalMisDept = 0;
 
-                                          // Biến tổng cộng mới
-                                          let grandTotalCorrectDept = 0; // Tổng máy đúng đơn vị
-                                          let grandTotalMisDept = 0; // Tổng máy khác đơn vị
-
-                                          let grandTotalDiff = 0;
+                                          // Build global scanned uuid set từ TOÀN BỘ inventoryDetails
+                                          const globalScannedUuids = new Set();
+                                          formData.inventoryDetails.forEach(
+                                            (dept) => {
+                                              try {
+                                                const parsed =
+                                                  typeof dept.scanned_result ===
+                                                  "string"
+                                                    ? JSON.parse(
+                                                        dept.scanned_result
+                                                      )
+                                                    : dept.scanned_result;
+                                                const locations = Array.isArray(
+                                                  parsed
+                                                )
+                                                  ? parsed
+                                                  : parsed?.locations || [];
+                                                locations.forEach((loc) => {
+                                                  (
+                                                    loc.scanned_machine || []
+                                                  ).forEach((m) => {
+                                                    const u =
+                                                      m.uuid || m.uuid_machine;
+                                                    if (
+                                                      u &&
+                                                      !String(u).startsWith(
+                                                        "NOT_FOUND"
+                                                      )
+                                                    ) {
+                                                      globalScannedUuids.add(u);
+                                                    }
+                                                  });
+                                                });
+                                              } catch (e) {
+                                                console.error(e);
+                                              }
+                                            }
+                                          );
 
                                           const rows =
                                             formData.inventoryDetails.map(
                                               (dept) => {
                                                 let scannedArr = [];
                                                 let systemSnapshot = 0;
+                                                let listBeforeScan = [];
 
                                                 try {
                                                   const parsed =
@@ -5208,12 +5334,25 @@ const TestProposalPage = () => {
                                                     0;
                                                 }
 
+                                                try {
+                                                  listBeforeScan =
+                                                    typeof dept.list_before_scan ===
+                                                    "string"
+                                                      ? JSON.parse(
+                                                          dept.list_before_scan
+                                                        )
+                                                      : dept.list_before_scan ||
+                                                        [];
+                                                } catch {
+                                                  listBeforeScan = [];
+                                                }
+
                                                 const checkedCount =
                                                   scannedArr.length;
                                                 const totalLocs =
                                                   dept.total_locations || 0;
 
-                                                // --- LOGIC TÍNH TOÁN CŨNG GIỐNG BÊN TRONG ---
+                                                let totalScanned = 0;
                                                 let correctDeptCount = 0;
                                                 let misDeptCount = 0;
 
@@ -5226,6 +5365,7 @@ const TestProposalPage = () => {
                                                   ) {
                                                     loc.scanned_machine.forEach(
                                                       (m) => {
+                                                        totalScanned++;
                                                         if (
                                                           m.misdepartment ===
                                                           "1"
@@ -5239,41 +5379,86 @@ const TestProposalPage = () => {
                                                   }
                                                 });
 
-                                                const totalScanned =
-                                                  correctDeptCount +
-                                                  misDeptCount;
-                                                const diff =
-                                                  systemSnapshot - totalScanned;
+                                                // Tính missing: UUID trong list_before_scan chưa quét ở BẤT KỲ ĐÂU
+                                                const allDeptUuids =
+                                                  listBeforeScan.flatMap(
+                                                    (loc) =>
+                                                      (loc.machines || []).map(
+                                                        (m) => m.uuid_machine
+                                                      )
+                                                  );
+                                                const missingCount =
+                                                  allDeptUuids.length > 0
+                                                    ? allDeptUuids.filter(
+                                                        (uuid) =>
+                                                          !globalScannedUuids.has(
+                                                            uuid
+                                                          )
+                                                      ).length
+                                                    : Math.max(
+                                                        0,
+                                                        systemSnapshot -
+                                                          correctDeptCount
+                                                      );
 
                                                 totalCheckedLocs +=
                                                   checkedCount;
                                                 grandTotalLocs += totalLocs;
                                                 grandTotalSystem +=
                                                   systemSnapshot;
-
-                                                // Cộng dồn tổng
+                                                grandTotalScanned +=
+                                                  totalScanned;
                                                 grandTotalCorrectDept +=
                                                   correctDeptCount;
                                                 grandTotalMisDept +=
                                                   misDeptCount;
 
-                                                grandTotalDiff += diff;
-
                                                 return {
                                                   id: dept.id_department,
+                                                  uuid: dept.uuid_department,
                                                   name: dept.name_department,
                                                   progress: `${checkedCount}/${totalLocs}`,
                                                   isFull:
                                                     checkedCount >= totalLocs &&
                                                     totalLocs > 0,
                                                   system: systemSnapshot,
-                                                  scanned: totalScanned, // Tổng số quét được
-                                                  correctDept: correctDeptCount, // Trong đơn vị
-                                                  misDept: misDeptCount, // Khác đơn vị
-                                                  diff: diff,
+                                                  scanned: totalScanned,
+                                                  correctDept: correctDeptCount,
+                                                  misDept: misDeptCount,
+                                                  missing: missingCount,
                                                 };
                                               }
                                             );
+
+                                          // Tổng missing toàn phiếu: tất cả UUID của mọi đơn vị chưa quét (unique)
+                                          const allTicketUuids =
+                                            formData.inventoryDetails.flatMap(
+                                              (dept) => {
+                                                try {
+                                                  const lbs =
+                                                    typeof dept.list_before_scan ===
+                                                    "string"
+                                                      ? JSON.parse(
+                                                          dept.list_before_scan
+                                                        )
+                                                      : dept.list_before_scan ||
+                                                        [];
+                                                  return lbs.flatMap((loc) =>
+                                                    (loc.machines || []).map(
+                                                      (m) => m.uuid_machine
+                                                    )
+                                                  );
+                                                } catch {
+                                                  return [];
+                                                }
+                                              }
+                                            );
+                                          const grandTotalMissing = [
+                                            ...new Set(allTicketUuids),
+                                          ].filter(
+                                            (uuid) =>
+                                              !globalScannedUuids.has(uuid)
+                                          ).length;
 
                                           return (
                                             <>
@@ -5312,7 +5497,6 @@ const TestProposalPage = () => {
                                                     ).format(row.system)}
                                                   </TableCell>
 
-                                                  {/* CỘT CÙNG ĐV */}
                                                   <TableCell
                                                     align="center"
                                                     sx={{
@@ -5320,34 +5504,86 @@ const TestProposalPage = () => {
                                                       fontWeight: 600,
                                                     }}
                                                   >
-                                                    {new Intl.NumberFormat(
-                                                      "en-US"
-                                                    ).format(row.correctDept)}
+                                                    {row.scanned > 0 ? (
+                                                      <>
+                                                        {new Intl.NumberFormat(
+                                                          "en-US"
+                                                        ).format(row.scanned)}
+                                                        {row.misDept > 0 && (
+                                                          <Typography
+                                                            component="span"
+                                                            sx={{
+                                                              fontSize:
+                                                                "0.85rem",
+                                                              color: "#2e7d32",
+                                                              ml: 0.5,
+                                                              fontWeight: 600,
+                                                            }}
+                                                          >
+                                                            (
+                                                            {new Intl.NumberFormat(
+                                                              "en-US"
+                                                            ).format(
+                                                              row.correctDept
+                                                            )}{" "}
+                                                            +{" "}
+                                                            <span
+                                                              style={{
+                                                                color:
+                                                                  "#ed6c02",
+                                                              }}
+                                                            >
+                                                              {new Intl.NumberFormat(
+                                                                "en-US"
+                                                              ).format(
+                                                                row.misDept
+                                                              )}
+                                                            </span>
+                                                            )
+                                                          </Typography>
+                                                        )}
+                                                      </>
+                                                    ) : (
+                                                      "0"
+                                                    )}
                                                   </TableCell>
 
-                                                  {/* CỘT KHÁC ĐV */}
                                                   <TableCell
                                                     align="center"
                                                     sx={{
-                                                      color: "#ed6c02",
-                                                      fontWeight: 600,
-                                                    }}
-                                                  >
-                                                    {new Intl.NumberFormat(
-                                                      "en-US"
-                                                    ).format(row.misDept)}
-                                                  </TableCell>
-
-                                                  <TableCell
-                                                    align="center"
-                                                    sx={{
-                                                      fontWeight: 600,
                                                       color: "#d32f2f",
+                                                      fontWeight: 600,
                                                     }}
                                                   >
-                                                    {new Intl.NumberFormat(
-                                                      "en-US"
-                                                    ).format(row.diff)}
+                                                    {row.missing > 0 ? (
+                                                      <Button
+                                                        size="small"
+                                                        variant="outlined"
+                                                        color="error"
+                                                        onClick={() =>
+                                                          handleViewMissingMachines(
+                                                            null,
+                                                            row.name,
+                                                            row.uuid
+                                                          )
+                                                        }
+                                                        sx={{
+                                                          minWidth: "auto",
+                                                          px: 2,
+                                                          py: 0.5,
+                                                          fontWeight: "bold",
+                                                          border: "2px solid",
+                                                        }}
+                                                      >
+                                                        {new Intl.NumberFormat(
+                                                          "en-US"
+                                                        ).format(row.missing)}
+                                                      </Button>
+                                                    ) : (
+                                                      new Intl.NumberFormat(
+                                                        "en-US"
+                                                      ).format(row.missing)
+                                                    )}
                                                   </TableCell>
                                                 </TableRow>
                                               ))}
@@ -5396,24 +5632,49 @@ const TestProposalPage = () => {
                                                     fontSize: "1rem",
                                                   }}
                                                 >
-                                                  {new Intl.NumberFormat(
-                                                    "en-US"
-                                                  ).format(
-                                                    grandTotalCorrectDept
+                                                  {grandTotalScanned > 0 ? (
+                                                    <>
+                                                      {new Intl.NumberFormat(
+                                                        "en-US"
+                                                      ).format(
+                                                        grandTotalScanned
+                                                      )}
+                                                      {grandTotalMisDept >
+                                                        0 && (
+                                                        <Typography
+                                                          component="span"
+                                                          sx={{
+                                                            fontSize: "0.9rem",
+                                                            color: "#2e7d32",
+                                                            ml: 0.5,
+                                                            fontWeight: 600,
+                                                          }}
+                                                        >
+                                                          (
+                                                          {new Intl.NumberFormat(
+                                                            "en-US"
+                                                          ).format(
+                                                            grandTotalCorrectDept
+                                                          )}{" "}
+                                                          +{" "}
+                                                          <span
+                                                            style={{
+                                                              color: "#ed6c02",
+                                                            }}
+                                                          >
+                                                            {new Intl.NumberFormat(
+                                                              "en-US"
+                                                            ).format(
+                                                              grandTotalMisDept
+                                                            )}
+                                                          </span>
+                                                          )
+                                                        </Typography>
+                                                      )}
+                                                    </>
+                                                  ) : (
+                                                    "0"
                                                   )}
-                                                </TableCell>
-
-                                                <TableCell
-                                                  align="center"
-                                                  sx={{
-                                                    fontWeight: "bold",
-                                                    color: "#ed6c02",
-                                                    fontSize: "1rem",
-                                                  }}
-                                                >
-                                                  {new Intl.NumberFormat(
-                                                    "en-US"
-                                                  ).format(grandTotalMisDept)}
                                                 </TableCell>
 
                                                 <TableCell
@@ -5424,9 +5685,33 @@ const TestProposalPage = () => {
                                                     fontSize: "1rem",
                                                   }}
                                                 >
-                                                  {new Intl.NumberFormat(
-                                                    "en-US"
-                                                  ).format(grandTotalDiff)}
+                                                  {grandTotalMissing > 0 ? (
+                                                    <Button
+                                                      size="small"
+                                                      variant="outlined"
+                                                      color="error"
+                                                      onClick={
+                                                        handleViewAllMissingMachines
+                                                      }
+                                                      sx={{
+                                                        minWidth: "auto",
+                                                        px: 2,
+                                                        py: 0.5,
+                                                        fontWeight: "bold",
+                                                        border: "2px solid",
+                                                      }}
+                                                    >
+                                                      {new Intl.NumberFormat(
+                                                        "en-US"
+                                                      ).format(
+                                                        grandTotalMissing
+                                                      )}
+                                                    </Button>
+                                                  ) : (
+                                                    new Intl.NumberFormat(
+                                                      "en-US"
+                                                    ).format(grandTotalMissing)
+                                                  )}
                                                 </TableCell>
                                               </TableRow>
                                             </>
@@ -8101,6 +8386,151 @@ const TestProposalPage = () => {
           </DialogContent>
         </Dialog>
 
+        {/* Missing Machines Dialog */}
+        <Dialog
+          open={openMissingMachinesDialog}
+          onClose={() => setOpenMissingMachinesDialog(false)}
+          maxWidth="md"
+          fullWidth
+          fullScreen={isMobile}
+          PaperProps={{ sx: { borderRadius: isMobile ? 0 : "20px" } }}
+        >
+          <DialogTitle
+            sx={{
+              background: "linear-gradient(45deg, #d32f2f, #f44336)",
+              color: "white",
+              fontWeight: 700,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <Box>
+              <Typography
+                component="span"
+                variant={isMobile ? "h6" : "h5"}
+                sx={{ fontWeight: 700 }}
+              >
+                Danh sách máy chưa xác định
+              </Typography>
+              <Typography variant="caption" sx={{ display: "block", mt: 0.5 }}>
+                {missingMachinesLocation === "Toàn bộ phiếu kiểm kê"
+                  ? "Tổng công ty"
+                  : missingMachinesLocation === "Toàn bộ đơn vị"
+                    ? `Đơn vị: ${currentDepartment?.name_department || ""}`
+                    : missingMachinesLocation?.includes("Xưởng") ||
+                        missingMachinesLocation?.includes("Phòng")
+                      ? `Đơn vị: ${missingMachinesLocation}`
+                      : `Vị trí: ${missingMachinesLocation || "Chưa xác định"}`}
+              </Typography>
+            </Box>
+            <IconButton
+              onClick={() => setOpenMissingMachinesDialog(false)}
+              sx={{ color: "white" }}
+            >
+              <Close />
+            </IconButton>
+          </DialogTitle>
+          <DialogContent sx={{ mt: 2 }}>
+            {missingMachines.length === 0 ? (
+              <Box sx={{ textAlign: "center", py: 4 }}>
+                <Typography color="text.secondary">
+                  Không có máy chưa xác định
+                </Typography>
+              </Box>
+            ) : (
+              <TableContainer component={Paper} elevation={0}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: "#f5f5f5" }}>
+                      <TableCell sx={{ fontWeight: "bold" }}>STT</TableCell>
+                      <TableCell sx={{ fontWeight: "bold" }}>
+                        Tên thiết bị
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: "bold" }}>Serial</TableCell>
+                      <TableCell sx={{ fontWeight: "bold" }}>RFID</TableCell>
+                      <TableCell sx={{ fontWeight: "bold" }}>
+                        Vị trí tìm thấy
+                      </TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {missingMachines.map((machine, index) => (
+                      <TableRow key={machine.uuid_machine} hover>
+                        <TableCell>{index + 1}</TableCell>
+                        <TableCell>
+                          {`${machine.type_machine || ""} ${
+                            machine.attribute_machine || ""
+                          } - ${machine.model_machine || ""}`.trim()}
+                        </TableCell>
+                        <TableCell>{machine.serial_machine || "-"}</TableCell>
+                        <TableCell>{machine.RFID_machine || "-"}</TableCell>
+                        <TableCell>
+                          <Chip
+                            label={machine.found_at}
+                            size="small"
+                            color={
+                              machine.found_at === "Chưa quét"
+                                ? "default"
+                                : "warning"
+                            }
+                            variant={
+                              machine.found_at === "Chưa quét"
+                                ? "outlined"
+                                : "filled"
+                            }
+                            sx={{ fontWeight: 600 }}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </DialogContent>
+          <DialogActions sx={{ p: 2, gap: 1 }}>
+            {missingMachines.some(
+              (m) =>
+                m.found_at === "Chưa quét" &&
+                m.RFID_machine &&
+                m.RFID_machine.trim() !== ""
+            ) && (
+              <Button
+                onClick={handleRfidSearchFromMissingMachines}
+                variant="contained"
+                startIcon={<WifiTethering />}
+                sx={{
+                  bgcolor: "#1976d2",
+                  "&:hover": { bgcolor: "#1565c0" },
+                  borderRadius: "8px",
+                }}
+              >
+                Dò tìm RFID máy chưa quét (
+                {
+                  missingMachines.filter(
+                    (m) =>
+                      m.found_at === "Chưa quét" &&
+                      m.RFID_machine &&
+                      m.RFID_machine.trim() !== ""
+                  ).length
+                }
+                )
+              </Button>
+            )}
+            <Button
+              onClick={() => setOpenMissingMachinesDialog(false)}
+              variant="contained"
+              sx={{
+                bgcolor: "#d32f2f",
+                "&:hover": { bgcolor: "#b71c1c" },
+              }}
+            >
+              Đóng
+            </Button>
+          </DialogActions>
+        </Dialog>
+
         {/* Inventory Department Detail Dialog */}
         <Dialog
           open={openInventoryScanDialog}
@@ -8680,7 +9110,6 @@ const TestProposalPage = () => {
                             Sổ sách (Trước kiểm)
                           </TableCell>
 
-                          {/* Cột 1: Thực tế Cùng ĐV */}
                           <TableCell
                             align="center"
                             sx={{
@@ -8689,19 +9118,8 @@ const TestProposalPage = () => {
                               color: "#2e7d32",
                             }}
                           >
-                            Thực tế (Cùng ĐV)
-                          </TableCell>
-
-                          {/* Cột 2: Thực tế Khác ĐV */}
-                          <TableCell
-                            align="center"
-                            sx={{
-                              fontWeight: "bold",
-                              bgcolor: "#eeeeee",
-                              color: "#ed6c02",
-                            }}
-                          >
-                            Thực tế (Khác ĐV)
+                            Số máy hiện diện (CĐV +{" "}
+                            <span style={{ color: "#ed6c02" }}>KĐV</span>)
                           </TableCell>
 
                           <TableCell
@@ -8712,15 +9130,16 @@ const TestProposalPage = () => {
                               color: "#d32f2f",
                             }}
                           >
-                            Chênh lệch
+                            Số máy chưa xác định
                           </TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
                         {(() => {
-                          // 1. Lấy dữ liệu snapshot từ currentDepartment
+                          // 1. Lấy dữ liệu snapshot + scannedData từ currentDepartment
                           let snapshots = {};
                           let scannedData = [];
+                          let listBeforeScan = [];
 
                           try {
                             const parsed =
@@ -8737,7 +9156,50 @@ const TestProposalPage = () => {
                             console.error(e);
                           }
 
-                          // 2. Tạo danh sách tất cả các vị trí (chỉ vị trí có máy trong sổ sách)
+                          try {
+                            listBeforeScan =
+                              typeof currentDepartment.list_before_scan ===
+                              "string"
+                                ? JSON.parse(currentDepartment.list_before_scan)
+                                : currentDepartment.list_before_scan || [];
+                          } catch (e) {
+                            console.error(e);
+                          }
+
+                          // 2. Build global scanned uuid set từ TOÀN BỘ inventoryDetails
+                          // Máy nào đã được quét ở bất kỳ đơn vị/vị trí nào trong phiếu đều được tính
+                          const globalScannedUuids = new Set();
+                          (formData.inventoryDetails || []).forEach((dept) => {
+                            try {
+                              const parsed =
+                                typeof dept.scanned_result === "string"
+                                  ? JSON.parse(dept.scanned_result)
+                                  : dept.scanned_result;
+                              const locations = Array.isArray(parsed)
+                                ? parsed
+                                : parsed?.locations || [];
+                              locations.forEach((loc) => {
+                                (loc.scanned_machine || []).forEach((m) => {
+                                  const u = m.uuid || m.uuid_machine;
+                                  if (u && !String(u).startsWith("NOT_FOUND")) {
+                                    globalScannedUuids.add(u);
+                                  }
+                                });
+                              });
+                            } catch (e) {
+                              console.error(e);
+                            }
+                          });
+
+                          // 3. Tạo map: uuid_location -> danh sách uuid_machine từ list_before_scan
+                          const locationMachinesMap = {};
+                          listBeforeScan.forEach((loc) => {
+                            locationMachinesMap[loc.location_uuid] = (
+                              loc.machines || []
+                            ).map((m) => m.uuid_machine);
+                          });
+
+                          // 4. Tạo danh sách tất cả các vị trí (chỉ vị trí có máy trong sổ sách)
                           const allLocations =
                             departmentLocations.length > 0
                               ? departmentLocations.filter(
@@ -8752,58 +9214,77 @@ const TestProposalPage = () => {
                                     name_location: "Đang tải...",
                                   }));
 
-                          // Các biến tổng
                           let grandTotalSystem = 0;
-                          let grandTotalCorrect = 0;
+                          let grandTotalScanned = 0;
+                          let grandTotalCorrectDept = 0;
                           let grandTotalMisDept = 0;
-                          let grandTotalDiff = 0;
                           let totalCheckedCount = 0;
 
                           const rows = allLocations.map((loc) => {
                             const systemCount =
                               snapshots[loc.uuid_location] || 0;
 
-                            // Tìm trong scannedData
                             const scannedLoc = scannedData.find(
                               (s) => s.location_uuid === loc.uuid_location
                             );
 
-                            // Logic đếm số lượng Correct vs MisDept
-                            let correctCount = 0;
+                            let totalScanned = 0;
+                            let correctDeptCount = 0;
                             let misDeptCount = 0;
 
                             if (scannedLoc && scannedLoc.scanned_machine) {
                               scannedLoc.scanned_machine.forEach((m) => {
+                                totalScanned++;
                                 if (m.misdepartment === "1") {
                                   misDeptCount++;
                                 } else {
-                                  correctCount++;
+                                  correctDeptCount++;
                                 }
                               });
                             }
 
-                            const totalActual = correctCount + misDeptCount;
                             const isScanned = !!scannedLoc;
-                            const diff = systemCount - totalActual;
 
-                            // Cập nhật tổng
+                            // Tính số máy thực sự bị thiếu:
+                            // Máy trong list_before_scan của vị trí này mà chưa được quét ở BẤT KỲ ĐÂU trong toàn phiếu
+                            const locationMachineUuids =
+                              locationMachinesMap[loc.uuid_location] || [];
+                            const missingCount =
+                              locationMachineUuids.length > 0
+                                ? locationMachineUuids.filter(
+                                    (uuid) => !globalScannedUuids.has(uuid)
+                                  ).length
+                                : Math.max(0, systemCount - correctDeptCount);
+
                             grandTotalSystem += systemCount;
                             if (isScanned) {
-                              grandTotalCorrect += correctCount;
+                              grandTotalScanned += totalScanned;
+                              grandTotalCorrectDept += correctDeptCount;
                               grandTotalMisDept += misDeptCount;
                               totalCheckedCount++;
                             }
-                            grandTotalDiff += diff;
 
                             return {
                               name: loc.name_location,
+                              uuid: loc.uuid_location,
                               system: systemCount,
-                              correct: correctCount,
+                              scanned: totalScanned,
+                              correctDept: correctDeptCount,
                               misDept: misDeptCount,
-                              diff: diff,
+                              missing: missingCount,
                               isScanned: isScanned,
                             };
                           });
+
+                          // Tổng máy bị thiếu = tất cả UUID trong list_before_scan của đơn vị này
+                          // mà chưa được quét ở bất kỳ đâu trong toàn phiếu (đếm unique, không trùng)
+                          const allDeptMachineUuids = listBeforeScan.flatMap(
+                            (loc) =>
+                              (loc.machines || []).map((m) => m.uuid_machine)
+                          );
+                          const grandTotalMissing = allDeptMachineUuids.filter(
+                            (uuid) => !globalScannedUuids.has(uuid)
+                          ).length;
 
                           return (
                             <>
@@ -8848,47 +9329,83 @@ const TestProposalPage = () => {
                                     )}
                                   </TableCell>
 
-                                  {/* CỘT CÙNG ĐV */}
                                   <TableCell
                                     align="center"
                                     sx={{ color: "#2e7d32", fontWeight: 600 }}
                                   >
-                                    {row.isScanned
-                                      ? new Intl.NumberFormat("en-US").format(
-                                          row.correct
-                                        )
-                                      : "0"}
+                                    {row.isScanned && row.scanned > 0 ? (
+                                      <>
+                                        {new Intl.NumberFormat("en-US").format(
+                                          row.scanned
+                                        )}
+                                        {row.misDept > 0 && (
+                                          <Typography
+                                            component="span"
+                                            sx={{
+                                              fontSize: "0.85rem",
+                                              color: "#2e7d32",
+                                              ml: 0.5,
+                                              fontWeight: 600,
+                                            }}
+                                          >
+                                            (
+                                            {new Intl.NumberFormat(
+                                              "en-US"
+                                            ).format(row.correctDept)}{" "}
+                                            +{" "}
+                                            <span
+                                              style={{
+                                                color: "#ed6c02",
+                                              }}
+                                            >
+                                              {new Intl.NumberFormat(
+                                                "en-US"
+                                              ).format(row.misDept)}
+                                            </span>
+                                            )
+                                          </Typography>
+                                        )}
+                                      </>
+                                    ) : (
+                                      "0"
+                                    )}
                                   </TableCell>
 
-                                  {/* CỘT KHÁC ĐV */}
                                   <TableCell
                                     align="center"
                                     sx={{
-                                      color: "#ed6c02",
-                                      fontWeight: 600,
-                                    }}
-                                  >
-                                    {row.isScanned
-                                      ? new Intl.NumberFormat("en-US").format(
-                                          row.misDept
-                                        )
-                                      : "0"}
-                                  </TableCell>
-
-                                  <TableCell
-                                    align="center"
-                                    sx={{
-                                      fontWeight: 600,
                                       color: "#d32f2f",
+                                      fontWeight: 600,
                                     }}
                                   >
-                                    {row.isScanned
-                                      ? new Intl.NumberFormat("en-US").format(
-                                          row.diff
-                                        )
-                                      : `${new Intl.NumberFormat(
-                                          "en-US"
-                                        ).format(row.system)}`}
+                                    {row.missing > 0 ? (
+                                      <Button
+                                        size="small"
+                                        variant="outlined"
+                                        color="error"
+                                        onClick={() =>
+                                          handleViewMissingMachines(
+                                            row.uuid,
+                                            row.name
+                                          )
+                                        }
+                                        sx={{
+                                          minWidth: "auto",
+                                          px: 2,
+                                          py: 0.5,
+                                          fontWeight: "bold",
+                                          border: "2px solid",
+                                        }}
+                                      >
+                                        {new Intl.NumberFormat("en-US").format(
+                                          row.missing
+                                        )}
+                                      </Button>
+                                    ) : (
+                                      new Intl.NumberFormat("en-US").format(
+                                        row.missing
+                                      )
+                                    )}
                                   </TableCell>
                                 </TableRow>
                               ))}
@@ -8934,20 +9451,41 @@ const TestProposalPage = () => {
                                     fontSize: "1rem",
                                   }}
                                 >
-                                  {new Intl.NumberFormat("en-US").format(
-                                    grandTotalCorrect
-                                  )}
-                                </TableCell>
-                                <TableCell
-                                  align="center"
-                                  sx={{
-                                    fontWeight: "bold",
-                                    color: "#ed6c02",
-                                    fontSize: "1rem",
-                                  }}
-                                >
-                                  {new Intl.NumberFormat("en-US").format(
-                                    grandTotalMisDept
+                                  {grandTotalScanned > 0 ? (
+                                    <>
+                                      {new Intl.NumberFormat("en-US").format(
+                                        grandTotalScanned
+                                      )}
+                                      {grandTotalMisDept > 0 && (
+                                        <Typography
+                                          component="span"
+                                          sx={{
+                                            fontSize: "0.9rem",
+                                            color: "#2e7d32",
+                                            ml: 0.5,
+                                            fontWeight: 600,
+                                          }}
+                                        >
+                                          (
+                                          {new Intl.NumberFormat(
+                                            "en-US"
+                                          ).format(grandTotalCorrectDept)}{" "}
+                                          +{" "}
+                                          <span
+                                            style={{
+                                              color: "#ed6c02",
+                                            }}
+                                          >
+                                            {new Intl.NumberFormat(
+                                              "en-US"
+                                            ).format(grandTotalMisDept)}
+                                          </span>
+                                          )
+                                        </Typography>
+                                      )}
+                                    </>
+                                  ) : (
+                                    "0"
                                   )}
                                 </TableCell>
                                 <TableCell
@@ -8958,8 +9496,33 @@ const TestProposalPage = () => {
                                     fontSize: "1rem",
                                   }}
                                 >
-                                  {new Intl.NumberFormat("en-US").format(
-                                    grandTotalDiff
+                                  {grandTotalMissing > 0 ? (
+                                    <Button
+                                      size="small"
+                                      variant="outlined"
+                                      color="error"
+                                      onClick={() =>
+                                        handleViewMissingMachines(
+                                          null,
+                                          "Toàn bộ đơn vị"
+                                        )
+                                      }
+                                      sx={{
+                                        minWidth: "auto",
+                                        px: 2,
+                                        py: 0.5,
+                                        fontWeight: "bold",
+                                        border: "2px solid",
+                                      }}
+                                    >
+                                      {new Intl.NumberFormat("en-US").format(
+                                        grandTotalMissing
+                                      )}
+                                    </Button>
+                                  ) : (
+                                    new Intl.NumberFormat("en-US").format(
+                                      grandTotalMissing
+                                    )
                                   )}
                                 </TableCell>
                               </TableRow>
@@ -9059,13 +9622,13 @@ const TestProposalPage = () => {
             </Stack>
           </DialogContent>
           <DialogActions sx={{ p: 3 }}>
-            <Button
+            {/* <Button
               onClick={handleCloseInventoryScan}
               variant="outlined"
               sx={{ borderRadius: "12px", px: 3 }}
             >
               Đóng
-            </Button>
+            </Button> */}
           </DialogActions>
         </Dialog>
 

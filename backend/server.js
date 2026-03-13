@@ -4539,10 +4539,10 @@ app.put("/api/imports/:uuid/complete", authenticateToken, async (req, res) => {
 
     // Tạo expansion field
     const expansionField = [
-      { "Từ đơn vị:": ticket.is_borrowed_or_rented_or_borrowed_out_name || "" },
-      { "Đến đơn vị:": "Việt Long Hưng" },
+      { "Từ đơn vị": ticket.is_borrowed_or_rented_or_borrowed_out_name || "" },
+      { "Đến đơn vị": "Việt Long Hưng" },
       {
-        "Thời hạn:":
+        "Thời hạn":
           ticket.is_borrowed_or_rented_or_borrowed_out_return_date || "",
       },
     ];
@@ -8815,9 +8815,9 @@ app.post(
           duration = is_borrowed_or_rented_or_borrowed_out_return_date || "";
         }
         expansionField = [
-          { "Từ đơn vị:": fromUnit },
-          { "Đến đơn vị:": toUnit },
-          { "Thời hạn:": duration },
+          { "Từ đơn vị": fromUnit },
+          { "Đến đơn vị": toUnit },
+          { "Thời hạn": duration },
         ];
       }
       // B. Phiếu Xuất (SỬA ĐỔI CHÍNH Ở ĐÂY)
@@ -8839,14 +8839,14 @@ app.post(
         }
 
         expansionField = [
-          { "Lý do điều động:": reason },
-          { "Thời hạn:": duration },
-          { "Từ đơn vị:": fromUnit },
-          { "Đến đơn vị:": toUnit },
-          { "Họ tên người nhận hàng:": receiver_name || "" },
-          { "Số xe:": vehicle_number || "" },
-          { "Địa chỉ (bộ phận):": department_address || "" },
-          { "Xuất tại kho:": "Kho cơ điện" },
+          { "Lý do điều động": reason },
+          { "Thời hạn": duration },
+          { "Từ đơn vị": fromUnit },
+          { "Đến đơn vị": toUnit },
+          { "Họ tên người nhận hàng": receiver_name || "" },
+          { "Số xe": vehicle_number || "" },
+          { "Địa chỉ (bộ phận)": department_address || "" },
+          { "Xuất tại kho": "Kho cơ điện" },
         ];
       }
       // C. Phiếu Điều Chuyển
@@ -9846,6 +9846,7 @@ app.get("/api/inventory-checks/:uuid", authenticateToken, async (req, res) => {
         d.id_department,
         d.is_completed,
         d.scanned_result,
+        d.list_before_scan,
         dep.name_department,
         dep.uuid_department,
         dep.id_phong_ban,
@@ -9895,6 +9896,132 @@ app.get("/api/inventory-checks/:uuid", authenticateToken, async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 });
+
+// GET /api/inventory-checks/:uuid/missing-machines - Lấy danh sách máy bị thiếu tại một vị trí hoặc toàn bộ đơn vị
+app.get(
+  "/api/inventory-checks/:uuid/missing-machines",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { uuid } = req.params;
+      const { department_uuid, location_uuid } = req.query;
+
+      if (!department_uuid)
+        return res
+          .status(400)
+          .json({ success: false, message: "Thiếu thông tin đơn vị" });
+
+      // 1. Lấy ID phiếu kiểm kê
+      const [invRes] = await tpmConnection.query(
+        "SELECT id_inventory_check FROM tb_inventory_check WHERE uuid_inventory_check = ?",
+        [uuid]
+      );
+      if (invRes.length === 0)
+        return res
+          .status(404)
+          .json({ success: false, message: "Phiếu không tồn tại" });
+      const idInventory = invRes[0].id_inventory_check;
+
+      // 2. Lấy dữ liệu QUÉT CỦA TẤT CẢ CÁC ĐƠN VỊ trong phiếu này để đối chiếu chéo
+      const [allDetails] = await tpmConnection.query(
+        `SELECT d.scanned_result, dep.name_department 
+         FROM tb_inventory_check_detail d 
+         JOIN tb_department dep ON d.id_department = dep.id_department 
+         WHERE d.id_inventory_check = ?`,
+        [idInventory]
+      );
+
+      const globalScanMap = new Map();
+      allDetails.forEach((detail) => {
+        try {
+          const parsed =
+            typeof detail.scanned_result === "string"
+              ? JSON.parse(detail.scanned_result)
+              : detail.scanned_result;
+          const locations = Array.isArray(parsed)
+            ? parsed
+            : parsed?.locations || [];
+
+          locations.forEach((loc) => {
+            (loc.scanned_machine || []).forEach((m) => {
+              const mUuid = m.uuid || m.uuid_machine;
+              if (mUuid && !String(mUuid).startsWith("NOT_FOUND")) {
+                globalScanMap.set(
+                  mUuid,
+                  `${detail.name_department} - ${loc.location_name}`
+                );
+              }
+            });
+          });
+        } catch (e) {
+          console.error("Lỗi parse scan result chéo:", e);
+        }
+      });
+
+      // 3. Lấy thông tin đơn vị hiện tại
+      const [depRes] = await tpmConnection.query(
+        "SELECT id_department FROM tb_department WHERE uuid_department = ?",
+        [department_uuid]
+      );
+      const idDepartment = depRes[0].id_department;
+
+      const [detailRes] = await tpmConnection.query(
+        "SELECT list_before_scan, scanned_result FROM tb_inventory_check_detail WHERE id_inventory_check = ? AND id_department = ?",
+        [idInventory, idDepartment]
+      );
+
+      // 4. Parse dữ liệu hệ thống (list_before_scan)
+      let listBeforeScan =
+        typeof detailRes[0].list_before_scan === "string"
+          ? JSON.parse(detailRes[0].list_before_scan)
+          : detailRes[0].list_before_scan;
+
+      // 5. !!! FIX LỖI TẠI ĐÂY: Parse dữ liệu ĐÃ QUÉT (scannedData) !!!
+      let scannedData = [];
+      if (detailRes[0].scanned_result) {
+        const parsed =
+          typeof detailRes[0].scanned_result === "string"
+            ? JSON.parse(detailRes[0].scanned_result)
+            : detailRes[0].scanned_result;
+        scannedData = Array.isArray(parsed) ? parsed : parsed?.locations || [];
+      }
+
+      // 6. Lấy danh sách máy hệ thống cần kiểm tra
+      let systemMachines = [];
+
+      if (location_uuid) {
+        // Lọc máy hệ thống theo vị trí cụ thể
+        const targetLoc = listBeforeScan.find(
+          (l) => l.location_uuid === location_uuid
+        );
+        systemMachines = targetLoc ? targetLoc.machines : [];
+      } else {
+        // Toàn bộ đơn vị
+        listBeforeScan.forEach((loc) =>
+          systemMachines.push(...(loc.machines || []))
+        );
+      }
+
+      // 7. Tìm máy thiếu: máy trong sổ sách mà chưa được quét ở BẤT KỲ ĐÂU trong toàn phiếu
+      // Dùng globalScanMap (đã bao gồm tất cả đơn vị) thay vì scannedMachineUuids chỉ của đơn vị hiện tại
+      const missingMachines = systemMachines
+        .filter((m) => !globalScanMap.has(m.uuid_machine))
+        .map((m) => ({
+          ...m,
+          found_at: "Chưa quét",
+        }));
+
+      res.json({
+        success: true,
+        data: missingMachines,
+        total: missingMachines.length,
+      });
+    } catch (error) {
+      console.error("Error fetching missing machines:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+);
 
 // POST /api/inventory-checks - Tạo phiếu kiểm kê
 app.post("/api/inventory-checks", authenticateToken, async (req, res) => {
@@ -9963,6 +10090,55 @@ app.post("/api/inventory-checks", authenticateToken, async (req, res) => {
         locationSnapshotsMap[l.uuid_location] = l.count;
       });
 
+      // Lấy danh sách chi tiết máy theo từng vị trí (snapshot tại thời điểm tạo phiếu)
+      const [machinesByLocation] = await connection.query(
+        `SELECT 
+          tl.uuid_location,
+          tl.name_location,
+          m.uuid_machine,
+          m.code_machine,
+          m.serial_machine,
+          m.type_machine,
+          m.model_machine,
+          m.attribute_machine,
+          m.RFID_machine,
+          m.NFC_machine
+         FROM tb_location tl
+         LEFT JOIN tb_machine_location ml ON tl.id_location = ml.id_location
+         LEFT JOIN tb_machine m ON ml.id_machine = m.id_machine
+         WHERE tl.id_department = ?
+           AND m.current_status != 'liquidation'
+           AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))
+         ORDER BY tl.uuid_location, m.code_machine`,
+        [dep.id_department]
+      );
+
+      // Nhóm máy theo vị trí
+      const machinesByLocationMap = {};
+      machinesByLocation.forEach((row) => {
+        if (!machinesByLocationMap[row.uuid_location]) {
+          machinesByLocationMap[row.uuid_location] = {
+            location_uuid: row.uuid_location,
+            location_name: row.name_location,
+            machines: [],
+          };
+        }
+        if (row.uuid_machine) {
+          machinesByLocationMap[row.uuid_location].machines.push({
+            uuid_machine: row.uuid_machine,
+            code_machine: row.code_machine,
+            serial_machine: row.serial_machine,
+            type_machine: row.type_machine,
+            model_machine: row.model_machine,
+            attribute_machine: row.attribute_machine,
+            RFID_machine: row.RFID_machine,
+            NFC_machine: row.NFC_machine,
+          });
+        }
+      });
+
+      const listBeforeScan = Object.values(machinesByLocationMap);
+
       const initialData = {
         snapshot_count: snapshotCount,
         location_snapshots: locationSnapshotsMap,
@@ -9970,13 +10146,14 @@ app.post("/api/inventory-checks", authenticateToken, async (req, res) => {
       };
 
       await connection.query(
-        `INSERT INTO tb_inventory_check_detail (id_inventory_check, id_department, created_by, updated_by, scanned_result) VALUES (?, ?, ?, ?, ?)`,
+        `INSERT INTO tb_inventory_check_detail (id_inventory_check, id_department, created_by, updated_by, scanned_result, list_before_scan) VALUES (?, ?, ?, ?, ?, ?)`,
         [
           inventoryId,
           dep.id_department,
           userId,
           userId,
           JSON.stringify(initialData),
+          JSON.stringify(listBeforeScan),
         ]
       );
     }
@@ -10435,6 +10612,54 @@ app.post(
           locationSnapshotsMap[l.uuid_location] = l.count;
         });
 
+        // Lấy danh sách chi tiết máy theo từng vị trí
+        const [machinesByLocation] = await connection.query(
+          `SELECT 
+            tl.uuid_location,
+            tl.name_location,
+            m.uuid_machine,
+            m.code_machine,
+            m.serial_machine,
+            m.type_machine,
+            m.model_machine,
+            m.attribute_machine,
+            m.RFID_machine,
+            m.NFC_machine
+           FROM tb_location tl
+           LEFT JOIN tb_machine_location ml ON tl.id_location = ml.id_location
+           LEFT JOIN tb_machine m ON ml.id_machine = m.id_machine
+           WHERE tl.id_department = ?
+             AND m.current_status != 'liquidation'
+             AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))
+           ORDER BY tl.uuid_location, m.code_machine`,
+          [dep.id_department]
+        );
+
+        const machinesByLocationMap = {};
+        machinesByLocation.forEach((row) => {
+          if (!machinesByLocationMap[row.uuid_location]) {
+            machinesByLocationMap[row.uuid_location] = {
+              location_uuid: row.uuid_location,
+              location_name: row.name_location,
+              machines: [],
+            };
+          }
+          if (row.uuid_machine) {
+            machinesByLocationMap[row.uuid_location].machines.push({
+              uuid_machine: row.uuid_machine,
+              code_machine: row.code_machine,
+              serial_machine: row.serial_machine,
+              type_machine: row.type_machine,
+              model_machine: row.model_machine,
+              attribute_machine: row.attribute_machine,
+              RFID_machine: row.RFID_machine,
+              NFC_machine: row.NFC_machine,
+            });
+          }
+        });
+
+        const listBeforeScan = Object.values(machinesByLocationMap);
+
         const initialData = {
           snapshot_count: snapshotCount,
           location_snapshots: locationSnapshotsMap,
@@ -10443,14 +10668,15 @@ app.post(
 
         await connection.query(
           `INSERT INTO tb_inventory_check_detail 
-          (id_inventory_check, id_department, scanned_result, is_completed, created_by, updated_by) 
-          VALUES (?, ?, ?, 0, ?, ?)`,
+          (id_inventory_check, id_department, scanned_result, is_completed, created_by, updated_by, list_before_scan) 
+          VALUES (?, ?, ?, 0, ?, ?, ?)`,
           [
             idInventory,
             dep.id_department,
             JSON.stringify(initialData),
             userId,
             userId,
+            JSON.stringify(listBeforeScan),
           ]
         );
       }
