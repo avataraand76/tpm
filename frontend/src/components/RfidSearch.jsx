@@ -22,8 +22,23 @@ import {
   useMediaQuery,
   Switch,
   FormControlLabel,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  MenuItem,
+  Select,
+  InputLabel,
+  FormControl,
+  Chip,
 } from "@mui/material";
-import { Search, Radar, CheckCircle, Replay } from "@mui/icons-material";
+import {
+  Search,
+  Radar,
+  CheckCircle,
+  Replay,
+  LocationOn,
+} from "@mui/icons-material";
 import { api } from "../api/api";
 
 const RfidSearch = ({
@@ -32,6 +47,12 @@ const RfidSearch = ({
   onClearSelection,
   // Khi ở chế độ kiểm kê (inventory) thì không cần gọi API resolve target
   skipResolveApi = false,
+  // Danh sách vị trí để chọn khi tìm thấy máy (chế độ kiểm kê)
+  inventoryLocations = [],
+  // Callback khi user xác nhận thêm máy vào vị trí (chế độ kiểm kê)
+  onFoundMachineInventory = null,
+  // Khi đã chọn sẵn vị trí (batch mode): tự động lưu ngay khi tìm thấy, không cần chọn vị trí
+  preSelectedLocationUuid = null,
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -58,9 +79,20 @@ const RfidSearch = ({
   const [foundTargets, setFoundTargets] = useState(new Set()); // Set các RFID đã tìm thấy
   const [currentFoundTarget, setCurrentFoundTarget] = useState(null); // Target vừa tìm thấy để hiển thị overlay
 
+  // State cho dialog chọn vị trí khi ở chế độ kiểm kê
+  const [openLocationDialog, setOpenLocationDialog] = useState(false);
+  // Sync ref để dùng trong interval (tránh stale closure)
+  useEffect(() => {
+    openLocationDialogRef.current = openLocationDialog;
+  }, [openLocationDialog]);
+  const [pendingFoundTarget, setPendingFoundTarget] = useState(null);
+  const [selectedLocationUuid, setSelectedLocationUuid] = useState("");
+  const [savingLocation, setSavingLocation] = useState(false);
+
   // Refs
   const scanInputRef = useRef(null);
   const audioRef = useRef(null);
+  const openLocationDialogRef = useRef(false);
 
   // Hàm lấy giá trị ưu tiên từ máy (serial -> rfid -> nfc -> code)
   const getMachineSearchValue = (machine) => {
@@ -228,10 +260,11 @@ const RfidSearch = ({
       scanInputRef.current.focus();
       const interval = setInterval(() => {
         // Chỉ focus lại nếu người dùng click ra ngoài,
-        // để đảm bảo máy quét luôn bắn dữ liệu vào đúng chỗ
+        // và không có dialog chọn vị trí đang mở
         if (
           scanInputRef.current &&
-          document.activeElement !== scanInputRef.current
+          document.activeElement !== scanInputRef.current &&
+          !openLocationDialogRef.current
         ) {
           scanInputRef.current.focus();
         }
@@ -240,15 +273,15 @@ const RfidSearch = ({
     }
   }, [step]);
 
-  // Tự động ẩn overlay sau 0.5 giây khi tìm thấy máy
+  // Tự động ẩn overlay sau 3.5 giây khi tìm thấy máy (chỉ ở chế độ thông thường)
   useEffect(() => {
-    if (currentFoundTarget) {
+    if (currentFoundTarget && !(skipResolveApi && onFoundMachineInventory)) {
       const timer = setTimeout(() => {
         setCurrentFoundTarget(null);
       }, 3500);
       return () => clearTimeout(timer);
     }
-  }, [currentFoundTarget]);
+  }, [currentFoundTarget, skipResolveApi, onFoundMachineInventory]);
 
   // Hàm xử lý khi dữ liệu từ máy quét đổ vào
   const handleStreamInput = (e) => {
@@ -262,20 +295,65 @@ const RfidSearch = ({
 
       // Nếu chưa tìm thấy và khớp với dữ liệu quét
       if (!isAlreadyFound && rawValue.toUpperCase().includes(targetRfid)) {
-        // Đánh dấu đã tìm thấy
-        setFoundTargets((prev) => new Set([...prev, targetRfid]));
-        // Set target hiện tại để hiển thị overlay
-        setCurrentFoundTarget(target);
         // Phát âm thanh cảnh báo
         playSound();
+
+        if (skipResolveApi && onFoundMachineInventory && preSelectedLocationUuid) {
+          // Batch mode: vị trí đã chọn sẵn → lưu ngay, hiện overlay xanh
+          setFoundTargets((prev) => new Set([...prev, targetRfid]));
+          setCurrentFoundTarget(target);
+          onFoundMachineInventory(target, preSelectedLocationUuid).catch((err) =>
+            console.error("Lỗi lưu máy batch:", err)
+          );
+        } else if (skipResolveApi && onFoundMachineInventory) {
+          // Chế độ kiểm kê thông thường: hiện dialog chọn vị trí
+          setPendingFoundTarget(target);
+          setSelectedLocationUuid("");
+          setOpenLocationDialog(true);
+        } else {
+          // Chế độ thông thường: hiện overlay toàn màn hình
+          setFoundTargets((prev) => new Set([...prev, targetRfid]));
+          setCurrentFoundTarget(target);
+        }
       }
     });
 
     // Tùy chọn: Giới hạn độ dài bộ nhớ đệm.
-    // Nếu máy quét bắn quá nhiều ký tự (ví dụ > 5000), ta xóa bớt để trình duyệt không bị đơ.
     if (rawValue.length > 5000) {
       setScanInput(rawValue.slice(-1000)); // Chỉ giữ lại 1000 ký tự cuối
     }
+  };
+
+  // Xử lý khi user xác nhận chọn vị trí trong dialog
+  const handleConfirmLocation = async () => {
+    if (!selectedLocationUuid || !pendingFoundTarget) return;
+
+    setSavingLocation(true);
+    try {
+      await onFoundMachineInventory(pendingFoundTarget, selectedLocationUuid);
+      // Đánh dấu đã tìm thấy sau khi lưu thành công
+      setFoundTargets(
+        (prev) =>
+          new Set([...prev, pendingFoundTarget.targetRfid.toUpperCase()])
+      );
+      setOpenLocationDialog(false);
+      setPendingFoundTarget(null);
+      setSelectedLocationUuid("");
+      // Focus lại textarea để tiếp tục quét
+      setTimeout(() => scanInputRef.current?.focus(), 200);
+    } catch (err) {
+      console.error("Lỗi lưu máy vào vị trí:", err);
+    } finally {
+      setSavingLocation(false);
+    }
+  };
+
+  // Đóng dialog chọn vị trí mà không lưu
+  const handleCancelLocationDialog = () => {
+    setOpenLocationDialog(false);
+    setPendingFoundTarget(null);
+    setSelectedLocationUuid("");
+    setTimeout(() => scanInputRef.current?.focus(), 200);
   };
 
   const handleReset = () => {
@@ -378,6 +456,179 @@ const RfidSearch = ({
           </Stack>
         )}
       </Box>
+
+      {/* DIALOG CHỌN VỊ TRÍ KHI TÌM THẤY MÁY (CHẾ ĐỘ KIỂM KÊ) */}
+      <Dialog
+        open={openLocationDialog}
+        onClose={handleCancelLocationDialog}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: "20px" } }}
+      >
+        <DialogTitle
+          sx={{
+            background: "linear-gradient(45deg, #2e7d32, #43a047)",
+            color: "white",
+            fontWeight: 700,
+            display: "flex",
+            alignItems: "center",
+            gap: 1,
+          }}
+        >
+          <CheckCircle sx={{ fontSize: 28 }} />
+          <Box>
+            <Typography variant="h6" fontWeight={700}>
+              Đã tìm thấy thiết bị!
+            </Typography>
+            <Typography variant="caption" sx={{ opacity: 0.85 }}>
+              Chọn vị trí để lưu máy này vào phiếu kiểm kê
+            </Typography>
+          </Box>
+        </DialogTitle>
+
+        <DialogContent sx={{ pt: 3 }}>
+          {pendingFoundTarget && (
+            <Stack spacing={3}>
+              {/* Thông tin máy tìm thấy */}
+              <Box
+                sx={{
+                  p: 2,
+                  bgcolor: "rgba(46, 125, 50, 0.07)",
+                  borderRadius: "12px",
+                  border: "1px solid rgba(46, 125, 50, 0.2)",
+                }}
+              >
+                <Typography
+                  variant="subtitle2"
+                  color="text.secondary"
+                  gutterBottom
+                >
+                  THIẾT BỊ VỪA QUÉT
+                </Typography>
+                <Typography
+                  variant="h6"
+                  fontWeight={700}
+                  sx={{ color: "#2e7d32" }}
+                >
+                  {pendingFoundTarget.info.name !==
+                  pendingFoundTarget.info.serial
+                    ? pendingFoundTarget.info.name
+                    : pendingFoundTarget.info.serial}
+                </Typography>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{ mt: 1, flexWrap: "wrap", gap: 0.5 }}
+                >
+                  <Chip
+                    label={`Serial: ${pendingFoundTarget.info.serial}`}
+                    size="small"
+                    variant="outlined"
+                    color="success"
+                  />
+                  <Chip
+                    label={`RFID: ${pendingFoundTarget.targetRfid}`}
+                    size="small"
+                    variant="outlined"
+                    sx={{ fontFamily: "monospace" }}
+                  />
+                </Stack>
+              </Box>
+
+              {/* Chọn vị trí */}
+              <FormControl fullWidth>
+                <InputLabel id="location-select-label">
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                    <LocationOn sx={{ fontSize: 18 }} />
+                    Chọn vị trí lưu máy
+                  </Box>
+                </InputLabel>
+                <Select
+                  labelId="location-select-label"
+                  value={selectedLocationUuid}
+                  onChange={(e) => setSelectedLocationUuid(e.target.value)}
+                  label="Chọn vị trí lưu máy"
+                  sx={{ borderRadius: "12px" }}
+                >
+                  {inventoryLocations.length === 0 ? (
+                    <MenuItem disabled value="">
+                      <Typography color="text.secondary" variant="body2">
+                        Không có vị trí nào
+                      </Typography>
+                    </MenuItem>
+                  ) : (
+                    inventoryLocations.map((loc) => (
+                      <MenuItem
+                        key={loc.uuid_location || loc.id_location}
+                        value={loc.uuid_location}
+                      >
+                        <Box>
+                          <Typography variant="body2" fontWeight={600}>
+                            {loc.name_location}
+                          </Typography>
+                          {loc._dept_name && (
+                            <Typography variant="caption" color="text.secondary">
+                              {loc._dept_name}
+                            </Typography>
+                          )}
+                        </Box>
+                      </MenuItem>
+                    ))
+                  )}
+                </Select>
+              </FormControl>
+
+              {/* Tiến độ tìm thấy */}
+              <Box
+                sx={{
+                  p: 1.5,
+                  bgcolor: "rgba(0,0,0,0.04)",
+                  borderRadius: "10px",
+                  textAlign: "center",
+                }}
+              >
+                <Typography variant="body2" color="text.secondary">
+                  Đã tìm thấy:{" "}
+                  <strong>
+                    {foundTargets.size + 1} / {targets.length} máy
+                  </strong>
+                </Typography>
+              </Box>
+            </Stack>
+          )}
+        </DialogContent>
+
+        <DialogActions sx={{ p: 2, gap: 1 }}>
+          <Button
+            onClick={handleCancelLocationDialog}
+            variant="outlined"
+            color="inherit"
+            sx={{ borderRadius: "10px" }}
+            disabled={savingLocation}
+          >
+            Bỏ qua
+          </Button>
+          <Button
+            onClick={handleConfirmLocation}
+            variant="contained"
+            disabled={!selectedLocationUuid || savingLocation}
+            startIcon={
+              savingLocation ? (
+                <CircularProgress size={18} color="inherit" />
+              ) : (
+                <CheckCircle />
+              )
+            }
+            sx={{
+              borderRadius: "10px",
+              background: "linear-gradient(45deg, #2e7d32, #43a047)",
+              px: 3,
+            }}
+          >
+            {savingLocation ? "Đang lưu..." : "Xác nhận lưu"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Box sx={{ p: 3 }}>
         {/* BƯỚC 1: SETUP */}

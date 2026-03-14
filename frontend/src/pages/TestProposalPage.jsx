@@ -72,6 +72,8 @@ import {
   Assessment,
   ExpandMore,
   EditNote,
+  ArrowForward,
+  ArrowBack,
 } from "@mui/icons-material";
 import * as XLSX from "xlsx-js-style";
 import ExcelJS from "exceljs";
@@ -685,6 +687,21 @@ const TestProposalPage = () => {
     useState(false);
   const [missingMachines, setMissingMachines] = useState([]);
   const [missingMachinesLocation, setMissingMachinesLocation] = useState(null);
+  // Locations cho toàn bộ phiếu kiểm kê (dùng khi dò tìm RFID nhiều đơn vị)
+  const [inventoryAllLocations, setInventoryAllLocations] = useState([]);
+
+  // Batch scan picker: chọn đơn vị + vị trí trước khi mở scan dialog
+  const [openBatchScanPicker, setOpenBatchScanPicker] = useState(false);
+  const [batchPickerStep, setBatchPickerStep] = useState(1); // 1: chọn đơn vị, 2: chọn vị trí
+  const [batchPickerDept, setBatchPickerDept] = useState(null);
+  const [batchPickerLocations, setBatchPickerLocations] = useState([]);
+  const [batchPickerLocation, setBatchPickerLocation] = useState(null);
+  const [batchPickerLoading, setBatchPickerLoading] = useState(false);
+  // Cache toàn bộ missing machines của phiếu cho batch scan (tách riêng, không ghi đè missingMachines UI)
+  const [batchScanAllMissing, setBatchScanAllMissing] = useState([]);
+  // UUID vị trí đã chọn sẵn cho chế độ batch scan (truyền vào RfidSearch)
+  const [batchScanPreSelectedLocation, setBatchScanPreSelectedLocation] =
+    useState(null);
 
   // Config statuses
   const STATUS_CONFIG = {
@@ -2387,6 +2404,213 @@ const TestProposalPage = () => {
     setOpenInventoryRfidSearchDialog(true);
   };
 
+  // --- BATCH SCAN PICKER ---
+  const handleOpenBatchScanPicker = async () => {
+    setBatchPickerStep(1);
+    setBatchPickerDept(null);
+    setBatchPickerLocation(null);
+    setBatchPickerLocations([]);
+    setOpenBatchScanPicker(true);
+
+    // Luôn fetch toàn bộ missing machines của phiếu để có đủ RFID cho batch scan
+    if (!selectedTicket || !formData.inventoryDetails) return;
+    try {
+      setBatchPickerLoading(true);
+      const allPromises = formData.inventoryDetails.map((dept) =>
+        api.inventory
+          .getMissingMachines(selectedTicket.uuid_inventory_check, {
+            department_uuid: dept.uuid_department,
+            location_uuid: null,
+          })
+          .then((res) => ({ dept, data: res.data || [] }))
+      );
+      const results = await Promise.all(allPromises);
+      const allMissing = results.flatMap(({ dept, data }) =>
+        data.map((m) => ({ ...m, _dept_uuid: dept.uuid_department }))
+      );
+      // Lưu vào state riêng, KHÔNG ghi đè missingMachines đang hiển thị trên UI
+      setBatchScanAllMissing(allMissing);
+    } catch {
+      // Không cần thông báo lỗi, giữ nguyên missingMachines hiện tại
+    } finally {
+      setBatchPickerLoading(false);
+    }
+  };
+
+  const handleBatchPickerSelectDept = async (dept) => {
+    setBatchPickerDept(dept);
+    setBatchPickerLocation(null);
+    setBatchPickerLocations([]);
+    setBatchPickerLoading(true);
+    try {
+      const res = await api.locations.getAll({
+        department_uuid: dept.uuid_department,
+      });
+      setBatchPickerLocations(res.data || []);
+      setBatchPickerStep(2);
+    } catch {
+      showNotification("error", "Lỗi", "Không thể tải danh sách vị trí");
+    } finally {
+      setBatchPickerLoading(false);
+    }
+  };
+
+  const handleBatchPickerConfirm = async () => {
+    if (!batchPickerDept || !batchPickerLocation) return;
+
+    // Đóng picker
+    setOpenBatchScanPicker(false);
+
+    // Chuẩn bị state cho batch scan
+    setCurrentDepartment(batchPickerDept);
+
+    // Parse scanned result cho đơn vị đã chọn (để dùng trong handler lưu)
+    let scannedList = [];
+    try {
+      const parsed =
+        typeof batchPickerDept.scanned_result === "string"
+          ? JSON.parse(batchPickerDept.scanned_result)
+          : batchPickerDept.scanned_result;
+      scannedList = Array.isArray(parsed) ? parsed : parsed?.locations || [];
+    } catch {
+      scannedList = [];
+    }
+    setScannedLocationsList(scannedList);
+
+    // Lấy toàn bộ RFID của máy chưa quét trên TOÀN BỘ phiếu (từ cache riêng, không dùng missingMachines UI)
+    const sourceList =
+      batchScanAllMissing.length > 0 ? batchScanAllMissing : missingMachines;
+    const rfids = sourceList
+      .filter(
+        (m) =>
+          m.found_at === "Chưa quét" &&
+          m.RFID_machine &&
+          m.RFID_machine.trim() !== ""
+      )
+      .map((m) => m.RFID_machine);
+
+    const targets = rfids.map((rfid) => ({ RFID_machine: rfid }));
+    setInventoryRfidSearchTargets(targets);
+
+    // Lưu vị trí đã chọn sẵn
+    setBatchScanPreSelectedLocation(batchPickerLocation.uuid_location);
+
+    // Mở RfidSearch ở batch mode (vị trí đã chọn sẵn, tự động lưu khi tìm thấy)
+    setOpenInventoryRfidSearchDialog(true);
+  };
+
+  // Xử lý khi user tìm thấy máy qua RFID Search và chọn vị trí để lưu vào phiếu kiểm kê
+  const handleInventoryMachineFoundFromRfidSearch = async (
+    foundTarget,
+    locationUuid
+  ) => {
+    if (!selectedTicket) return;
+
+    // Tìm thông tin máy: ưu tiên tìm trong batchScanAllMissing (đủ toàn phiếu), fallback về missingMachines
+    const rfid = foundTarget.targetRfid.toUpperCase();
+    const searchList =
+      batchScanAllMissing.length > 0 ? batchScanAllMissing : missingMachines;
+    const machineData = searchList.find(
+      (m) => m.RFID_machine && m.RFID_machine.toUpperCase() === rfid
+    );
+
+    if (!machineData) {
+      showNotification(
+        "error",
+        "Không tìm thấy máy",
+        "Không tìm thấy thông tin máy tương ứng với RFID vừa quét."
+      );
+      throw new Error("Machine not found");
+    }
+
+    // Xác định đơn vị của máy này: dùng _dept_uuid (đã gắn khi fetch missing machines)
+    // Nếu không có thì fallback về currentDepartment
+    const deptUuid =
+      machineData._dept_uuid || currentDepartment?.uuid_department;
+    if (!deptUuid) {
+      showNotification(
+        "error",
+        "Lỗi",
+        "Không xác định được đơn vị của máy này."
+      );
+      throw new Error("Department not found");
+    }
+
+    // Lấy thông tin vị trí đã chọn (từ inventoryAllLocations)
+    const selectedLoc = inventoryAllLocations.find(
+      (l) => l.uuid_location === locationUuid
+    );
+
+    // Gọi API lưu máy vào vị trí đã chọn
+    await api.inventory.scanLocation(selectedTicket.uuid_inventory_check, {
+      department_uuid: deptUuid,
+      location_uuid: locationUuid,
+      scanned_machines: [machineData],
+      machines_to_remove: [],
+    });
+
+    // Cập nhật missingMachines: đánh dấu đã tìm thấy
+    setMissingMachines((prev) =>
+      prev.map((m) =>
+        m.RFID_machine && m.RFID_machine.toUpperCase() === rfid
+          ? {
+              ...m,
+              found_at: selectedLoc ? selectedLoc.name_location : "Đã tìm thấy",
+            }
+          : m
+      )
+    );
+
+    // Refresh data của phiếu kiểm kê
+    try {
+      const response = await api.inventory.getById(
+        selectedTicket.uuid_inventory_check
+      );
+      setSelectedTicket(response.data.inventory);
+      setFormData((prev) => ({
+        ...prev,
+        inventoryDetails: response.data.details || [],
+      }));
+
+      // Nếu đang mở department detail thì cập nhật luôn
+      if (currentDepartment) {
+        const updatedDept = response.data.details.find(
+          (d) => d.uuid_department === deptUuid
+        );
+        if (updatedDept) {
+          let updatedScannedList = [];
+          try {
+            const parsed =
+              typeof updatedDept.scanned_result === "string"
+                ? JSON.parse(updatedDept.scanned_result)
+                : updatedDept.scanned_result;
+            updatedScannedList = Array.isArray(parsed)
+              ? parsed
+              : parsed?.locations || [];
+          } catch {
+            updatedScannedList = [];
+          }
+          setScannedLocationsList(updatedScannedList);
+          if (
+            updatedDept.uuid_department === currentDepartment.uuid_department
+          ) {
+            setCurrentDepartment(updatedDept);
+          }
+        }
+      }
+    } catch (refreshErr) {
+      console.error("Lỗi refresh data sau khi lưu máy:", refreshErr);
+    }
+
+    showNotification(
+      "success",
+      "Đã lưu thành công",
+      `Máy ${machineData.serial_machine || rfid} đã được lưu vào ${
+        selectedLoc?.name_location || "vị trí đã chọn"
+      }.`
+    );
+  };
+
   const handleInventorySubmit = async () => {
     if (!selectedTicket) return;
 
@@ -2466,41 +2690,58 @@ const TestProposalPage = () => {
     }
   };
 
-  const handleViewMissingMachines = async (
-    locationUuid,
-    locationName,
-    departmentUuid = null
-  ) => {
-    if (!selectedTicket) return;
+  // const handleViewMissingMachines = async (
+  //   locationUuid,
+  //   locationName,
+  //   departmentUuid = null
+  // ) => {
+  //   if (!selectedTicket) return;
 
-    const deptUuid = departmentUuid || currentDepartment?.uuid_department;
-    if (!deptUuid) return;
+  //   const deptUuid = departmentUuid || currentDepartment?.uuid_department;
+  //   if (!deptUuid) return;
 
-    try {
-      setDetailLoading(true);
-      const response = await api.inventory.getMissingMachines(
-        selectedTicket.uuid_inventory_check,
-        {
-          department_uuid: deptUuid,
-          location_uuid: locationUuid,
-        }
-      );
+  //   try {
+  //     // Fetch missing machines và locations của đơn vị này song song
+  //     const [missingRes, locsRes] = await Promise.all([
+  //       api.inventory.getMissingMachines(selectedTicket.uuid_inventory_check, {
+  //         department_uuid: deptUuid,
+  //         location_uuid: locationUuid,
+  //       }),
+  //       api.locations.getAll({ department_uuid: deptUuid }),
+  //     ]);
 
-      setMissingMachines(response.data || []);
-      setMissingMachinesLocation(locationName);
-      setOpenMissingMachinesDialog(true);
-    } catch (error) {
-      console.error("Error fetching missing machines:", error);
-      showNotification(
-        "error",
-        "Lỗi",
-        error.response?.data?.message ||
-          "Không thể tải danh sách máy chưa xác định"
-      );
-    } finally {
-      setDetailLoading(false);
-    }
-  };
+  //     // Gắn uuid_department vào mỗi máy để dùng khi lưu
+  //     const taggedMachines = (missingRes.data || []).map((m) => ({
+  //       ...m,
+  //       _dept_uuid: deptUuid,
+  //     }));
+
+  //     // Tìm tên đơn vị từ inventoryDetails
+  //     const deptInfo = formData.inventoryDetails?.find(
+  //       (d) => d.uuid_department === deptUuid
+  //     );
+  //     const locs = (locsRes.data || []).map((loc) => ({
+  //       ...loc,
+  //       _dept_uuid: deptUuid,
+  //       _dept_name: deptInfo?.name_department || "",
+  //     }));
+
+  //     setMissingMachines(taggedMachines);
+  //     setMissingMachinesLocation(locationName);
+  //     setInventoryAllLocations(locs);
+  //     setOpenMissingMachinesDialog(true);
+  //   } catch (error) {
+  //     console.error("Error fetching missing machines:", error);
+  //     showNotification(
+  //       "error",
+  //       "Lỗi",
+  //       error.response?.data?.message ||
+  //         "Không thể tải danh sách máy chưa xác định"
+  //     );
+  //   } finally {
+  //     setDetailLoading(false);
+  //   }
+  // };
 
   const handleViewAllMissingMachines = async () => {
     if (!selectedTicket || !formData.inventoryDetails) return;
@@ -2509,18 +2750,45 @@ const TestProposalPage = () => {
       setDetailLoading(true);
 
       const allPromises = formData.inventoryDetails.map((dept) =>
-        api.inventory.getMissingMachines(selectedTicket.uuid_inventory_check, {
-          department_uuid: dept.uuid_department,
-          location_uuid: null,
-        })
+        api.inventory
+          .getMissingMachines(selectedTicket.uuid_inventory_check, {
+            department_uuid: dept.uuid_department,
+            location_uuid: null,
+          })
+          .then((res) => ({ dept, data: res.data || [] }))
       );
 
       const results = await Promise.all(allPromises);
 
-      const allMissingMachines = results.flatMap((res) => res.data || []);
+      // Gắn uuid_department vào mỗi máy để biết nó thuộc đơn vị nào khi lưu
+      const allMissingMachines = results.flatMap(({ dept, data }) =>
+        data.map((m) => ({ ...m, _dept_uuid: dept.uuid_department }))
+      );
 
       setMissingMachines(allMissingMachines);
       setMissingMachinesLocation("Toàn bộ phiếu kiểm kê");
+
+      // Load tất cả vị trí của tất cả đơn vị trong phiếu
+      const locPromises = formData.inventoryDetails.map((dept) =>
+        api.locations
+          .getAll({ department_uuid: dept.uuid_department })
+          .then((res) =>
+            (res.data || []).map((loc) => ({
+              ...loc,
+              _dept_uuid: dept.uuid_department,
+              _dept_name: dept.name_department,
+            }))
+          )
+          .catch(() => [])
+      );
+      const locResults = await Promise.all(locPromises);
+      // Gộp và loại trùng theo uuid_location
+      const allLocs = locResults.flat();
+      const uniqueLocs = Array.from(
+        new Map(allLocs.map((l) => [l.uuid_location, l])).values()
+      );
+      setInventoryAllLocations(uniqueLocs);
+
       setOpenMissingMachinesDialog(true);
     } catch (error) {
       console.error("Error fetching all missing machines:", error);
@@ -5181,7 +5449,20 @@ const TestProposalPage = () => {
                                         variant="caption"
                                         color="text.secondary"
                                       >
-                                        Thông số trong đợt kiểm kê
+                                        Thông số trong đợt kiểm kê (
+                                        <span style={{ color: "#1565c0" }}>
+                                          Sổ sách,{" "}
+                                        </span>
+                                        <span style={{ color: "#2e7d32" }}>
+                                          Số máy hiện diện,{" "}
+                                        </span>
+                                        <span style={{ color: "#ed6c02" }}>
+                                          Số máy khác đơn vị,{" "}
+                                        </span>
+                                        <span style={{ color: "#d32f2f" }}>
+                                          Số máy chưa xác định
+                                        </span>
+                                        )
                                       </Typography>
                                     </Box>
                                   </Stack>
@@ -5225,7 +5506,7 @@ const TestProposalPage = () => {
                                             }}
                                             align="center"
                                           >
-                                            Số máy hiện diện (CĐV +{" "}
+                                            Số máy hiện diện (
                                             <span style={{ color: "#ed6c02" }}>
                                               KĐV
                                             </span>
@@ -5249,7 +5530,7 @@ const TestProposalPage = () => {
                                           let grandTotalLocs = 0;
                                           let grandTotalSystem = 0;
                                           let grandTotalScanned = 0;
-                                          let grandTotalCorrectDept = 0;
+                                          // let grandTotalCorrectDept = 0;
                                           let grandTotalMisDept = 0;
 
                                           // Build global scanned uuid set từ TOÀN BỘ inventoryDetails
@@ -5408,8 +5689,8 @@ const TestProposalPage = () => {
                                                   systemSnapshot;
                                                 grandTotalScanned +=
                                                   totalScanned;
-                                                grandTotalCorrectDept +=
-                                                  correctDeptCount;
+                                                // grandTotalCorrectDept +=
+                                                correctDeptCount;
                                                 grandTotalMisDept +=
                                                   misDeptCount;
 
@@ -5521,18 +5802,13 @@ const TestProposalPage = () => {
                                                             }}
                                                           >
                                                             (
-                                                            {new Intl.NumberFormat(
-                                                              "en-US"
-                                                            ).format(
-                                                              row.correctDept
-                                                            )}{" "}
-                                                            +{" "}
                                                             <span
                                                               style={{
                                                                 color:
                                                                   "#ed6c02",
                                                               }}
                                                             >
+                                                              KĐV:{" "}
                                                               {new Intl.NumberFormat(
                                                                 "en-US"
                                                               ).format(
@@ -5555,7 +5831,7 @@ const TestProposalPage = () => {
                                                       fontWeight: 600,
                                                     }}
                                                   >
-                                                    {row.missing > 0 ? (
+                                                    {/* {row.missing > 0 ? (
                                                       <Button
                                                         size="small"
                                                         variant="outlined"
@@ -5583,7 +5859,10 @@ const TestProposalPage = () => {
                                                       new Intl.NumberFormat(
                                                         "en-US"
                                                       ).format(row.missing)
-                                                    )}
+                                                    )} */}
+                                                    {new Intl.NumberFormat(
+                                                      "en-US"
+                                                    ).format(row.missing)}
                                                   </TableCell>
                                                 </TableRow>
                                               ))}
@@ -5651,17 +5930,12 @@ const TestProposalPage = () => {
                                                           }}
                                                         >
                                                           (
-                                                          {new Intl.NumberFormat(
-                                                            "en-US"
-                                                          ).format(
-                                                            grandTotalCorrectDept
-                                                          )}{" "}
-                                                          +{" "}
                                                           <span
                                                             style={{
                                                               color: "#ed6c02",
                                                             }}
                                                           >
+                                                            KĐV:{" "}
                                                             {new Intl.NumberFormat(
                                                               "en-US"
                                                             ).format(
@@ -8355,7 +8629,9 @@ const TestProposalPage = () => {
         >
           <DialogTitle
             sx={{
-              background: "linear-gradient(45deg, #667eea, #764ba2)",
+              background: batchScanPreSelectedLocation
+                ? "linear-gradient(45deg, #ff9800, #ff5722)"
+                : "linear-gradient(45deg, #667eea, #764ba2)",
               color: "white",
               fontWeight: 700,
               display: "flex",
@@ -8363,15 +8639,32 @@ const TestProposalPage = () => {
               alignItems: "center",
             }}
           >
-            <Typography
-              component="span"
-              variant={isMobile ? "h6" : "h5"}
-              sx={{ fontWeight: 700 }}
-            >
-              Dò tìm thiết bị (RFID)
-            </Typography>
+            <Box>
+              <Typography
+                component="span"
+                variant={isMobile ? "h6" : "h5"}
+                sx={{ fontWeight: 700, display: "block" }}
+              >
+                {batchScanPreSelectedLocation
+                  ? "Quét hàng loạt (RFID)"
+                  : "Dò tìm thiết bị (RFID)"}
+              </Typography>
+              {batchScanPreSelectedLocation && (
+                <Typography variant="caption" sx={{ opacity: 0.9 }}>
+                  {currentDepartment?.name_department} —{" "}
+                  {inventoryAllLocations.find(
+                    (l) => l.uuid_location === batchScanPreSelectedLocation
+                  )?.name_location ||
+                    batchPickerLocation?.name_location ||
+                    ""}
+                </Typography>
+              )}
+            </Box>
             <IconButton
-              onClick={() => setOpenInventoryRfidSearchDialog(false)}
+              onClick={() => {
+                setOpenInventoryRfidSearchDialog(false);
+                setBatchScanPreSelectedLocation(null);
+              }}
               sx={{ color: "white" }}
             >
               <Close />
@@ -8379,9 +8672,18 @@ const TestProposalPage = () => {
           </DialogTitle>
           <DialogContent sx={{ p: 0 }}>
             <RfidSearch
-              onClose={() => setOpenInventoryRfidSearchDialog(false)}
+              onClose={() => {
+                setOpenInventoryRfidSearchDialog(false);
+                setBatchScanPreSelectedLocation(null);
+                setBatchScanAllMissing([]);
+              }}
               selectedMachines={inventoryRfidSearchTargets}
               skipResolveApi
+              inventoryLocations={inventoryAllLocations}
+              onFoundMachineInventory={
+                handleInventoryMachineFoundFromRfidSearch
+              }
+              preSelectedLocationUuid={batchScanPreSelectedLocation}
             />
           </DialogContent>
         </Dialog>
@@ -8489,35 +8791,60 @@ const TestProposalPage = () => {
               </TableContainer>
             )}
           </DialogContent>
-          <DialogActions sx={{ p: 2, gap: 1 }}>
-            {missingMachines.some(
-              (m) =>
-                m.found_at === "Chưa quét" &&
-                m.RFID_machine &&
-                m.RFID_machine.trim() !== ""
-            ) && (
-              <Button
-                onClick={handleRfidSearchFromMissingMachines}
-                variant="contained"
-                startIcon={<WifiTethering />}
-                sx={{
-                  bgcolor: "#1976d2",
-                  "&:hover": { bgcolor: "#1565c0" },
-                  borderRadius: "8px",
-                }}
-              >
-                Dò tìm RFID máy chưa quét (
-                {
-                  missingMachines.filter(
-                    (m) =>
-                      m.found_at === "Chưa quét" &&
-                      m.RFID_machine &&
-                      m.RFID_machine.trim() !== ""
-                  ).length
-                }
-                )
-              </Button>
-            )}
+          <DialogActions sx={{ p: 2, gap: 1, flexWrap: "wrap" }}>
+            {/* Chỉ hiện 2 nút dò tìm khi phiếu ở trạng thái draft */}
+            {selectedTicket?.status === "draft" &&
+              missingMachines.some(
+                (m) =>
+                  m.found_at === "Chưa quét" &&
+                  m.RFID_machine &&
+                  m.RFID_machine.trim() !== ""
+              ) && (
+                <Button
+                  onClick={handleOpenBatchScanPicker}
+                  variant="contained"
+                  startIcon={<WifiTethering />}
+                  sx={{
+                    background: "linear-gradient(45deg, #ff9800, #ff5722)",
+                    "&:hover": {
+                      background: "linear-gradient(45deg, #f57c00, #e64a19)",
+                    },
+                    borderRadius: "8px",
+                    fontWeight: 700,
+                  }}
+                >
+                  Dò tìm RFID hàng loạt theo chuyền
+                </Button>
+              )}
+            {selectedTicket?.status === "draft" &&
+              missingMachines.some(
+                (m) =>
+                  m.found_at === "Chưa quét" &&
+                  m.RFID_machine &&
+                  m.RFID_machine.trim() !== ""
+              ) && (
+                <Button
+                  onClick={handleRfidSearchFromMissingMachines}
+                  variant="contained"
+                  startIcon={<WifiTethering />}
+                  sx={{
+                    bgcolor: "#1976d2",
+                    "&:hover": { bgcolor: "#1565c0" },
+                    borderRadius: "8px",
+                  }}
+                >
+                  Dò tìm RFID máy chưa quét (
+                  {
+                    missingMachines.filter(
+                      (m) =>
+                        m.found_at === "Chưa quét" &&
+                        m.RFID_machine &&
+                        m.RFID_machine.trim() !== ""
+                    ).length
+                  }
+                  )
+                </Button>
+              )}
             <Button
               onClick={() => setOpenMissingMachinesDialog(false)}
               variant="contained"
@@ -8528,6 +8855,205 @@ const TestProposalPage = () => {
             >
               Đóng
             </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Batch Scan Picker Dialog: chọn đơn vị + vị trí trước khi quét hàng loạt */}
+        <Dialog
+          open={openBatchScanPicker}
+          onClose={() => setOpenBatchScanPicker(false)}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{ sx: { borderRadius: "20px" } }}
+        >
+          <DialogTitle
+            sx={{
+              background: "linear-gradient(45deg, #ff9800, #ff5722)",
+              color: "white",
+              fontWeight: 700,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <WifiTethering />
+              <Box>
+                <Typography variant="h6" fontWeight={700}>
+                  Quét hàng loạt vào vị trí
+                </Typography>
+                <Typography variant="caption" sx={{ opacity: 0.85 }}>
+                  {batchPickerStep === 1
+                    ? "Bước 1/2: Chọn đơn vị"
+                    : `Bước 2/2: Chọn vị trí — ${batchPickerDept?.name_department}`}
+                </Typography>
+              </Box>
+            </Box>
+            <IconButton
+              onClick={() => setOpenBatchScanPicker(false)}
+              sx={{ color: "white" }}
+            >
+              <Close />
+            </IconButton>
+          </DialogTitle>
+
+          <DialogContent sx={{ pt: 3, pb: 1 }}>
+            {batchPickerLoading ? (
+              <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+                <CircularProgress />
+              </Box>
+            ) : batchPickerStep === 1 ? (
+              /* BƯỚC 1: Chọn đơn vị */
+              <Stack spacing={1.5}>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mb: 1 }}
+                >
+                  Chọn đơn vị bạn muốn quét máy vào:
+                </Typography>
+                {(formData.inventoryDetails || []).map((dept) => (
+                  <Card
+                    key={dept.uuid_department}
+                    variant="outlined"
+                    onClick={() => handleBatchPickerSelectDept(dept)}
+                    sx={{
+                      p: 2,
+                      cursor: "pointer",
+                      borderRadius: "12px",
+                      borderColor: "rgba(255,152,0,0.3)",
+                      transition: "all 0.2s",
+                      "&:hover": {
+                        borderColor: "#ff9800",
+                        bgcolor: "rgba(255,152,0,0.05)",
+                        transform: "translateX(4px)",
+                      },
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <Typography fontWeight={600}>
+                        {dept.name_department}
+                      </Typography>
+                      <ArrowForward sx={{ color: "#ff9800", fontSize: 20 }} />
+                    </Box>
+                  </Card>
+                ))}
+              </Stack>
+            ) : (
+              /* BƯỚC 2: Chọn vị trí */
+              <Stack spacing={1.5}>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mb: 1 }}
+                >
+                  Chọn vị trí trong{" "}
+                  <strong>{batchPickerDept?.name_department}</strong> để quét
+                  máy vào:
+                </Typography>
+                {batchPickerLocations.length === 0 ? (
+                  <Alert severity="warning" sx={{ borderRadius: "12px" }}>
+                    Đơn vị này chưa có vị trí nào.
+                  </Alert>
+                ) : (
+                  batchPickerLocations.map((loc) => (
+                    <Card
+                      key={loc.uuid_location}
+                      variant="outlined"
+                      onClick={() => setBatchPickerLocation(loc)}
+                      sx={{
+                        p: 2,
+                        cursor: "pointer",
+                        borderRadius: "12px",
+                        borderColor:
+                          batchPickerLocation?.uuid_location ===
+                          loc.uuid_location
+                            ? "#ff9800"
+                            : "rgba(0,0,0,0.12)",
+                        bgcolor:
+                          batchPickerLocation?.uuid_location ===
+                          loc.uuid_location
+                            ? "rgba(255,152,0,0.08)"
+                            : "transparent",
+                        transition: "all 0.2s",
+                        "&:hover": {
+                          borderColor: "#ff9800",
+                          bgcolor: "rgba(255,152,0,0.05)",
+                        },
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        <Typography fontWeight={600}>
+                          {loc.name_location}
+                        </Typography>
+                        {batchPickerLocation?.uuid_location ===
+                          loc.uuid_location && (
+                          <Chip
+                            label="Đã chọn"
+                            size="small"
+                            color="warning"
+                            sx={{ fontWeight: 700 }}
+                          />
+                        )}
+                      </Box>
+                    </Card>
+                  ))
+                )}
+              </Stack>
+            )}
+          </DialogContent>
+
+          <DialogActions sx={{ p: 2, gap: 1 }}>
+            {batchPickerStep === 2 && (
+              <Button
+                onClick={() => {
+                  setBatchPickerStep(1);
+                  setBatchPickerLocation(null);
+                }}
+                variant="outlined"
+                color="inherit"
+                startIcon={<ArrowBack />}
+                sx={{ borderRadius: "10px" }}
+              >
+                Quay lại
+              </Button>
+            )}
+            <Box sx={{ flex: 1 }} />
+            <Button
+              onClick={() => setOpenBatchScanPicker(false)}
+              variant="outlined"
+              color="inherit"
+              sx={{ borderRadius: "10px" }}
+            >
+              Hủy
+            </Button>
+            {batchPickerStep === 2 && (
+              <Button
+                onClick={handleBatchPickerConfirm}
+                variant="contained"
+                disabled={!batchPickerLocation}
+                sx={{
+                  background: "linear-gradient(45deg, #ff9800, #ff5722)",
+                  borderRadius: "10px",
+                  fontWeight: 700,
+                  px: 3,
+                }}
+              >
+                Bắt đầu quét
+              </Button>
+            )}
           </DialogActions>
         </Dialog>
 
@@ -9050,7 +9576,18 @@ const TestProposalPage = () => {
                             Thống kê theo vị trí
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
-                            Chi tiết từng vị trí trong đơn vị
+                            Chi tiết từng vị trí trong đơn vị (
+                            <span style={{ color: "#1565c0" }}>Sổ sách, </span>
+                            <span style={{ color: "#2e7d32" }}>
+                              Số máy hiện diện,{" "}
+                            </span>
+                            <span style={{ color: "#ed6c02" }}>
+                              Số máy khác đơn vị,{" "}
+                            </span>
+                            <span style={{ color: "#d32f2f" }}>
+                              Số máy chưa xác định
+                            </span>
+                            )
                           </Typography>
                         </Box>
                       </Stack>
@@ -9107,7 +9644,7 @@ const TestProposalPage = () => {
                               color: "#1565c0",
                             }}
                           >
-                            Sổ sách (Trước kiểm)
+                            Sổ sách (Trước kiểm kê)
                           </TableCell>
 
                           <TableCell
@@ -9118,7 +9655,7 @@ const TestProposalPage = () => {
                               color: "#2e7d32",
                             }}
                           >
-                            Số máy hiện diện (CĐV +{" "}
+                            Số máy hiện diện (
                             <span style={{ color: "#ed6c02" }}>KĐV</span>)
                           </TableCell>
 
@@ -9216,7 +9753,7 @@ const TestProposalPage = () => {
 
                           let grandTotalSystem = 0;
                           let grandTotalScanned = 0;
-                          let grandTotalCorrectDept = 0;
+                          // let grandTotalCorrectDept = 0;
                           let grandTotalMisDept = 0;
                           let totalCheckedCount = 0;
 
@@ -9259,7 +9796,7 @@ const TestProposalPage = () => {
                             grandTotalSystem += systemCount;
                             if (isScanned) {
                               grandTotalScanned += totalScanned;
-                              grandTotalCorrectDept += correctDeptCount;
+                              // grandTotalCorrectDept += correctDeptCount;
                               grandTotalMisDept += misDeptCount;
                               totalCheckedCount++;
                             }
@@ -9349,15 +9886,12 @@ const TestProposalPage = () => {
                                             }}
                                           >
                                             (
-                                            {new Intl.NumberFormat(
-                                              "en-US"
-                                            ).format(row.correctDept)}{" "}
-                                            +{" "}
                                             <span
                                               style={{
                                                 color: "#ed6c02",
                                               }}
                                             >
+                                              KĐV:{" "}
                                               {new Intl.NumberFormat(
                                                 "en-US"
                                               ).format(row.misDept)}
@@ -9378,7 +9912,7 @@ const TestProposalPage = () => {
                                       fontWeight: 600,
                                     }}
                                   >
-                                    {row.missing > 0 ? (
+                                    {/* {row.missing > 0 ? (
                                       <Button
                                         size="small"
                                         variant="outlined"
@@ -9405,6 +9939,9 @@ const TestProposalPage = () => {
                                       new Intl.NumberFormat("en-US").format(
                                         row.missing
                                       )
+                                    )} */}
+                                    {new Intl.NumberFormat("en-US").format(
+                                      row.missing
                                     )}
                                   </TableCell>
                                 </TableRow>
@@ -9467,15 +10004,12 @@ const TestProposalPage = () => {
                                           }}
                                         >
                                           (
-                                          {new Intl.NumberFormat(
-                                            "en-US"
-                                          ).format(grandTotalCorrectDept)}{" "}
-                                          +{" "}
                                           <span
                                             style={{
                                               color: "#ed6c02",
                                             }}
                                           >
+                                            KĐV:{" "}
                                             {new Intl.NumberFormat(
                                               "en-US"
                                             ).format(grandTotalMisDept)}
@@ -9496,7 +10030,7 @@ const TestProposalPage = () => {
                                     fontSize: "1rem",
                                   }}
                                 >
-                                  {grandTotalMissing > 0 ? (
+                                  {/* {grandTotalMissing > 0 ? (
                                     <Button
                                       size="small"
                                       variant="outlined"
@@ -9523,6 +10057,9 @@ const TestProposalPage = () => {
                                     new Intl.NumberFormat("en-US").format(
                                       grandTotalMissing
                                     )
+                                  )} */}
+                                  {new Intl.NumberFormat("en-US").format(
+                                    grandTotalMissing
                                   )}
                                 </TableCell>
                               </TableRow>
