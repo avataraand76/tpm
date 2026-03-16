@@ -13,6 +13,7 @@ import {
   Alert,
   List,
   ListItem,
+  ListItemIcon,
   ListItemText,
   Divider,
   IconButton,
@@ -31,6 +32,9 @@ import {
   InputLabel,
   FormControl,
   Chip,
+  Fab,
+  Badge,
+  Tooltip,
 } from "@mui/material";
 import {
   Search,
@@ -38,6 +42,7 @@ import {
   CheckCircle,
   Replay,
   LocationOn,
+  Save,
 } from "@mui/icons-material";
 import { api } from "../api/api";
 
@@ -49,10 +54,12 @@ const RfidSearch = ({
   skipResolveApi = false,
   // Danh sách vị trí để chọn khi tìm thấy máy (chế độ kiểm kê)
   inventoryLocations = [],
-  // Callback khi user xác nhận thêm máy vào vị trí (chế độ kiểm kê)
+  // Callback khi user xác nhận thêm máy vào vị trí (chế độ kiểm kê - từng máy)
   onFoundMachineInventory = null,
-  // Khi đã chọn sẵn vị trí (batch mode): tự động lưu ngay khi tìm thấy, không cần chọn vị trí
+  // Khi đã chọn sẵn vị trí (batch mode): tích lũy danh sách, user bấm xác nhận mới lưu 1 lần
   preSelectedLocationUuid = null,
+  // Callback batch: (targets[], locationUuid) => Promise — lưu toàn bộ 1 lần
+  onBatchConfirm = null,
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -88,6 +95,11 @@ const RfidSearch = ({
   const [pendingFoundTarget, setPendingFoundTarget] = useState(null);
   const [selectedLocationUuid, setSelectedLocationUuid] = useState("");
   const [savingLocation, setSavingLocation] = useState(false);
+
+  // Batch mode: tích lũy máy tìm thấy, user xác nhận mới lưu 1 lần
+  const [batchFoundList, setBatchFoundList] = useState([]); // [{target, locationUuid}]
+  const [batchSaving, setBatchSaving] = useState(false);
+  const [openBatchConfirmDialog, setOpenBatchConfirmDialog] = useState(false);
 
   // Refs
   const scanInputRef = useRef(null);
@@ -298,13 +310,17 @@ const RfidSearch = ({
         // Phát âm thanh cảnh báo
         playSound();
 
-        if (skipResolveApi && onFoundMachineInventory && preSelectedLocationUuid) {
-          // Batch mode: vị trí đã chọn sẵn → lưu ngay, hiện overlay xanh
+        if (skipResolveApi && preSelectedLocationUuid && onBatchConfirm) {
+          // Batch mode: tích lũy vào danh sách tạm, chờ user bấm xác nhận
           setFoundTargets((prev) => new Set([...prev, targetRfid]));
           setCurrentFoundTarget(target);
-          onFoundMachineInventory(target, preSelectedLocationUuid).catch((err) =>
-            console.error("Lỗi lưu máy batch:", err)
-          );
+          setBatchFoundList((prev) => {
+            const alreadyIn = prev.some(
+              (item) => item.target.targetRfid.toUpperCase() === targetRfid
+            );
+            if (alreadyIn) return prev;
+            return [...prev, { target, locationUuid: preSelectedLocationUuid }];
+          });
         } else if (skipResolveApi && onFoundMachineInventory) {
           // Chế độ kiểm kê thông thường: hiện dialog chọn vị trí
           setPendingFoundTarget(target);
@@ -339,8 +355,14 @@ const RfidSearch = ({
       setOpenLocationDialog(false);
       setPendingFoundTarget(null);
       setSelectedLocationUuid("");
-      // Focus lại textarea để tiếp tục quét
-      setTimeout(() => scanInputRef.current?.focus(), 200);
+      // Xóa bộ đệm scan để tránh match lại RFID cũ khi quét máy tiếp theo
+      setScanInput("");
+      setTimeout(() => {
+        if (scanInputRef.current) {
+          scanInputRef.current.value = "";
+          scanInputRef.current.focus();
+        }
+      }, 200);
     } catch (err) {
       console.error("Lỗi lưu máy vào vị trí:", err);
     } finally {
@@ -348,12 +370,19 @@ const RfidSearch = ({
     }
   };
 
-  // Đóng dialog chọn vị trí mà không lưu
+  // Đóng dialog chọn vị trí mà không lưu — máy vẫn ở trạng thái "chưa quét"
   const handleCancelLocationDialog = () => {
     setOpenLocationDialog(false);
     setPendingFoundTarget(null);
     setSelectedLocationUuid("");
-    setTimeout(() => scanInputRef.current?.focus(), 200);
+    // Xóa bộ đệm scan để tránh match lại RFID cũ khi quét máy tiếp theo
+    setScanInput("");
+    setTimeout(() => {
+      if (scanInputRef.current) {
+        scanInputRef.current.value = "";
+        scanInputRef.current.focus();
+      }
+    }, 200);
   };
 
   const handleReset = () => {
@@ -364,6 +393,25 @@ const RfidSearch = ({
     setScanInput("");
     setError("");
     setErrors([]);
+    setBatchFoundList([]);
+  };
+
+  // Batch mode: user bấm xác nhận → lưu toàn bộ 1 lần
+  const handleBatchConfirm = async () => {
+    if (!onBatchConfirm || batchFoundList.length === 0) return;
+    setBatchSaving(true);
+    try {
+      await onBatchConfirm(batchFoundList);
+      setBatchFoundList([]);
+      setFoundTargets(new Set());
+      setCurrentFoundTarget(null);
+      setScanInput("");
+      setOpenBatchConfirmDialog(false);
+    } catch (err) {
+      console.error("Lỗi xác nhận batch:", err);
+    } finally {
+      setBatchSaving(false);
+    }
   };
 
   // Hàm để người dùng reset trạng thái tìm kiếm (để quét tiếp)
@@ -567,7 +615,10 @@ const RfidSearch = ({
                             {loc.name_location}
                           </Typography>
                           {loc._dept_name && (
-                            <Typography variant="caption" color="text.secondary">
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
                               {loc._dept_name}
                             </Typography>
                           )}
@@ -947,6 +998,174 @@ const RfidSearch = ({
               </Box>
             </Card>
 
+            {/* BATCH MODE: FAB xác nhận lưu */}
+            {preSelectedLocationUuid && onBatchConfirm && (
+              <>
+                <Tooltip
+                  title={
+                    batchFoundList.length === 0
+                      ? "Chưa quét được máy nào"
+                      : `Xác nhận lưu ${batchFoundList.length} máy`
+                  }
+                  placement="left"
+                >
+                  <Fab
+                    color="success"
+                    size="large"
+                    onClick={() => setOpenBatchConfirmDialog(true)}
+                    disabled={batchFoundList.length === 0}
+                    sx={{
+                      position: "fixed",
+                      bottom: 24,
+                      right: 24,
+                      zIndex: 1000,
+                      boxShadow: "0 6px 24px rgba(46,125,50,0.45)",
+                      "&:not(:disabled)": {
+                        animation: "fabPulse 2s ease-in-out infinite",
+                      },
+                    }}
+                  >
+                    <Badge
+                      badgeContent={batchFoundList.length}
+                      color="error"
+                      sx={{
+                        "& .MuiBadge-badge": {
+                          fontSize: "0.75rem",
+                          fontWeight: "bold",
+                          minWidth: "24px",
+                          height: "24px",
+                        },
+                      }}
+                    >
+                      <Save />
+                    </Badge>
+                  </Fab>
+                </Tooltip>
+
+                {/* Dialog xác nhận lưu batch */}
+                <Dialog
+                  open={openBatchConfirmDialog}
+                  onClose={() =>
+                    !batchSaving && setOpenBatchConfirmDialog(false)
+                  }
+                  maxWidth="sm"
+                  fullWidth
+                  PaperProps={{ sx: { borderRadius: "20px" } }}
+                >
+                  <DialogTitle
+                    sx={{
+                      background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                      color: "white",
+                      fontWeight: 700,
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <Box>
+                      <Typography variant="h6" fontWeight={700}>
+                        Xác nhận lưu
+                      </Typography>
+                      <Typography variant="caption" sx={{ opacity: 0.9 }}>
+                        Phát hiện {batchFoundList.length} máy
+                      </Typography>
+                    </Box>
+                    <Chip
+                      label={`${batchFoundList.length} máy`}
+                      sx={{
+                        bgcolor: "rgba(255,255,255,0.25)",
+                        color: "white",
+                        fontWeight: 700,
+                        fontSize: "0.95rem",
+                      }}
+                    />
+                  </DialogTitle>
+                  <DialogContent sx={{ p: 0 }}>
+                    <List dense sx={{ maxHeight: 360, overflowY: "auto" }}>
+                      {batchFoundList.map((item, idx) => (
+                        <ListItem
+                          key={idx}
+                          sx={{
+                            py: 1,
+                            px: 2.5,
+                            borderBottom: "1px solid rgba(0,0,0,0.06)",
+                            "&:last-child": { borderBottom: "none" },
+                          }}
+                        >
+                          <ListItemIcon sx={{ minWidth: 36 }}>
+                            <CheckCircle
+                              sx={{ color: "#2e7d32", fontSize: 20 }}
+                            />
+                          </ListItemIcon>
+                          <ListItemText
+                            primary={
+                              <Typography variant="body2" fontWeight={600}>
+                                {item.target.info?.code ||
+                                  item.target.info?.serial ||
+                                  item.target.targetRfid}
+                              </Typography>
+                            }
+                            secondary={
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                {[
+                                  item.target.info?.type,
+                                  item.target.info?.model,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" ")}{" "}
+                                {[
+                                  item.target.info?.type,
+                                  item.target.info?.model,
+                                ].some(Boolean) && "·"}{" "}
+                                RFID: {item.target.targetRfid}
+                              </Typography>
+                            }
+                          />
+                        </ListItem>
+                      ))}
+                    </List>
+                  </DialogContent>
+                  <DialogActions sx={{ p: 2.5, gap: 1 }}>
+                    <Button
+                      variant="outlined"
+                      color="inherit"
+                      onClick={() => setOpenBatchConfirmDialog(false)}
+                      disabled={batchSaving}
+                      sx={{ borderRadius: "10px", px: 3 }}
+                    >
+                      Quét thêm
+                    </Button>
+                    <Button
+                      variant="contained"
+                      color="success"
+                      onClick={handleBatchConfirm}
+                      disabled={batchSaving}
+                      startIcon={
+                        batchSaving ? (
+                          <CircularProgress size={18} color="inherit" />
+                        ) : (
+                          <Save />
+                        )
+                      }
+                      sx={{
+                        borderRadius: "10px",
+                        px: 3,
+                        fontWeight: 700,
+                        background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                      }}
+                    >
+                      {batchSaving
+                        ? "Đang lưu..."
+                        : `Lưu ${batchFoundList.length} máy`}
+                    </Button>
+                  </DialogActions>
+                </Dialog>
+              </>
+            )}
+
             <Stack
               direction="row"
               spacing={2}
@@ -989,6 +1208,11 @@ const RfidSearch = ({
           0% { transform: scale(0.95); opacity: 0.9; }
           50% { transform: scale(1.1); opacity: 1; }
           100% { transform: scale(0.95); opacity: 0.9; }
+        }
+        @keyframes fabPulse {
+          0% { box-shadow: 0 6px 24px rgba(46,125,50,0.45); }
+          50% { box-shadow: 0 6px 32px rgba(46,125,50,0.75), 0 0 0 8px rgba(76,175,80,0.15); }
+          100% { box-shadow: 0 6px 24px rgba(46,125,50,0.45); }
         }
       `}</style>
 

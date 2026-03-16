@@ -2611,6 +2611,123 @@ const TestProposalPage = () => {
     );
   };
 
+  // Batch mode: nhận toàn bộ danh sách máy đã quét, lưu 1 lần
+  const handleBatchConfirmFromRfidSearch = async (batchList) => {
+    if (!selectedTicket || !batchList || batchList.length === 0) return;
+
+    const searchList =
+      batchScanAllMissing.length > 0 ? batchScanAllMissing : missingMachines;
+
+    // Nhóm máy theo đơn vị + vị trí để gọi API tối thiểu
+    const groupMap = new Map(); // key: `${deptUuid}__${locationUuid}`
+    const skipped = [];
+
+    for (const { target, locationUuid } of batchList) {
+      const rfid = target.targetRfid.toUpperCase();
+      const machineData = searchList.find(
+        (m) => m.RFID_machine && m.RFID_machine.toUpperCase() === rfid
+      );
+      if (!machineData) {
+        skipped.push(rfid);
+        continue;
+      }
+      const deptUuid =
+        machineData._dept_uuid || currentDepartment?.uuid_department;
+      if (!deptUuid) {
+        skipped.push(rfid);
+        continue;
+      }
+      const key = `${deptUuid}__${locationUuid}`;
+      if (!groupMap.has(key)) {
+        groupMap.set(key, { deptUuid, locationUuid, machines: [] });
+      }
+      groupMap.get(key).machines.push(machineData);
+    }
+
+    // Gọi API song song theo từng nhóm
+    const groups = Array.from(groupMap.values());
+    await Promise.all(
+      groups.map(({ deptUuid, locationUuid, machines }) =>
+        api.inventory.scanLocation(selectedTicket.uuid_inventory_check, {
+          department_uuid: deptUuid,
+          location_uuid: locationUuid,
+          scanned_machines: machines,
+          machines_to_remove: [],
+        })
+      )
+    );
+
+    // Cập nhật missingMachines: đánh dấu tất cả máy đã tìm thấy
+    const foundRfids = new Set(
+      batchList.map((item) => item.target.targetRfid.toUpperCase())
+    );
+    setMissingMachines((prev) =>
+      prev.map((m) =>
+        m.RFID_machine && foundRfids.has(m.RFID_machine.toUpperCase())
+          ? { ...m, found_at: "Đã tìm thấy (batch)" }
+          : m
+      )
+    );
+
+    // Refresh data
+    try {
+      const response = await api.inventory.getById(
+        selectedTicket.uuid_inventory_check
+      );
+      setSelectedTicket(response.data.inventory);
+      setFormData((prev) => ({
+        ...prev,
+        inventoryDetails: response.data.details || [],
+      }));
+      if (currentDepartment) {
+        const deptUuidsInBatch = new Set(groups.map((g) => g.deptUuid));
+        for (const deptUuid of deptUuidsInBatch) {
+          const updatedDept = response.data.details.find(
+            (d) => d.uuid_department === deptUuid
+          );
+          if (
+            updatedDept &&
+            updatedDept.uuid_department === currentDepartment.uuid_department
+          ) {
+            let updatedScannedList = [];
+            try {
+              const parsed =
+                typeof updatedDept.scanned_result === "string"
+                  ? JSON.parse(updatedDept.scanned_result)
+                  : updatedDept.scanned_result;
+              updatedScannedList = Array.isArray(parsed)
+                ? parsed
+                : parsed?.locations || [];
+            } catch {
+              updatedScannedList = [];
+            }
+            setScannedLocationsList(updatedScannedList);
+            setCurrentDepartment(updatedDept);
+          }
+        }
+      }
+    } catch (refreshErr) {
+      console.error("Lỗi refresh sau batch:", refreshErr);
+    }
+
+    const savedCount = batchList.length - skipped.length;
+    showNotification(
+      "success",
+      "Lưu thành công",
+      `Đã lưu ${savedCount} máy vào vị trí đã chọn.${
+        skipped.length > 0
+          ? ` (${skipped.length} máy không tìm thấy thông tin)`
+          : ""
+      }`
+    );
+
+    // Đóng tất cả dialog liên quan và reset batch state
+    setOpenInventoryRfidSearchDialog(false);
+    setOpenMissingMachinesDialog(false);
+    setBatchScanPreSelectedLocation(null);
+    setBatchScanAllMissing([]);
+  };
+
   const handleInventorySubmit = async () => {
     if (!selectedTicket) return;
 
@@ -8681,9 +8798,16 @@ const TestProposalPage = () => {
               skipResolveApi
               inventoryLocations={inventoryAllLocations}
               onFoundMachineInventory={
-                handleInventoryMachineFoundFromRfidSearch
+                batchScanPreSelectedLocation
+                  ? null
+                  : handleInventoryMachineFoundFromRfidSearch
               }
               preSelectedLocationUuid={batchScanPreSelectedLocation}
+              onBatchConfirm={
+                batchScanPreSelectedLocation
+                  ? handleBatchConfirmFromRfidSearch
+                  : null
+              }
             />
           </DialogContent>
         </Dialog>
@@ -8904,13 +9028,13 @@ const TestProposalPage = () => {
               </Box>
             ) : batchPickerStep === 1 ? (
               /* BƯỚC 1: Chọn đơn vị */
-              <Stack spacing={1.5}>
+              <Stack spacing={1.5} sx={{ pt: 2, pb: 1 }}>
                 <Typography
                   variant="body2"
                   color="text.secondary"
                   sx={{ mb: 1 }}
                 >
-                  Chọn đơn vị bạn muốn quét máy vào:
+                  Chọn đơn vị quét máy vào:
                 </Typography>
                 {(formData.inventoryDetails || []).map((dept) => (
                   <Card
@@ -8947,7 +9071,7 @@ const TestProposalPage = () => {
               </Stack>
             ) : (
               /* BƯỚC 2: Chọn vị trí */
-              <Stack spacing={1.5}>
+              <Stack spacing={1.5} sx={{ pt: 2, pb: 1 }}>
                 <Typography
                   variant="body2"
                   color="text.secondary"
