@@ -11,6 +11,7 @@ const { Readable } = require("stream");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const axios = require("axios");
+const cron = require("node-cron");
 // const bodyParser = require("body-parser");
 require("dotenv").config();
 
@@ -8405,7 +8406,7 @@ async function enrichApprovalFlowWithNames(flowJson) {
     // Gán tên vào flow
     const enrichedFlow = flow.map((step) => ({
       ...step,
-      ten_nv: userMap[step.ma_nv] || "(Chưa cập nhật tên)",
+      ten_nv: userMap[step.ma_nv],
     }));
 
     return enrichedFlow;
@@ -8646,9 +8647,17 @@ app.post(
               `SELECT DISTINCT id_nhan_vien FROM tb_user_permission WHERE id_nhan_vien IN (?) AND id_permission = 2`,
               [destUserIds]
             );
+            const EXCLUDED_MA_NV = new Set([
+              "01195",
+              "09411",
+              "08502",
+              "08477",
+            ]);
             const permittedSet = new Set(perms.map((p) => p.id_nhan_vien));
             validApprovers = destUsers
-              .filter((u) => permittedSet.has(u.id))
+              .filter(
+                (u) => permittedSet.has(u.id) && !EXCLUDED_MA_NV.has(u.ma_nv)
+              )
               .map((u) => ({
                 ma_nv: u.ma_nv,
                 step_flow: 0,
@@ -9251,7 +9260,7 @@ app.post("/api/test-proposals/callback", async (req, res) => {
 
     // Kiểm tra Import
     const [importCheck] = await connection.query(
-      "SELECT id_machine_import, approval_flow, created_by, import_type, to_location_id, is_borrowed_or_rented_or_borrowed_out_name, is_borrowed_or_rented_or_borrowed_out_date, is_borrowed_or_rented_or_borrowed_out_return_date FROM tb_machine_import WHERE uuid_machine_import = ?",
+      "SELECT id_machine_import, approval_flow, created_by, status, import_type, to_location_id, is_borrowed_or_rented_or_borrowed_out_name, is_borrowed_or_rented_or_borrowed_out_date, is_borrowed_or_rented_or_borrowed_out_return_date FROM tb_machine_import WHERE uuid_machine_import = ?",
       [id_refer]
     );
     if (importCheck.length > 0) {
@@ -9264,7 +9273,7 @@ app.post("/api/test-proposals/callback", async (req, res) => {
     } else {
       // Kiểm tra Export
       const [exportCheck] = await connection.query(
-        "SELECT id_machine_export, approval_flow, created_by, export_type, to_location_id, is_borrowed_or_rented_or_borrowed_out_name, is_borrowed_or_rented_or_borrowed_out_date, is_borrowed_or_rented_or_borrowed_out_return_date FROM tb_machine_export WHERE uuid_machine_export = ?",
+        "SELECT id_machine_export, approval_flow, created_by, status, export_type, to_location_id, is_borrowed_or_rented_or_borrowed_out_name, is_borrowed_or_rented_or_borrowed_out_date, is_borrowed_or_rented_or_borrowed_out_return_date FROM tb_machine_export WHERE uuid_machine_export = ?",
         [id_refer]
       );
       if (exportCheck.length > 0) {
@@ -9277,7 +9286,7 @@ app.post("/api/test-proposals/callback", async (req, res) => {
       } else {
         // Kiểm tra Internal
         const [internalCheck] = await connection.query(
-          "SELECT id_machine_internal_transfer, approval_flow, created_by, to_location_id, target_status FROM tb_machine_internal_transfer WHERE uuid_machine_internal_transfer = ?",
+          "SELECT id_machine_internal_transfer, approval_flow, created_by, status, to_location_id, target_status FROM tb_machine_internal_transfer WHERE uuid_machine_internal_transfer = ?",
           [id_refer]
         );
         if (internalCheck.length > 0) {
@@ -9312,6 +9321,23 @@ app.post("/api/test-proposals/callback", async (req, res) => {
       return res
         .status(404)
         .json({ success: false, message: "Ticket not found" });
+    }
+
+    // Guard: chỉ xử lý phiếu đang ở trạng thái chờ duyệt
+    const ALLOWED_STATUSES = [
+      "pending",
+      "pending_approval",
+      "pending_confirmation",
+    ];
+    if (!ALLOWED_STATUSES.includes(ticketInfo.status)) {
+      await connection.rollback();
+      console.warn(
+        `[Callback] Bỏ qua phiếu ${id_refer} vì trạng thái hiện tại là '${ticketInfo.status}' (không nằm trong danh sách cho phép).`
+      );
+      return res.status(200).json({
+        success: false,
+        message: `Phiếu đã ở trạng thái '${ticketInfo.status}', không thể cập nhật.`,
+      });
     }
 
     // 2. Xử lý Luồng Duyệt Mới
@@ -9453,11 +9479,17 @@ app.post("/api/test-proposals/callback", async (req, res) => {
 
               if (loc.scanned_machine && Array.isArray(loc.scanned_machine)) {
                 for (const m of loc.scanned_machine) {
-                  // Chỉ cập nhật nếu máy bị SAI VỊ TRÍ (mislocation = "1")
-                  if (m.mislocation === "1") {
+                  // Chỉ cập nhật máy SAI VỊ TRÍ (mislocation = "1"),
+                  // bỏ qua máy NOT_FOUND và máy chưa xác định (không có trong scanned_result)
+                  const mUuid = m.uuid || m.uuid_machine;
+                  if (
+                    m.mislocation === "1" &&
+                    mUuid &&
+                    !String(mUuid).startsWith("NOT_FOUND")
+                  ) {
                     const [mIdRes] = await connection.query(
                       "SELECT id_machine FROM tb_machine WHERE uuid_machine = ?",
-                      [m.uuid]
+                      [mUuid]
                     );
                     if (mIdRes.length > 0) {
                       const idMachine = mIdRes[0].id_machine;
@@ -10711,7 +10743,10 @@ app.put(
 
       // 1. Get Inventory
       const [invRes] = await connection.query(
-        "SELECT id_inventory_check, check_date, status, created_by FROM tb_inventory_check WHERE uuid_inventory_check = ?",
+        `SELECT i.id_inventory_check, i.check_date, i.status, i.created_by, creator.ma_nv as ma_nv_creator
+         FROM tb_inventory_check i
+         LEFT JOIN ${process.env.DATA_HITIMESHEET_DATABASE}.sync_nhan_vien creator ON creator.id = i.created_by
+         WHERE i.uuid_inventory_check = ?`,
         [uuid]
       );
       if (invRes.length === 0)
@@ -10792,6 +10827,7 @@ app.put(
         SELECT 
           d.id_department,
           d.scanned_result,
+          d.list_before_scan,
           dep.name_department,
           dep.uuid_department
         FROM tb_inventory_check_detail d
@@ -10803,6 +10839,30 @@ app.put(
 
       let tableRows = [];
       let stt = 1;
+
+      // Build globalScannedUuids từ TOÀN BỘ đơn vị trong phiếu (giống logic frontend)
+      const globalScannedUuids = new Set();
+      departmentDetails.forEach((dept) => {
+        try {
+          const parsed =
+            typeof dept.scanned_result === "string"
+              ? JSON.parse(dept.scanned_result)
+              : dept.scanned_result;
+          const locations = Array.isArray(parsed)
+            ? parsed
+            : parsed?.locations || [];
+          locations.forEach((loc) => {
+            (loc.scanned_machine || []).forEach((m) => {
+              const u = m.uuid || m.uuid_machine;
+              if (u && !String(u).startsWith("NOT_FOUND")) {
+                globalScannedUuids.add(u);
+              }
+            });
+          });
+        } catch (e) {
+          console.error("Error building globalScannedUuids:", e);
+        }
+      });
 
       departmentDetails.forEach((dept) => {
         let locationsArr = [];
@@ -10862,12 +10922,39 @@ app.put(
           }
         });
 
-        // Chỉ thêm đơn vị nếu có máy sai vị trí
+        // Tính danh sách máy chưa xác định: có trong list_before_scan nhưng
+        // chưa được quét ở BẤT KỲ ĐÂU trong toàn phiếu (dùng globalScannedUuids)
+        const unidentifiedMachines = [];
+        try {
+          const listBeforeScan =
+            typeof dept.list_before_scan === "string"
+              ? JSON.parse(dept.list_before_scan)
+              : dept.list_before_scan;
+
+          if (Array.isArray(listBeforeScan)) {
+            listBeforeScan.forEach((loc) => {
+              (loc.machines || []).forEach((m) => {
+                if (m.uuid_machine && !globalScannedUuids.has(m.uuid_machine)) {
+                  unidentifiedMachines.push({
+                    name: `${m.type_machine || ""} ${m.attribute_machine || ""} - ${m.model_machine || ""}`.trim(),
+                    serial: m.serial_machine || "",
+                    code: m.code_machine || "",
+                    location_name: loc.location_name || "",
+                  });
+                }
+              });
+            });
+          }
+        } catch (e) {
+          console.error("Error computing unidentified machines:", e);
+        }
+
         const hasMislocations =
           Object.keys(sameDeptMislocations).length > 0 ||
           Object.keys(diffDeptMislocations).length > 0;
+        const hasUnidentified = unidentifiedMachines.length > 0;
 
-        if (hasMislocations) {
+        if (hasMislocations || hasUnidentified) {
           // Tính tổng số lượng máy từng loại
           const sameDeptTotal = Object.values(sameDeptMislocations).reduce(
             (sum, group) => sum + group.count,
@@ -10978,13 +11065,54 @@ app.put(
               "",
             ]);
           }
+
+          // 6. Thêm danh sách máy chưa xác định (có trong sổ sách nhưng chưa quét)
+          if (hasUnidentified) {
+            tableRows.push([
+              "Các máy chưa xác định (chưa được quét)",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+            ]);
+
+            unidentifiedMachines.forEach((m) => {
+              tableRows.push([
+                stt++,
+                m.name,
+                m.serial || m.code,
+                "Máy",
+                1,
+                m.location_name,
+                "",
+                "Chưa xác định",
+                "",
+              ]);
+            });
+
+            tableRows.push([
+              `Tổng SL máy chưa xác định ${dept.name_department}`,
+              "",
+              "",
+              "",
+              unidentifiedMachines.length,
+              "",
+              "",
+              "",
+              "",
+            ]);
+          }
         }
       });
 
       if (tableRows.length === 0) {
         tableRows.push([
           "",
-          "Không có máy sai vị trí",
+          "Không có máy sai vị trí hoặc máy chưa xác định",
           "",
           "",
           "",
@@ -10997,7 +11125,7 @@ app.put(
 
       const externalPayload = {
         uid_proposal_type: "ead745eb-8499-46de-9740-ce14974f333b",
-        ma_nv: ma_nv_login,
+        ma_nv: ticket.ma_nv_creator || ma_nv_login,
         name_proposal_reality: `Phiếu kiểm kê ngày ${new Date(
           ticket.check_date
         ).toLocaleDateString("vi-VN")}`,
@@ -11069,3 +11197,244 @@ app.put(
     }
   }
 );
+
+// MARK: AUTO CREATE INVENTORY SCHEDULE
+// Tự động tạo phiếu kiểm kê lúc 16:00 thứ 2-6 và 15:00 thứ 7 cho các đơn vị id_department 1,2,3,4,5
+
+const AUTO_INVENTORY_DEPARTMENT_IDS = [1, 2, 3, 4, 5];
+
+async function autoCreateInventoryCheck() {
+  const connection = await tpmConnection.getConnection();
+  try {
+    const now = new Date();
+    const vnNow = new Date(
+      now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" })
+    );
+    const yyyy = vnNow.getFullYear();
+    const mm = String(vnNow.getMonth() + 1).padStart(2, "0");
+    const dd = String(vnNow.getDate()).padStart(2, "0");
+    const checkDate = `${yyyy}-${mm}-${dd}`;
+
+    // Kiểm tra xem hôm nay đã có phiếu kiểm kê chưa (tránh tạo trùng)
+    const [existing] = await tpmConnection.query(
+      `SELECT id_inventory_check FROM tb_inventory_check WHERE DATE(check_date) = ? LIMIT 1`,
+      [checkDate]
+    );
+    if (existing.length > 0) {
+      console.log(
+        `[AutoInventory] Phiếu kiểm kê ngày ${checkDate} đã tồn tại, bỏ qua.`
+      );
+      connection.release();
+      return;
+    }
+
+    await connection.beginTransaction();
+
+    // Tạo master ticket
+    const [result] = await connection.query(
+      `INSERT INTO tb_inventory_check (check_date, status, note, created_by, updated_by) VALUES (?, 'draft', ?, ?, ?)`,
+      [checkDate, "Phiếu tự động tạo theo lịch", 795009, 795009]
+    );
+    const inventoryId = result.insertId;
+
+    for (const deptId of AUTO_INVENTORY_DEPARTMENT_IDS) {
+      // Snapshot tổng số máy của đơn vị
+      const [countRes] = await connection.query(
+        `SELECT COUNT(m.id_machine) as total
+         FROM tb_machine_location ml
+         JOIN tb_location tl ON ml.id_location = tl.id_location
+         JOIN tb_machine m ON ml.id_machine = m.id_machine
+         WHERE tl.id_department = ?
+           AND m.current_status != 'liquidation'
+           AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))`,
+        [deptId]
+      );
+      const snapshotCount = countRes[0]?.total || 0;
+
+      // Snapshot theo từng vị trí
+      const [locSnapshots] = await connection.query(
+        `SELECT tl.uuid_location, COUNT(m.id_machine) as count
+         FROM tb_location tl
+         LEFT JOIN tb_machine_location ml ON tl.id_location = ml.id_location
+         LEFT JOIN tb_machine m ON ml.id_machine = m.id_machine
+              AND m.current_status != 'liquidation'
+              AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))
+         WHERE tl.id_department = ?
+         GROUP BY tl.id_location`,
+        [deptId]
+      );
+      const locationSnapshotsMap = {};
+      locSnapshots.forEach((l) => {
+        locationSnapshotsMap[l.uuid_location] = l.count;
+      });
+
+      // Snapshot danh sách máy theo vị trí
+      const [machinesByLocation] = await connection.query(
+        `SELECT
+          tl.uuid_location,
+          tl.name_location,
+          m.uuid_machine,
+          m.code_machine,
+          m.serial_machine,
+          m.type_machine,
+          m.model_machine,
+          m.attribute_machine,
+          m.RFID_machine,
+          m.NFC_machine
+         FROM tb_location tl
+         LEFT JOIN tb_machine_location ml ON tl.id_location = ml.id_location
+         LEFT JOIN tb_machine m ON ml.id_machine = m.id_machine
+         WHERE tl.id_department = ?
+           AND m.current_status != 'liquidation'
+           AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))
+         ORDER BY tl.uuid_location, m.code_machine`,
+        [deptId]
+      );
+
+      const machinesByLocationMap = {};
+      machinesByLocation.forEach((row) => {
+        if (!machinesByLocationMap[row.uuid_location]) {
+          machinesByLocationMap[row.uuid_location] = {
+            location_uuid: row.uuid_location,
+            location_name: row.name_location,
+            machines: [],
+          };
+        }
+        if (row.uuid_machine) {
+          machinesByLocationMap[row.uuid_location].machines.push({
+            uuid_machine: row.uuid_machine,
+            code_machine: row.code_machine,
+            serial_machine: row.serial_machine,
+            type_machine: row.type_machine,
+            model_machine: row.model_machine,
+            attribute_machine: row.attribute_machine,
+            RFID_machine: row.RFID_machine,
+            NFC_machine: row.NFC_machine,
+          });
+        }
+      });
+
+      const listBeforeScan = Object.values(machinesByLocationMap);
+      const initialData = {
+        snapshot_count: snapshotCount,
+        location_snapshots: locationSnapshotsMap,
+        locations: [],
+      };
+
+      await connection.query(
+        `INSERT INTO tb_inventory_check_detail (id_inventory_check, id_department, created_by, updated_by, scanned_result, list_before_scan) VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          inventoryId,
+          deptId,
+          795009,
+          795009,
+          JSON.stringify(initialData),
+          JSON.stringify(listBeforeScan),
+        ]
+      );
+    }
+
+    await connection.commit();
+    console.log(
+      `[AutoInventory] Đã tự động tạo phiếu kiểm kê ngày ${checkDate} cho ${AUTO_INVENTORY_DEPARTMENT_IDS.length} đơn vị.`
+    );
+  } catch (error) {
+    await connection.rollback();
+    console.error("[AutoInventory] Lỗi khi tự động tạo phiếu kiểm kê:", error);
+  } finally {
+    connection.release();
+  }
+}
+
+async function autoCancelInternalTransfers() {
+  const connection = await tpmConnection.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const [pendingTransfers] = await connection.query(
+      `
+      SELECT id_machine_internal_transfer, approval_flow
+      FROM tb_machine_internal_transfer
+      WHERE status IN ('pending_confirmation', 'pending_approval')
+        AND transfer_date <= CURDATE()
+      `
+    );
+
+    if (!pendingTransfers || pendingTransfers.length === 0) {
+      await connection.commit();
+      console.log(
+        "[AutoCancelInternalTransfer] Không có phiếu điều chuyển nội bộ nào cần hủy."
+      );
+      return;
+    }
+
+    const systemCancelStep = {
+      ma_nv: "SYSTEM",
+      ten_nv: "Hệ thống",
+      step_flow: 999,
+      isFinalFlow: true,
+      status_text: "Hệ thống tự động hủy",
+      is_forward: 0,
+    };
+
+    for (const transfer of pendingTransfers) {
+      let currentFlow = [];
+      try {
+        currentFlow =
+          typeof transfer.approval_flow === "string"
+            ? JSON.parse(transfer.approval_flow)
+            : transfer.approval_flow || [];
+        if (!Array.isArray(currentFlow)) currentFlow = [];
+      } catch {
+        currentFlow = [];
+      }
+
+      const newFlow = [...currentFlow, systemCancelStep];
+
+      await connection.query(
+        `
+        UPDATE tb_machine_internal_transfer
+        SET status = 'cancelled',
+            approval_flow = ?,
+            updated_by = 795009,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id_machine_internal_transfer = ?
+        `,
+        [JSON.stringify(newFlow), transfer.id_machine_internal_transfer]
+      );
+    }
+
+    await connection.commit();
+    console.log(
+      `[AutoCancelInternalTransfer] Đã tự động hủy ${pendingTransfers.length} phiếu điều chuyển nội bộ hết hạn.`
+    );
+  } catch (error) {
+    await connection.rollback();
+    console.error(
+      "[AutoCancelInternalTransfer] Lỗi khi tự động hủy phiếu điều chuyển nội bộ:",
+      error
+    );
+  } finally {
+    connection.release();
+  }
+}
+
+// 16:00 thứ 2-6 (timezone Asia/Ho_Chi_Minh)
+cron.schedule("00 16 * * 1-5", autoCreateInventoryCheck, {
+  timezone: "Asia/Ho_Chi_Minh",
+});
+
+// 15:00 thứ 7 (timezone Asia/Ho_Chi_Minh)
+cron.schedule("0 15 * * 6", autoCreateInventoryCheck, {
+  timezone: "Asia/Ho_Chi_Minh",
+});
+
+// 16:30 thứ 2-6 (timezone Asia/Ho_Chi_Minh)
+cron.schedule("30 16 * * 1-5", autoCancelInternalTransfers, {
+  timezone: "Asia/Ho_Chi_Minh",
+});
+
+// 15:30 thứ 7 (timezone Asia/Ho_Chi_Minh)
+cron.schedule("30 15 * * 6", autoCancelInternalTransfers, {
+  timezone: "Asia/Ho_Chi_Minh",
+});

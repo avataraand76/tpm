@@ -3577,8 +3577,12 @@ const TestProposalPage = () => {
         </Typography>
       );
 
+    // Tách step hệ thống tự động hủy (ma_nv === "SYSTEM") ra khỏi flow bình thường
+    const systemStep = flow.find((s) => s.ma_nv === "SYSTEM");
+    const normalFlow = flow.filter((s) => s.ma_nv !== "SYSTEM");
+
     // 1. Gom nhóm theo step_flow
-    const groupedSteps = flow.reduce((acc, curr) => {
+    const groupedSteps = normalFlow.reduce((acc, curr) => {
       const step = curr.step_flow ?? 0;
       if (!acc[step]) acc[step] = [];
       acc[step].push(curr);
@@ -3613,7 +3617,8 @@ const TestProposalPage = () => {
 
         {sortedStepKeys.map((stepKey, groupIndex) => {
           const group = groupedSteps[stepKey];
-          const isLastGroup = groupIndex === sortedStepKeys.length - 1;
+          const isLastGroup =
+            groupIndex === sortedStepKeys.length - 1 && !systemStep;
 
           return (
             <React.Fragment key={stepKey}>
@@ -3774,6 +3779,69 @@ const TestProposalPage = () => {
             </React.Fragment>
           );
         })}
+
+        {/* Step hệ thống tự động hủy */}
+        {systemStep && (
+          <>
+            {sortedStepKeys.length > 0 && (
+              <Box
+                sx={{
+                  mx: 0.5,
+                  width: 20,
+                  height: 2,
+                  bgcolor: "#ef9a9a",
+                  flexShrink: 0,
+                }}
+              />
+            )}
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 1.5,
+                px: 2,
+                py: 0.5,
+                borderRadius: "20px",
+                backgroundColor: "#ffebee",
+                border: "1.5px dashed #ef5350",
+                minWidth: "200px",
+              }}
+            >
+              <Avatar
+                sx={{
+                  width: 22,
+                  height: 22,
+                  fontSize: "0.75rem",
+                  bgcolor: "#d32f2f",
+                  color: "#fff",
+                  fontWeight: "bold",
+                }}
+              >
+                <Autorenew sx={{ fontSize: 14 }} />
+              </Avatar>
+              <Box>
+                <Typography
+                  variant="body2"
+                  sx={{ fontWeight: 700, fontSize: "0.85rem", color: "#b71c1c" }}
+                >
+                  {systemStep.ten_nv}
+                </Typography>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    display: "block",
+                    lineHeight: 1,
+                    color: "#d32f2f",
+                    fontStyle: "italic",
+                    fontWeight: "bold",
+                  }}
+                >
+                  {systemStep.status_text}
+                </Typography>
+              </Box>
+            </Box>
+          </>
+        )}
       </Box>
     );
   };
@@ -7670,9 +7738,20 @@ const TestProposalPage = () => {
                                 }}
                               >
                                 {(() => {
+                                  const fullFlow =
+                                    selectedTicket.approval_flow;
+
+                                  // Tách step hệ thống (ma_nv === "SYSTEM")
+                                  const dlgSystemStep = fullFlow.find(
+                                    (s) => s.ma_nv === "SYSTEM"
+                                  );
+                                  const dlgNormalFlow = fullFlow.filter(
+                                    (s) => s.ma_nv !== "SYSTEM"
+                                  );
+
                                   // 1. Gom nhóm các bước duyệt theo step_flow
                                   const groupedSteps =
-                                    selectedTicket.approval_flow.reduce(
+                                    dlgNormalFlow.reduce(
                                       (acc, curr) => {
                                         const step = curr.step_flow ?? 0;
                                         if (!acc[step]) acc[step] = [];
@@ -7687,12 +7766,16 @@ const TestProposalPage = () => {
                                     groupedSteps
                                   ).sort((a, b) => Number(a) - Number(b));
 
-                                  return sortedStepKeys.map(
-                                    (stepKey, groupIndex) => {
-                                      const group = groupedSteps[stepKey];
-                                      const isLastGroup =
-                                        groupIndex ===
-                                        sortedStepKeys.length - 1;
+                                  return (
+                                    <>
+                                      {sortedStepKeys.map(
+                                        (stepKey, groupIndex) => {
+                                          const group =
+                                            groupedSteps[stepKey];
+                                          const isLastGroup =
+                                            groupIndex ===
+                                              sortedStepKeys.length - 1 &&
+                                            !dlgSystemStep;
 
                                       return (
                                         <React.Fragment key={stepKey}>
@@ -7888,6 +7971,100 @@ const TestProposalPage = () => {
                                         </React.Fragment>
                                       );
                                     }
+                                  )}
+
+                                  {/* Step hệ thống tự động hủy */}
+                                  {dlgSystemStep && (
+                                    <>
+                                      {sortedStepKeys.length > 0 && (
+                                        <Box
+                                          sx={{
+                                            mx: 1,
+                                            minWidth: 20,
+                                            height: 2,
+                                            bgcolor: "#ef9a9a",
+                                            flexShrink: 0,
+                                          }}
+                                        />
+                                      )}
+                                      <Box
+                                        sx={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: 1.5,
+                                          px: 2.5,
+                                          py: 1,
+                                          borderRadius: "24px",
+                                          backgroundColor: "#ffebee",
+                                          border: "2px dashed #ef5350",
+                                          minWidth: "240px",
+                                          transition: "transform 0.2s",
+                                          "&:hover": {
+                                            transform: "translateY(-2px)",
+                                          },
+                                        }}
+                                      >
+                                        <Avatar
+                                          sx={{
+                                            width: 30,
+                                            height: 30,
+                                            bgcolor: "#d32f2f",
+                                            color: "#fff",
+                                          }}
+                                        >
+                                          <Autorenew sx={{ fontSize: 18 }} />
+                                        </Avatar>
+                                        <Box>
+                                          <Box
+                                            sx={{
+                                              display: "flex",
+                                              alignItems: "center",
+                                              gap: 1,
+                                            }}
+                                          >
+                                            <Typography
+                                              variant="body2"
+                                              sx={{
+                                                fontWeight: 700,
+                                                fontSize: "0.95rem",
+                                                color: "#b71c1c",
+                                              }}
+                                            >
+                                              {dlgSystemStep.ten_nv}
+                                            </Typography>
+                                            <Chip
+                                              label="Tự động"
+                                              size="small"
+                                              sx={{
+                                                height: 20,
+                                                fontSize: "0.75rem",
+                                                bgcolor: "#ffcdd2",
+                                                color: "#b71c1c",
+                                                fontWeight: 700,
+                                                border:
+                                                  "1px solid #ef9a9a",
+                                              }}
+                                            />
+                                          </Box>
+                                          <Typography
+                                            variant="caption"
+                                            sx={{
+                                              display: "block",
+                                              lineHeight: 1.2,
+                                              fontSize: "0.8rem",
+                                              mt: 0.5,
+                                              color: "#d32f2f",
+                                              fontStyle: "italic",
+                                              fontWeight: "bold",
+                                            }}
+                                          >
+                                            {dlgSystemStep.status_text}
+                                          </Typography>
+                                        </Box>
+                                      </Box>
+                                    </>
+                                  )}
+                                </>
                                   );
                                 })()}
                               </Box>
