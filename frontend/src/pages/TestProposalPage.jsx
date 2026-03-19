@@ -533,7 +533,7 @@ const TestProposalPage = () => {
     isAdmin || isPhongCoDien || isCoDienXuong || isViewOnly;
   const canCreateInventory = isAdmin || isPhongCoDien;
 
-  // Tab state (bảo vệ id_phong_ban=11 chỉ xem tab Phiếu nhập)
+  // Tab state (bảo vệ mặc định ở Phiếu nhập nhưng vẫn xem được Phiếu xuất)
   const [activeTab, setActiveTab] = useState(
     isBaoVe ? 0 : isCoDienXuong ? 2 : 0
   ); // 0: Import, 1: Export, 2: Internal, 3: Inventory
@@ -574,6 +574,7 @@ const TestProposalPage = () => {
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [filesToUpload, setFilesToUpload] = useState([]);
+  const [confirmingExportGate, setConfirmingExportGate] = useState(false);
   const [hoveredRowUuid, setHoveredRowUuid] = useState(null);
 
   // Helper function to format date without timezone issues
@@ -600,6 +601,7 @@ const TestProposalPage = () => {
     type: "",
     date: new Date().toISOString().split("T")[0],
     note: "",
+    quantity: "",
     machines: [],
     is_borrowed_or_rented_or_borrowed_out_name: "",
     is_borrowed_or_rented_or_borrowed_out_date: "",
@@ -687,6 +689,7 @@ const TestProposalPage = () => {
     useState(false);
   const [missingMachines, setMissingMachines] = useState([]);
   const [missingMachinesLocation, setMissingMachinesLocation] = useState(null);
+  const [confirmingMissingAll, setConfirmingMissingAll] = useState(false);
   // Locations cho toàn bộ phiếu kiểm kê (dùng khi dò tìm RFID nhiều đơn vị)
   const [inventoryAllLocations, setInventoryAllLocations] = useState([]);
 
@@ -757,6 +760,67 @@ const TestProposalPage = () => {
       color: "#9e9e9e",
       label: statusKey,
     };
+
+  const areAllMissingMachinesConfirmed = useCallback(() => {
+    const details = formData.inventoryDetails || [];
+    if (!Array.isArray(details) || details.length === 0) return true;
+
+    // Build global scanned UUIDs across all departments (exclude NOT_FOUND)
+    const globalScannedUuids = new Set();
+    details.forEach((dept) => {
+      try {
+        const parsed =
+          typeof dept?.scanned_result === "string"
+            ? JSON.parse(dept.scanned_result)
+            : dept?.scanned_result;
+        const locations = Array.isArray(parsed)
+          ? parsed
+          : parsed?.locations || [];
+        locations.forEach((loc) => {
+          (loc?.scanned_machine || []).forEach((m) => {
+            const u = m?.uuid || m?.uuid_machine;
+            if (u && !String(u).startsWith("NOT_FOUND")) {
+              globalScannedUuids.add(u);
+            }
+          });
+        });
+      } catch {
+        // ignore parse errors
+      }
+    });
+
+    // For every machine in list_before_scan that is still missing (not scanned anywhere),
+    // require it to be confirmed not found.
+    for (const dept of details) {
+      let listBeforeScan = [];
+      try {
+        listBeforeScan =
+          typeof dept?.list_before_scan === "string"
+            ? JSON.parse(dept.list_before_scan)
+            : dept?.list_before_scan || [];
+      } catch {
+        listBeforeScan = [];
+      }
+
+      if (!Array.isArray(listBeforeScan)) continue;
+
+      for (const loc of listBeforeScan) {
+        const machines = Array.isArray(loc?.machines) ? loc.machines : [];
+        for (const m of machines) {
+          const uuid = m?.uuid_machine;
+          if (!uuid) continue;
+          if (String(uuid).startsWith("NOT_FOUND")) continue;
+
+          const isMissing = !globalScannedUuids.has(uuid);
+          if (isMissing && !m?.not_found_confirmed) {
+            return false;
+          }
+        }
+      }
+    }
+
+    return true;
+  }, [formData.inventoryDetails]);
   const showNotification = useCallback(
     (severity, title, message) =>
       setNotification({ open: true, severity, title, message }),
@@ -974,9 +1038,9 @@ const TestProposalPage = () => {
     fetchStatistics();
   }, [fetchStatistics]);
 
-  // Bảo vệ (id_phong_ban=11) chỉ được ở tab Phiếu nhập
+  // Bảo vệ chỉ được ở tab Phiếu nhập/xuất
   useEffect(() => {
-    if (isBaoVe && activeTab !== 0) setActiveTab(0);
+    if (isBaoVe && activeTab > 1) setActiveTab(0); // tránh nội bộ/kiểm kê
   }, [isBaoVe, activeTab]);
 
   useEffect(() => {
@@ -1098,7 +1162,47 @@ const TestProposalPage = () => {
     return null;
   };
 
+  const handleConfirmExportGate = async () => {
+    if (!selectedTicket?.uuid_machine_export) return;
+    if (confirmingExportGate) return;
+
+    setConfirmingExportGate(true);
+    try {
+      await api.exports.confirm(selectedTicket.uuid_machine_export);
+
+      // Cập nhật trạng thái confirm ngay để ẩn nút
+      setSelectedTicket((prev) => (prev ? { ...prev, confirm: 1 } : prev));
+
+      // Refresh danh sách bên ngoài sau khi xác nhận
+      if (activeTab === 1) {
+        await fetchData();
+        await fetchStatistics();
+      }
+
+      showNotification("success", "Thành công", "Đã xác nhận ra cổng");
+    } catch (error) {
+      console.error("Error confirming export gate:", error);
+      showNotification(
+        "error",
+        "Thao tác thất bại",
+        error.response?.data?.message || "Lỗi khi xác nhận ra cổng"
+      );
+    } finally {
+      setConfirmingExportGate(false);
+      handleCloseDialog();
+    }
+  };
+
   const handleOpenDialog = async (mode, type, ticket = null) => {
+    // Bảo vệ không được phép tạo phiếu xuất
+    if (isBaoVe && mode === "create" && type === "export") {
+      showNotification(
+        "error",
+        "Không đủ quyền",
+        "Bảo vệ không thể tạo phiếu xuất."
+      );
+      return;
+    }
     setDialogMode(mode);
     setDialogType(type);
     setOpenDialog(true);
@@ -1124,6 +1228,7 @@ const TestProposalPage = () => {
       type: "",
       date: new Date().toISOString().split("T")[0],
       note: "",
+      quantity: "",
       machines: [],
       is_borrowed_or_rented_or_borrowed_out_name: "",
       is_borrowed_or_rented_or_borrowed_out_date: "",
@@ -1257,6 +1362,11 @@ const TestProposalPage = () => {
           type: ticketType || "",
           date: formatDateTicket(ticketDate),
           note: ticketDetails.note || "",
+          quantity:
+            ticketDetails.quantity ??
+            (Array.isArray(response.data.details)
+              ? response.data.details.length
+              : ""),
           machines: response.data.details.map((d) => ({ ...d })),
           creator_ma_nv: ticketDetails.creator_ma_nv,
           creator_ten_nv: ticketDetails.creator_ten_nv,
@@ -1302,6 +1412,7 @@ const TestProposalPage = () => {
       type: "",
       date: new Date().toISOString().split("T")[0],
       note: "",
+      quantity: "",
       machines: [],
       is_borrowed_or_rented_or_borrowed_out_name: "",
       is_borrowed_or_rented_or_borrowed_out_date: "",
@@ -1339,6 +1450,21 @@ const TestProposalPage = () => {
   };
 
   const handleSelectMachine = (machine) => {
+    const limitNum = Number(formData.quantity);
+    const hasQuantityLimit =
+      dialogType === "import" &&
+      dialogMode === "edit" &&
+      selectedTicket?.status === "draft" &&
+      Number.isFinite(limitNum) &&
+      limitNum > 0;
+    if (hasQuantityLimit && formData.machines.length >= limitNum) {
+      showNotification(
+        "warning",
+        "Đã đủ số lượng máy",
+        `Phiếu này yêu cầu đúng ${limitNum} máy. Vui lòng xóa bớt máy trước khi thêm.`
+      );
+      return;
+    }
     const isSelected = formData.machines.some(
       (m) => m.uuid_machine === machine.uuid_machine
     );
@@ -1550,14 +1676,47 @@ const TestProposalPage = () => {
         setLoading(false);
       }
     } else {
+      const limitNum = Number(formData.quantity);
+      const hasQuantityLimit =
+        dialogType === "import" &&
+        dialogMode === "edit" &&
+        selectedTicket?.status === "draft" &&
+        Number.isFinite(limitNum) &&
+        limitNum > 0;
       setFormData((prev) => {
+        if (hasQuantityLimit) {
+          const remaining = limitNum - prev.machines.length;
+          if (remaining <= 0) {
+            showNotification(
+              "warning",
+              "Đã đủ số lượng máy",
+              `Phiếu này yêu cầu đúng ${limitNum} máy. Vui lòng xóa bớt máy trước khi thêm.`
+            );
+            return prev;
+          }
+          if (machinesToAdd.length > remaining) {
+            showNotification(
+              "warning",
+              "Vượt quá số lượng",
+              `Chỉ có thể thêm tối đa ${remaining} máy nữa (tổng đúng ${limitNum}).`
+            );
+          }
+        }
         const newMachinesWithNote = machinesToAdd.map((m) => ({
           ...m,
           note: "",
         }));
         return {
           ...prev,
-          machines: [...prev.machines, ...newMachinesWithNote],
+          machines: hasQuantityLimit
+            ? [
+                ...prev.machines,
+                ...newMachinesWithNote.slice(
+                  0,
+                  limitNum - prev.machines.length
+                ),
+              ]
+            : [...prev.machines, ...newMachinesWithNote],
         };
       });
     }
@@ -1703,6 +1862,21 @@ const TestProposalPage = () => {
         setLoading(false);
       }
     } else {
+      const limitNum = Number(formData.quantity);
+      const hasQuantityLimit =
+        dialogType === "import" &&
+        dialogMode === "edit" &&
+        selectedTicket?.status === "draft" &&
+        Number.isFinite(limitNum) &&
+        limitNum > 0;
+      if (hasQuantityLimit && formData.machines.length >= limitNum) {
+        showNotification(
+          "warning",
+          "Đã đủ số lượng máy",
+          `Phiếu này yêu cầu đúng ${limitNum} máy. Vui lòng xóa bớt máy trước khi thêm.`
+        );
+        return;
+      }
       setFormData((prev) => ({
         ...prev,
         machines: [...prev.machines, { ...machine, note: "" }],
@@ -1727,7 +1901,18 @@ const TestProposalPage = () => {
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      // Nếu là bảo vệ tạo phiếu nhập, validate ngày + (note hoặc file)
+      // Bảo vệ không được tạo phiếu xuất
+      if (isBaoVe && dialogType === "export") {
+        showNotification(
+          "error",
+          "Không đủ quyền",
+          "Bảo vệ không thể tạo phiếu xuất."
+        );
+        setLoading(false);
+        return;
+      }
+
+      // Nếu là bảo vệ tạo phiếu nhập, validate ngày + số lượng
       if (isBaoVe && dialogType === "import") {
         if (!formData.date) {
           showNotification(
@@ -1739,11 +1924,12 @@ const TestProposalPage = () => {
           return;
         }
 
-        if (!formData.note && filesToUpload.length === 0) {
+        const quantityNum = Number(formData.quantity);
+        if (!Number.isFinite(quantityNum) || quantityNum <= 0) {
           showNotification(
             "error",
             "Lỗi nhập liệu",
-            "Vui lòng nhập ghi chú hoặc đính kèm file."
+            "Vui lòng nhập số lượng máy hợp lệ (lớn hơn 0)."
           );
           setLoading(false);
           return;
@@ -1753,7 +1939,7 @@ const TestProposalPage = () => {
         const data = new FormData();
         data.append("category", "import");
         data.append("date", formData.date);
-        data.append("note", formData.note);
+        data.append("quantity", String(quantityNum));
         data.append("machines", JSON.stringify([]));
         filesToUpload.forEach((f) => data.append("attachments", f));
 
@@ -2807,58 +2993,58 @@ const TestProposalPage = () => {
     }
   };
 
-  // const handleViewMissingMachines = async (
-  //   locationUuid,
-  //   locationName,
-  //   departmentUuid = null
-  // ) => {
-  //   if (!selectedTicket) return;
+  const handleViewMissingMachines = async (
+    locationUuid,
+    locationName,
+    departmentUuid = null
+  ) => {
+    if (!selectedTicket) return;
 
-  //   const deptUuid = departmentUuid || currentDepartment?.uuid_department;
-  //   if (!deptUuid) return;
+    const deptUuid = departmentUuid || currentDepartment?.uuid_department;
+    if (!deptUuid) return;
 
-  //   try {
-  //     // Fetch missing machines và locations của đơn vị này song song
-  //     const [missingRes, locsRes] = await Promise.all([
-  //       api.inventory.getMissingMachines(selectedTicket.uuid_inventory_check, {
-  //         department_uuid: deptUuid,
-  //         location_uuid: locationUuid,
-  //       }),
-  //       api.locations.getAll({ department_uuid: deptUuid }),
-  //     ]);
+    try {
+      // Fetch missing machines và locations của đơn vị này song song
+      const [missingRes, locsRes] = await Promise.all([
+        api.inventory.getMissingMachines(selectedTicket.uuid_inventory_check, {
+          department_uuid: deptUuid,
+          location_uuid: locationUuid,
+        }),
+        api.locations.getAll({ department_uuid: deptUuid }),
+      ]);
 
-  //     // Gắn uuid_department vào mỗi máy để dùng khi lưu
-  //     const taggedMachines = (missingRes.data || []).map((m) => ({
-  //       ...m,
-  //       _dept_uuid: deptUuid,
-  //     }));
+      // Gắn uuid_department vào mỗi máy để dùng khi lưu
+      const taggedMachines = (missingRes.data || []).map((m) => ({
+        ...m,
+        _dept_uuid: deptUuid,
+      }));
 
-  //     // Tìm tên đơn vị từ inventoryDetails
-  //     const deptInfo = formData.inventoryDetails?.find(
-  //       (d) => d.uuid_department === deptUuid
-  //     );
-  //     const locs = (locsRes.data || []).map((loc) => ({
-  //       ...loc,
-  //       _dept_uuid: deptUuid,
-  //       _dept_name: deptInfo?.name_department || "",
-  //     }));
+      // Tìm tên đơn vị từ inventoryDetails
+      const deptInfo = formData.inventoryDetails?.find(
+        (d) => d.uuid_department === deptUuid
+      );
+      const locs = (locsRes.data || []).map((loc) => ({
+        ...loc,
+        _dept_uuid: deptUuid,
+        _dept_name: deptInfo?.name_department || "",
+      }));
 
-  //     setMissingMachines(taggedMachines);
-  //     setMissingMachinesLocation(locationName);
-  //     setInventoryAllLocations(locs);
-  //     setOpenMissingMachinesDialog(true);
-  //   } catch (error) {
-  //     console.error("Error fetching missing machines:", error);
-  //     showNotification(
-  //       "error",
-  //       "Lỗi",
-  //       error.response?.data?.message ||
-  //         "Không thể tải danh sách máy chưa xác định"
-  //     );
-  //   } finally {
-  //     setDetailLoading(false);
-  //   }
-  // };
+      setMissingMachines(taggedMachines);
+      setMissingMachinesLocation(locationName);
+      setInventoryAllLocations(locs);
+      setOpenMissingMachinesDialog(true);
+    } catch (error) {
+      console.error("Error fetching missing machines:", error);
+      showNotification(
+        "error",
+        "Lỗi",
+        error.response?.data?.message ||
+          "Không thể tải danh sách máy chưa xác định"
+      );
+    } finally {
+      setDetailLoading(false);
+    }
+  };
 
   const handleViewAllMissingMachines = async () => {
     if (!selectedTicket || !formData.inventoryDetails) return;
@@ -2917,6 +3103,69 @@ const TestProposalPage = () => {
       );
     } finally {
       setDetailLoading(false);
+    }
+  };
+
+  const handleConfirmAllMissingMachines = async () => {
+    if (!selectedTicket) return;
+    if (selectedTicket?.status !== "draft") return;
+
+    const targets = (missingMachines || []).filter(
+      (m) => m && m.found_at === "Chưa quét" && !m.not_found_confirmed
+    );
+    if (targets.length === 0) return;
+
+    // Group theo đơn vị vì backend nhận 1 department_uuid/lần
+    const groups = new Map(); // deptUuid -> [uuid_machine]
+    targets.forEach((m) => {
+      const deptUuid = m?._dept_uuid || currentDepartment?.uuid_department;
+      if (!deptUuid || !m?.uuid_machine) return;
+      if (!groups.has(deptUuid)) groups.set(deptUuid, []);
+      groups.get(deptUuid).push(m.uuid_machine);
+    });
+
+    if (groups.size === 0) return;
+
+    try {
+      setConfirmingMissingAll(true);
+
+      // Gửi lần lượt để dễ debug/thông báo; vẫn đủ nhanh vì số group thường nhỏ
+      let totalUpdated = 0;
+      for (const [deptUuid, uuids] of groups.entries()) {
+        if (!uuids || uuids.length === 0) continue;
+        const res = await api.inventory.confirmMissingMachines(
+          selectedTicket.uuid_inventory_check,
+          { department_uuid: deptUuid, machine_uuids: uuids }
+        );
+        totalUpdated += Number(res?.updated || 0);
+      }
+
+      const confirmedSet = new Set(targets.map((t) => t.uuid_machine));
+      setMissingMachines((prev) =>
+        (prev || []).map((m) =>
+          confirmedSet.has(m?.uuid_machine)
+            ? { ...m, not_found_confirmed: true, found_at: "Không tìm thấy" }
+            : m
+        )
+      );
+
+      showNotification(
+        "success",
+        "Thành công",
+        totalUpdated > 0
+          ? `Đã xác nhận ${totalUpdated} máy không tìm thấy`
+          : "Đã xác nhận máy không tìm thấy"
+      );
+    } catch (error) {
+      console.error("Error confirming all missing machines:", error);
+      showNotification(
+        "error",
+        "Lỗi",
+        error.response?.data?.message ||
+          "Không thể xác nhận tất cả máy không tìm thấy"
+      );
+    } finally {
+      setConfirmingMissingAll(false);
     }
   };
 
@@ -3552,6 +3801,15 @@ const TestProposalPage = () => {
       completed: "Đã duyệt",
       cancelled: "Đã hủy",
     })[status] || status;
+
+  const getExportGateConfirmChip = (ticket) => {
+    if (!ticket || ticket.status !== "completed") return null;
+    const confirmed = ticket.confirm === 1;
+    return {
+      label: confirmed ? "Đã xác nhận ra cổng" : "Chưa xác nhận ra cổng",
+      color: confirmed ? "success" : "warning",
+    };
+  };
   const getMachineStatusLabel = (status) => getStatusInfo(status).label;
   const getTypeLabel = (type) =>
     ({
@@ -3822,7 +4080,11 @@ const TestProposalPage = () => {
               <Box>
                 <Typography
                   variant="body2"
-                  sx={{ fontWeight: 700, fontSize: "0.85rem", color: "#b71c1c" }}
+                  sx={{
+                    fontWeight: 700,
+                    fontSize: "0.85rem",
+                    color: "#b71c1c",
+                  }}
                 >
                   {systemStep.ten_nv}
                 </Typography>
@@ -4007,13 +4269,38 @@ const TestProposalPage = () => {
             ) : (
               <TableCell colSpan={2}>{item.to_location_name || "-"}</TableCell>
             )}
-            <TableCell align="center">{item.machine_count || 0}</TableCell>
+            <TableCell align="center">
+              {item.quantity_display ??
+                item.quantity ??
+                item.machine_count ??
+                0}
+            </TableCell>
             <TableCell>
-              <Chip
-                label={getStatusLabel(item.status)}
-                color={getStatusColor(item.status)}
-                size="small"
-              />
+              <Stack
+                direction="row"
+                spacing={1}
+                alignItems="center"
+                flexWrap="wrap"
+              >
+                <Chip
+                  label={getStatusLabel(item.status)}
+                  color={getStatusColor(item.status)}
+                  size="small"
+                />
+                {activeTab === 1 &&
+                  item.status === "completed" &&
+                  (() => {
+                    const gateChip = getExportGateConfirmChip(item);
+                    if (!gateChip) return null;
+                    return (
+                      <Chip
+                        label={gateChip.label}
+                        color={gateChip.color}
+                        size="small"
+                      />
+                    );
+                  })()}
+              </Stack>
             </TableCell>
             <TableCell>{item.note || "-"}</TableCell>
           </TableRow>
@@ -4158,7 +4445,7 @@ const TestProposalPage = () => {
                       </Button>
                     </Grid>
                   )}
-                  {hasImportExportTabs && !isBaoVe && (
+                  {hasImportExportTabs && (
                     <Grid size={{ xs: 6 }} sx={{ display: "flex" }}>
                       <Button
                         fullWidth
@@ -4337,7 +4624,7 @@ const TestProposalPage = () => {
                       iconPosition="start"
                     />
                   )}
-                  {hasImportExportTabs && !isBaoVe && (
+                  {hasImportExportTabs && (
                     <Tab
                       icon={<FileUpload />}
                       label="Phiếu xuất"
@@ -4470,20 +4757,18 @@ const TestProposalPage = () => {
                   spacing={2}
                   sx={{ width: { xs: "100%", md: "auto" } }}
                 >
-                  {(isAdmin || isPhongCoDien || isBaoVe) && ( // Admin/PCD/Bảo vệ (chỉ tạo phiếu nhập)
+                  {(isAdmin ||
+                    isPhongCoDien ||
+                    (isBaoVe && activeTab === 0)) && (
                     <Button
                       variant="contained"
                       startIcon={<Add />}
-                      onClick={() =>
+                      onClick={() => {
                         handleOpenDialog(
                           "create",
-                          isBaoVe
-                            ? "import"
-                            : activeTab === 0
-                              ? "import"
-                              : "export"
-                        )
-                      }
+                          activeTab === 0 ? "import" : "export"
+                        );
+                      }}
                       sx={{
                         borderRadius: "12px",
                         background: "linear-gradient(45deg, #2e7d32, #4caf50)",
@@ -5222,13 +5507,14 @@ const TestProposalPage = () => {
                           />
                           <TextField
                             fullWidth
-                            multiline
-                            rows={4}
-                            label="Ghi chú"
-                            value={formData.note}
+                            type="number"
+                            label="Số lượng máy"
+                            value={formData.quantity}
                             onChange={(e) =>
-                              handleFormChange("note", e.target.value)
+                              handleFormChange("quantity", e.target.value)
                             }
+                            required
+                            inputProps={{ min: 1, step: 1 }}
                             sx={{
                               "& .MuiOutlinedInput-root": {
                                 borderRadius: "12px",
@@ -6706,6 +6992,22 @@ const TestProposalPage = () => {
                                   : {}
                               }
                             />
+                            {dialogType === "import" && (
+                              <TextField
+                                fullWidth
+                                type="number"
+                                label="Số lượng máy"
+                                value={
+                                  formData.quantity ??
+                                  (Array.isArray(formData.machines)
+                                    ? formData.machines.length
+                                    : 0)
+                                }
+                                disabled
+                                InputLabelProps={{ shrink: true }}
+                                sx={DISABLED_VIEW_SX}
+                              />
+                            )}
                             <Autocomplete
                               fullWidth
                               options={filteredLocations}
@@ -7738,8 +8040,7 @@ const TestProposalPage = () => {
                                 }}
                               >
                                 {(() => {
-                                  const fullFlow =
-                                    selectedTicket.approval_flow;
+                                  const fullFlow = selectedTicket.approval_flow;
 
                                   // Tách step hệ thống (ma_nv === "SYSTEM")
                                   const dlgSystemStep = fullFlow.find(
@@ -7750,16 +8051,15 @@ const TestProposalPage = () => {
                                   );
 
                                   // 1. Gom nhóm các bước duyệt theo step_flow
-                                  const groupedSteps =
-                                    dlgNormalFlow.reduce(
-                                      (acc, curr) => {
-                                        const step = curr.step_flow ?? 0;
-                                        if (!acc[step]) acc[step] = [];
-                                        acc[step].push(curr);
-                                        return acc;
-                                      },
-                                      {}
-                                    );
+                                  const groupedSteps = dlgNormalFlow.reduce(
+                                    (acc, curr) => {
+                                      const step = curr.step_flow ?? 0;
+                                      if (!acc[step]) acc[step] = [];
+                                      acc[step].push(curr);
+                                      return acc;
+                                    },
+                                    {}
+                                  );
 
                                   // 2. Sắp xếp key để hiển thị theo thứ tự: Cấp 1 -> Cấp 2...
                                   const sortedStepKeys = Object.keys(
@@ -7770,301 +8070,317 @@ const TestProposalPage = () => {
                                     <>
                                       {sortedStepKeys.map(
                                         (stepKey, groupIndex) => {
-                                          const group =
-                                            groupedSteps[stepKey];
+                                          const group = groupedSteps[stepKey];
                                           const isLastGroup =
                                             groupIndex ===
                                               sortedStepKeys.length - 1 &&
                                             !dlgSystemStep;
 
-                                      return (
-                                        <React.Fragment key={stepKey}>
-                                          {/* Cột chứa các người duyệt trong cùng 1 cấp (xếp dọc) */}
-                                          <Box
-                                            sx={{
-                                              display: "flex",
-                                              flexDirection: "column",
-                                              gap: 1.5,
-                                              justifyContent: "center",
-                                            }}
-                                          >
-                                            {group.map((step, index) => {
-                                              // --- LOGIC MÀU SẮC & TRẠNG THÁI ---
-                                              const statusText =
-                                                step.status_text ||
-                                                "Đang chờ duyệt";
-                                              const statusLower =
-                                                statusText.toLowerCase();
+                                          return (
+                                            <React.Fragment key={stepKey}>
+                                              {/* Cột chứa các người duyệt trong cùng 1 cấp (xếp dọc) */}
+                                              <Box
+                                                sx={{
+                                                  display: "flex",
+                                                  flexDirection: "column",
+                                                  gap: 1.5,
+                                                  justifyContent: "center",
+                                                }}
+                                              >
+                                                {group.map((step, index) => {
+                                                  // --- LOGIC MÀU SẮC & TRẠNG THÁI ---
+                                                  const statusText =
+                                                    step.status_text ||
+                                                    "Đang chờ duyệt";
+                                                  const statusLower =
+                                                    statusText.toLowerCase();
 
-                                              const isApproved =
-                                                statusLower.includes(
-                                                  "đã duyệt"
-                                                ) ||
-                                                statusLower.includes("đồng ý");
-                                              const isRejected =
-                                                statusLower.includes("hủy") ||
-                                                statusLower.includes("từ chối");
-                                              const isForwarded =
-                                                step.is_forward === 1;
-                                              const isSkipped =
-                                                statusLower.includes(
-                                                  "đồng cấp"
-                                                );
+                                                  const isApproved =
+                                                    statusLower.includes(
+                                                      "đã duyệt"
+                                                    ) ||
+                                                    statusLower.includes(
+                                                      "đồng ý"
+                                                    );
+                                                  const isRejected =
+                                                    statusLower.includes(
+                                                      "hủy"
+                                                    ) ||
+                                                    statusLower.includes(
+                                                      "từ chối"
+                                                    );
+                                                  const isForwarded =
+                                                    step.is_forward === 1;
+                                                  const isSkipped =
+                                                    statusLower.includes(
+                                                      "đồng cấp"
+                                                    );
 
-                                              // Màu mặc định (Chờ duyệt - Cam)
-                                              let statusColor = "#ff9800";
-                                              let bgColor = "#fff3e0";
-                                              let borderColor = "#ffcc80";
-                                              let opacity = 1;
+                                                  // Màu mặc định (Chờ duyệt - Cam)
+                                                  let statusColor = "#ff9800";
+                                                  let bgColor = "#fff3e0";
+                                                  let borderColor = "#ffcc80";
+                                                  let opacity = 1;
 
-                                              if (isApproved) {
-                                                // Xanh lá
-                                                statusColor = "#2e7d32";
-                                                bgColor = "#e8f5e9";
-                                                borderColor = "#a5d6a7";
-                                              } else if (isRejected) {
-                                                // Đỏ
-                                                statusColor = "#d32f2f";
-                                                bgColor = "#ffebee";
-                                                borderColor = "#ef9a9a";
-                                              } else if (isSkipped) {
-                                                // Xám (Đồng cấp đã duyệt)
-                                                statusColor = "#757575";
-                                                bgColor = "#f5f5f5";
-                                                borderColor = "#e0e0e0";
-                                                opacity = 0.7;
-                                              }
+                                                  if (isApproved) {
+                                                    // Xanh lá
+                                                    statusColor = "#2e7d32";
+                                                    bgColor = "#e8f5e9";
+                                                    borderColor = "#a5d6a7";
+                                                  } else if (isRejected) {
+                                                    // Đỏ
+                                                    statusColor = "#d32f2f";
+                                                    bgColor = "#ffebee";
+                                                    borderColor = "#ef9a9a";
+                                                  } else if (isSkipped) {
+                                                    // Xám (Đồng cấp đã duyệt)
+                                                    statusColor = "#757575";
+                                                    bgColor = "#f5f5f5";
+                                                    borderColor = "#e0e0e0";
+                                                    opacity = 0.7;
+                                                  }
 
-                                              return (
-                                                <Box
-                                                  key={index}
-                                                  sx={{
-                                                    display: "flex",
-                                                    alignItems: "center",
-                                                    opacity: opacity,
-                                                  }}
-                                                >
-                                                  <Box
-                                                    sx={{
-                                                      display: "flex",
-                                                      alignItems: "center",
-                                                      gap: 1.5,
-                                                      px: 2.5,
-                                                      py: 1,
-                                                      borderRadius: "24px",
-                                                      backgroundColor: bgColor,
-                                                      border: `1px solid ${
-                                                        step.isFinalFlow
-                                                          ? "#FFD700"
-                                                          : borderColor
-                                                      }`,
-                                                      boxShadow:
-                                                        step.isFinalFlow &&
-                                                        !isSkipped
-                                                          ? "0 0 8px rgba(255, 215, 0, 0.6)"
-                                                          : "none",
-                                                      minWidth: "240px",
-                                                      transition:
-                                                        "transform 0.2s",
-                                                      "&:hover": {
-                                                        transform: isSkipped
-                                                          ? "none"
-                                                          : "translateY(-2px)",
-                                                      },
-                                                    }}
-                                                  >
-                                                    <Avatar
+                                                  return (
+                                                    <Box
+                                                      key={index}
                                                       sx={{
-                                                        width: 30,
-                                                        height: 30,
-                                                        fontSize: "0.9rem",
-                                                        bgcolor: statusColor,
-                                                        color: "#fff",
-                                                        fontWeight: "bold",
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        opacity: opacity,
                                                       }}
                                                     >
-                                                      {isSkipped
-                                                        ? "-"
-                                                        : Number(stepKey) + 1}
-                                                    </Avatar>
-
-                                                    <Box>
                                                       <Box
                                                         sx={{
                                                           display: "flex",
                                                           alignItems: "center",
-                                                          gap: 1,
+                                                          gap: 1.5,
+                                                          px: 2.5,
+                                                          py: 1,
+                                                          borderRadius: "24px",
+                                                          backgroundColor:
+                                                            bgColor,
+                                                          border: `1px solid ${
+                                                            step.isFinalFlow
+                                                              ? "#FFD700"
+                                                              : borderColor
+                                                          }`,
+                                                          boxShadow:
+                                                            step.isFinalFlow &&
+                                                            !isSkipped
+                                                              ? "0 0 8px rgba(255, 215, 0, 0.6)"
+                                                              : "none",
+                                                          minWidth: "240px",
+                                                          transition:
+                                                            "transform 0.2s",
+                                                          "&:hover": {
+                                                            transform: isSkipped
+                                                              ? "none"
+                                                              : "translateY(-2px)",
+                                                          },
                                                         }}
                                                       >
-                                                        <Typography
-                                                          variant="body2"
+                                                        <Avatar
                                                           sx={{
-                                                            fontWeight: 700,
-                                                            fontSize: "0.95rem",
-                                                            color: isSkipped
-                                                              ? "text.secondary"
-                                                              : "text.primary",
-                                                          }}
-                                                        >
-                                                          {step.ten_nv}
-                                                        </Typography>
-                                                        {isForwarded && (
-                                                          <Chip
-                                                            label="Chuyển tiếp"
-                                                            size="small"
-                                                            variant="outlined"
-                                                            sx={{
-                                                              height: 20,
-                                                              fontSize:
-                                                                "0.8rem",
-                                                              borderColor:
-                                                                "#9e9e9e",
-                                                              color: "#fd3333",
-                                                              backgroundColor:
-                                                                "#ffffff80",
-                                                            }}
-                                                          />
-                                                        )}
-                                                      </Box>
-
-                                                      <Typography
-                                                        variant="caption"
-                                                        sx={{
-                                                          display: "block",
-                                                          lineHeight: 1.2,
-                                                          fontSize: "0.8rem",
-                                                          mt: 0.5,
-                                                          color:
-                                                            "text.secondary",
-                                                        }}
-                                                      >
-                                                        {step.ma_nv} •{" "}
-                                                        <span
-                                                          style={{
-                                                            color: statusColor,
-                                                            fontStyle: "italic",
+                                                            width: 30,
+                                                            height: 30,
+                                                            fontSize: "0.9rem",
+                                                            bgcolor:
+                                                              statusColor,
+                                                            color: "#fff",
                                                             fontWeight: "bold",
                                                           }}
                                                         >
-                                                          {statusText}
-                                                        </span>
-                                                      </Typography>
-                                                    </Box>
-                                                  </Box>
-                                                </Box>
-                                              );
-                                            })}
-                                          </Box>
+                                                          {isSkipped
+                                                            ? "-"
+                                                            : Number(stepKey) +
+                                                              1}
+                                                        </Avatar>
 
-                                          {/* Mũi tên nối giữa các cấp (trừ cấp cuối) */}
-                                          {!isLastGroup && (
+                                                        <Box>
+                                                          <Box
+                                                            sx={{
+                                                              display: "flex",
+                                                              alignItems:
+                                                                "center",
+                                                              gap: 1,
+                                                            }}
+                                                          >
+                                                            <Typography
+                                                              variant="body2"
+                                                              sx={{
+                                                                fontWeight: 700,
+                                                                fontSize:
+                                                                  "0.95rem",
+                                                                color: isSkipped
+                                                                  ? "text.secondary"
+                                                                  : "text.primary",
+                                                              }}
+                                                            >
+                                                              {step.ten_nv}
+                                                            </Typography>
+                                                            {isForwarded && (
+                                                              <Chip
+                                                                label="Chuyển tiếp"
+                                                                size="small"
+                                                                variant="outlined"
+                                                                sx={{
+                                                                  height: 20,
+                                                                  fontSize:
+                                                                    "0.8rem",
+                                                                  borderColor:
+                                                                    "#9e9e9e",
+                                                                  color:
+                                                                    "#fd3333",
+                                                                  backgroundColor:
+                                                                    "#ffffff80",
+                                                                }}
+                                                              />
+                                                            )}
+                                                          </Box>
+
+                                                          <Typography
+                                                            variant="caption"
+                                                            sx={{
+                                                              display: "block",
+                                                              lineHeight: 1.2,
+                                                              fontSize:
+                                                                "0.8rem",
+                                                              mt: 0.5,
+                                                              color:
+                                                                "text.secondary",
+                                                            }}
+                                                          >
+                                                            {step.ma_nv} •{" "}
+                                                            <span
+                                                              style={{
+                                                                color:
+                                                                  statusColor,
+                                                                fontStyle:
+                                                                  "italic",
+                                                                fontWeight:
+                                                                  "bold",
+                                                              }}
+                                                            >
+                                                              {statusText}
+                                                            </span>
+                                                          </Typography>
+                                                        </Box>
+                                                      </Box>
+                                                    </Box>
+                                                  );
+                                                })}
+                                              </Box>
+
+                                              {/* Mũi tên nối giữa các cấp (trừ cấp cuối) */}
+                                              {!isLastGroup && (
+                                                <Box
+                                                  sx={{
+                                                    mx: 1,
+                                                    minWidth: 20,
+                                                    height: 2,
+                                                    bgcolor: "#bdbdbd",
+                                                    flexShrink: 0,
+                                                  }}
+                                                />
+                                              )}
+                                            </React.Fragment>
+                                          );
+                                        }
+                                      )}
+
+                                      {/* Step hệ thống tự động hủy */}
+                                      {dlgSystemStep && (
+                                        <>
+                                          {sortedStepKeys.length > 0 && (
                                             <Box
                                               sx={{
                                                 mx: 1,
                                                 minWidth: 20,
                                                 height: 2,
-                                                bgcolor: "#bdbdbd",
+                                                bgcolor: "#ef9a9a",
                                                 flexShrink: 0,
                                               }}
                                             />
                                           )}
-                                        </React.Fragment>
-                                      );
-                                    }
-                                  )}
-
-                                  {/* Step hệ thống tự động hủy */}
-                                  {dlgSystemStep && (
-                                    <>
-                                      {sortedStepKeys.length > 0 && (
-                                        <Box
-                                          sx={{
-                                            mx: 1,
-                                            minWidth: 20,
-                                            height: 2,
-                                            bgcolor: "#ef9a9a",
-                                            flexShrink: 0,
-                                          }}
-                                        />
-                                      )}
-                                      <Box
-                                        sx={{
-                                          display: "flex",
-                                          alignItems: "center",
-                                          gap: 1.5,
-                                          px: 2.5,
-                                          py: 1,
-                                          borderRadius: "24px",
-                                          backgroundColor: "#ffebee",
-                                          border: "2px dashed #ef5350",
-                                          minWidth: "240px",
-                                          transition: "transform 0.2s",
-                                          "&:hover": {
-                                            transform: "translateY(-2px)",
-                                          },
-                                        }}
-                                      >
-                                        <Avatar
-                                          sx={{
-                                            width: 30,
-                                            height: 30,
-                                            bgcolor: "#d32f2f",
-                                            color: "#fff",
-                                          }}
-                                        >
-                                          <Autorenew sx={{ fontSize: 18 }} />
-                                        </Avatar>
-                                        <Box>
                                           <Box
                                             sx={{
                                               display: "flex",
                                               alignItems: "center",
-                                              gap: 1,
+                                              gap: 1.5,
+                                              px: 2.5,
+                                              py: 1,
+                                              borderRadius: "24px",
+                                              backgroundColor: "#ffebee",
+                                              border: "2px dashed #ef5350",
+                                              minWidth: "240px",
+                                              transition: "transform 0.2s",
+                                              "&:hover": {
+                                                transform: "translateY(-2px)",
+                                              },
                                             }}
                                           >
-                                            <Typography
-                                              variant="body2"
+                                            <Avatar
                                               sx={{
-                                                fontWeight: 700,
-                                                fontSize: "0.95rem",
-                                                color: "#b71c1c",
+                                                width: 30,
+                                                height: 30,
+                                                bgcolor: "#d32f2f",
+                                                color: "#fff",
                                               }}
                                             >
-                                              {dlgSystemStep.ten_nv}
-                                            </Typography>
-                                            <Chip
-                                              label="Tự động"
-                                              size="small"
-                                              sx={{
-                                                height: 20,
-                                                fontSize: "0.75rem",
-                                                bgcolor: "#ffcdd2",
-                                                color: "#b71c1c",
-                                                fontWeight: 700,
-                                                border:
-                                                  "1px solid #ef9a9a",
-                                              }}
-                                            />
+                                              <Autorenew
+                                                sx={{ fontSize: 18 }}
+                                              />
+                                            </Avatar>
+                                            <Box>
+                                              <Box
+                                                sx={{
+                                                  display: "flex",
+                                                  alignItems: "center",
+                                                  gap: 1,
+                                                }}
+                                              >
+                                                <Typography
+                                                  variant="body2"
+                                                  sx={{
+                                                    fontWeight: 700,
+                                                    fontSize: "0.95rem",
+                                                    color: "#b71c1c",
+                                                  }}
+                                                >
+                                                  {dlgSystemStep.ten_nv}
+                                                </Typography>
+                                                <Chip
+                                                  label="Tự động"
+                                                  size="small"
+                                                  sx={{
+                                                    height: 20,
+                                                    fontSize: "0.75rem",
+                                                    bgcolor: "#ffcdd2",
+                                                    color: "#b71c1c",
+                                                    fontWeight: 700,
+                                                    border: "1px solid #ef9a9a",
+                                                  }}
+                                                />
+                                              </Box>
+                                              <Typography
+                                                variant="caption"
+                                                sx={{
+                                                  display: "block",
+                                                  lineHeight: 1.2,
+                                                  fontSize: "0.8rem",
+                                                  mt: 0.5,
+                                                  color: "#d32f2f",
+                                                  fontStyle: "italic",
+                                                  fontWeight: "bold",
+                                                }}
+                                              >
+                                                {dlgSystemStep.status_text}
+                                              </Typography>
+                                            </Box>
                                           </Box>
-                                          <Typography
-                                            variant="caption"
-                                            sx={{
-                                              display: "block",
-                                              lineHeight: 1.2,
-                                              fontSize: "0.8rem",
-                                              mt: 0.5,
-                                              color: "#d32f2f",
-                                              fontStyle: "italic",
-                                              fontWeight: "bold",
-                                            }}
-                                          >
-                                            {dlgSystemStep.status_text}
-                                          </Typography>
-                                        </Box>
-                                      </Box>
+                                        </>
+                                      )}
                                     </>
-                                  )}
-                                </>
                                   );
                                 })()}
                               </Box>
@@ -8184,9 +8500,34 @@ const TestProposalPage = () => {
                 </Button>
               )}
               {dialogMode === "view" &&
+                dialogType === "export" &&
+                isBaoVe &&
+                selectedTicket?.status === "completed" &&
+                selectedTicket?.confirm !== 1 && (
+                  <Button
+                    variant="contained"
+                    onClick={handleConfirmExportGate}
+                    disabled={loading || confirmingExportGate}
+                    startIcon={<CheckCircleOutline />}
+                    sx={{
+                      borderRadius: "12px",
+                      background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                      px: 3,
+                      width: { xs: "100%", sm: "auto" },
+                    }}
+                  >
+                    {confirmingExportGate ? (
+                      <CircularProgress size={24} />
+                    ) : (
+                      "Xác nhận ra cổng"
+                    )}
+                  </Button>
+                )}
+              {dialogMode === "view" &&
                 dialogType === "inventory" &&
                 selectedTicket?.status === "draft" &&
                 formData.inventoryDetails?.every((loc) => loc.is_completed) &&
+                areAllMissingMachinesConfirmed() &&
                 (isAdmin ||
                   isPhongCoDien ||
                   selectedTicket?.created_by === user?.id) && (
@@ -9075,7 +9416,9 @@ const TestProposalPage = () => {
                             color={
                               machine.found_at === "Chưa quét"
                                 ? "default"
-                                : "warning"
+                                : machine.found_at === "Không tìm thấy"
+                                  ? "error"
+                                  : "warning"
                             }
                             variant={
                               machine.found_at === "Chưa quét"
@@ -9084,6 +9427,15 @@ const TestProposalPage = () => {
                             }
                             sx={{ fontWeight: 600 }}
                           />
+                          {/* {machine.not_found_confirmed && (
+                            <Chip
+                              label="Đã xác nhận"
+                              size="small"
+                              color="success"
+                              variant="filled"
+                              sx={{ fontWeight: 700, ml: 1 }}
+                            />
+                          )} */}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -9092,70 +9444,230 @@ const TestProposalPage = () => {
               </TableContainer>
             )}
           </DialogContent>
-          <DialogActions sx={{ p: 2, gap: 1, flexWrap: "wrap" }}>
-            {/* Chỉ hiện 2 nút dò tìm khi phiếu ở trạng thái draft */}
-            {selectedTicket?.status === "draft" &&
-              missingMachines.some(
-                (m) =>
-                  m.found_at === "Chưa quét" &&
-                  m.RFID_machine &&
-                  m.RFID_machine.trim() !== ""
-              ) && (
-                <Button
-                  onClick={handleOpenBatchScanPicker}
-                  variant="contained"
-                  startIcon={<WifiTethering />}
-                  sx={{
-                    background: "linear-gradient(45deg, #ff9800, #ff5722)",
-                    "&:hover": {
-                      background: "linear-gradient(45deg, #f57c00, #e64a19)",
-                    },
-                    borderRadius: "8px",
-                    fontWeight: 700,
-                  }}
-                >
-                  Dò tìm RFID hàng loạt theo chuyền
-                </Button>
-              )}
-            {selectedTicket?.status === "draft" &&
-              missingMachines.some(
-                (m) =>
-                  m.found_at === "Chưa quét" &&
-                  m.RFID_machine &&
-                  m.RFID_machine.trim() !== ""
-              ) && (
-                <Button
-                  onClick={handleRfidSearchFromMissingMachines}
-                  variant="contained"
-                  startIcon={<WifiTethering />}
-                  sx={{
-                    bgcolor: "#1976d2",
-                    "&:hover": { bgcolor: "#1565c0" },
-                    borderRadius: "8px",
-                  }}
-                >
-                  Dò tìm RFID máy chưa quét (
-                  {
-                    missingMachines.filter(
-                      (m) =>
-                        m.found_at === "Chưa quét" &&
-                        m.RFID_machine &&
-                        m.RFID_machine.trim() !== ""
-                    ).length
+          <DialogActions
+            sx={{
+              p: 2,
+              gap: 1,
+              ...(isMobile
+                ? {
+                    display: "flex",
+                    flexDirection: "column", // Chuyển sang xếp chồng dọc trên mobile
+                    alignItems: "stretch",
                   }
-                  )
-                </Button>
-              )}
-            <Button
-              onClick={() => setOpenMissingMachinesDialog(false)}
-              variant="contained"
-              sx={{
-                bgcolor: "#d32f2f",
-                "&:hover": { bgcolor: "#b71c1c" },
-              }}
-            >
-              Đóng
-            </Button>
+                : {
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                  }),
+            }}
+          >
+            {(() => {
+              const canConfirmAll =
+                selectedTicket?.status === "draft" &&
+                missingMachines.some(
+                  (m) => m.found_at === "Chưa quét" && !m.not_found_confirmed
+                );
+              const canRfidSearch =
+                selectedTicket?.status === "draft" &&
+                missingMachines.some(
+                  (m) =>
+                    m.found_at === "Chưa quét" &&
+                    m.RFID_machine &&
+                    m.RFID_machine.trim() !== ""
+                );
+
+              const placeholderSx = {
+                width: "100%",
+                minHeight: 44,
+                borderRadius: "8px",
+                visibility: "hidden",
+              };
+              const commonBtnSx = {
+                width: "100%",
+                minHeight: 44,
+                textAlign: "center",
+                lineHeight: 1.2,
+                whiteSpace: "normal",
+                px: 1,
+                fontSize: 12,
+              };
+
+              // Mobile: luôn render đúng layout 1 + 3 (có placeholder)
+              if (isMobile) {
+                return (
+                  <>
+                    {canConfirmAll ? (
+                      <Button
+                        onClick={handleConfirmAllMissingMachines}
+                        variant="contained"
+                        disabled={confirmingMissingAll}
+                        sx={{
+                          ...commonBtnSx,
+                          background:
+                            "linear-gradient(45deg, #2e7d32, #4caf50)",
+                          "&:hover": {
+                            background:
+                              "linear-gradient(45deg, #1b5e20, #388e3c)",
+                          },
+                          borderRadius: "8px",
+                          fontWeight: 800,
+                          gridColumn: "1 / -1",
+                        }}
+                      >
+                        {confirmingMissingAll
+                          ? "Đang lưu..."
+                          : "Xác nhận không tìm thấy"}
+                      </Button>
+                    ) : (
+                      <Box
+                        aria-hidden
+                        sx={{ ...placeholderSx, gridColumn: "1 / -1" }}
+                      />
+                    )}
+
+                    {canRfidSearch ? (
+                      <Button
+                        onClick={handleOpenBatchScanPicker}
+                        variant="contained"
+                        sx={{
+                          ...commonBtnSx,
+                          background:
+                            "linear-gradient(45deg, #ff9800, #ff5722)",
+                          "&:hover": {
+                            background:
+                              "linear-gradient(45deg, #f57c00, #e64a19)",
+                          },
+                          borderRadius: "8px",
+                          fontWeight: 700,
+                        }}
+                      >
+                        Dò RFID theo chuyền
+                      </Button>
+                    ) : (
+                      <Box aria-hidden sx={placeholderSx} />
+                    )}
+
+                    {canRfidSearch ? (
+                      <Button
+                        onClick={handleRfidSearchFromMissingMachines}
+                        variant="contained"
+                        sx={{
+                          ...commonBtnSx,
+                          bgcolor: "#1976d2",
+                          "&:hover": { bgcolor: "#1565c0" },
+                          borderRadius: "8px",
+                        }}
+                      >
+                        Dò tìm RFID máy chưa quét (
+                        {
+                          missingMachines.filter(
+                            (m) =>
+                              m.found_at === "Chưa quét" &&
+                              m.RFID_machine &&
+                              m.RFID_machine.trim() !== ""
+                          ).length
+                        }
+                        )
+                      </Button>
+                    ) : (
+                      <Box aria-hidden sx={placeholderSx} />
+                    )}
+
+                    <Button
+                      onClick={() => setOpenMissingMachinesDialog(false)}
+                      variant="contained"
+                      sx={{
+                        ...commonBtnSx,
+                        bgcolor: "#d32f2f",
+                        "&:hover": { bgcolor: "#b71c1c" },
+                      }}
+                    >
+                      Đóng
+                    </Button>
+                  </>
+                );
+              }
+
+              // Desktop: render điều kiện như trước (không cần placeholder)
+              return (
+                <>
+                  {canConfirmAll && (
+                    <Button
+                      onClick={handleConfirmAllMissingMachines}
+                      variant="contained"
+                      disabled={confirmingMissingAll}
+                      sx={{
+                        background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                        "&:hover": {
+                          background:
+                            "linear-gradient(45deg, #1b5e20, #388e3c)",
+                        },
+                        borderRadius: "8px",
+                        fontWeight: 800,
+                      }}
+                    >
+                      {confirmingMissingAll
+                        ? "Đang lưu..."
+                        : "Xác nhận không tìm thấy"}
+                    </Button>
+                  )}
+
+                  {canRfidSearch && (
+                    <Button
+                      onClick={handleOpenBatchScanPicker}
+                      variant="contained"
+                      startIcon={<WifiTethering />}
+                      sx={{
+                        background: "linear-gradient(45deg, #ff9800, #ff5722)",
+                        "&:hover": {
+                          background:
+                            "linear-gradient(45deg, #f57c00, #e64a19)",
+                        },
+                        borderRadius: "8px",
+                        fontWeight: 700,
+                      }}
+                    >
+                      Dò tìm RFID hàng loạt theo chuyền
+                    </Button>
+                  )}
+
+                  {canRfidSearch && (
+                    <Button
+                      onClick={handleRfidSearchFromMissingMachines}
+                      variant="contained"
+                      startIcon={<WifiTethering />}
+                      sx={{
+                        bgcolor: "#1976d2",
+                        "&:hover": { bgcolor: "#1565c0" },
+                        borderRadius: "8px",
+                      }}
+                    >
+                      Dò tìm RFID máy chưa quét (
+                      {
+                        missingMachines.filter(
+                          (m) =>
+                            m.found_at === "Chưa quét" &&
+                            m.RFID_machine &&
+                            m.RFID_machine.trim() !== ""
+                        ).length
+                      }
+                      )
+                    </Button>
+                  )}
+
+                  <Button
+                    onClick={() => setOpenMissingMachinesDialog(false)}
+                    variant="contained"
+                    sx={{
+                      bgcolor: "#d32f2f",
+                      "&:hover": { bgcolor: "#b71c1c" },
+                    }}
+                  >
+                    Đóng
+                  </Button>
+                </>
+              );
+            })()}
           </DialogActions>
         </Dialog>
 
@@ -10331,7 +10843,7 @@ const TestProposalPage = () => {
                                     fontSize: "1rem",
                                   }}
                                 >
-                                  {/* {grandTotalMissing > 0 ? (
+                                  {grandTotalMissing > 0 ? (
                                     <Button
                                       size="small"
                                       variant="outlined"
@@ -10342,6 +10854,7 @@ const TestProposalPage = () => {
                                           "Toàn bộ đơn vị"
                                         )
                                       }
+                                      // onClick={handleViewAllMissingMachines}
                                       sx={{
                                         minWidth: "auto",
                                         px: 2,
@@ -10358,9 +10871,6 @@ const TestProposalPage = () => {
                                     new Intl.NumberFormat("en-US").format(
                                       grandTotalMissing
                                     )
-                                  )} */}
-                                  {new Intl.NumberFormat("en-US").format(
-                                    grandTotalMissing
                                   )}
                                 </TableCell>
                               </TableRow>

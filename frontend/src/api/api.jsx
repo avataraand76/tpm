@@ -311,6 +311,10 @@ export const api = {
       });
       return response.data;
     },
+    confirm: async (uuid) => {
+      const response = await httpConnect.put(`/api/exports/${uuid}/confirm`);
+      return response.data;
+    },
     getStats: async () => {
       const response = await httpConnect.get("/api/exports/stats");
       return response.data;
@@ -686,6 +690,14 @@ export const api = {
       const response = await httpConnect.get(
         `/api/inventory-checks/${uuid}/missing-machines`,
         { params }
+      );
+      return response.data;
+    },
+    confirmMissingMachines: async (uuid, data) => {
+      // data: { department_uuid, machine_uuids: [] }
+      const response = await httpConnect.put(
+        `/api/inventory-checks/${uuid}/confirm-missing`,
+        data
       );
       return response.data;
     },

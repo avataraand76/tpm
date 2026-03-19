@@ -3708,6 +3708,7 @@ app.get("/api/imports", authenticateToken, async (req, res) => {
         i.import_date,
         i.status,
         i.note,
+        MAX(i.quantity) as quantity,
         i.created_at,
         i.updated_at,
         i.approval_flow,
@@ -3718,7 +3719,8 @@ app.get("/api/imports", authenticateToken, async (req, res) => {
         tl.name_location as to_location_name,
         td.uuid_department as to_department_uuid,
         td.name_department as to_department_name,
-        COUNT(d.id_machine) as machine_count
+        COUNT(d.id_machine) as machine_count,
+        COALESCE(MAX(i.quantity), COUNT(d.id_machine)) as quantity_display
       FROM tb_machine_import i
       LEFT JOIN tb_location tl ON tl.id_location = i.to_location_id
       LEFT JOIN tb_department td ON td.id_department = tl.id_department
@@ -3880,6 +3882,7 @@ app.get("/api/imports/:uuid", authenticateToken, async (req, res) => {
         i.import_date,
         i.status,
         i.note,
+        i.quantity,
         i.attached_file,
         i.approval_flow,
         i.expansion_field,
@@ -4386,7 +4389,7 @@ app.put("/api/imports/:uuid/complete", authenticateToken, async (req, res) => {
 
     // Lấy thông tin phiếu
     const [importTicket] = await connection.query(
-      `SELECT i.id_machine_import, i.status, i.to_location_id, i.import_type, i.import_date, i.note, i.attached_file,
+      `SELECT i.id_machine_import, i.status, i.to_location_id, i.import_type, i.import_date, i.note, i.attached_file, i.quantity,
               i.is_borrowed_or_rented_or_borrowed_out_name, i.is_borrowed_or_rented_or_borrowed_out_date, i.is_borrowed_or_rented_or_borrowed_out_return_date,
               l.name_location, l.uuid_location
        FROM tb_machine_import i
@@ -4436,6 +4439,20 @@ app.put("/api/imports/:uuid/complete", authenticateToken, async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Phiếu chưa có máy móc nào",
+      });
+    }
+
+    // Nếu phiếu có quantity (tạo từ Bảo vệ), bắt buộc số máy đúng bằng quantity
+    const quantityNum = Number(ticket.quantity);
+    if (
+      Number.isFinite(quantityNum) &&
+      quantityNum > 0 &&
+      machineDetails.length !== quantityNum
+    ) {
+      await connection.rollback();
+      return res.status(400).json({
+        success: false,
+        message: `Số lượng máy trong phiếu phải đúng bằng ${quantityNum}. Hiện tại đang có ${machineDetails.length} máy.`,
       });
     }
 
@@ -4996,6 +5013,7 @@ app.get("/api/exports", authenticateToken, async (req, res) => {
         e.note,
         e.created_at,
         e.updated_at,
+        e.confirm,
         e.approval_flow,
         e.is_borrowed_or_rented_or_borrowed_out_name,
         e.is_borrowed_or_rented_or_borrowed_out_date,
@@ -5166,6 +5184,7 @@ app.get("/api/exports/:uuid", authenticateToken, async (req, res) => {
         e.created_at,
         e.updated_at,
         e.created_by,
+        e.confirm,
         e.is_borrowed_or_rented_or_borrowed_out_name,
         e.is_borrowed_or_rented_or_borrowed_out_date,
         e.is_borrowed_or_rented_or_borrowed_out_return_date,
@@ -5409,6 +5428,83 @@ app.put("/api/exports/:uuid/status", authenticateToken, async (req, res) => {
     await connection.rollback();
     console.error("Error updating export status:", error);
     res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  } finally {
+    connection.release();
+  }
+});
+
+// PUT /api/exports/:uuid/confirm - (BAO VE) Confirm export slip to gate
+app.put("/api/exports/:uuid/confirm", authenticateToken, async (req, res) => {
+  const connection = await tpmConnection.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const { uuid } = req.params;
+    const userId = req.user.id;
+    const userPhongBanId = req.user.phongban_id;
+    const baoVeId = 11;
+
+    if (Number(userPhongBanId) !== baoVeId) {
+      await connection.rollback();
+      return res.status(403).json({
+        success: false,
+        message: "Không đủ quyền xác nhận phiếu này",
+      });
+    }
+
+    const [existing] = await connection.query(
+      `
+        SELECT
+          id_machine_export,
+          status,
+          confirm
+        FROM tb_machine_export
+        WHERE uuid_machine_export = ?
+      `,
+      [uuid]
+    );
+
+    if (existing.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ success: false, message: "Export not found" });
+    }
+
+    const ticket = existing[0];
+
+    if (ticket.status !== "completed") {
+      await connection.rollback();
+      return res.status(400).json({
+        success: false,
+        message: "Chỉ được xác nhận khi phiếu ở trạng thái completed",
+      });
+    }
+
+    // Idempotent: confirm = 1 (không phụ thuộc đã confirm trước đó hay chưa)
+    await connection.query(
+      `
+        UPDATE tb_machine_export
+        SET
+        confirm = 1,
+          updated_by = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id_machine_export = ?
+      `,
+      [userId, ticket.id_machine_export]
+    );
+
+    await connection.commit();
+    return res.json({
+      success: true,
+      message: "Xác nhận ra cổng thành công",
+    });
+  } catch (error) {
+    await connection.rollback();
+    console.error("Error confirming export:", error);
+    return res.status(500).json({
       success: false,
       message: "Internal server error",
       error: error.message,
@@ -8432,6 +8528,7 @@ app.post(
         type, // Loại chi tiết (purchased, borrowed, etc.)
         date,
         note,
+        quantity,
         to_location_uuid,
         machines: machinesJson,
         // Các trường cũ
@@ -8476,6 +8573,15 @@ app.post(
 
       // Nếu là bảo vệ và category là import, tạo phiếu draft
       if (isBaoVe && category === "import") {
+        const quantityNum = Number(quantity);
+        if (!Number.isFinite(quantityNum) || quantityNum <= 0) {
+          await connection.rollback();
+          return res.status(400).json({
+            success: false,
+            message: "Vui lòng nhập số lượng máy hợp lệ (lớn hơn 0).",
+          });
+        }
+
         // Xử lý file đính kèm
         let attachedFileString = null;
         if (req.files && req.files.length > 0) {
@@ -8498,10 +8604,16 @@ app.post(
           ).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")}`;
         }
 
-        // Tạo phiếu draft (có ngày, note, file - không có location, type, machines)
+        // Tạo phiếu draft (có ngày, quantity, file - không có location, type, machines)
         const [resImport] = await connection.query(
-          `INSERT INTO tb_machine_import (status, import_date, note, created_by, updated_by, attached_file) VALUES ('draft', ?, ?, ?, ?, ?)`,
-          [formattedDate, note || null, userId, userId, attachedFileString]
+          `INSERT INTO tb_machine_import (status, import_date, quantity, created_by, updated_by, attached_file) VALUES ('draft', ?, ?, ?, ?, ?)`,
+          [
+            formattedDate,
+            quantityNum,
+            userId,
+            userId,
+            attachedFileString || null,
+          ]
         );
 
         await connection.commit();
@@ -8647,16 +8759,29 @@ app.post(
               `SELECT DISTINCT id_nhan_vien FROM tb_user_permission WHERE id_nhan_vien IN (?) AND id_permission = 2`,
               [destUserIds]
             );
-            const EXCLUDED_MA_NV = new Set([
+            const EXCLUDED_MA_NV_TO_PHO = new Set([
               "01195",
+              "01195",
+              "00764",
               "09411",
+              "09411",
+              "00200",
+              "01362",
               "08502",
+              "08502",
+              "01375",
               "08477",
+              "08477",
+              "03604",
+              "02537",
+              "02741",
+              "11318",
             ]);
             const permittedSet = new Set(perms.map((p) => p.id_nhan_vien));
             validApprovers = destUsers
               .filter(
-                (u) => permittedSet.has(u.id) && !EXCLUDED_MA_NV.has(u.ma_nv)
+                (u) =>
+                  permittedSet.has(u.id) && !EXCLUDED_MA_NV_TO_PHO.has(u.ma_nv)
               )
               .map((u) => ({
                 ma_nv: u.ma_nv,
@@ -10008,6 +10133,22 @@ app.get(
           ? JSON.parse(detailRes[0].list_before_scan)
           : detailRes[0].list_before_scan;
 
+      // Map các máy đã được xác nhận "không tìm thấy" (lưu trong list_before_scan)
+      const confirmedNotFound = new Set();
+      try {
+        if (Array.isArray(listBeforeScan)) {
+          listBeforeScan.forEach((loc) => {
+            (loc?.machines || []).forEach((m) => {
+              if (m?.uuid_machine && m?.not_found_confirmed) {
+                confirmedNotFound.add(m.uuid_machine);
+              }
+            });
+          });
+        }
+      } catch (e) {
+        // ignore
+      }
+
       // 5. !!! FIX LỖI TẠI ĐÂY: Parse dữ liệu ĐÃ QUÉT (scannedData) !!!
       let scannedData = [];
       if (detailRes[0].scanned_result) {
@@ -10040,7 +10181,10 @@ app.get(
         .filter((m) => !globalScanMap.has(m.uuid_machine))
         .map((m) => ({
           ...m,
-          found_at: "Chưa quét",
+          not_found_confirmed: confirmedNotFound.has(m.uuid_machine),
+          found_at: confirmedNotFound.has(m.uuid_machine)
+            ? "Không tìm thấy"
+            : "Chưa quét",
         }));
 
       res.json({
@@ -10051,6 +10195,143 @@ app.get(
     } catch (error) {
       console.error("Error fetching missing machines:", error);
       res.status(500).json({ success: false, message: error.message });
+    }
+  }
+);
+
+// PUT /api/inventory-checks/:uuid/confirm-missing - Xác nhận máy không tìm thấy (lưu vào list_before_scan)
+app.put(
+  "/api/inventory-checks/:uuid/confirm-missing",
+  authenticateToken,
+  async (req, res) => {
+    const connection = await tpmConnection.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      const { uuid } = req.params;
+      const userId = req.user.id;
+      const { department_uuid, machine_uuids } = req.body;
+
+      if (!department_uuid) {
+        await connection.rollback();
+        return res
+          .status(400)
+          .json({ success: false, message: "Thiếu thông tin đơn vị" });
+      }
+      if (!Array.isArray(machine_uuids) || machine_uuids.length === 0) {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Vui lòng chọn ít nhất một máy để xác nhận",
+        });
+      }
+
+      // 1. Get Inventory + validate status
+      const [invRes] = await connection.query(
+        "SELECT id_inventory_check, status FROM tb_inventory_check WHERE uuid_inventory_check = ?",
+        [uuid]
+      );
+      if (invRes.length === 0) {
+        await connection.rollback();
+        return res
+          .status(404)
+          .json({ success: false, message: "Phiếu không tồn tại" });
+      }
+      if (invRes[0].status !== "draft") {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Phiếu không ở trạng thái nháp, không thể xác nhận",
+        });
+      }
+      const idInventory = invRes[0].id_inventory_check;
+
+      // 2. Resolve Department ID
+      const [depRes] = await connection.query(
+        "SELECT id_department FROM tb_department WHERE uuid_department = ?",
+        [department_uuid]
+      );
+      if (depRes.length === 0) {
+        await connection.rollback();
+        return res
+          .status(404)
+          .json({ success: false, message: "Đơn vị không tồn tại" });
+      }
+      const idDepartment = depRes[0].id_department;
+
+      // 3. Fetch detail row
+      const [detailRes] = await connection.query(
+        "SELECT list_before_scan FROM tb_inventory_check_detail WHERE id_inventory_check = ? AND id_department = ? FOR UPDATE",
+        [idInventory, idDepartment]
+      );
+      if (detailRes.length === 0) {
+        await connection.rollback();
+        return res.status(404).json({
+          success: false,
+          message: "Không tìm thấy chi tiết đơn vị trong phiếu kiểm kê",
+        });
+      }
+
+      let listBeforeScan =
+        typeof detailRes[0].list_before_scan === "string"
+          ? JSON.parse(detailRes[0].list_before_scan)
+          : detailRes[0].list_before_scan;
+
+      if (!Array.isArray(listBeforeScan)) {
+        listBeforeScan = [];
+      }
+
+      const targetSet = new Set(machine_uuids.filter(Boolean));
+      const nowIso = new Date().toISOString();
+      let updatedCount = 0;
+
+      const updatedList = listBeforeScan.map((loc) => {
+        const machines = Array.isArray(loc?.machines) ? loc.machines : [];
+        const nextMachines = machines.map((m) => {
+          if (!m?.uuid_machine) return m;
+          if (!targetSet.has(m.uuid_machine)) return m;
+
+          // Đánh dấu đã xác nhận không tìm thấy
+          const already = !!m.not_found_confirmed;
+          if (!already) updatedCount += 1;
+          return {
+            ...m,
+            not_found_confirmed: true,
+            not_found_confirmed_by: userId,
+            not_found_confirmed_at: m.not_found_confirmed_at || nowIso,
+          };
+        });
+        return { ...loc, machines: nextMachines };
+      });
+
+      if (updatedCount === 0) {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message:
+            "Không có máy nào được cập nhật (có thể máy không thuộc đơn vị hoặc đã xác nhận trước đó)",
+        });
+      }
+
+      await connection.query(
+        `UPDATE tb_inventory_check_detail
+         SET list_before_scan = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
+         WHERE id_inventory_check = ? AND id_department = ?`,
+        [JSON.stringify(updatedList), userId, idInventory, idDepartment]
+      );
+
+      await connection.commit();
+      return res.json({
+        success: true,
+        message: `Đã xác nhận ${updatedCount} máy không tìm thấy`,
+        updated: updatedCount,
+      });
+    } catch (error) {
+      await connection.rollback();
+      console.error("Error confirming missing machines:", error);
+      return res.status(500).json({ success: false, message: error.message });
+    } finally {
+      connection.release();
     }
   }
 );

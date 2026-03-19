@@ -146,8 +146,8 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
       colKey === "ALL"
         ? borrow_status.length === 0 || borrow_status.includes("ALL")
         : colKey === "internal"
-        ? borrow_status.includes("internal")
-        : borrow_status.includes(colKey);
+          ? borrow_status.includes("internal")
+          : borrow_status.includes(colKey);
     return isRowMatch && isColMatch;
   };
 
@@ -270,8 +270,8 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
                 bgcolor: cellSelected
                   ? alpha(row.color, 0.2)
                   : hasDataCell
-                  ? row.bg
-                  : "transparent",
+                    ? row.bg
+                    : "transparent",
                 color: hasDataCell || cellSelected ? row.color : "#e0e0e0",
                 fontWeight: hasDataCell || cellSelected ? "bold" : "normal",
                 boxShadow: cellSelected
@@ -304,8 +304,8 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
                 backgroundColor: cellSelected
                   ? alpha(row.color, 0.2)
                   : hasDataRow
-                  ? alpha(row.color, 0.08)
-                  : "transparent",
+                    ? alpha(row.color, 0.08)
+                    : "transparent",
                 boxShadow: cellSelected
                   ? `inset 0 0 0 2px ${row.color}`
                   : "none",
@@ -612,6 +612,7 @@ const LocationTrackPage = () => {
       label: "Chờ thanh lý",
     },
     disabled: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Chưa sử dụng" },
+    broken: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Máy hư" },
   };
 
   const getStatusInfo = (statusKey) => {
@@ -744,9 +745,8 @@ const LocationTrackPage = () => {
   const fetchMachineTypeStats = useCallback(async (locationUuid) => {
     // Không cần kiểm tra locationUuid vì nó sẽ được gọi trong useEffect
     try {
-      const response = await api.tracking.getMachineStatsByTypeAtLocation(
-        locationUuid
-      );
+      const response =
+        await api.tracking.getMachineStatsByTypeAtLocation(locationUuid);
       if (response.success) {
         setTypeStats(response.data);
       } else {
@@ -799,9 +799,8 @@ const LocationTrackPage = () => {
 
   const fetchDepartmentTypeStats = useCallback(async (departmentUuid) => {
     try {
-      const response = await api.tracking.getMachineStatsByTypeAtDepartment(
-        departmentUuid
-      );
+      const response =
+        await api.tracking.getMachineStatsByTypeAtDepartment(departmentUuid);
       if (response.success) {
         setTypeStats(response.data);
       } else {
@@ -2343,8 +2342,8 @@ const LocationTrackPage = () => {
                     {selectedLocation
                       ? selectedLocation.name_location
                       : selectedDepartment
-                      ? selectedDepartment.name_department
-                      : "..."}
+                        ? selectedDepartment.name_department
+                        : "..."}
                   </Typography>
                 </Box>
 
