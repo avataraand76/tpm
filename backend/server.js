@@ -5470,7 +5470,9 @@ app.put("/api/exports/:uuid/confirm", authenticateToken, async (req, res) => {
 
     if (existing.length === 0) {
       await connection.rollback();
-      return res.status(404).json({ success: false, message: "Export not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Export not found" });
     }
 
     const ticket = existing[0];
@@ -8748,41 +8750,34 @@ app.post(
             indexOf: 1,
           }));
         } else {
+          // 1. Định nghĩa các ID bộ phận thuộc nhóm Cơ điện Xưởng được phép duyệt
+          const VALID_MAINTENANCE_SECTION_IDS = [22, 30, 41, 50, 117];
+
+          // 2. Query lấy nhân viên thuộc phòng ban đích VÀ thuộc các bộ phận quy định
           const [destUsers] = await dataHiTimesheetConnection.query(
-            `SELECT nv.id, nv.ma_nv FROM sync_nhan_vien nv JOIN sync_bo_phan bp ON nv.id_bo_phan = bp.id WHERE bp.id_phong_ban = ?`,
-            [dest_phongban_id]
+            `SELECT nv.id, nv.ma_nv 
+              FROM sync_nhan_vien nv 
+              JOIN sync_bo_phan bp ON nv.id_bo_phan = bp.id 
+              WHERE bp.id_phong_ban = ? 
+              AND nv.id_bo_phan IN (?)`,
+            [dest_phongban_id, VALID_MAINTENANCE_SECTION_IDS]
           );
+
           let validApprovers = [];
           const destUserIds = destUsers.map((u) => u.id);
+
           if (destUserIds.length > 0) {
+            // 3. Kiểm tra xem những nhân viên này có quyền duyệt (id_permission = 2) không
             const [perms] = await connection.query(
               `SELECT DISTINCT id_nhan_vien FROM tb_user_permission WHERE id_nhan_vien IN (?) AND id_permission = 2`,
               [destUserIds]
             );
-            const EXCLUDED_MA_NV_TO_PHO = new Set([
-              "01195",
-              "01195",
-              "00764",
-              "09411",
-              "09411",
-              "00200",
-              "01362",
-              "08502",
-              "08502",
-              "01375",
-              "08477",
-              "08477",
-              "03604",
-              "02537",
-              "02741",
-              "11318",
-            ]);
+
             const permittedSet = new Set(perms.map((p) => p.id_nhan_vien));
+
+            // 4. Map thành luồng duyệt (Không cần lọc mã nhân viên hardcode nữa)
             validApprovers = destUsers
-              .filter(
-                (u) =>
-                  permittedSet.has(u.id) && !EXCLUDED_MA_NV_TO_PHO.has(u.ma_nv)
-              )
+              .filter((u) => permittedSet.has(u.id))
               .map((u) => ({
                 ma_nv: u.ma_nv,
                 step_flow: 0,
@@ -11496,19 +11491,6 @@ async function autoCreateInventoryCheck() {
     const dd = String(vnNow.getDate()).padStart(2, "0");
     const checkDate = `${yyyy}-${mm}-${dd}`;
 
-    // Kiểm tra xem hôm nay đã có phiếu kiểm kê chưa (tránh tạo trùng)
-    const [existing] = await tpmConnection.query(
-      `SELECT id_inventory_check FROM tb_inventory_check WHERE DATE(check_date) = ? LIMIT 1`,
-      [checkDate]
-    );
-    if (existing.length > 0) {
-      console.log(
-        `[AutoInventory] Phiếu kiểm kê ngày ${checkDate} đã tồn tại, bỏ qua.`
-      );
-      connection.release();
-      return;
-    }
-
     await connection.beginTransaction();
 
     // Tạo master ticket
@@ -11701,7 +11683,7 @@ async function autoCancelInternalTransfers() {
 }
 
 // 16:00 thứ 2-6 (timezone Asia/Ho_Chi_Minh)
-cron.schedule("00 16 * * 1-5", autoCreateInventoryCheck, {
+cron.schedule("0 16 * * 1-5", autoCreateInventoryCheck, {
   timezone: "Asia/Ho_Chi_Minh",
 });
 
