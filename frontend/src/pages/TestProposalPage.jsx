@@ -2566,10 +2566,15 @@ const TestProposalPage = () => {
     setOpenInventoryRfidSearchDialog(true);
   };
 
+  const missingMachineEligibleForRfidSearch = (m) =>
+    m &&
+    m.RFID_machine &&
+    String(m.RFID_machine).trim() !== "" &&
+    (m.found_at === "Chưa quét" || m.found_at === "Không tìm thấy");
+
   const handleRfidSearchFromMissingMachines = () => {
-    // Lọc các máy "Chưa quét" có RFID
     const unscannedMachines = missingMachines.filter(
-      (m) => m.found_at === "Chưa quét"
+      missingMachineEligibleForRfidSearch
     );
 
     const rfids = unscannedMachines
@@ -2667,12 +2672,7 @@ const TestProposalPage = () => {
     const sourceList =
       batchScanAllMissing.length > 0 ? batchScanAllMissing : missingMachines;
     const rfids = sourceList
-      .filter(
-        (m) =>
-          m.found_at === "Chưa quét" &&
-          m.RFID_machine &&
-          m.RFID_machine.trim() !== ""
-      )
+      .filter(missingMachineEligibleForRfidSearch)
       .map((m) => m.RFID_machine);
 
     const targets = rfids.map((rfid) => ({ RFID_machine: rfid }));
@@ -9469,12 +9469,7 @@ const TestProposalPage = () => {
                 );
               const canRfidSearch =
                 selectedTicket?.status === "draft" &&
-                missingMachines.some(
-                  (m) =>
-                    m.found_at === "Chưa quét" &&
-                    m.RFID_machine &&
-                    m.RFID_machine.trim() !== ""
-                );
+                missingMachines.some(missingMachineEligibleForRfidSearch);
 
               const placeholderSx = {
                 width: "100%",
@@ -9561,10 +9556,7 @@ const TestProposalPage = () => {
                         Dò tìm RFID máy chưa quét (
                         {
                           missingMachines.filter(
-                            (m) =>
-                              m.found_at === "Chưa quét" &&
-                              m.RFID_machine &&
-                              m.RFID_machine.trim() !== ""
+                            missingMachineEligibleForRfidSearch
                           ).length
                         }
                         )
@@ -9645,10 +9637,7 @@ const TestProposalPage = () => {
                       Dò tìm RFID máy chưa quét (
                       {
                         missingMachines.filter(
-                          (m) =>
-                            m.found_at === "Chưa quét" &&
-                            m.RFID_machine &&
-                            m.RFID_machine.trim() !== ""
+                          missingMachineEligibleForRfidSearch
                         ).length
                       }
                       )
