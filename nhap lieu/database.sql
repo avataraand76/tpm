@@ -248,6 +248,28 @@ create table if not exists tb_machine
     updated_by bigint default '0'
 );
 
+-- MARK: machine rfid lưu RFID của máy móc
+create table if not exists tb_machine_rfid
+(
+    -- primary
+    id_machine_rfid bigint not null auto_increment,
+    uuid_machine_rfid varchar(36) not null unique default (UUID()),
+    
+    -- properties
+    RFID_machine text,
+    active int default 1,
+    
+    -- key
+    primary key (id_machine_rfid),
+    unique (RFID_machine),
+    
+    -- timestamp
+    created_at timestamp default current_timestamp,
+    created_by bigint default '0',
+    updated_at timestamp default current_timestamp on update current_timestamp,
+    updated_by bigint default '0'
+);
+
 -- MARK: machine rfid history lịch sử lưu RFID của máy móc
 create table if not exists tb_machine_rfid_history
 (

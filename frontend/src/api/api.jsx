@@ -629,6 +629,16 @@ export const api = {
       );
       return response.data;
     },
+    getMachineRfids: async () => {
+      const response = await httpConnect.get("/api/admin/machine-rfids");
+      return response.data;
+    },
+    getMachineRfidHistory: async (uuid) => {
+      const response = await httpConnect.get(
+        `/api/admin/machine-rfids/${uuid}/history`
+      );
+      return response.data;
+    },
   },
 
   // MARK: TEST PROPOSALS

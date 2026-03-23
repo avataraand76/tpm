@@ -2034,6 +2034,20 @@ app.post(
                 `,
                 [machineId, rfidTrimmed, userId, userId]
               );
+              await ensureMachineRfidRegistry(connection, rfidTrimmed, userId);
+            }
+            if (currentRfid && currentRfid !== rfidTrimmed) {
+              const [cntRows] = await connection.query(
+                "SELECT COUNT(*) AS c FROM tb_machine WHERE RFID_machine = ?",
+                [currentRfid]
+              );
+              if (cntRows[0].c === 0) {
+                await deactivateMachineRfidRegistry(
+                  connection,
+                  currentRfid,
+                  userId
+                );
+              }
             }
             successCount++;
           } else {
@@ -2463,6 +2477,7 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
         `,
         [result.insertId, rfidToSave, userId, userId]
       );
+      await ensureMachineRfidRegistry(tpmConnection, rfidToSave, userId);
     }
 
     // Get the newly created machine
@@ -2704,6 +2719,16 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         `,
         [machineId, newRfid, userId, userId]
       );
+      await ensureMachineRfidRegistry(tpmConnection, newRfid, userId);
+    }
+    if (currentRfid && currentRfid !== newRfid) {
+      const [cntRows] = await tpmConnection.query(
+        "SELECT COUNT(*) AS c FROM tb_machine WHERE RFID_machine = ?",
+        [currentRfid]
+      );
+      if (cntRows[0].c === 0) {
+        await deactivateMachineRfidRegistry(tpmConnection, currentRfid, userId);
+      }
     }
 
     // Get updated machine
@@ -3110,6 +3135,7 @@ app.post("/api/machines/batch-import", authenticateToken, async (req, res) => {
           `,
           [insertResult.insertId, rfidToSave, userId, userId]
         );
+        await ensureMachineRfidRegistry(connection, rfidToSave, userId);
       }
 
       successes.push({
@@ -5516,6 +5542,46 @@ app.put("/api/exports/:uuid/confirm", authenticateToken, async (req, res) => {
   }
 });
 
+// Đồng bộ danh mục thẻ RFID (tb_machine_rfid): tạo mới hoặc kích hoạt lại active=1
+const normalizeRfid = (v) => {
+  if (v == null || String(v).trim() === "") return null;
+  return String(v).trim();
+};
+
+const ensureMachineRfidRegistry = async (connection, rfidValue, userId) => {
+  const rfid = normalizeRfid(rfidValue);
+  if (!rfid) return;
+
+  const [rows] = await connection.query(
+    "SELECT id_machine_rfid, active FROM tb_machine_rfid WHERE RFID_machine = ? LIMIT 1",
+    [rfid]
+  );
+  if (rows.length === 0) {
+    await connection.query(
+      `INSERT INTO tb_machine_rfid (RFID_machine, active, created_by, updated_by)
+       VALUES (?, 1, ?, ?)`,
+      [rfid, userId, userId]
+    );
+  } else if (Number(rows[0].active) === 0) {
+    await connection.query(
+      `UPDATE tb_machine_rfid SET active = 1, updated_by = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id_machine_rfid = ?`,
+      [userId, rows[0].id_machine_rfid]
+    );
+  }
+};
+
+const deactivateMachineRfidRegistry = async (connection, rfidValue, userId) => {
+  const rfid = normalizeRfid(rfidValue);
+  if (!rfid) return;
+
+  await connection.query(
+    `UPDATE tb_machine_rfid SET active = 0, updated_by = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE RFID_machine = ?`,
+    [userId, rfid]
+  );
+};
+
 // Function to handle location and status updates in a transaction
 // Requires an active connection from a pool
 const updateMachineLocationAndStatus = async (
@@ -5701,6 +5767,20 @@ const updateMachineLocationAndStatus = async (
       );
     }
 
+    const [machBefore] = await connection.query(
+      "SELECT RFID_machine FROM tb_machine WHERE id_machine = ? LIMIT 1",
+      [idMachine]
+    );
+    const prevRfid = machBefore[0]?.RFID_machine
+      ? String(machBefore[0].RFID_machine).trim()
+      : null;
+
+    const clearsRfidFromExport =
+      ticketType === "export" &&
+      (ticketTypeDetail === "borrowed_return" ||
+        ticketTypeDetail === "rented_return" ||
+        ticketTypeDetail === "liquidation");
+
     // d. Update tb_machine status (updated_by = người tạo phiếu)
     let updateQuery = `
       UPDATE tb_machine
@@ -5713,6 +5793,14 @@ const updateMachineLocationAndStatus = async (
     ) {
       updateQuery += `, is_borrowed_or_rented_or_borrowed_out = ?, RFID_machine = NULL`;
       updateParams.push(newBorrowStatus); // newBorrowStatus đã được set trong switch case
+    } else if (ticketTypeDetail === "liquidation") {
+      updateQuery += `, 
+        RFID_machine = NULL,
+        is_borrowed_or_rented_or_borrowed_out = ?,
+        is_borrowed_or_rented_or_borrowed_out_name = ?,
+        is_borrowed_or_rented_or_borrowed_out_date = ?,
+        is_borrowed_or_rented_or_borrowed_out_return_date = ?`;
+      updateParams.push(null, null, null, null);
     }
     // Xử lý cho các trường hợp XÓA hoặc CẬP NHẬT MỚI toàn bộ
     else if (shouldUpdateBorrowInfo) {
@@ -5733,6 +5821,10 @@ const updateMachineLocationAndStatus = async (
     updateParams.push(idMachine);
 
     await connection.query(updateQuery, updateParams);
+
+    if (clearsRfidFromExport && prevRfid) {
+      await deactivateMachineRfidRegistry(connection, prevRfid, creatorId);
+    }
   }
 };
 
@@ -8434,6 +8526,213 @@ app.delete("/api/admin/machine-suppliers/:uuid", async (req, res) => {
       [uuid]
     );
     res.json({ success: true, message: "Xóa nhà cung cấp thành công" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/admin/machine-rfids — Danh sách thẻ RFID + thống kê active / máy / vị trí
+app.get("/api/admin/machine-rfids", async (req, res) => {
+  try {
+    const [statsRows] = await tpmConnection.query(
+      `SELECT
+        COUNT(*) AS total,
+        SUM(
+          CASE
+            WHEN r.active = 1 AND (
+              NOT EXISTS (
+                SELECT 1 FROM tb_machine m
+                WHERE m.RFID_machine = r.RFID_machine
+              )
+              OR EXISTS (
+                SELECT 1 FROM tb_machine m
+                WHERE m.RFID_machine = r.RFID_machine
+                  AND m.current_status NOT IN ('temporary', 'liquidation')
+                  AND (
+                    m.is_borrowed_or_rented_or_borrowed_out IS NULL
+                    OR m.is_borrowed_or_rented_or_borrowed_out NOT IN (
+                      'borrowed_return',
+                      'rented_return'
+                    )
+                  )
+              )
+            )
+            THEN 1
+            ELSE 0
+          END
+        ) AS active_count,
+        SUM(
+          CASE
+            WHEN r.active = 0
+              OR (
+                r.active = 1
+                AND EXISTS (
+                  SELECT 1 FROM tb_machine m
+                  WHERE m.RFID_machine = r.RFID_machine
+                )
+                AND NOT EXISTS (
+                  SELECT 1 FROM tb_machine m
+                  WHERE m.RFID_machine = r.RFID_machine
+                    AND m.current_status NOT IN ('temporary', 'liquidation')
+                    AND (
+                      m.is_borrowed_or_rented_or_borrowed_out IS NULL
+                      OR m.is_borrowed_or_rented_or_borrowed_out NOT IN (
+                        'borrowed_return',
+                        'rented_return'
+                      )
+                    )
+                )
+              )
+            THEN 1
+            ELSE 0
+          END
+        ) AS inactive_count
+       FROM tb_machine_rfid r`
+    );
+    const stats = statsRows[0] || {
+      total: 0,
+      active_count: 0,
+      inactive_count: 0,
+    };
+
+    const [items] = await tpmConnection.query(
+      `SELECT
+        r.id_machine_rfid,
+        r.uuid_machine_rfid,
+        r.RFID_machine,
+        r.active,
+        r.created_at,
+        CASE
+          WHEN r.active = 1 AND (
+            NOT EXISTS (
+              SELECT 1 FROM tb_machine m0
+              WHERE m0.RFID_machine = r.RFID_machine
+            )
+            OR EXISTS (
+              SELECT 1 FROM tb_machine m0
+              WHERE m0.RFID_machine = r.RFID_machine
+                AND m0.current_status NOT IN ('temporary', 'liquidation')
+                AND (
+                  m0.is_borrowed_or_rented_or_borrowed_out IS NULL
+                  OR m0.is_borrowed_or_rented_or_borrowed_out NOT IN (
+                    'borrowed_return',
+                    'rented_return'
+                  )
+                )
+            )
+          )
+          THEN 1
+          ELSE 0
+        END AS counts_as_active_usage,
+        m.id_machine,
+        m.uuid_machine,
+        m.code_machine,
+        m.serial_machine,
+        m.type_machine,
+        tl.uuid_location,
+        tl.name_location,
+        td.name_department
+       FROM tb_machine_rfid r
+       LEFT JOIN tb_machine m
+         ON m.RFID_machine = r.RFID_machine
+         AND r.active = 1
+         AND m.current_status NOT IN ('temporary', 'liquidation')
+         AND (
+           m.is_borrowed_or_rented_or_borrowed_out IS NULL
+           OR m.is_borrowed_or_rented_or_borrowed_out NOT IN (
+             'borrowed_return',
+             'rented_return'
+           )
+         )
+       LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
+       LEFT JOIN tb_location tl ON tl.id_location = ml.id_location
+       LEFT JOIN tb_department td ON td.id_department = tl.id_department
+       ORDER BY r.active DESC, r.RFID_machine ASC`
+    );
+
+    const data = items.map((row) => ({
+      id_machine_rfid: row.id_machine_rfid,
+      uuid_machine_rfid: row.uuid_machine_rfid,
+      RFID_machine: row.RFID_machine,
+      active: row.active,
+      counts_as_active_usage: Number(row.counts_as_active_usage) === 1,
+      created_at: row.created_at,
+      machine:
+        row.id_machine != null
+          ? {
+              id_machine: row.id_machine,
+              uuid_machine: row.uuid_machine,
+              code_machine: row.code_machine,
+              serial_machine: row.serial_machine,
+              type_machine: row.type_machine,
+            }
+          : null,
+      location:
+        row.uuid_location != null
+          ? {
+              uuid_location: row.uuid_location,
+              name_location: row.name_location,
+              name_department: row.name_department,
+            }
+          : null,
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        stats: {
+          total: Number(stats.total) || 0,
+          active: Number(stats.active_count) || 0,
+          inactive: Number(stats.inactive_count) || 0,
+        },
+        items: data,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/admin/machine-rfids/:uuid/history — Lịch sử gán thẻ (tb_machine_rfid_history)
+app.get("/api/admin/machine-rfids/:uuid/history", async (req, res) => {
+  try {
+    const { uuid } = req.params;
+    const [rfidRows] = await tpmConnection.query(
+      "SELECT RFID_machine FROM tb_machine_rfid WHERE uuid_machine_rfid = ? LIMIT 1",
+      [uuid]
+    );
+    if (!rfidRows.length) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Không tìm thấy mã RFID" });
+    }
+    const rfid = rfidRows[0].RFID_machine;
+
+    const [history] = await tpmConnection.query(
+      `SELECT
+        h.id_machine_rfid_history,
+        h.uuid_machine_rfid_history,
+        h.id_machine,
+        h.RFID_machine,
+        h.created_at,
+        m.uuid_machine,
+        m.code_machine,
+        m.serial_machine,
+        m.type_machine
+       FROM tb_machine_rfid_history h
+       LEFT JOIN tb_machine m ON m.id_machine = h.id_machine
+       WHERE TRIM(COALESCE(h.RFID_machine, '')) = TRIM(COALESCE(?, ''))
+       ORDER BY h.created_at DESC`,
+      [rfid]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        RFID_machine: rfid,
+        history,
+      },
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

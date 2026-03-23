@@ -1,6 +1,6 @@
 // frontend/src/pages/AdminPage.jsx
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Container,
   Typography,
@@ -43,6 +43,12 @@ import {
   useTheme,
   useMediaQuery,
   Chip,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
 } from "@mui/material";
 import {
   AdminPanelSettings,
@@ -64,8 +70,11 @@ import {
   LocalShipping,
   Link,
   LinkOff,
+  Nfc,
+  Radar,
 } from "@mui/icons-material";
 import NavigationBar from "../components/NavigationBar";
+import RfidSearch from "../components/RfidSearch";
 import { api } from "../api/api"; // Import API
 
 // --- STYLES ĐỒNG NHẤT ---
@@ -167,6 +176,18 @@ const AdminPage = () => {
     useState(null);
   const [typeAttributes, setTypeAttributes] = useState([]);
 
+  // Quản lý RFID (tab)
+  const [rfidPayload, setRfidPayload] = useState(null);
+  const [rfidLoading, setRfidLoading] = useState(false);
+  const [rfidDetailOpen, setRfidDetailOpen] = useState(false);
+  const [rfidDetailLoading, setRfidDetailLoading] = useState(false);
+  const [selectedRfidRow, setSelectedRfidRow] = useState(null);
+  const [rfidHistory, setRfidHistory] = useState([]);
+  /** 'all' | 'active' | 'inactive' — lọc bảng theo paper đã bấm */
+  const [rfidStatusFilter, setRfidStatusFilter] = useState("all");
+  const [openUnusedRfidSearchDialog, setOpenUnusedRfidSearchDialog] =
+    useState(false);
+
   // States for Dialog
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState("create");
@@ -253,6 +274,25 @@ const AdminPage = () => {
     }
   }, []);
 
+  const fetchRfidList = useCallback(async () => {
+    setRfidLoading(true);
+    try {
+      const res = await api.admin.getMachineRfids();
+      if (res.success) {
+        setRfidPayload(res.data);
+      }
+    } catch (error) {
+      console.error("Error fetching RFID list:", error);
+      showNotification(
+        "error",
+        "Lỗi tải RFID",
+        error.response?.data?.message || error.message
+      );
+    } finally {
+      setRfidLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
@@ -263,10 +303,64 @@ const AdminPage = () => {
     }
   }, [selectedTypeForAttributes, fetchTypeAttributes]);
 
+  useEffect(() => {
+    if (currentTab === 2) {
+      fetchRfidList();
+    }
+  }, [currentTab, fetchRfidList]);
+
   // --- Handlers ---
   const handleTabChange = (event, newValue) => {
     setCurrentTab(newValue);
   };
+
+  const handleRfidRowClick = async (row) => {
+    setSelectedRfidRow(row);
+    setRfidDetailOpen(true);
+    setRfidDetailLoading(true);
+    setRfidHistory([]);
+    try {
+      const res = await api.admin.getMachineRfidHistory(row.uuid_machine_rfid);
+      if (res.success) {
+        setRfidHistory(res.data.history || []);
+      }
+    } catch (error) {
+      showNotification(
+        "error",
+        "Lỗi lịch sử RFID",
+        error.response?.data?.message || error.message
+      );
+    } finally {
+      setRfidDetailLoading(false);
+    }
+  };
+
+  const handleCloseRfidDetail = () => {
+    setRfidDetailOpen(false);
+    setSelectedRfidRow(null);
+    setRfidHistory([]);
+  };
+
+  const rfidFilteredItems = useMemo(() => {
+    const items = rfidPayload?.items || [];
+    const isUsageActive = (r) => r.counts_as_active_usage ?? r.active === 1;
+    if (rfidStatusFilter === "active") {
+      return items.filter((r) => isUsageActive(r));
+    }
+    if (rfidStatusFilter === "inactive") {
+      return items.filter((r) => !isUsageActive(r));
+    }
+    return items;
+  }, [rfidPayload, rfidStatusFilter]);
+
+  /** Mục tiêu dò RFID (chế độ chỉ RFID) — các thẻ không sử dụng theo logic counts_as_active_usage */
+  const unusedRfidTargetsForSearch = useMemo(() => {
+    const items = rfidPayload?.items || [];
+    const isUsageActive = (r) => r.counts_as_active_usage ?? r.active === 1;
+    return items
+      .filter((r) => !isUsageActive(r) && r.RFID_machine)
+      .map((r) => ({ RFID_machine: r.RFID_machine }));
+  }, [rfidPayload]);
 
   const handleUserSearchChange = (e) => {
     setUserSearchQuery(e.target.value);
@@ -822,6 +916,7 @@ const AdminPage = () => {
                 icon={<Build />}
                 iconPosition="start"
               />
+              <Tab label="Quản lý RFID" icon={<Nfc />} iconPosition="start" />
               <Tab label="Phân Quyền" icon={<People />} iconPosition="start" />
             </Tabs>
           </Box>
@@ -1571,8 +1666,353 @@ const AdminPage = () => {
                 </MachineCatalogSubTabPanel>
               </TabPanel>
 
-              {/* === TAB PHÂN QUYỀN === */}
+              {/* === TAB QUẢN LÝ RFID === */}
               <TabPanel value={currentTab} index={2}>
+                <Box>
+                  {rfidLoading ? (
+                    <Box
+                      sx={{
+                        display: "flex",
+                        justifyContent: "center",
+                        py: 6,
+                      }}
+                    >
+                      <CircularProgress />
+                    </Box>
+                  ) : (
+                    <>
+                      <Grid container spacing={2} sx={{ mb: 3 }}>
+                        <Grid size={{ xs: 12, sm: 4 }}>
+                          <Paper
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setRfidStatusFilter("all")}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                setRfidStatusFilter("all");
+                              }
+                            }}
+                            variant="outlined"
+                            sx={{
+                              p: 2,
+                              borderRadius: "16px",
+                              textAlign: "center",
+                              cursor: "pointer",
+                              borderWidth: 2,
+                              borderColor:
+                                rfidStatusFilter === "all"
+                                  ? "primary.main"
+                                  : "divider",
+                              transition: "border-color 0.2s, box-shadow 0.2s",
+                              boxShadow:
+                                rfidStatusFilter === "all" ? 2 : "none",
+                              "&:hover": {
+                                boxShadow: 1,
+                              },
+                            }}
+                          >
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              display="block"
+                            >
+                              Tổng số thẻ
+                            </Typography>
+                            <Typography variant="h5" fontWeight={700}>
+                              {rfidPayload?.stats?.total ?? 0}
+                            </Typography>
+                          </Paper>
+                        </Grid>
+                        <Grid size={{ xs: 12, sm: 4 }}>
+                          <Paper
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setRfidStatusFilter("active")}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                setRfidStatusFilter("active");
+                              }
+                            }}
+                            variant="outlined"
+                            sx={{
+                              p: 2,
+                              borderRadius: "16px",
+                              textAlign: "center",
+                              cursor: "pointer",
+                              borderWidth: 2,
+                              borderColor:
+                                rfidStatusFilter === "active"
+                                  ? "primary.main"
+                                  : "success.light",
+                              bgcolor: "rgba(46, 125, 50, 0.06)",
+                              transition: "border-color 0.2s, box-shadow 0.2s",
+                              boxShadow:
+                                rfidStatusFilter === "active" ? 2 : "none",
+                              "&:hover": {
+                                boxShadow: 1,
+                              },
+                            }}
+                          >
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              display="block"
+                            >
+                              Đang sử dụng
+                            </Typography>
+                            <Typography
+                              variant="h5"
+                              fontWeight={700}
+                              color="success.dark"
+                            >
+                              {rfidPayload?.stats?.active ?? 0}
+                            </Typography>
+                          </Paper>
+                        </Grid>
+                        <Grid size={{ xs: 12, sm: 4 }}>
+                          <Paper
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setRfidStatusFilter("inactive")}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                setRfidStatusFilter("inactive");
+                              }
+                            }}
+                            variant="outlined"
+                            sx={{
+                              p: 2,
+                              borderRadius: "16px",
+                              textAlign: "center",
+                              cursor: "pointer",
+                              borderWidth: 2,
+                              borderColor:
+                                rfidStatusFilter === "inactive"
+                                  ? "primary.main"
+                                  : "action.disabled",
+                              bgcolor: "rgba(0, 0, 0, 0.04)",
+                              transition: "border-color 0.2s, box-shadow 0.2s",
+                              boxShadow:
+                                rfidStatusFilter === "inactive" ? 2 : "none",
+                              "&:hover": {
+                                boxShadow: 1,
+                              },
+                            }}
+                          >
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              display="block"
+                            >
+                              Không sử dụng
+                            </Typography>
+                            <Typography variant="h5" fontWeight={700}>
+                              {rfidPayload?.stats?.inactive ?? 0}
+                            </Typography>
+                          </Paper>
+                        </Grid>
+                      </Grid>
+
+                      <Stack
+                        direction={{ xs: "column", sm: "row" }}
+                        spacing={2}
+                        alignItems={{ xs: "stretch", sm: "center" }}
+                        justifyContent="space-between"
+                        sx={{ mb: 2 }}
+                      >
+                        <Typography variant="body2" color="text.secondary">
+                          {unusedRfidTargetsForSearch.length > 0
+                            ? `Danh sách có ${unusedRfidTargetsForSearch.length} thẻ không sử dụng — mở dò tìm để quét lần lượt các mã đã điền sẵn (có thể sửa hoặc thêm mã).`
+                            : "Chưa có thẻ không sử dụng trong danh sách hiện tại; bạn vẫn có thể mở dò tìm và nhập mã RFID thủ công."}
+                        </Typography>
+                        <Button
+                          variant="contained"
+                          startIcon={<Radar />}
+                          disabled={rfidLoading}
+                          onClick={() => setOpenUnusedRfidSearchDialog(true)}
+                          sx={{
+                            alignSelf: { xs: "stretch", sm: "center" },
+                            borderRadius: "12px",
+                            px: 2.5,
+                            py: 1,
+                            ...btnGradientStyle,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Dò tìm thẻ không sử dụng
+                        </Button>
+                      </Stack>
+
+                      <TableContainer
+                        component={Paper}
+                        variant="outlined"
+                        sx={{ maxHeight: 560, borderRadius: "16px" }}
+                      >
+                        <Table stickyHeader size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell sx={{ fontWeight: 700 }}>
+                                Mã RFID
+                              </TableCell>
+                              <TableCell sx={{ fontWeight: 700 }}>
+                                Trạng thái
+                              </TableCell>
+                              <TableCell sx={{ fontWeight: 700 }}>
+                                Máy đang gán
+                              </TableCell>
+                              <TableCell sx={{ fontWeight: 700 }}>
+                                Vị trí / Đơn vị
+                              </TableCell>
+                              <TableCell sx={{ fontWeight: 700 }}>
+                                Ngày tạo thẻ
+                              </TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {(rfidPayload?.items || []).length === 0 ? (
+                              <TableRow>
+                                <TableCell colSpan={5} align="center">
+                                  <Typography
+                                    color="text.secondary"
+                                    sx={{ py: 3 }}
+                                  >
+                                    Chưa có dữ liệu thẻ RFID.
+                                  </Typography>
+                                </TableCell>
+                              </TableRow>
+                            ) : rfidFilteredItems.length === 0 ? (
+                              <TableRow>
+                                <TableCell colSpan={5} align="center">
+                                  <Typography
+                                    color="text.secondary"
+                                    sx={{ py: 3 }}
+                                  >
+                                    Không có mã nào khớp bộ lọc đã chọn.
+                                  </Typography>
+                                </TableCell>
+                              </TableRow>
+                            ) : (
+                              rfidFilteredItems.map((row) => (
+                                <TableRow
+                                  key={row.uuid_machine_rfid}
+                                  hover
+                                  sx={{
+                                    cursor: "pointer",
+                                    "&:hover": {
+                                      bgcolor: "rgba(102, 126, 234, 0.06)",
+                                    },
+                                  }}
+                                  onClick={() => handleRfidRowClick(row)}
+                                >
+                                  <TableCell>
+                                    <Typography fontWeight={600}>
+                                      {row.RFID_machine || "—"}
+                                    </Typography>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Chip
+                                      size="small"
+                                      label={
+                                        (row.counts_as_active_usage ??
+                                        row.active === 1)
+                                          ? "Đang sử dụng"
+                                          : "Không sử dụng"
+                                      }
+                                      color={
+                                        (row.counts_as_active_usage ??
+                                        row.active === 1)
+                                          ? "success"
+                                          : "default"
+                                      }
+                                      variant={
+                                        (row.counts_as_active_usage ??
+                                        row.active === 1)
+                                          ? "filled"
+                                          : "outlined"
+                                      }
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    {row.machine ? (
+                                      <Box>
+                                        <Typography variant="body2">
+                                          {row.machine.code_machine +
+                                            "—" +
+                                            row.machine.serial_machine || "—"}
+                                        </Typography>
+                                        {row.machine.type_machine ? (
+                                          <Typography
+                                            variant="caption"
+                                            color="text.secondary"
+                                          >
+                                            {row.machine.type_machine}
+                                          </Typography>
+                                        ) : null}
+                                      </Box>
+                                    ) : (
+                                      <Typography
+                                        variant="body2"
+                                        color="text.secondary"
+                                      >
+                                        —
+                                      </Typography>
+                                    )}
+                                  </TableCell>
+                                  <TableCell>
+                                    {row.location ? (
+                                      <Box>
+                                        <Typography variant="body2">
+                                          {row.location.name_location || "—"}
+                                        </Typography>
+                                        {row.location.name_department ? (
+                                          <Typography
+                                            variant="caption"
+                                            color="text.secondary"
+                                          >
+                                            {row.location.name_department}
+                                          </Typography>
+                                        ) : null}
+                                      </Box>
+                                    ) : (
+                                      <Typography
+                                        variant="body2"
+                                        color="text.secondary"
+                                      >
+                                        —
+                                      </Typography>
+                                    )}
+                                  </TableCell>
+                                  <TableCell>
+                                    {row.created_at
+                                      ? new Date(row.created_at).toLocaleString(
+                                          "vi-VN"
+                                        )
+                                      : "—"}
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                            )}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ display: "block", mt: 2 }}
+                      >
+                        Bấm vào một dòng để xem chi tiết lịch sử gán thẻ.
+                      </Typography>
+                    </>
+                  )}
+                </Box>
+              </TabPanel>
+
+              {/* === TAB PHÂN QUYỀN === */}
+              <TabPanel value={currentTab} index={3}>
                 <Grid container spacing={3}>
                   {/* CỘT TRÁI: TÌM KIẾM */}
                   <Grid size={{ xs: 12, md: 5 }}>
@@ -1869,18 +2309,18 @@ const AdminPage = () => {
               {currentItem?.type === "department"
                 ? "Đơn vị"
                 : currentItem?.type === "location"
-                ? "Vị trí"
-                : currentItem?.type === "category"
-                ? "Phân Loại"
-                : currentItem?.type === "machine-type"
-                ? "Loại máy"
-                : currentItem?.type === "machine-attribute"
-                ? "Đặc tính"
-                : currentItem?.type === "machine-manufacturer"
-                ? "Hãng sản xuất"
-                : currentItem?.type === "machine-supplier"
-                ? "Nhà cung cấp"
-                : ""}
+                  ? "Vị trí"
+                  : currentItem?.type === "category"
+                    ? "Phân Loại"
+                    : currentItem?.type === "machine-type"
+                      ? "Loại máy"
+                      : currentItem?.type === "machine-attribute"
+                        ? "Đặc tính"
+                        : currentItem?.type === "machine-manufacturer"
+                          ? "Hãng sản xuất"
+                          : currentItem?.type === "machine-supplier"
+                            ? "Nhà cung cấp"
+                            : ""}
             </Box>
             <IconButton onClick={handleCloseDialog} sx={{ color: "white" }}>
               <Close />
@@ -1928,6 +2368,146 @@ const AdminPage = () => {
               )}
             </Button>
           </DialogActions>
+        </Dialog>
+
+        <Dialog
+          open={rfidDetailOpen}
+          onClose={handleCloseRfidDetail}
+          maxWidth="md"
+          fullWidth
+          PaperProps={{
+            sx: { borderRadius: "20px" },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              fontWeight: 700,
+              background: "linear-gradient(45deg, #667eea, #764ba2)",
+              color: "white",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+              <Typography component="span" variant="h6" fontWeight={700}>
+                Lịch sử gán thẻ RFID
+              </Typography>
+              {selectedRfidRow?.RFID_machine ? (
+                <Typography
+                  component="span"
+                  variant="body2"
+                  sx={{ opacity: 0.95, fontWeight: 500 }}
+                >
+                  Mã: {selectedRfidRow.RFID_machine}
+                </Typography>
+              ) : null}
+            </Box>
+            <IconButton onClick={handleCloseRfidDetail} sx={{ color: "white" }}>
+              <Close />
+            </IconButton>
+          </DialogTitle>
+          <DialogContent sx={{ mt: 1 }}>
+            {rfidDetailLoading ? (
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "center",
+                  py: 4,
+                }}
+              >
+                <CircularProgress />
+              </Box>
+            ) : rfidHistory.length === 0 ? (
+              <Typography color="text.secondary" sx={{ py: 3 }}>
+                Chưa có bản ghi lịch sử gán thẻ cho mã này.
+              </Typography>
+            ) : (
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 700 }}>Thời gian</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>
+                        Máy (mã serial)
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Loại máy</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {rfidHistory.map((h) => (
+                      <TableRow key={h.uuid_machine_rfid_history}>
+                        <TableCell>
+                          {h.created_at
+                            ? new Date(h.created_at).toLocaleString("vi-VN")
+                            : "—"}
+                        </TableCell>
+                        <TableCell>
+                          {[h.code_machine, h.serial_machine]
+                            .filter(Boolean)
+                            .join(" · ") || "—"}
+                        </TableCell>
+                        <TableCell>{h.type_machine || "—"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2 }}>
+            <Button onClick={handleCloseRfidDetail} variant="outlined">
+              Đóng
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog
+          open={openUnusedRfidSearchDialog}
+          onClose={() => setOpenUnusedRfidSearchDialog(false)}
+          maxWidth="md"
+          fullWidth
+          fullScreen={isMobile}
+          PaperProps={{
+            sx: { borderRadius: isMobile ? 0 : "20px" },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              background: "linear-gradient(45deg, #667eea, #764ba2)",
+              color: "white",
+              fontWeight: 700,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <Box>
+              <Typography
+                component="span"
+                variant={isMobile ? "h6" : "h5"}
+                sx={{ fontWeight: 700, display: "block" }}
+              >
+                Dò tìm thẻ RFID không sử dụng
+              </Typography>
+              <Typography variant="caption" sx={{ opacity: 0.9 }}>
+                Chế độ chỉ RFID — quét để khớp từng mã trong danh sách mục tiêu
+              </Typography>
+            </Box>
+            <IconButton
+              onClick={() => setOpenUnusedRfidSearchDialog(false)}
+              sx={{ color: "white" }}
+            >
+              <Close />
+            </IconButton>
+          </DialogTitle>
+          <DialogContent sx={{ p: 0 }}>
+            <RfidSearch
+              onClose={() => setOpenUnusedRfidSearchDialog(false)}
+              selectedMachines={unusedRfidTargetsForSearch}
+              skipResolveApi
+            />
+          </DialogContent>
         </Dialog>
 
         {/* --- Snackbar --- */}
