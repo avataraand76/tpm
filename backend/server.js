@@ -5837,6 +5837,7 @@ app.get("/api/internal-transfers", authenticateToken, async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const status = req.query.status || "";
     const to_location_uuid = req.query.to_location_uuid || "";
+    const to_department_uuid = req.query.to_department_uuid || "";
     const date_from = req.query.date_from || "";
     const date_to = req.query.date_to || "";
     const offset = (page - 1) * limit;
@@ -5852,6 +5853,11 @@ app.get("/api/internal-transfers", authenticateToken, async (req, res) => {
     if (to_location_uuid) {
       whereConditions.push(`loc_to.uuid_location = ?`);
       params.push(to_location_uuid);
+    }
+
+    if (to_department_uuid) {
+      whereConditions.push(`td.uuid_department = ?`);
+      params.push(to_department_uuid);
     }
 
     if (date_from) {
@@ -5874,6 +5880,7 @@ app.get("/api/internal-transfers", authenticateToken, async (req, res) => {
       `SELECT COUNT(DISTINCT t.id_machine_internal_transfer) as total 
        FROM tb_machine_internal_transfer t
        LEFT JOIN tb_location loc_to ON loc_to.id_location = t.to_location_id
+       LEFT JOIN tb_department td ON td.id_department = loc_to.id_department
        ${whereClause}`,
       params
     );
@@ -10453,7 +10460,7 @@ app.get(
         scannedData = Array.isArray(parsed) ? parsed : parsed?.locations || [];
       }
 
-      // 6. Lấy danh sách máy hệ thống cần kiểm tra
+      // 6. Lấy danh sách máy hệ thống cần kiểm tra + gắn vị trí trước đó từ list_before_scan
       let systemMachines = [];
 
       if (location_uuid) {
@@ -10461,12 +10468,24 @@ app.get(
         const targetLoc = listBeforeScan.find(
           (l) => l.location_uuid === location_uuid
         );
-        systemMachines = targetLoc ? targetLoc.machines : [];
+        systemMachines = targetLoc
+          ? (targetLoc.machines || []).map((m) => ({
+              ...m,
+              previous_location_name: targetLoc.location_name || "",
+              previous_location_uuid: targetLoc.location_uuid || null,
+            }))
+          : [];
       } else {
         // Toàn bộ đơn vị
-        listBeforeScan.forEach((loc) =>
-          systemMachines.push(...(loc.machines || []))
-        );
+        listBeforeScan.forEach((loc) => {
+          (loc.machines || []).forEach((m) => {
+            systemMachines.push({
+              ...m,
+              previous_location_name: loc.location_name || "",
+              previous_location_uuid: loc.location_uuid || null,
+            });
+          });
+        });
       }
 
       // 7. Tìm máy thiếu: máy trong sổ sách mà chưa được quét ở BẤT KỲ ĐÂU trong toàn phiếu
@@ -11982,21 +12001,21 @@ async function autoCancelInternalTransfers() {
 }
 
 // 16:00 thứ 2-6 (timezone Asia/Ho_Chi_Minh)
-cron.schedule("0 16 * * 1-5", autoCreateInventoryCheck, {
-  timezone: "Asia/Ho_Chi_Minh",
-});
+// cron.schedule("0 16 * * 1-5", autoCreateInventoryCheck, {
+//   timezone: "Asia/Ho_Chi_Minh",
+// });
 
 // 15:00 thứ 7 (timezone Asia/Ho_Chi_Minh)
-cron.schedule("0 15 * * 6", autoCreateInventoryCheck, {
-  timezone: "Asia/Ho_Chi_Minh",
-});
+// cron.schedule("0 15 * * 6", autoCreateInventoryCheck, {
+//   timezone: "Asia/Ho_Chi_Minh",
+// });
 
 // 16:30 thứ 2-6 (timezone Asia/Ho_Chi_Minh)
-cron.schedule("30 16 * * 1-5", autoCancelInternalTransfers, {
-  timezone: "Asia/Ho_Chi_Minh",
-});
+// cron.schedule("30 16 * * 1-5", autoCancelInternalTransfers, {
+//   timezone: "Asia/Ho_Chi_Minh",
+// });
 
 // 15:30 thứ 7 (timezone Asia/Ho_Chi_Minh)
-cron.schedule("30 15 * * 6", autoCancelInternalTransfers, {
-  timezone: "Asia/Ho_Chi_Minh",
-});
+// cron.schedule("30 15 * * 6", autoCancelInternalTransfers, {
+//   timezone: "Asia/Ho_Chi_Minh",
+// });

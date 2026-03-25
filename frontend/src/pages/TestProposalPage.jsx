@@ -930,7 +930,7 @@ const TestProposalPage = () => {
         delete params.import_type;
         delete params.export_type;
         if (locationFilter) {
-          params.to_location_uuid = locationFilter;
+          params.to_department_uuid = locationFilter;
         }
         response = await api.internal_transfers.getAll(params);
         setTransfers(response.data);
@@ -1047,22 +1047,27 @@ const TestProposalPage = () => {
     fetchExternalLocations();
   }, [fetchExternalLocations, showNotification]);
 
-  // Fetch all locations for filter when on transfer tab
+  // Fetch all main departments for filter when on transfer tab
   useEffect(() => {
-    const fetchAllLocationsForFilter = async () => {
+    const fetchAllDepartmentsForFilter = async () => {
       if (activeTab === 2) {
         try {
-          const response = await api.locations.getAll({});
-          setAllLocationsForFilter(response.data || []);
+          const response = await api.departments.getAll();
+          const internalDepartments = (response.data || []).filter(
+            (dept) =>
+              dept.type !== "external" &&
+              dept.name_department !== "Đơn vị bên ngoài"
+          );
+          setAllLocationsForFilter(internalDepartments);
         } catch (error) {
-          console.error("Error fetching locations for filter:", error);
+          console.error("Error fetching departments for filter:", error);
           setAllLocationsForFilter([]);
         }
       } else {
         setAllLocationsForFilter([]);
       }
     };
-    fetchAllLocationsForFilter();
+    fetchAllDepartmentsForFilter();
   }, [activeTab]);
 
   useEffect(() => {
@@ -5220,7 +5225,7 @@ const TestProposalPage = () => {
                   <TextField
                     fullWidth
                     select
-                    label="Đến vị trí"
+                    label="Đến đơn vị"
                     value={locationFilter}
                     onChange={(e) => setLocationFilter(e.target.value)}
                     sx={{
@@ -5228,12 +5233,12 @@ const TestProposalPage = () => {
                     }}
                   >
                     <MenuItem value="">Tất cả</MenuItem>
-                    {allLocationsForFilter.map((location) => (
+                    {allLocationsForFilter.map((department) => (
                       <MenuItem
-                        key={location.uuid_location}
-                        value={location.uuid_location}
+                        key={department.uuid_department}
+                        value={department.uuid_department}
                       >
-                        {location.name_location}
+                        {department.name_department}
                       </MenuItem>
                     ))}
                   </TextField>
@@ -9394,7 +9399,10 @@ const TestProposalPage = () => {
                       <TableCell sx={{ fontWeight: "bold" }}>Serial</TableCell>
                       <TableCell sx={{ fontWeight: "bold" }}>RFID</TableCell>
                       <TableCell sx={{ fontWeight: "bold" }}>
-                        Vị trí tìm thấy
+                        Vị trí ghi nhận
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: "bold" }}>
+                        Trạng thái
                       </TableCell>
                     </TableRow>
                   </TableHead>
@@ -9409,6 +9417,9 @@ const TestProposalPage = () => {
                         </TableCell>
                         <TableCell>{machine.serial_machine || "-"}</TableCell>
                         <TableCell>{machine.RFID_machine || "-"}</TableCell>
+                        <TableCell>
+                          {machine.previous_location_name || "-"}
+                        </TableCell>
                         <TableCell>
                           <Chip
                             label={machine.found_at}
