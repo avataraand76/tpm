@@ -11809,6 +11809,18 @@ async function autoCreateInventoryCheck() {
     const dd = String(vnNow.getDate()).padStart(2, "0");
     const checkDate = `${yyyy}-${mm}-${dd}`;
 
+    const [existing] = await connection.query(
+      `SELECT id_inventory_check FROM tb_inventory_check 
+       WHERE DATE(check_date) = ? AND created_by = 795009 LIMIT 1`,
+      [checkDate]
+    );
+
+    if (existing.length > 0) {
+      console.log(
+        `[AutoInventory] Đã có phiếu tự động cho ngày ${checkDate}. Bỏ qua.`
+      );
+      return;
+    }
     await connection.beginTransaction();
 
     // Tạo master ticket
@@ -12001,21 +12013,21 @@ async function autoCancelInternalTransfers() {
 }
 
 // 16:00 thứ 2-6 (timezone Asia/Ho_Chi_Minh)
-// cron.schedule("0 16 * * 1-5", autoCreateInventoryCheck, {
-//   timezone: "Asia/Ho_Chi_Minh",
-// });
+cron.schedule("0 16 * * 1-5", autoCreateInventoryCheck, {
+  timezone: "Asia/Ho_Chi_Minh",
+});
 
 // 15:00 thứ 7 (timezone Asia/Ho_Chi_Minh)
-// cron.schedule("0 15 * * 6", autoCreateInventoryCheck, {
-//   timezone: "Asia/Ho_Chi_Minh",
-// });
+cron.schedule("0 15 * * 6", autoCreateInventoryCheck, {
+  timezone: "Asia/Ho_Chi_Minh",
+});
 
 // 16:30 thứ 2-6 (timezone Asia/Ho_Chi_Minh)
-// cron.schedule("30 16 * * 1-5", autoCancelInternalTransfers, {
-//   timezone: "Asia/Ho_Chi_Minh",
-// });
+cron.schedule("30 16 * * 1-5", autoCancelInternalTransfers, {
+  timezone: "Asia/Ho_Chi_Minh",
+});
 
 // 15:30 thứ 7 (timezone Asia/Ho_Chi_Minh)
-// cron.schedule("30 15 * * 6", autoCancelInternalTransfers, {
-//   timezone: "Asia/Ho_Chi_Minh",
-// });
+cron.schedule("30 15 * * 6", autoCancelInternalTransfers, {
+  timezone: "Asia/Ho_Chi_Minh",
+});

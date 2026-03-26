@@ -2578,6 +2578,10 @@ const TestProposalPage = () => {
     (m.found_at === "Chưa quét" || m.found_at === "Không tìm thấy");
 
   const handleRfidSearchFromMissingMachines = () => {
+    // Đảm bảo luôn mở theo chế độ chọn vị trí (không dính batch scan trước đó)
+    setBatchScanPreSelectedLocation(null);
+    setBatchScanAllMissing([]);
+
     const unscannedMachines = missingMachines.filter(
       missingMachineEligibleForRfidSearch
     );
@@ -3032,6 +3036,7 @@ const TestProposalPage = () => {
         ...loc,
         _dept_uuid: deptUuid,
         _dept_name: deptInfo?.name_department || "",
+        _id_department: deptInfo?.id_department || deptInfo?.id_phong_ban,
       }));
 
       setMissingMachines(taggedMachines);
@@ -3056,8 +3061,7 @@ const TestProposalPage = () => {
 
     try {
       setDetailLoading(true);
-
-      const allPromises = formData.inventoryDetails.map((dept) =>
+      const allPromises = (formData.inventoryDetails || []).map((dept) =>
         api.inventory
           .getMissingMachines(selectedTicket.uuid_inventory_check, {
             department_uuid: dept.uuid_department,
@@ -3077,7 +3081,7 @@ const TestProposalPage = () => {
       setMissingMachinesLocation("Toàn bộ phiếu kiểm kê");
 
       // Load tất cả vị trí của tất cả đơn vị trong phiếu
-      const locPromises = formData.inventoryDetails.map((dept) =>
+      const locPromises = (formData.inventoryDetails || []).map((dept) =>
         api.locations
           .getAll({ department_uuid: dept.uuid_department })
           .then((res) =>
@@ -3085,6 +3089,7 @@ const TestProposalPage = () => {
               ...loc,
               _dept_uuid: dept.uuid_department,
               _dept_name: dept.name_department,
+              _id_department: dept.id_department || dept.id_phong_ban,
             }))
           )
           .catch(() => [])
@@ -9319,7 +9324,20 @@ const TestProposalPage = () => {
               }}
               selectedMachines={inventoryRfidSearchTargets}
               skipResolveApi
-              inventoryLocations={inventoryAllLocations}
+              inventoryLocations={(() => {
+                // Chỉ lọc danh sách vị trí hiển thị trong dialog "Đã tìm thấy thiết bị!"
+                // theo `id_phong_ban` của user. Các phần khác (tải missing machines, lưu kết quả...) giữ nguyên.
+                if (isAdmin || isPhongCoDien) return inventoryAllLocations;
+                const userDeptId = Number(user?.phongban_id);
+                if (Number.isNaN(userDeptId)) return [];
+
+                return (inventoryAllLocations || []).filter((loc) => {
+                  const dept = (formData.inventoryDetails || []).find(
+                    (d) => d.uuid_department === loc?._dept_uuid
+                  );
+                  return Number(dept?.id_phong_ban) === userDeptId;
+                });
+              })()}
               onFoundMachineInventory={
                 batchScanPreSelectedLocation
                   ? null
@@ -9474,11 +9492,13 @@ const TestProposalPage = () => {
           >
             {(() => {
               const canConfirmAll =
+                !isViewOnly &&
                 selectedTicket?.status === "draft" &&
                 missingMachines.some(
                   (m) => m.found_at === "Chưa quét" && !m.not_found_confirmed
                 );
               const canRfidSearch =
+                !isViewOnly &&
                 selectedTicket?.status === "draft" &&
                 missingMachines.some(missingMachineEligibleForRfidSearch);
 
@@ -9725,38 +9745,48 @@ const TestProposalPage = () => {
                 >
                   Chọn đơn vị quét máy vào:
                 </Typography>
-                {(formData.inventoryDetails || []).map((dept) => (
-                  <Card
-                    key={dept.uuid_department}
-                    variant="outlined"
-                    onClick={() => handleBatchPickerSelectDept(dept)}
-                    sx={{
-                      p: 2,
-                      cursor: "pointer",
-                      borderRadius: "12px",
-                      borderColor: "rgba(255,152,0,0.3)",
-                      transition: "all 0.2s",
-                      "&:hover": {
-                        borderColor: "#ff9800",
-                        bgcolor: "rgba(255,152,0,0.05)",
-                        transform: "translateX(4px)",
-                      },
-                    }}
-                  >
-                    <Box
+                {(formData.inventoryDetails || [])
+                  .filter((dept) => {
+                    if (isAdmin || isPhongCoDien) return true;
+
+                    return (
+                      Number(dept.id_department) ===
+                        Number(user?.phongban_id) ||
+                      Number(dept.id_phong_ban) === Number(user?.phongban_id)
+                    );
+                  })
+                  .map((dept) => (
+                    <Card
+                      key={dept.uuid_department}
+                      variant="outlined"
+                      onClick={() => handleBatchPickerSelectDept(dept)}
                       sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
+                        p: 2,
+                        cursor: "pointer",
+                        borderRadius: "12px",
+                        borderColor: "rgba(255,152,0,0.3)",
+                        transition: "all 0.2s",
+                        "&:hover": {
+                          borderColor: "#ff9800",
+                          bgcolor: "rgba(255,152,0,0.05)",
+                          transform: "translateX(4px)",
+                        },
                       }}
                     >
-                      <Typography fontWeight={600}>
-                        {dept.name_department}
-                      </Typography>
-                      <ArrowForward sx={{ color: "#ff9800", fontSize: 20 }} />
-                    </Box>
-                  </Card>
-                ))}
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        <Typography fontWeight={600}>
+                          {dept.name_department}
+                        </Typography>
+                        <ArrowForward sx={{ color: "#ff9800", fontSize: 20 }} />
+                      </Box>
+                    </Card>
+                  ))}
               </Stack>
             ) : (
               /* BƯỚC 2: Chọn vị trí */

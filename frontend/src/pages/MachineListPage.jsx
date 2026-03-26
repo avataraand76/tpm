@@ -280,8 +280,8 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
       colKey === "ALL"
         ? borrow_status.length === 0 || borrow_status.includes("ALL")
         : colKey === "internal"
-        ? borrow_status.includes("internal") // Khi click Nội bộ, logic active vẫn giữ nguyên
-        : borrow_status.includes(colKey);
+          ? borrow_status.includes("internal") // Khi click Nội bộ, logic active vẫn giữ nguyên
+          : borrow_status.includes(colKey);
 
     return isRowMatch && isColMatch;
   };
@@ -408,8 +408,8 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
                 bgcolor: cellSelected
                   ? alpha(row.color, 0.2)
                   : hasDataCell
-                  ? row.bg
-                  : "transparent",
+                    ? row.bg
+                    : "transparent",
                 color: hasDataCell || cellSelected ? row.color : "#e0e0e0",
                 fontWeight: hasDataCell || cellSelected ? "bold" : "normal",
                 boxShadow: cellSelected
@@ -442,8 +442,8 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
                 backgroundColor: cellSelected
                   ? alpha(row.color, 0.2)
                   : hasDataRow
-                  ? alpha(row.color, 0.08)
-                  : "transparent",
+                    ? alpha(row.color, 0.08)
+                    : "transparent",
                 boxShadow: cellSelected
                   ? `inset 0 0 0 2px ${row.color}`
                   : "none",
@@ -1054,9 +1054,14 @@ const MachineListPage = () => {
     setPage(1); // Reset to first page when changing rows per page
   };
 
-  const handleGenerateCode = async () => {
-    // Chỉ chạy khi đang ở chế độ Tạo mới và có nhập Hãng SX
-    if (isCreateMode && editedData.manufacturer) {
+  const handleGenerateCode = async (force = false) => {
+    // Chỉ chạy nếu:
+    // 1. Có Hãng sản xuất
+    // 2. Ô mã máy đang trống HOẶC người dùng chủ động bấm nút (force = true)
+    if (
+      editedData.manufacturer &&
+      (!editedData.code_machine || force === true)
+    ) {
       try {
         // Gọi API lấy mã tiếp theo
         const result = await api.machines.getNextCode(editedData.manufacturer);
@@ -1239,8 +1244,8 @@ const MachineListPage = () => {
                   : "PHUKIEN"
               }-${editedData.serial_machine || ""}</div>
               <div class="name">${editedData.type_machine || ""} - ${
-      editedData.model_machine || ""
-    }</div> 
+                editedData.model_machine || ""
+              }</div> 
             </div>
           </div>
           <script>
@@ -4497,7 +4502,7 @@ const MachineListPage = () => {
                     onChange={(e) =>
                       handleInputChange("code_machine", e.target.value)
                     }
-                    disabled={!canCreateOrImport || !isCreateMode}
+                    disabled={!canCreateOrImport}
                     sx={
                       !(isAdmin || canEdit) || !isCreateMode
                         ? DISABLED_VIEW_SX
@@ -4505,10 +4510,13 @@ const MachineListPage = () => {
                     }
                     // THÊM: Nút refresh nhỏ ở cuối ô để tạo lại mã nếu cần
                     InputProps={{
-                      endAdornment: isCreateMode && (
+                      endAdornment: canCreateOrImport && (
                         <InputAdornment position="end">
                           <Tooltip title="Tự động tạo mã theo Hãng SX">
-                            <IconButton onClick={handleGenerateCode} edge="end">
+                            <IconButton
+                              onClick={() => handleGenerateCode(true)}
+                              edge="end"
+                            >
                               <Refresh />
                             </IconButton>
                           </Tooltip>
@@ -4669,12 +4677,13 @@ const MachineListPage = () => {
                       ) || null
                     }
                     onChange={(event, newValue) => {
-                      handleInputChange(
-                        "manufacturer",
-                        newValue ? newValue.name : ""
-                      );
+                      const manufacturerName = newValue ? newValue.name : "";
+                      handleInputChange("manufacturer", manufacturerName);
+                      if (manufacturerName && !editedData.code_machine) {
+                        handleGenerateCode();
+                      }
                     }}
-                    onBlur={handleGenerateCode} // Giữ nguyên logic tạo mã
+                    onBlur={() => handleGenerateCode(false)} // Giữ nguyên logic tạo mã
                     disabled={!canCreateOrImport}
                     renderInput={(params) => (
                       <TextField
