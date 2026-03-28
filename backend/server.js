@@ -3293,6 +3293,7 @@ app.get("/api/departments", authenticateToken, async (req, res) => {
         COUNT(CASE 
           WHEN m.id_machine IS NOT NULL 
                AND m.current_status != 'liquidation'
+               AND m.current_status != 'temporary'
                AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))
           THEN 1 
           ELSE NULL 
@@ -3337,6 +3338,7 @@ app.get("/api/locations", authenticateToken, async (req, res) => {
         COUNT(CASE 
           WHEN m.id_machine IS NOT NULL 
                AND m.current_status != 'liquidation'
+               AND m.current_status != 'temporary'
                AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))
           THEN 1 
           ELSE NULL 
@@ -6833,6 +6835,7 @@ app.get(
         FROM tb_machine_location ml
         JOIN tb_machine m ON m.id_machine = ml.id_machine
         WHERE ml.id_location = ?
+        AND m.current_status != 'temporary'
         -- Chú ý: Không có filterClause ở đây
       `;
       const [statsResult] = await tpmConnection.query(statsQuery, [idLocation]);
@@ -6974,6 +6977,7 @@ app.get(
         JOIN tb_machine m ON m.id_machine = ml.id_machine
         LEFT JOIN tb_category c ON c.id_category = m.id_category
         WHERE ml.id_location = ?
+        AND m.current_status != 'temporary'
         ${filterClause}
         LIMIT ? OFFSET ?
       `;
@@ -7130,6 +7134,7 @@ app.get(
         WHERE ml.id_location = ? 
           AND m.type_machine IS NOT NULL 
           AND m.type_machine != ''
+          AND m.current_status != 'temporary'
         GROUP BY m.type_machine
         ORDER BY count DESC
         `,
@@ -7206,6 +7211,7 @@ app.get(
         JOIN tb_machine_location ml ON m.id_machine = ml.id_machine
         JOIN tb_location tl ON ml.id_location = tl.id_location
         WHERE tl.id_department = ?
+        AND m.current_status != 'temporary'
         -- Chú ý: Không có filterClause ở đây
       `;
       const [statsResult] = await tpmConnection.query(statsQuery, [
@@ -7357,6 +7363,7 @@ app.get(
         JOIN tb_location tl ON ml.id_location = tl.id_location
         LEFT JOIN tb_category c ON c.id_category = m.id_category
         WHERE tl.id_department = ?
+        AND m.current_status != 'temporary'
         ${filterClause}
         ORDER BY tl.name_location ASC
         LIMIT ? OFFSET ?
@@ -7422,9 +7429,9 @@ app.get(
         WHERE tl.id_department = ?
           AND m.type_machine IS NOT NULL 
           AND m.type_machine != ''
+          AND m.current_status != 'temporary'
         GROUP BY m.type_machine
         ORDER BY count DESC
-        LIMIT 8
         `,
         [idDepartment]
       );

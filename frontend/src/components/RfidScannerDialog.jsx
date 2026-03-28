@@ -85,6 +85,7 @@ const RfidScannerDialog = ({
         (code) =>
           code.toUpperCase().startsWith("E") ||
           code.toUpperCase().startsWith("A") ||
+          code.toUpperCase().startsWith("00") ||
           code.toLowerCase().includes("test")
       );
 
