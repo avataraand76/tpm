@@ -9927,6 +9927,22 @@ app.post("/api/test-proposals/callback", async (req, res) => {
                     if (mIdRes.length > 0) {
                       const idMachine = mIdRes[0].id_machine;
 
+                      // Guard: nếu máy hiện tại đang nằm ở department = 10
+                      // thì bỏ qua việc cập nhật theo phiếu kiểm kê (tránh ghi đè trạng thái khi máy đã xuất/đi nơi khác).
+                      const [currentDeptRes] = await connection.query(
+                        `SELECT tl.id_department
+                         FROM tb_machine_location tml
+                         LEFT JOIN tb_location tl ON tl.id_location = tml.id_location
+                         WHERE tml.id_machine = ?`,
+                        [idMachine]
+                      );
+                      const isInDept10 = currentDeptRes.some(
+                        (r) => String(r.id_department) === "10"
+                      );
+                      if (isInDept10) {
+                        continue;
+                      }
+
                       // 1. Lấy vị trí cũ để ghi log
                       const [oldLoc] = await connection.query(
                         "SELECT id_location FROM tb_machine_location WHERE id_machine = ?",
@@ -10701,6 +10717,7 @@ app.post("/api/inventory-checks", authenticateToken, async (req, res) => {
          JOIN tb_machine m ON ml.id_machine = m.id_machine
          WHERE tl.id_department = ?
            AND m.current_status != 'liquidation'
+           AND m.current_status != 'temporary'
            AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))`,
         [dep.id_department]
       );
@@ -10713,6 +10730,7 @@ app.post("/api/inventory-checks", authenticateToken, async (req, res) => {
          LEFT JOIN tb_machine_location ml ON tl.id_location = ml.id_location
          LEFT JOIN tb_machine m ON ml.id_machine = m.id_machine 
               AND m.current_status != 'liquidation'
+              AND m.current_status != 'temporary'
               AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))
          WHERE tl.id_department = ?
          GROUP BY tl.id_location`,
@@ -10741,6 +10759,7 @@ app.post("/api/inventory-checks", authenticateToken, async (req, res) => {
          LEFT JOIN tb_machine m ON ml.id_machine = m.id_machine
          WHERE tl.id_department = ?
            AND m.current_status != 'liquidation'
+           AND m.current_status != 'temporary'
            AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))
          ORDER BY tl.uuid_location, m.code_machine`,
         [dep.id_department]
@@ -11802,7 +11821,7 @@ app.put(
 // MARK: AUTO CREATE INVENTORY SCHEDULE
 // Tự động tạo phiếu kiểm kê lúc 16:00 thứ 2-6 và 15:00 thứ 7 cho các đơn vị id_department 1,2,3,4,5
 
-const AUTO_INVENTORY_DEPARTMENT_IDS = [1, 2, 3, 4, 5];
+const AUTO_INVENTORY_DEPARTMENT_IDS = [2, 3, 4, 5];
 
 async function autoCreateInventoryCheck() {
   const connection = await tpmConnection.getConnection();
@@ -12020,21 +12039,21 @@ async function autoCancelInternalTransfers() {
 }
 
 // 16:00 thứ 2-6 (timezone Asia/Ho_Chi_Minh)
-cron.schedule("0 16 * * 1-5", autoCreateInventoryCheck, {
+cron.schedule("5 0 16 * * 1-5", autoCreateInventoryCheck, {
   timezone: "Asia/Ho_Chi_Minh",
 });
 
 // 15:00 thứ 7 (timezone Asia/Ho_Chi_Minh)
-cron.schedule("0 15 * * 6", autoCreateInventoryCheck, {
+cron.schedule("5 0 15 * * 6", autoCreateInventoryCheck, {
   timezone: "Asia/Ho_Chi_Minh",
 });
 
 // 16:30 thứ 2-6 (timezone Asia/Ho_Chi_Minh)
-cron.schedule("30 16 * * 1-5", autoCancelInternalTransfers, {
+cron.schedule("0 16 * * 1-5", autoCancelInternalTransfers, {
   timezone: "Asia/Ho_Chi_Minh",
 });
 
 // 15:30 thứ 7 (timezone Asia/Ho_Chi_Minh)
-cron.schedule("30 15 * * 6", autoCancelInternalTransfers, {
+cron.schedule("0 15 * * 6", autoCancelInternalTransfers, {
   timezone: "Asia/Ho_Chi_Minh",
 });
