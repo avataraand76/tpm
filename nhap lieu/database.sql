@@ -671,6 +671,77 @@ create table if not exists tb_inventory_check_detail
     updated_by bigint default '0'
 );
 
+-- MARK: tb_maintenance_content nội dung bảo dưỡng định kỳ
+create table if not exists tb_maintenance_content
+(
+    -- primary
+    id_maintenance_content bigint not null auto_increment,
+    uuid_maintenance_content varchar(36) not null unique default (UUID()),
+
+    -- properties
+    name_maintenance_content text,
+
+    -- key
+    primary key (id_maintenance_content),
+
+    -- timestamp
+    created_at timestamp default current_timestamp,
+    created_by bigint default '0',
+    updated_at timestamp default current_timestamp on update current_timestamp,
+    updated_by bigint default '0'
+);
+
+-- MARK: tb_maintenance_content_machine_type_attribute nội dung bảo dưỡng định kỳ cho từng loại, thuộc tính
+create table if not exists tb_maintenance_content_machine_type_attribute
+(
+    -- foreign
+    id_machine_type bigint,
+    id_machine_attribute bigint,
+    
+    -- properties
+    maintenance_content json, 
+
+    -- key
+    unique (id_machine_type, id_machine_attribute),
+
+    -- timestamp
+    created_at timestamp default current_timestamp,
+    created_by bigint default '0',
+    updated_at timestamp default current_timestamp on update current_timestamp,
+    updated_by bigint default '0'
+);
+
+-- MARK: tb_maintenance_schedule lịch trình bảo dưỡng định kỳ
+create table if not exists tb_maintenance_schedule
+(
+    -- foreign
+    id_machine_type bigint,
+    id_machine_attribute bigint,
+
+    -- properties
+    january tinyint default 0, 
+    february tinyint default 0, 
+    march tinyint default 0, 
+    april tinyint default 0, 
+    may tinyint default 0, 
+    june tinyint default 0, 
+    july tinyint default 0, 
+    august tinyint default 0, 
+    september tinyint default 0, 
+    october tinyint default 0, 
+    november tinyint default 0, 
+    december tinyint default 0, 
+
+    -- key
+    unique (id_machine_type, id_machine_attribute),
+
+    -- timestamp
+    created_at timestamp default current_timestamp,
+    created_by bigint default '0',
+    updated_at timestamp default current_timestamp on update current_timestamp,
+    updated_by bigint default '0'
+);
+
 -- MARK: insert data
 insert into tb_category (name_category) values ('Máy móc thiết bị'), ('Phụ kiện');
 

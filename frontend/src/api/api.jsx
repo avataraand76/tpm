@@ -639,6 +639,55 @@ export const api = {
       );
       return response.data;
     },
+    // Maintenance matrix
+    getMaintenanceContents: async () => {
+      const response = await httpConnect.get("/api/admin/maintenance-contents");
+      return response.data;
+    },
+    addMaintenanceContent: async (name) => {
+      const response = await httpConnect.post("/api/admin/maintenance-contents", {
+        name_maintenance_content: name,
+      });
+      return response.data;
+    },
+    updateMaintenanceContent: async (id, name) => {
+      const response = await httpConnect.put(`/api/admin/maintenance-contents/${id}`, {
+        name_maintenance_content: name,
+      });
+      return response.data;
+    },
+    deleteMaintenanceContent: async (id) => {
+      const response = await httpConnect.delete(`/api/admin/maintenance-contents/${id}`);
+      return response.data;
+    },
+    getMachineTypesForMatrix: async () => {
+      const response = await httpConnect.get(
+        "/api/admin/machine-types-for-matrix"
+      );
+      return response.data;
+    },
+    getMaintenanceMatrix: async () => {
+      const response = await httpConnect.get("/api/admin/maintenance-matrix");
+      return response.data;
+    },
+    saveMaintenanceMatrix: async (data) => {
+      const response = await httpConnect.post(
+        "/api/admin/maintenance-matrix",
+        data
+      );
+      return response.data;
+    },
+    getMaintenanceSchedule: async () => {
+      const response = await httpConnect.get("/api/admin/maintenance-schedule");
+      return response.data;
+    },
+    saveMaintenanceSchedule: async (data) => {
+      const response = await httpConnect.post(
+        "/api/admin/maintenance-schedule",
+        data
+      );
+      return response.data;
+    },
   },
 
   // MARK: TEST PROPOSALS

@@ -1,6 +1,12 @@
 // frontend/src/pages/AdminPage.jsx
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import {
   Container,
   Typography,
@@ -72,6 +78,7 @@ import {
   LinkOff,
   Nfc,
   Radar,
+  PlaylistAddCheck,
 } from "@mui/icons-material";
 import NavigationBar from "../components/NavigationBar";
 import RfidSearch from "../components/RfidSearch";
@@ -113,6 +120,304 @@ const inputStyle = {
     borderRadius: "12px",
   },
 };
+
+// --- MATRIX HELPERS (outside component for stable references) ---
+function getColKey(col) {
+  return `${col.id_machine_type}_${col.id_machine_attribute ?? "null"}`;
+}
+
+const CHECKBOX_SX = {
+  padding: "2px",
+  "&.Mui-checked": { color: "#764ba2" },
+};
+
+const STICKY_LABEL_SX_BASE = {
+  position: "sticky",
+  left: 0,
+  zIndex: 1,
+  borderRight: "2px solid #d0d4f0",
+  fontWeight: 500,
+  fontSize: "0.85rem",
+  minWidth: 250,
+  width: 250,
+  maxWidth: 300,
+  py: 0.8,
+  px: 1.5,
+  whiteSpace: "normal",
+  lineHeight: 1.4,
+  transition: "background-color 0.1s ease",
+  "tr:hover &": { backgroundColor: "#fff000 !important" },
+};
+
+// Input nội tuyến — state nằm hoàn toàn bên trong, không trigger parent re-render khi gõ
+const InlineEditCell = React.memo(function InlineEditCell({
+  initialName,
+  onSave,
+  onCancel,
+  isSaving,
+}) {
+  const [localName, setLocalName] = React.useState(initialName);
+  return (
+    <Stack direction="row" spacing={0.5} alignItems="center">
+      <TextField
+        size="small"
+        value={localName}
+        onChange={(e) => setLocalName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") onSave(localName);
+          if (e.key === "Escape") onCancel();
+        }}
+        autoFocus
+        disabled={isSaving}
+        sx={{
+          flex: 1,
+          "& .MuiInputBase-input": { fontSize: "0.8rem", py: "5px" },
+        }}
+      />
+      <IconButton
+        size="small"
+        onClick={() => onSave(localName)}
+        disabled={isSaving || !localName.trim()}
+        sx={{ color: "#667eea", p: "4px" }}
+        title="Lưu"
+      >
+        {isSaving ? <CircularProgress size={14} /> : <Save fontSize="small" />}
+      </IconButton>
+      <IconButton
+        size="small"
+        onClick={onCancel}
+        disabled={isSaving}
+        sx={{ color: "text.secondary", p: "4px" }}
+        title="Huỷ"
+      >
+        <Close fontSize="small" />
+      </IconButton>
+    </Stack>
+  );
+});
+
+// Memoized row: chỉ re-render khi đúng row này thay đổi (reference equality)
+const MatrixRow = React.memo(
+  function MatrixRow({
+    content,
+    machineTypesForMatrix,
+    rowChecked,
+    rowBg,
+    onCheckboxChange,
+    onLabelMouseEnter,
+    onCellMouseEnter,
+    isEditing,
+    onSaveEdit,
+    onCancelEdit,
+    onEdit,
+    onDelete,
+    isSaving,
+    isDeleting,
+  }) {
+    return (
+      <TableRow>
+        <TableCell
+          onMouseEnter={onLabelMouseEnter}
+          sx={{
+            ...STICKY_LABEL_SX_BASE,
+            backgroundColor: isEditing ? "#f5f4ff" : rowBg,
+            py: isEditing ? 0.5 : 0.8,
+          }}
+        >
+          {isEditing ? (
+            <InlineEditCell
+              initialName={content.name_maintenance_content}
+              onSave={onSaveEdit}
+              onCancel={onCancelEdit}
+              isSaving={isSaving}
+            />
+          ) : (
+            <Stack
+              direction="row"
+              alignItems="center"
+              justifyContent="space-between"
+              sx={{
+                "& .row-actions": { opacity: 0, transition: "opacity 0.15s" },
+                "&:hover .row-actions": { opacity: 1 },
+              }}
+            >
+              <Typography
+                variant="body2"
+                sx={{
+                  fontWeight: 500,
+                  fontSize: "0.85rem",
+                  lineHeight: 1.4,
+                  flex: 1,
+                }}
+              >
+                {content.name_maintenance_content}
+              </Typography>
+              <Stack
+                direction="row"
+                className="row-actions"
+                sx={{ ml: 0.5, flexShrink: 0 }}
+              >
+                <IconButton
+                  size="medium"
+                  onClick={() => onEdit(content)}
+                  sx={{ color: "#667eea", p: "3px" }}
+                  title="Chỉnh sửa"
+                >
+                  <Edit sx={{ fontSize: "1.5rem" }} />
+                </IconButton>
+                <IconButton
+                  size="medium"
+                  onClick={() => onDelete(content)}
+                  disabled={isDeleting}
+                  sx={{ color: "#e53935", p: "3px" }}
+                  title="Xoá"
+                >
+                  {isDeleting ? (
+                    <CircularProgress size={12} />
+                  ) : (
+                    <Delete sx={{ fontSize: "1.5rem" }} />
+                  )}
+                </IconButton>
+              </Stack>
+            </Stack>
+          )}
+        </TableCell>
+        {machineTypesForMatrix.map((col) => {
+          const colKey = getColKey(col);
+          return (
+            <TableCell
+              key={colKey}
+              align="center"
+              padding="checkbox"
+              onMouseEnter={() => onCellMouseEnter(colKey)}
+              sx={{ backgroundColor: rowBg }}
+            >
+              <Checkbox
+                checked={rowChecked?.[colKey] ?? false}
+                inputProps={{
+                  "data-col-key": colKey,
+                  "data-content-name": content.name_maintenance_content,
+                }}
+                onChange={onCheckboxChange}
+                size="large"
+                sx={CHECKBOX_SX}
+              />
+            </TableCell>
+          );
+        })}
+      </TableRow>
+    );
+  },
+  (prev, next) =>
+    prev.rowChecked === next.rowChecked &&
+    prev.rowBg === next.rowBg &&
+    prev.machineTypesForMatrix === next.machineTypesForMatrix &&
+    prev.onCheckboxChange === next.onCheckboxChange &&
+    prev.isEditing === next.isEditing &&
+    prev.isSaving === next.isSaving &&
+    prev.isDeleting === next.isDeleting &&
+    prev.content.name_maintenance_content ===
+      next.content.name_maintenance_content
+);
+
+// --- SCHEDULE HELPERS ---
+const MONTHS_CONFIG = [
+  { key: "january", label: "T1", fullLabel: "Tháng 1" },
+  { key: "february", label: "T2", fullLabel: "Tháng 2" },
+  { key: "march", label: "T3", fullLabel: "Tháng 3" },
+  { key: "april", label: "T4", fullLabel: "Tháng 4" },
+  { key: "may", label: "T5", fullLabel: "Tháng 5" },
+  { key: "june", label: "T6", fullLabel: "Tháng 6" },
+  { key: "july", label: "T7", fullLabel: "Tháng 7" },
+  { key: "august", label: "T8", fullLabel: "Tháng 8" },
+  { key: "september", label: "T9", fullLabel: "Tháng 9" },
+  { key: "october", label: "T10", fullLabel: "Tháng 10" },
+  { key: "november", label: "T11", fullLabel: "Tháng 11" },
+  { key: "december", label: "T12", fullLabel: "Tháng 12" },
+];
+
+const SCHEDULE_LABEL_SX_BASE = {
+  position: "sticky",
+  left: 0,
+  zIndex: 1,
+  borderRight: "2px solid #d0d4f0",
+  fontWeight: 500,
+  fontSize: "0.85rem",
+  minWidth: 220,
+  width: 220,
+  maxWidth: 280,
+  py: 0.8,
+  px: 1.5,
+  whiteSpace: "normal",
+  lineHeight: 1.4,
+  "tr:hover &": { backgroundColor: "#fff000 !important" },
+};
+
+// Hook debounce để tránh re-render liên tục khi gõ filter
+function useDebounce(value, delay) {
+  const [debouncedValue, setDebouncedValue] = React.useState(value);
+  React.useEffect(() => {
+    const timer = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debouncedValue;
+}
+
+// Memoized: chỉ re-render khi đúng row này thay đổi
+const ScheduleRow = React.memo(
+  function ScheduleRow({
+    col,
+    rowKey,
+    rowData,
+    rowBg,
+    isDirty,
+    onCheckboxChange,
+    visibleMonths,
+  }) {
+    return (
+      <TableRow>
+        <TableCell sx={{ ...SCHEDULE_LABEL_SX_BASE, backgroundColor: rowBg }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+            {col.machine_name}
+            {isDirty && (
+              <Box
+                component="span"
+                sx={{ color: "#f59e0b", fontSize: "0.7rem", lineHeight: 1 }}
+              >
+                ●
+              </Box>
+            )}
+          </Box>
+        </TableCell>
+        {visibleMonths.map(({ key }) => (
+          <TableCell
+            key={key}
+            align="center"
+            padding="checkbox"
+            sx={{ backgroundColor: rowBg, minWidth: 52, width: 52 }}
+          >
+            <Checkbox
+              checked={rowData?.[key] ?? false}
+              inputProps={{
+                "data-row-key": rowKey,
+                "data-month-key": key,
+              }}
+              onChange={onCheckboxChange}
+              size="large"
+              sx={CHECKBOX_SX}
+            />
+          </TableCell>
+        ))}
+      </TableRow>
+    );
+  },
+  (prev, next) =>
+    prev.rowData === next.rowData &&
+    prev.isDirty === next.isDirty &&
+    prev.rowBg === next.rowBg &&
+    prev.visibleMonths === next.visibleMonths &&
+    prev.onCheckboxChange === next.onCheckboxChange
+);
 
 // Component TabPanel để quản lý nội dung các tab
 function TabPanel(props) {
@@ -187,6 +492,39 @@ const AdminPage = () => {
   const [rfidStatusFilter, setRfidStatusFilter] = useState("all");
   const [openUnusedRfidSearchDialog, setOpenUnusedRfidSearchDialog] =
     useState(false);
+
+  // States for maintenance matrix
+  const [maintenanceContents, setMaintenanceContents] = useState([]);
+  const [machineTypesForMatrix, setMachineTypesForMatrix] = useState([]);
+  const [matrixChecked, setMatrixChecked] = useState({});
+  const [loadingMatrix, setLoadingMatrix] = useState(false);
+  const [dirtyColKeys, setDirtyColKeys] = useState(new Set());
+  const [savingMatrix, setSavingMatrix] = useState(false);
+  const [newContentName, setNewContentName] = useState("");
+  const [addingContent, setAddingContent] = useState(false);
+  const [editingContentId, setEditingContentId] = useState(null);
+  const [savingEditContent, setSavingEditContent] = useState(false);
+  const [confirmDeleteContent, setConfirmDeleteContent] = useState(null);
+  const [deletingContentId, setDeletingContentId] = useState(null);
+  const [scheduleData, setScheduleData] = useState({});
+  const [dirtyScheduleKeys, setDirtyScheduleKeys] = useState(new Set());
+  const [savingSchedule, setSavingSchedule] = useState(false);
+  // Dùng DOM ref thay vì state để tránh re-render khi hover
+  const headerCellRefs = useRef({});
+  const prevHoveredColKeyRef = useRef(null);
+  // State tìm kiếm cho Matrix (raw input, debounced riêng để tránh lag)
+  const [searchContent, setSearchContent] = useState("");
+  const [searchMachineType, setSearchMachineType] = useState("");
+  const debouncedSearchContent = useDebounce(searchContent, 1000);
+  const debouncedSearchMachineType = useDebounce(searchMachineType, 1000);
+  // State tìm kiếm cho Lịch bảo dưỡng
+  const [searchScheduleMachineType, setSearchScheduleMachineType] =
+    useState("");
+  const [searchScheduleMonth, setSearchScheduleMonth] = useState([]); // [] = hiện tất cả tháng
+  const debouncedSearchScheduleMachineType = useDebounce(
+    searchScheduleMachineType,
+    1000
+  );
 
   // States for Dialog
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -293,6 +631,96 @@ const AdminPage = () => {
     }
   }, []);
 
+  const fetchMaintenanceMatrix = useCallback(async () => {
+    setLoadingMatrix(true);
+    setDirtyColKeys(new Set());
+    setDirtyScheduleKeys(new Set());
+    try {
+      const [contentsRes, typesRes, matrixRes, scheduleRes] = await Promise.all(
+        [
+          api.admin.getMaintenanceContents(),
+          api.admin.getMachineTypesForMatrix(),
+          api.admin.getMaintenanceMatrix(),
+          api.admin.getMaintenanceSchedule(),
+        ]
+      );
+
+      if (contentsRes.success) setMaintenanceContents(contentsRes.data);
+      if (typesRes.success) setMachineTypesForMatrix(typesRes.data);
+
+      if (matrixRes.success) {
+        // Cấu trúc: matrixChecked[contentName][colKey] = boolean
+        const initChecked = {};
+        matrixRes.data.forEach((row) => {
+          const colKey = `${row.id_machine_type}_${row.id_machine_attribute ?? "null"}`;
+          const content =
+            typeof row.maintenance_content === "string"
+              ? JSON.parse(row.maintenance_content)
+              : row.maintenance_content || {};
+          Object.entries(content).forEach(([contentName, val]) => {
+            if (!initChecked[contentName]) initChecked[contentName] = {};
+            initChecked[contentName][colKey] = val === 1;
+          });
+        });
+        setMatrixChecked(initChecked);
+      }
+
+      if (scheduleRes.success) {
+        // Cấu trúc: scheduleData[rowKey][monthKey] = boolean
+        const initSchedule = {};
+        scheduleRes.data.forEach((row) => {
+          const rowKey = `${row.id_machine_type}_${row.id_machine_attribute ?? "null"}`;
+          initSchedule[rowKey] = {};
+          MONTHS_CONFIG.forEach(({ key }) => {
+            initSchedule[rowKey][key] = row[key] === 1;
+          });
+        });
+        setScheduleData(initSchedule);
+      }
+    } catch (error) {
+      showNotification(
+        "error",
+        "Lỗi tải dữ liệu",
+        error.response?.data?.message || error.message
+      );
+    } finally {
+      setLoadingMatrix(false);
+    }
+  }, []);
+
+  // Logic lọc nội dung bảo dưỡng (dùng debounced để tránh lag khi gõ)
+  const filteredContents = useMemo(() => {
+    return maintenanceContents.filter((c) =>
+      c.name_maintenance_content
+        .toLowerCase()
+        .includes(debouncedSearchContent.toLowerCase())
+    );
+  }, [maintenanceContents, debouncedSearchContent]);
+
+  // Logic lọc loại máy (cột) trong matrix
+  const filteredMachineTypes = useMemo(() => {
+    return machineTypesForMatrix.filter((m) =>
+      m.machine_name
+        .toLowerCase()
+        .includes(debouncedSearchMachineType.toLowerCase())
+    );
+  }, [machineTypesForMatrix, debouncedSearchMachineType]);
+
+  // Logic lọc loại máy (hàng) trong Lịch bảo dưỡng
+  const filteredScheduleMachineTypes = useMemo(() => {
+    return machineTypesForMatrix.filter((m) =>
+      m.machine_name
+        .toLowerCase()
+        .includes(debouncedSearchScheduleMachineType.toLowerCase())
+    );
+  }, [machineTypesForMatrix, debouncedSearchScheduleMachineType]);
+
+  // Logic lọc tháng (cột) trong Lịch bảo dưỡng; [] = hiện tất cả
+  const filteredScheduleMonths = useMemo(() => {
+    if (searchScheduleMonth.length === 0) return MONTHS_CONFIG;
+    return MONTHS_CONFIG.filter((m) => searchScheduleMonth.includes(m.key));
+  }, [searchScheduleMonth]);
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
@@ -308,6 +736,12 @@ const AdminPage = () => {
       fetchRfidList();
     }
   }, [currentTab, fetchRfidList]);
+
+  useEffect(() => {
+    if (currentTab === 4) {
+      fetchMaintenanceMatrix();
+    }
+  }, [currentTab, fetchMaintenanceMatrix]);
 
   // --- Handlers ---
   const handleTabChange = (event, newValue) => {
@@ -704,6 +1138,267 @@ const AdminPage = () => {
     }
   };
 
+  // Stable handler — không tạo hàm mới mỗi render (không có dependency)
+  const handleMatrixCheckboxChange = useCallback((e) => {
+    const colKey = e.target.dataset.colKey;
+    const contentName = e.target.dataset.contentName;
+    const checked = e.target.checked;
+    // Cấu trúc mới: [contentName][colKey] → chỉ row này thay đổi reference
+    setMatrixChecked((prev) => ({
+      ...prev,
+      [contentName]: {
+        ...prev[contentName],
+        [colKey]: checked,
+      },
+    }));
+    setDirtyColKeys((prev) => {
+      const next = new Set(prev);
+      next.add(colKey);
+      return next;
+    });
+  }, []);
+
+  const handleSaveMatrix = async () => {
+    if (dirtyColKeys.size === 0) return;
+    setSavingMatrix(true);
+    const savedCount = dirtyColKeys.size;
+    try {
+      const savePromises = [];
+      dirtyColKeys.forEach((colKey) => {
+        const col = machineTypesForMatrix.find((c) => getColKey(c) === colKey);
+        if (!col) return;
+        const contentJson = {};
+        maintenanceContents.forEach((c) => {
+          const cName = c.name_maintenance_content;
+          contentJson[cName] =
+            (matrixChecked[cName]?.[colKey] ?? false) ? 1 : 0;
+        });
+        savePromises.push(
+          api.admin.saveMaintenanceMatrix({
+            id_machine_type: col.id_machine_type,
+            id_machine_attribute: col.id_machine_attribute,
+            maintenance_content: contentJson,
+          })
+        );
+      });
+      await Promise.all(savePromises);
+      setDirtyColKeys(new Set());
+      showNotification(
+        "success",
+        "Lưu thành công",
+        `Đã lưu thay đổi cho ${savedCount} loại máy`
+      );
+    } catch (error) {
+      showNotification(
+        "error",
+        "Lỗi lưu",
+        error.response?.data?.message || error.message
+      );
+    } finally {
+      setSavingMatrix(false);
+    }
+  };
+
+  const handleAddMaintenanceContent = async () => {
+    const name = newContentName.trim();
+    if (!name) return;
+    setAddingContent(true);
+    try {
+      const res = await api.admin.addMaintenanceContent(name);
+      if (res.success) {
+        // Thêm vào danh sách local (không cần reload toàn bộ matrix)
+        setMaintenanceContents((prev) => [...prev, res.data]);
+        setNewContentName("");
+        showNotification("success", "Thêm thành công", `Đã thêm "${name}"`);
+      } else {
+        showNotification("error", "Lỗi", res.message);
+      }
+    } catch (error) {
+      showNotification(
+        "error",
+        "Lỗi",
+        error.response?.data?.message || error.message
+      );
+    } finally {
+      setAddingContent(false);
+    }
+  };
+
+  const handleStartEditContent = useCallback((content) => {
+    setEditingContentId(content.id_maintenance_content);
+  }, []);
+
+  const handleCancelEditContent = useCallback(() => {
+    setEditingContentId(null);
+  }, []);
+
+  const handleSaveEditContent = useCallback(
+    async (name) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      setSavingEditContent(true);
+      try {
+        const res = await api.admin.updateMaintenanceContent(
+          editingContentId,
+          trimmed
+        );
+        if (res.success) {
+          setMaintenanceContents((prev) =>
+            prev.map((c) =>
+              c.id_maintenance_content === editingContentId
+                ? { ...c, name_maintenance_content: trimmed }
+                : c
+            )
+          );
+          setEditingContentId(null);
+          showNotification(
+            "success",
+            "Cập nhật thành công",
+            `Đã đổi tên thành "${trimmed}"`
+          );
+        } else {
+          showNotification("error", "Lỗi", res.message);
+        }
+      } catch (error) {
+        showNotification(
+          "error",
+          "Lỗi",
+          error.response?.data?.message || error.message
+        );
+      } finally {
+        setSavingEditContent(false);
+      }
+    },
+    [editingContentId]
+  );
+
+  const handleConfirmDeleteContent = useCallback((content) => {
+    setConfirmDeleteContent(content);
+  }, []);
+
+  const handleDeleteContent = async () => {
+    if (!confirmDeleteContent) return;
+    setDeletingContentId(confirmDeleteContent.id_maintenance_content);
+    try {
+      const res = await api.admin.deleteMaintenanceContent(
+        confirmDeleteContent.id_maintenance_content
+      );
+      if (res.success) {
+        setMaintenanceContents((prev) =>
+          prev.filter(
+            (c) =>
+              c.id_maintenance_content !==
+              confirmDeleteContent.id_maintenance_content
+          )
+        );
+        showNotification(
+          "success",
+          "Xoá thành công",
+          `Đã xoá "${confirmDeleteContent.name_maintenance_content}"`
+        );
+      } else {
+        showNotification("error", "Lỗi", res.message);
+      }
+    } catch (error) {
+      showNotification(
+        "error",
+        "Lỗi",
+        error.response?.data?.message || error.message
+      );
+    } finally {
+      setDeletingContentId(null);
+      setConfirmDeleteContent(null);
+    }
+  };
+
+  // Stable handler — scheduleData[rowKey][monthKey]
+  const handleScheduleChange = useCallback((e) => {
+    const rowKey = e.target.dataset.rowKey;
+    const monthKey = e.target.dataset.monthKey;
+    const checked = e.target.checked;
+    setScheduleData((prev) => ({
+      ...prev,
+      [rowKey]: { ...prev[rowKey], [monthKey]: checked },
+    }));
+    setDirtyScheduleKeys((prev) => {
+      const next = new Set(prev);
+      next.add(rowKey);
+      return next;
+    });
+  }, []);
+
+  const handleSaveSchedule = async () => {
+    if (dirtyScheduleKeys.size === 0) return;
+    setSavingSchedule(true);
+    const savedCount = dirtyScheduleKeys.size;
+    try {
+      const promises = [];
+      dirtyScheduleKeys.forEach((rowKey) => {
+        const col = machineTypesForMatrix.find((c) => getColKey(c) === rowKey);
+        if (!col) return;
+        const months = {};
+        MONTHS_CONFIG.forEach(({ key }) => {
+          months[key] = scheduleData[rowKey]?.[key] ?? false;
+        });
+        promises.push(
+          api.admin.saveMaintenanceSchedule({
+            id_machine_type: col.id_machine_type,
+            id_machine_attribute: col.id_machine_attribute,
+            months,
+          })
+        );
+      });
+      await Promise.all(promises);
+      setDirtyScheduleKeys(new Set());
+      showNotification(
+        "success",
+        "Lưu thành công",
+        `Đã lưu lịch bảo dưỡng cho ${savedCount} loại máy`
+      );
+    } catch (error) {
+      showNotification(
+        "error",
+        "Lỗi lưu",
+        error.response?.data?.message || error.message
+      );
+    } finally {
+      setSavingSchedule(false);
+    }
+  };
+
+  // --- Matrix hover: thao tác DOM trực tiếp, không dùng state → không re-render ---
+  const handleMatrixColMouseEnter = (colKey) => {
+    const prevKey = prevHoveredColKeyRef.current;
+    if (prevKey && prevKey !== colKey) {
+      const prevEl = headerCellRefs.current[prevKey];
+      // Xóa inline style → sx (React) tự lo màu dirty/normal
+      if (prevEl) prevEl.style.backgroundColor = "";
+    }
+    const el = headerCellRefs.current[colKey];
+    if (el) {
+      el.style.backgroundColor = "#fff000";
+      prevHoveredColKeyRef.current = colKey;
+    }
+  };
+
+  const handleMatrixBodyMouseLeave = () => {
+    const prevKey = prevHoveredColKeyRef.current;
+    if (prevKey) {
+      const el = headerCellRefs.current[prevKey];
+      if (el) el.style.backgroundColor = "";
+      prevHoveredColKeyRef.current = null;
+    }
+  };
+
+  const handleMatrixLabelMouseEnter = () => {
+    const prevKey = prevHoveredColKeyRef.current;
+    if (prevKey) {
+      const el = headerCellRefs.current[prevKey];
+      if (el) el.style.backgroundColor = "";
+      prevHoveredColKeyRef.current = null;
+    }
+  };
+
   // --- Render Dialog Content ---
   const renderDialogContent = () => {
     if (!currentItem) return null;
@@ -918,6 +1613,11 @@ const AdminPage = () => {
               />
               <Tab label="Quản lý RFID" icon={<Nfc />} iconPosition="start" />
               <Tab label="Phân Quyền" icon={<People />} iconPosition="start" />
+              <Tab
+                label="Cấu hình nội dung bảo dưỡng"
+                icon={<PlaylistAddCheck />}
+                iconPosition="start"
+              />
             </Tabs>
           </Box>
 
@@ -2280,6 +2980,521 @@ const AdminPage = () => {
                   </Grid>
                 </Grid>
               </TabPanel>
+
+              {/* === TAB CẤU HÌNH NỘI DUNG BẢO DƯỠNG === */}
+              <TabPanel value={currentTab} index={4}>
+                {loadingMatrix ? (
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      minHeight: 300,
+                    }}
+                  >
+                    <CircularProgress />
+                  </Box>
+                ) : (
+                  <>
+                    <Box
+                      sx={{
+                        mb: 3,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
+                        flexWrap: "wrap",
+                        gap: 2,
+                      }}
+                    >
+                      <Box>
+                        <Typography variant="h6" fontWeight={600} gutterBottom>
+                          Nội dung bảo dưỡng theo loại máy
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Tick vào ô tương ứng để gán nội dung bảo dưỡng, sau đó
+                          nhấn <strong>Lưu thay đổi</strong> để lưu vào hệ
+                          thống.
+                        </Typography>
+                      </Box>
+
+                      <Stack direction="row" spacing={1.5} alignItems="center">
+                        {dirtyColKeys.size > 0 && (
+                          <Chip
+                            label={`${dirtyColKeys.size} cột chưa lưu`}
+                            color="warning"
+                            size="small"
+                            variant="outlined"
+                            sx={{ fontWeight: 600 }}
+                          />
+                        )}
+                        <Button
+                          variant="contained"
+                          startIcon={
+                            savingMatrix ? (
+                              <CircularProgress size={18} color="inherit" />
+                            ) : (
+                              <Save />
+                            )
+                          }
+                          onClick={handleSaveMatrix}
+                          disabled={savingMatrix || dirtyColKeys.size === 0}
+                          sx={{ ...btnGradientStyle, px: 3, py: 1 }}
+                        >
+                          {savingMatrix ? "Đang lưu..." : "Lưu thay đổi"}
+                        </Button>
+                      </Stack>
+                    </Box>
+
+                    {/* --- Bộ lọc Matrix --- */}
+                    <Grid container spacing={2} sx={{ mb: 2 }}>
+                      <Grid item xs={12} md={6}>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          label="Lọc theo nội dung bảo dưỡng"
+                          value={searchContent}
+                          onChange={(e) => setSearchContent(e.target.value)}
+                          InputProps={{
+                            startAdornment: (
+                              <Search
+                                sx={{
+                                  color: "action.active",
+                                  mr: 1,
+                                  fontSize: 20,
+                                }}
+                              />
+                            ),
+                          }}
+                          sx={inputStyle}
+                        />
+                      </Grid>
+                      <Grid item xs={12} md={6}>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          label="Lọc theo loại máy (cột)"
+                          value={searchMachineType}
+                          onChange={(e) => setSearchMachineType(e.target.value)}
+                          InputProps={{
+                            startAdornment: (
+                              <Search
+                                sx={{
+                                  color: "action.active",
+                                  mr: 1,
+                                  fontSize: 20,
+                                }}
+                              />
+                            ),
+                          }}
+                          sx={inputStyle}
+                        />
+                      </Grid>
+                    </Grid>
+
+                    {maintenanceContents.length === 0 ||
+                    machineTypesForMatrix.length === 0 ? (
+                      <Alert severity="info" sx={{ borderRadius: "12px" }}>
+                        {maintenanceContents.length === 0
+                          ? "Chưa có nội dung bảo dưỡng nào trong hệ thống."
+                          : "Chưa có loại máy nào trong hệ thống."}
+                      </Alert>
+                    ) : (
+                      <TableContainer
+                        component={Paper}
+                        variant="outlined"
+                        sx={{
+                          maxHeight: 600,
+                          borderRadius: "16px",
+                          overflow: "auto",
+                          position: "relative",
+                        }}
+                      >
+                        <Table
+                          stickyHeader
+                          size="small"
+                          sx={{ borderCollapse: "separate", borderSpacing: 0 }}
+                        >
+                          <TableHead>
+                            <TableRow>
+                              {/* Corner cell — sticky theo cả top lẫn left */}
+                              <TableCell
+                                sx={{
+                                  position: "sticky",
+                                  left: 0,
+                                  top: 0,
+                                  zIndex: 5,
+                                  backgroundColor: "#eef0fb",
+                                  borderRight: "2px solid #d0d4f0",
+                                  borderBottom: "2px solid #d0d4f0",
+                                  fontWeight: 700,
+                                  minWidth: 250,
+                                  width: 250,
+                                  fontSize: "0.875rem",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                Nội dung bảo dưỡng
+                              </TableCell>
+                              {filteredMachineTypes.map((col) => {
+                                const colKey = getColKey(col);
+                                const isDirty = dirtyColKeys.has(colKey);
+                                return (
+                                  <TableCell
+                                    key={colKey}
+                                    ref={(el) => {
+                                      if (el)
+                                        headerCellRefs.current[colKey] = el;
+                                    }}
+                                    align="center"
+                                    sx={{
+                                      position: "sticky",
+                                      top: 0,
+                                      zIndex: 2,
+                                      fontWeight: 700,
+                                      minWidth: 100,
+                                      width: 100,
+                                      whiteSpace: "normal",
+                                      lineHeight: 1.3,
+                                      fontSize: "0.75rem",
+                                      // Màu do React quản lý (dirty/normal)
+                                      // Hover do DOM ref quản lý (không re-render)
+                                      backgroundColor: isDirty
+                                        ? "#fff8dc"
+                                        : "#eef0fb",
+                                      borderBottom: isDirty
+                                        ? "2px solid #f59e0b"
+                                        : "2px solid #d0d4f0",
+                                      padding: "8px 4px",
+                                      verticalAlign: "bottom",
+                                    }}
+                                  >
+                                    {col.machine_name}
+                                    {isDirty && (
+                                      <Box
+                                        component="span"
+                                        sx={{
+                                          display: "block",
+                                          fontSize: "0.6rem",
+                                          color: "#b45309",
+                                          fontWeight: 700,
+                                          mt: 0.3,
+                                        }}
+                                      >
+                                        ● chưa lưu
+                                      </Box>
+                                    )}
+                                  </TableCell>
+                                );
+                              })}
+                            </TableRow>
+                          </TableHead>
+                          <TableBody onMouseLeave={handleMatrixBodyMouseLeave}>
+                            {filteredContents.map((content, idx) => (
+                              <MatrixRow
+                                key={content.id_maintenance_content}
+                                content={content}
+                                machineTypesForMatrix={filteredMachineTypes}
+                                rowChecked={
+                                  matrixChecked[
+                                    content.name_maintenance_content
+                                  ]
+                                }
+                                rowBg={idx % 2 === 0 ? "#ffffff" : "#f8f8fc"}
+                                onCheckboxChange={handleMatrixCheckboxChange}
+                                onLabelMouseEnter={handleMatrixLabelMouseEnter}
+                                onCellMouseEnter={handleMatrixColMouseEnter}
+                                isEditing={
+                                  editingContentId ===
+                                  content.id_maintenance_content
+                                }
+                                onSaveEdit={handleSaveEditContent}
+                                onCancelEdit={handleCancelEditContent}
+                                onEdit={handleStartEditContent}
+                                onDelete={handleConfirmDeleteContent}
+                                isSaving={savingEditContent}
+                                isDeleting={
+                                  deletingContentId ===
+                                  content.id_maintenance_content
+                                }
+                              />
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    )}
+
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: "block", mt: 2 }}
+                    >
+                      Tổng: {filteredContents.length} nội dung bảo dưỡng ×{" "}
+                      {filteredMachineTypes.length} loại máy
+                    </Typography>
+
+                    {/* --- Thêm nội dung bảo dưỡng mới --- */}
+                    <Divider sx={{ my: 3 }} />
+                    <Box>
+                      <Typography
+                        variant="subtitle1"
+                        fontWeight={600}
+                        gutterBottom
+                      >
+                        Thêm nội dung bảo dưỡng mới
+                      </Typography>
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ mb: 2 }}
+                      >
+                        Sau khi thêm, nội dung mới sẽ xuất hiện ngay trong ma
+                        trận bên trên.
+                      </Typography>
+                      <Stack direction="row" spacing={1.5} alignItems="center">
+                        <TextField
+                          size="small"
+                          label="Tên nội dung bảo dưỡng"
+                          value={newContentName}
+                          onChange={(e) => setNewContentName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter")
+                              handleAddMaintenanceContent();
+                          }}
+                          disabled={addingContent}
+                          sx={{ flex: 1, maxWidth: 480 }}
+                          placeholder="VD: Kiểm tra, vệ sinh, bơm dầu"
+                        />
+                        <Button
+                          variant="contained"
+                          startIcon={
+                            addingContent ? (
+                              <CircularProgress size={18} color="inherit" />
+                            ) : (
+                              <Add />
+                            )
+                          }
+                          onClick={handleAddMaintenanceContent}
+                          disabled={addingContent || !newContentName.trim()}
+                          sx={{
+                            ...btnGradientStyle,
+                            px: 3,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {addingContent ? "Đang thêm..." : "Thêm"}
+                        </Button>
+                      </Stack>
+                    </Box>
+
+                    {/* --- Lịch bảo dưỡng định kỳ theo tháng --- */}
+                    <Divider sx={{ my: 3 }} />
+                    <Box
+                      sx={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
+                        flexWrap: "wrap",
+                        gap: 2,
+                        mb: 2,
+                      }}
+                    >
+                      <Box>
+                        <Typography variant="h6" fontWeight={600} gutterBottom>
+                          Lịch bảo dưỡng định kỳ theo tháng
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Tick vào tháng tương ứng để lên lịch bảo dưỡng cho
+                          từng loại máy, sau đó nhấn <strong>Lưu lịch</strong>{" "}
+                          để lưu vào hệ thống.
+                        </Typography>
+                      </Box>
+                      <Stack direction="row" spacing={1.5} alignItems="center">
+                        {dirtyScheduleKeys.size > 0 && (
+                          <Chip
+                            label={`${dirtyScheduleKeys.size} loại máy chưa lưu`}
+                            color="warning"
+                            size="small"
+                            variant="outlined"
+                            sx={{ fontWeight: 600 }}
+                          />
+                        )}
+                        <Button
+                          variant="contained"
+                          startIcon={
+                            savingSchedule ? (
+                              <CircularProgress size={18} color="inherit" />
+                            ) : (
+                              <Save />
+                            )
+                          }
+                          onClick={handleSaveSchedule}
+                          disabled={
+                            savingSchedule || dirtyScheduleKeys.size === 0
+                          }
+                          sx={{ ...btnGradientStyle, px: 3, py: 1 }}
+                        >
+                          {savingSchedule ? "Đang lưu..." : "Lưu lịch"}
+                        </Button>
+                      </Stack>
+                    </Box>
+
+                    {/* --- Bộ lọc Lịch bảo dưỡng --- */}
+                    <Grid container spacing={2} sx={{ mb: 2 }}>
+                      <Grid item xs={12} md={6}>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          label="Lọc theo loại máy"
+                          value={searchScheduleMachineType}
+                          onChange={(e) =>
+                            setSearchScheduleMachineType(e.target.value)
+                          }
+                          InputProps={{
+                            startAdornment: (
+                              <Search
+                                sx={{
+                                  color: "action.active",
+                                  mr: 1,
+                                  fontSize: 20,
+                                }}
+                              />
+                            ),
+                          }}
+                          sx={inputStyle}
+                        />
+                      </Grid>
+                      <Grid item xs={12} md={6}>
+                        <FormControl fullWidth size="small" sx={inputStyle}>
+                          <InputLabel>Lọc theo tháng</InputLabel>
+                          <Select
+                            multiple
+                            value={searchScheduleMonth}
+                            onChange={(e) =>
+                              setSearchScheduleMonth(e.target.value)
+                            }
+                            label="Lọc theo tháng"
+                            renderValue={(selected) =>
+                              selected.length === 0
+                                ? "Tất cả tháng"
+                                : MONTHS_CONFIG.filter((m) =>
+                                    selected.includes(m.key)
+                                  )
+                                    .map((m) => m.fullLabel)
+                                    .join(", ")
+                            }
+                          >
+                            {MONTHS_CONFIG.map(({ key, fullLabel }) => (
+                              <MenuItem key={key} value={key}>
+                                <Checkbox
+                                  checked={searchScheduleMonth.includes(key)}
+                                  size="small"
+                                />
+                                <ListItemText primary={fullLabel} />
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      </Grid>
+                    </Grid>
+
+                    {machineTypesForMatrix.length === 0 ? (
+                      <Alert severity="info" sx={{ borderRadius: "12px" }}>
+                        Chưa có loại máy nào trong hệ thống.
+                      </Alert>
+                    ) : filteredScheduleMachineTypes.length === 0 ? (
+                      <Alert severity="info" sx={{ borderRadius: "12px" }}>
+                        Không tìm thấy loại máy phù hợp.
+                      </Alert>
+                    ) : (
+                      <TableContainer
+                        component={Paper}
+                        variant="outlined"
+                        sx={{
+                          maxHeight: 500,
+                          borderRadius: "16px",
+                          overflow: "auto",
+                          position: "relative",
+                        }}
+                      >
+                        <Table
+                          stickyHeader
+                          size="small"
+                          sx={{ borderCollapse: "separate", borderSpacing: 0 }}
+                        >
+                          <TableHead>
+                            <TableRow>
+                              <TableCell
+                                sx={{
+                                  position: "sticky",
+                                  left: 0,
+                                  top: 0,
+                                  zIndex: 5,
+                                  backgroundColor: "#eef0fb",
+                                  borderRight: "2px solid #d0d4f0",
+                                  borderBottom: "2px solid #d0d4f0",
+                                  fontWeight: 700,
+                                  minWidth: 220,
+                                  width: 220,
+                                  fontSize: "0.875rem",
+                                }}
+                              >
+                                Loại máy
+                              </TableCell>
+                              {filteredScheduleMonths.map(
+                                ({ key, fullLabel }) => (
+                                  <TableCell
+                                    key={key}
+                                    align="center"
+                                    sx={{
+                                      top: 0,
+                                      zIndex: 2,
+                                      backgroundColor: "#eef0fb",
+                                      borderBottom: "2px solid #d0d4f0",
+                                      fontWeight: 700,
+                                      minWidth: 52,
+                                      width: 52,
+                                      fontSize: "0.8rem",
+                                      whiteSpace: "nowrap",
+                                    }}
+                                  >
+                                    {fullLabel}
+                                  </TableCell>
+                                )
+                              )}
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {filteredScheduleMachineTypes.map((col, idx) => {
+                              const rowKey = getColKey(col);
+                              return (
+                                <ScheduleRow
+                                  key={rowKey}
+                                  col={col}
+                                  rowKey={rowKey}
+                                  rowData={scheduleData[rowKey]}
+                                  rowBg={idx % 2 === 0 ? "#ffffff" : "#f8f8fc"}
+                                  isDirty={dirtyScheduleKeys.has(rowKey)}
+                                  onCheckboxChange={handleScheduleChange}
+                                  visibleMonths={filteredScheduleMonths}
+                                />
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    )}
+
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: "block", mt: 2 }}
+                    >
+                      Tổng: {filteredScheduleMachineTypes.length} loại máy ×{" "}
+                      {filteredScheduleMonths.length} tháng
+                    </Typography>
+                  </>
+                )}
+              </TabPanel>
             </>
           )}
         </Paper>
@@ -2508,6 +3723,56 @@ const AdminPage = () => {
               skipResolveApi
             />
           </DialogContent>
+        </Dialog>
+
+        {/* --- Dialog xác nhận xoá nội dung bảo dưỡng --- */}
+        <Dialog
+          open={!!confirmDeleteContent}
+          onClose={() => setConfirmDeleteContent(null)}
+          maxWidth="xs"
+          fullWidth
+          PaperProps={{ sx: { borderRadius: "16px" } }}
+        >
+          <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>
+            Xác nhận xoá
+          </DialogTitle>
+          <DialogContent>
+            <Typography variant="body1">
+              Bạn có chắc muốn xoá nội dung bảo dưỡng{" "}
+              <strong>
+                "{confirmDeleteContent?.name_maintenance_content}"
+              </strong>{" "}
+              không?
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              Thao tác này không thể hoàn tác.
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+            <Button
+              variant="outlined"
+              onClick={() => setConfirmDeleteContent(null)}
+              sx={{ borderRadius: "10px" }}
+            >
+              Huỷ
+            </Button>
+            <Button
+              variant="contained"
+              color="error"
+              onClick={handleDeleteContent}
+              disabled={!!deletingContentId}
+              startIcon={
+                deletingContentId ? (
+                  <CircularProgress size={16} color="inherit" />
+                ) : (
+                  <Delete />
+                )
+              }
+              sx={{ borderRadius: "10px" }}
+            >
+              {deletingContentId ? "Đang xoá..." : "Xoá"}
+            </Button>
+          </DialogActions>
         </Dialog>
 
         {/* --- Snackbar --- */}

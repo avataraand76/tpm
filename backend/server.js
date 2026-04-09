@@ -8752,6 +8752,270 @@ app.get("/api/admin/machine-rfids/:uuid/history", async (req, res) => {
   }
 });
 
+// GET /api/admin/maintenance-contents — Danh sách nội dung bảo dưỡng
+app.get("/api/admin/maintenance-contents", async (req, res) => {
+  try {
+    const [rows] = await tpmConnection.query(
+      `SELECT id_maintenance_content, uuid_maintenance_content, name_maintenance_content
+       FROM tb_maintenance_content
+       ORDER BY id_maintenance_content`
+    );
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/admin/maintenance-contents — Thêm nội dung bảo dưỡng mới
+app.post("/api/admin/maintenance-contents", async (req, res) => {
+  try {
+    const { name_maintenance_content } = req.body;
+    if (!name_maintenance_content || !name_maintenance_content.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Tên nội dung bảo dưỡng không được để trống",
+      });
+    }
+    const name = name_maintenance_content.trim();
+    const [result] = await tpmConnection.query(
+      `INSERT INTO tb_maintenance_content (name_maintenance_content) VALUES (?)`,
+      [name]
+    );
+    res.json({
+      success: true,
+      message: "Thêm nội dung bảo dưỡng thành công",
+      data: { name_maintenance_content: name },
+    });
+  } catch (error) {
+    console.error("Error adding maintenance content:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// PUT /api/admin/maintenance-contents/:id — Chỉnh sửa tên nội dung bảo dưỡng
+app.put("/api/admin/maintenance-contents/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name_maintenance_content } = req.body;
+    if (!name_maintenance_content || !name_maintenance_content.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Tên nội dung bảo dưỡng không được để trống",
+      });
+    }
+    const name = name_maintenance_content.trim();
+    const [result] = await tpmConnection.query(
+      `UPDATE tb_maintenance_content SET name_maintenance_content = ? WHERE id_maintenance_content = ?`,
+      [name, id]
+    );
+    if (result.affectedRows === 0) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Không tìm thấy nội dung bảo dưỡng" });
+    }
+    res.json({
+      success: true,
+      message: "Cập nhật thành công",
+      data: {
+        id_maintenance_content: parseInt(id),
+        name_maintenance_content: name,
+      },
+    });
+  } catch (error) {
+    console.error("Error updating maintenance content:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// DELETE /api/admin/maintenance-contents/:id — Xoá nội dung bảo dưỡng
+app.delete("/api/admin/maintenance-contents/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [result] = await tpmConnection.query(
+      `DELETE FROM tb_maintenance_content WHERE id_maintenance_content = ?`,
+      [id]
+    );
+    if (result.affectedRows === 0) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Không tìm thấy nội dung bảo dưỡng" });
+    }
+    res.json({ success: true, message: "Xoá nội dung bảo dưỡng thành công" });
+  } catch (error) {
+    console.error("Error deleting maintenance content:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/admin/maintenance-schedule — Lịch bảo dưỡng định kỳ
+app.get("/api/admin/maintenance-schedule", async (req, res) => {
+  try {
+    const [rows] = await tpmConnection.query(
+      `SELECT id_machine_type, id_machine_attribute,
+              january, february, march, april, may, june,
+              july, august, september, october, november, december
+       FROM tb_maintenance_schedule`
+    );
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/admin/maintenance-schedule — Lưu lịch bảo dưỡng cho 1 loại máy
+app.post("/api/admin/maintenance-schedule", async (req, res) => {
+  try {
+    const { id_machine_type, id_machine_attribute, months } = req.body;
+    const userId = req.user.id;
+
+    if (!id_machine_type) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Thiếu id_machine_type" });
+    }
+
+    const attrValue = id_machine_attribute ?? null;
+    const m = months || {};
+    const MONTH_COLS = [
+      "january",
+      "february",
+      "march",
+      "april",
+      "may",
+      "june",
+      "july",
+      "august",
+      "september",
+      "october",
+      "november",
+      "december",
+    ];
+    const monthValues = MONTH_COLS.map((c) => (m[c] ? 1 : 0));
+
+    const [existing] = await tpmConnection.query(
+      `SELECT id_machine_type FROM tb_maintenance_schedule
+       WHERE id_machine_type = ? AND id_machine_attribute <=> ?`,
+      [id_machine_type, attrValue]
+    );
+
+    if (existing.length > 0) {
+      const setClause = MONTH_COLS.map((c) => `${c} = ?`).join(", ");
+      await tpmConnection.query(
+        `UPDATE tb_maintenance_schedule
+         SET ${setClause}, updated_by = ?, updated_at = CURRENT_TIMESTAMP
+         WHERE id_machine_type = ? AND id_machine_attribute <=> ?`,
+        [...monthValues, userId, id_machine_type, attrValue]
+      );
+    } else {
+      const colNames = MONTH_COLS.join(", ");
+      const placeholders = MONTH_COLS.map(() => "?").join(", ");
+      await tpmConnection.query(
+        `INSERT INTO tb_maintenance_schedule
+           (id_machine_type, id_machine_attribute, ${colNames}, created_by, updated_by)
+         VALUES (?, ?, ${placeholders}, ?, ?)`,
+        [id_machine_type, attrValue, ...monthValues, userId, userId]
+      );
+    }
+
+    res.json({ success: true, message: "Lưu lịch bảo dưỡng thành công" });
+  } catch (error) {
+    console.error("Error saving maintenance schedule:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/admin/machine-types-for-matrix — Loại máy + thuộc tính cho ma trận bảo dưỡng
+app.get("/api/admin/machine-types-for-matrix", async (req, res) => {
+  try {
+    const [rows] = await tpmConnection.query(`
+      SELECT 
+        mt.id_machine_type,
+        NULL AS id_machine_attribute,
+        mt.name_machine_type AS machine_name
+      FROM tb_machine_type mt
+      UNION ALL
+      SELECT 
+        mt.id_machine_type,
+        ma.id_machine_attribute,
+        CONCAT(mt.name_machine_type, ' ', ma.name_machine_attribute) AS machine_name
+      FROM tb_machine_type mt
+      JOIN tb_machine_type_attribute mta 
+        ON mt.id_machine_type = mta.id_machine_type
+      JOIN tb_machine_attribute ma 
+        ON mta.id_machine_attribute = ma.id_machine_attribute
+      ORDER BY id_machine_type, machine_name
+    `);
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/admin/maintenance-matrix — Ma trận cấu hình bảo dưỡng
+app.get("/api/admin/maintenance-matrix", async (req, res) => {
+  try {
+    const [rows] = await tpmConnection.query(
+      `SELECT id_machine_type, id_machine_attribute, maintenance_content
+       FROM tb_maintenance_content_machine_type_attribute`
+    );
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/admin/maintenance-matrix — Lưu cấu hình 1 cột trong ma trận bảo dưỡng
+app.post("/api/admin/maintenance-matrix", async (req, res) => {
+  try {
+    const { id_machine_type, id_machine_attribute, maintenance_content } =
+      req.body;
+
+    // Lấy userId từ token (đã được gán bởi middleware authenticateToken)
+    const userId = req.user.id;
+
+    if (!id_machine_type) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Thiếu id_machine_type" });
+    }
+
+    const attrValue = id_machine_attribute ?? null;
+    const contentJson = JSON.stringify(maintenance_content || {});
+
+    // Kiểm tra xem bản ghi đã tồn tại chưa (sử dụng NULL-safe equals <=>)
+    const [existing] = await tpmConnection.query(
+      `SELECT id_machine_type FROM tb_maintenance_content_machine_type_attribute
+       WHERE id_machine_type = ? AND id_machine_attribute <=> ?`,
+      [id_machine_type, attrValue]
+    );
+
+    if (existing.length > 0) {
+      // Cập nhật: Chỉ cập nhật nội dung và người cập nhật (updated_by)
+      await tpmConnection.query(
+        `UPDATE tb_maintenance_content_machine_type_attribute
+         SET maintenance_content = ?, 
+             updated_by = ?, 
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id_machine_type = ? AND id_machine_attribute <=> ?`,
+        [contentJson, userId, id_machine_type, attrValue]
+      );
+    } else {
+      // Thêm mới: Lưu cả người tạo (created_by) và người cập nhật (updated_by)
+      await tpmConnection.query(
+        `INSERT INTO tb_maintenance_content_machine_type_attribute
+           (id_machine_type, id_machine_attribute, maintenance_content, created_by, updated_by)
+         VALUES (?, ?, ?, ?, ?)`,
+        [id_machine_type, attrValue, contentJson, userId, userId]
+      );
+    }
+
+    res.json({ success: true, message: "Lưu cấu hình thành công" });
+  } catch (error) {
+    console.error("Error saving maintenance matrix:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // MARK: FASTWORK
 
 // Helper: Map loại phiếu sang tên proposal
@@ -11865,6 +12129,7 @@ async function autoCreateInventoryCheck() {
          JOIN tb_machine m ON ml.id_machine = m.id_machine
          WHERE tl.id_department = ?
            AND m.current_status != 'liquidation'
+           AND m.current_status != 'temporary'
            AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))`,
         [deptId]
       );
@@ -11877,6 +12142,7 @@ async function autoCreateInventoryCheck() {
          LEFT JOIN tb_machine_location ml ON tl.id_location = ml.id_location
          LEFT JOIN tb_machine m ON ml.id_machine = m.id_machine
               AND m.current_status != 'liquidation'
+              AND m.current_status != 'temporary'
               AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))
          WHERE tl.id_department = ?
          GROUP BY tl.id_location`,
@@ -11905,6 +12171,7 @@ async function autoCreateInventoryCheck() {
          LEFT JOIN tb_machine m ON ml.id_machine = m.id_machine
          WHERE tl.id_department = ?
            AND m.current_status != 'liquidation'
+           AND m.current_status != 'temporary'
            AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))
          ORDER BY tl.uuid_location, m.code_machine`,
         [deptId]
@@ -12039,21 +12306,21 @@ async function autoCancelInternalTransfers() {
 }
 
 // 16:00 thứ 2-6 (timezone Asia/Ho_Chi_Minh)
-cron.schedule("5 0 16 * * 1-5", autoCreateInventoryCheck, {
+cron.schedule("0 16 * * 1-5", autoCreateInventoryCheck, {
   timezone: "Asia/Ho_Chi_Minh",
 });
 
 // 15:00 thứ 7 (timezone Asia/Ho_Chi_Minh)
-cron.schedule("5 0 15 * * 6", autoCreateInventoryCheck, {
+cron.schedule("0 15 * * 6", autoCreateInventoryCheck, {
   timezone: "Asia/Ho_Chi_Minh",
 });
 
 // 16:30 thứ 2-6 (timezone Asia/Ho_Chi_Minh)
-cron.schedule("0 16 * * 1-5", autoCancelInternalTransfers, {
+cron.schedule("30 16 * * 1-5", autoCancelInternalTransfers, {
   timezone: "Asia/Ho_Chi_Minh",
 });
 
 // 15:30 thứ 7 (timezone Asia/Ho_Chi_Minh)
-cron.schedule("0 15 * * 6", autoCancelInternalTransfers, {
+cron.schedule("30 15 * * 6", autoCancelInternalTransfers, {
   timezone: "Asia/Ho_Chi_Minh",
 });
