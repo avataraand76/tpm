@@ -742,6 +742,33 @@ create table if not exists tb_maintenance_schedule
     updated_by bigint default '0'
 );
 
+-- MARK: tb_maintenance_schedule_detail chi tiết lịch trình bảo dưỡng định kỳ
+create table if not exists tb_maintenance_schedule_detail
+(
+    -- primary
+    id_maintenance_schedule_detail bigint not null auto_increment,
+    uuid_maintenance_schedule_detail varchar(36) not null unique default (UUID()),
+    
+    -- foreign
+    id_machine bigint,
+
+    -- properties
+    year int,
+    month int,
+    day int,
+    maintenance_content_detail json,
+
+    -- key
+    primary key (id_maintenance_schedule_detail),
+    unique (id_machine, year, month, day),
+
+    -- timestamp
+    created_at timestamp default current_timestamp,
+    created_by bigint default '0',
+    updated_at timestamp default current_timestamp on update current_timestamp,
+    updated_by bigint default '0'
+);
+
 -- MARK: insert data
 insert into tb_category (name_category) values ('Máy móc thiết bị'), ('Phụ kiện');
 

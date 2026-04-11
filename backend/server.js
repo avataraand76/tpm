@@ -2,7 +2,7 @@
 
 const express = require("express");
 // const router = express.Router();
-// const sql = require("mssql");
+const sql = require("mssql");
 const mysql = require("mysql2/promise");
 const cors = require("cors");
 const multer = require("multer");
@@ -146,6 +146,33 @@ const dataHiTimesheetConnection = mysql.createPool({
   multipleStatements: true,
 });
 
+const mssqlHigmfConnection = {
+  user: process.env.MSSQL_USER,
+  password: process.env.MSSQL_PASSWORD,
+  database: process.env.MSSQL_HIGMF,
+  server: process.env.MSSQL_SERVER,
+  port: parseInt(process.env.MSSQL_PORT),
+  pool: {
+    max: 10,
+    min: 0,
+    idleTimeoutMillis: 30000,
+    acquireTimeoutMillis: 30000,
+    createTimeoutMillis: 30000,
+    destroyTimeoutMillis: 5000,
+    reapIntervalMillis: 1000,
+    createRetryIntervalMillis: 200,
+  },
+  options: {
+    encrypt: false,
+    trustServerCertificate: true,
+    enableArithAbort: true,
+    requestTimeout: 300000, // 5 minutes
+    cancelTimeout: 5000, // 5 seconds
+  },
+};
+
+const higmfConnection = new sql.ConnectionPool(mssqlHigmfConnection);
+
 // Test database connections
 async function testConnections() {
   try {
@@ -163,6 +190,15 @@ async function testConnections() {
   } catch (err) {
     console.error("Error connecting to Data Hi Timesheet MySQL database:", err);
   }
+
+  higmfConnection
+    .connect()
+    .then(() => {
+      console.log("Successfully connected to MSSQL HIGMF database");
+    })
+    .catch((err) => {
+      console.error("Error connecting to MSSQL HIGMF database:", err);
+    });
 }
 
 testConnections();
@@ -12324,3 +12360,246 @@ cron.schedule("30 16 * * 1-5", autoCancelInternalTransfers, {
 cron.schedule("30 15 * * 6", autoCancelInternalTransfers, {
   timezone: "Asia/Ho_Chi_Minh",
 });
+
+// MARK: MAINTENANCE SCHEDULE DETAIL
+
+const MONTH_COLUMNS = [
+  { col: "january", num: 1 },
+  { col: "february", num: 2 },
+  { col: "march", num: 3 },
+  { col: "april", num: 4 },
+  { col: "may", num: 5 },
+  { col: "june", num: 6 },
+  { col: "july", num: 7 },
+  { col: "august", num: 8 },
+  { col: "september", num: 9 },
+  { col: "october", num: 10 },
+  { col: "november", num: 11 },
+  { col: "december", num: 12 },
+];
+
+async function autoCreateMaintenanceScheduleDetail() {
+  const connection = await tpmConnection.getConnection();
+  try {
+    const now = new Date();
+    const vnNow = new Date(
+      now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" })
+    );
+    const currentYear = vnNow.getFullYear();
+
+    // Lấy danh sách id_machine đã có lịch trong năm này để bỏ qua (per-machine idempotent)
+    const [existingRows] = await connection.query(
+      `SELECT DISTINCT id_machine FROM tb_maintenance_schedule_detail WHERE year = ?`,
+      [currentYear]
+    );
+    const existingMachineIds = new Set(existingRows.map((r) => r.id_machine));
+
+    // Lấy ngày nghỉ lễ, Tết, chủ nhật năm hiện tại từ MSSQL eGMF
+    // holidaysByMonth: Map<month(1-12), Set<dayNumber>>
+    const holidaysByMonth = new Map();
+    try {
+      if (!higmfConnection.connected) {
+        await higmfConnection.connect();
+      }
+      const holidayResult = await higmfConnection.request().query(`
+        SELECT NgayThang FROM [dbo].[Lib_NgayNghi_ChiTiet]
+        WHERE NgayThang IS NOT NULL
+          AND YEAR(NgayThang) = ${currentYear}
+      `);
+      for (const row of holidayResult.recordset) {
+        const d = new Date(row.NgayThang);
+        const m = d.getMonth() + 1;
+        const day = d.getDate();
+        if (!holidaysByMonth.has(m)) holidaysByMonth.set(m, new Set());
+        holidaysByMonth.get(m).add(day);
+      }
+      console.log(
+        `[AutoMaintenanceSchedule] Tải ${holidayResult.recordset.length} ngày nghỉ từ eGMF cho năm ${currentYear}.`
+      );
+    } catch (err) {
+      console.warn(
+        "[AutoMaintenanceSchedule] Không thể lấy ngày nghỉ từ eGMF, tiếp tục không trừ ngày nghỉ:",
+        err.message
+      );
+    }
+
+    // Lấy danh sách máy có nội dung bảo dưỡng và lịch bảo dưỡng
+    // Thêm id_machine_type, id_machine_attribute để nhóm theo lịch
+    const [machines] = await connection.query(`
+      SELECT
+        m.id_machine,
+        mt.id_machine_type,
+        mt.name_machine_type,
+        ma.id_machine_attribute,
+        ma.name_machine_attribute,
+        mcata.maintenance_content,
+        ms.january, ms.february, ms.march, ms.april, ms.may, ms.june,
+        ms.july, ms.august, ms.september, ms.october, ms.november, ms.december
+      FROM tb_machine m
+      LEFT JOIN tb_machine_type mt ON mt.name_machine_type = m.type_machine
+      LEFT JOIN tb_machine_attribute ma ON ma.name_machine_attribute = m.attribute_machine
+      LEFT JOIN tb_maintenance_content_machine_type_attribute mcata
+        ON mcata.id_machine_type = mt.id_machine_type
+        AND mcata.id_machine_attribute <=> ma.id_machine_attribute
+      LEFT JOIN tb_maintenance_schedule ms
+        ON ms.id_machine_type = mt.id_machine_type
+        AND ms.id_machine_attribute <=> ma.id_machine_attribute
+      WHERE (m.type_machine IS NOT NULL AND m.type_machine != '')
+        AND m.current_status NOT IN ('liquidation', 'temporary')
+        AND (
+          m.is_borrowed_or_rented_or_borrowed_out IS NULL
+          OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return', 'borrowed_out')
+        )
+        AND mcata.id_machine_type IS NOT NULL
+        AND ms.id_machine_type IS NOT NULL
+    `);
+
+    if (!machines || machines.length === 0) {
+      console.log(
+        "[AutoMaintenanceSchedule] Không có máy nào đủ điều kiện tạo lịch bảo dưỡng."
+      );
+      return;
+    }
+
+    // Lọc ra các máy chưa có lịch trong năm này
+    const newMachines = machines.filter(
+      (m) => !existingMachineIds.has(m.id_machine)
+    );
+
+    if (newMachines.length === 0) {
+      console.log(
+        `[AutoMaintenanceSchedule] Tất cả ${machines.length} máy đã có lịch bảo dưỡng cho năm ${currentYear}. Bỏ qua.`
+      );
+      return;
+    }
+
+    if (existingMachineIds.size > 0) {
+      console.log(
+        `[AutoMaintenanceSchedule] Bỏ qua ${existingMachineIds.size} máy đã có lịch, xử lý ${newMachines.length} máy mới.`
+      );
+    }
+
+    // Nhóm máy theo cùng lịch bảo dưỡng (id_machine_type + id_machine_attribute)
+    // Các máy cùng nhóm sẽ được chia đều vào các ngày trong tháng
+    const scheduleGroups = new Map();
+    for (const machine of newMachines) {
+      const key = `${machine.id_machine_type}_${machine.id_machine_attribute ?? "null"}`;
+      if (!scheduleGroups.has(key)) {
+        const monthFlags = {};
+        for (const { col, num } of MONTH_COLUMNS) {
+          monthFlags[num] = !!machine[col];
+        }
+        // Lọc chỉ các nội dung được đánh dấu 1, thêm is_check để người dùng xác nhận hoàn thành
+        const rawContent = machine.maintenance_content;
+        let maintenanceContent = null;
+        if (rawContent != null) {
+          const contentObj =
+            typeof rawContent === "string"
+              ? JSON.parse(rawContent)
+              : rawContent;
+          const filtered = Object.entries(contentObj)
+            .filter(([, val]) => val === 1)
+            .map(([name]) => ({ name, is_check: 0 }));
+          maintenanceContent =
+            filtered.length > 0 ? JSON.stringify(filtered) : null;
+        }
+        const groupLabel = machine.name_machine_attribute
+          ? `${machine.name_machine_type} ${machine.name_machine_attribute}`
+          : machine.name_machine_type;
+        scheduleGroups.set(key, {
+          monthFlags,
+          maintenanceContent,
+          groupLabel,
+          machineIds: [],
+        });
+      }
+      scheduleGroups.get(key).machineIds.push(machine.id_machine);
+    }
+
+    // Với mỗi nhóm, phân chia máy đều vào các ngày của từng tháng bảo dưỡng
+    const rows = [];
+    // Theo dõi các nhóm thực sự có rows để log chính xác
+    const activeGroups = [];
+    for (const group of scheduleGroups.values()) {
+      const { monthFlags, maintenanceContent, machineIds } = group;
+      const N = machineIds.length;
+      if (N === 0) continue;
+      const rowsBefore = rows.length;
+
+      for (const { num } of MONTH_COLUMNS) {
+        if (!monthFlags[num]) continue;
+
+        // Lọc ngày làm việc: tổng ngày trong tháng trừ ngày nghỉ lễ/Tết/chủ nhật
+        const totalDays = new Date(currentYear, num, 0).getDate();
+        const holidays = holidaysByMonth.get(num) ?? new Set();
+        const workingDays = [];
+        for (let d = 1; d <= totalDays; d++) {
+          if (!holidays.has(d)) workingDays.push(d);
+        }
+
+        const D = workingDays.length;
+        if (D === 0) continue;
+
+        // Công thức: N máy / D ngày làm việc = a dư b
+        //   → b ngày đầu: a+1 máy/ngày
+        //   → D-b ngày còn lại: a máy/ngày
+        const a = Math.floor(N / D);
+        const b = N % D;
+
+        let idx = 0;
+        for (let wi = 0; wi < D; wi++) {
+          const day = workingDays[wi];
+          const count = wi < b ? a + 1 : a;
+          for (let i = 0; i < count; i++) {
+            rows.push([
+              machineIds[idx],
+              currentYear,
+              num,
+              day,
+              maintenanceContent,
+            ]);
+            idx++;
+          }
+        }
+      }
+
+      // Ghi nhận nhóm này nếu thực sự tạo được dòng
+      if (rows.length > rowsBefore) {
+        activeGroups.push({ groupLabel: group.groupLabel, machineCount: N });
+      }
+    }
+
+    if (rows.length === 0) {
+      console.log(
+        "[AutoMaintenanceSchedule] Không có tháng bảo dưỡng nào được cấu hình."
+      );
+      return;
+    }
+
+    await connection.beginTransaction();
+    await connection.query(
+      `INSERT INTO tb_maintenance_schedule_detail
+         (id_machine, year, month, day, maintenance_content_detail)
+       VALUES ?`,
+      [rows]
+    );
+    await connection.commit();
+
+    console.log(
+      `[AutoMaintenanceSchedule] Đã tạo ${rows.length} dòng lịch bảo dưỡng cho năm ${currentYear} cho các loại máy: ${activeGroups.map((g) => `${g.groupLabel} (${g.machineCount} máy)`).join(", ")}.`
+    );
+  } catch (error) {
+    await connection.rollback();
+    console.error(
+      "[AutoMaintenanceSchedule] Lỗi khi tự động tạo lịch bảo dưỡng:",
+      error
+    );
+  } finally {
+    connection.release();
+  }
+}
+autoCreateMaintenanceScheduleDetail();
+// 00:00 ngày 1/1 hàng năm (timezone Asia/Ho_Chi_Minh)
+// cron.schedule("15 34 9 11 4 *", autoCreateMaintenanceScheduleDetail, {
+//   timezone: "Asia/Ho_Chi_Minh",
+// });
