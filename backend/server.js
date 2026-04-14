@@ -12387,12 +12387,19 @@ async function autoCreateMaintenanceScheduleDetail() {
     );
     const currentYear = vnNow.getFullYear();
 
-    // Lấy danh sách id_machine đã có lịch trong năm này để bỏ qua (per-machine idempotent)
+    // Lấy các cặp (id_machine, month) đã có lịch trong năm này — per-(machine,month) idempotent
+    // Máy đã có tháng X → bỏ qua tháng X, tháng mới vẫn được tạo bình thường
     const [existingRows] = await connection.query(
-      `SELECT DISTINCT id_machine FROM tb_maintenance_schedule_detail WHERE year = ?`,
+      `SELECT DISTINCT id_machine, month FROM tb_maintenance_schedule_detail WHERE year = ?`,
       [currentYear]
     );
-    const existingMachineIds = new Set(existingRows.map((r) => r.id_machine));
+    const existingMonthsByMachine = new Map();
+    for (const row of existingRows) {
+      if (!existingMonthsByMachine.has(row.id_machine)) {
+        existingMonthsByMachine.set(row.id_machine, new Set());
+      }
+      existingMonthsByMachine.get(row.id_machine).add(row.month);
+    }
 
     // Lấy ngày nghỉ lễ, Tết, chủ nhật năm hiện tại từ MSSQL eGMF
     // holidaysByMonth: Map<month(1-12), Set<dayNumber>>
@@ -12414,7 +12421,7 @@ async function autoCreateMaintenanceScheduleDetail() {
         holidaysByMonth.get(m).add(day);
       }
       console.log(
-        `[AutoMaintenanceSchedule] Tải ${holidayResult.recordset.length} ngày nghỉ từ eGMF cho năm ${currentYear}.`
+        `[AutoMaintenanceSchedule] Lấy ${holidayResult.recordset.length} ngày nghỉ từ eGMF cho năm ${currentYear}.`
       );
     } catch (err) {
       console.warn(
@@ -12461,133 +12468,190 @@ async function autoCreateMaintenanceScheduleDetail() {
       return;
     }
 
-    // Lọc ra các máy chưa có lịch trong năm này
+    // Helper: phân chia danh sách máy vào các ngày làm việc của một tháng
+    const distributeToWorkingDays = (
+      machineIds,
+      monthNum,
+      maintenanceContent
+    ) => {
+      // Lọc ngày làm việc: tổng ngày trong tháng trừ ngày nghỉ lễ/Tết/chủ nhật
+      const totalDays = new Date(currentYear, monthNum, 0).getDate();
+      const holidays = holidaysByMonth.get(monthNum) ?? new Set();
+      const workingDays = [];
+      for (let d = 1; d <= totalDays; d++) {
+        if (!holidays.has(d)) workingDays.push(d);
+      }
+      // Công thức: N máy / D ngày làm việc = a dư b
+      //   → b ngày đầu: a+1 máy/ngày
+      //   → D-b ngày còn lại: a máy/ngày
+      const D = workingDays.length;
+      if (D === 0) return [];
+      const N = machineIds.length;
+      const a = Math.floor(N / D);
+      const b = N % D;
+      const result = [];
+      let idx = 0;
+      for (let wi = 0; wi < D; wi++) {
+        const day = workingDays[wi];
+        const count = wi < b ? a + 1 : a;
+        for (let i = 0; i < count; i++) {
+          result.push([
+            machineIds[idx],
+            currentYear,
+            monthNum,
+            day,
+            maintenanceContent,
+          ]);
+          idx++;
+        }
+      }
+      return result;
+    };
+
+    // Helper: build group metadata từ danh sách máy
+    const buildGroups = (machineList) => {
+      const groups = new Map();
+      for (const machine of machineList) {
+        const key = `${machine.id_machine_type}_${machine.id_machine_attribute ?? "null"}`;
+        if (!groups.has(key)) {
+          const monthFlags = {};
+          for (const { col, num } of MONTH_COLUMNS) {
+            monthFlags[num] = !!machine[col];
+          }
+          const rawContent = machine.maintenance_content;
+          let maintenanceContent = null;
+          if (rawContent != null) {
+            const contentObj =
+              typeof rawContent === "string"
+                ? JSON.parse(rawContent)
+                : rawContent;
+            const filtered = Object.entries(contentObj)
+              .filter(([, val]) => val === 1)
+              .map(([name]) => ({ name, is_check: 0 }));
+            maintenanceContent =
+              filtered.length > 0 ? JSON.stringify(filtered) : null;
+          }
+          const groupLabel = machine.name_machine_attribute
+            ? `${machine.name_machine_type} ${machine.name_machine_attribute}`
+            : machine.name_machine_type;
+          groups.set(key, {
+            monthFlags,
+            maintenanceContent,
+            groupLabel,
+            machineIds: [],
+          });
+        }
+        groups.get(key).machineIds.push(machine.id_machine);
+      }
+      return groups;
+    };
+
+    // ── Pass 1: Máy hoàn toàn mới (chưa có record nào trong năm này) ──────────
+    // Hành vi giống code cũ: xử lý tất cả các tháng được cấu hình
     const newMachines = machines.filter(
-      (m) => !existingMachineIds.has(m.id_machine)
+      (m) => !existingMonthsByMachine.has(m.id_machine)
+    );
+    const existingMachines = machines.filter((m) =>
+      existingMonthsByMachine.has(m.id_machine)
     );
 
-    if (newMachines.length === 0) {
-      console.log(
-        `[AutoMaintenanceSchedule] Tất cả ${machines.length} máy đã có lịch bảo dưỡng cho năm ${currentYear}. Bỏ qua.`
-      );
-      return;
-    }
-
-    if (existingMachineIds.size > 0) {
-      console.log(
-        `[AutoMaintenanceSchedule] Bỏ qua ${existingMachineIds.size} máy đã có lịch, xử lý ${newMachines.length} máy mới.`
-      );
-    }
-
-    // Nhóm máy theo cùng lịch bảo dưỡng (id_machine_type + id_machine_attribute)
-    // Các máy cùng nhóm sẽ được chia đều vào các ngày trong tháng
-    const scheduleGroups = new Map();
-    for (const machine of newMachines) {
-      const key = `${machine.id_machine_type}_${machine.id_machine_attribute ?? "null"}`;
-      if (!scheduleGroups.has(key)) {
-        const monthFlags = {};
-        for (const { col, num } of MONTH_COLUMNS) {
-          monthFlags[num] = !!machine[col];
-        }
-        // Lọc chỉ các nội dung được đánh dấu 1, thêm is_check để người dùng xác nhận hoàn thành
-        const rawContent = machine.maintenance_content;
-        let maintenanceContent = null;
-        if (rawContent != null) {
-          const contentObj =
-            typeof rawContent === "string"
-              ? JSON.parse(rawContent)
-              : rawContent;
-          const filtered = Object.entries(contentObj)
-            .filter(([, val]) => val === 1)
-            .map(([name]) => ({ name, is_check: 0 }));
-          maintenanceContent =
-            filtered.length > 0 ? JSON.stringify(filtered) : null;
-        }
-        const groupLabel = machine.name_machine_attribute
-          ? `${machine.name_machine_type} ${machine.name_machine_attribute}`
-          : machine.name_machine_type;
-        scheduleGroups.set(key, {
-          monthFlags,
-          maintenanceContent,
-          groupLabel,
-          machineIds: [],
-        });
-      }
-      scheduleGroups.get(key).machineIds.push(machine.id_machine);
-    }
-
-    // Với mỗi nhóm, phân chia máy đều vào các ngày của từng tháng bảo dưỡng
     const rows = [];
-    // Theo dõi các nhóm thực sự có rows để log chính xác
-    const activeGroups = [];
-    for (const group of scheduleGroups.values()) {
-      const { monthFlags, maintenanceContent, machineIds } = group;
-      const N = machineIds.length;
-      if (N === 0) continue;
-      const rowsBefore = rows.length;
+    const pass1ActiveGroups = [];
 
-      for (const { num } of MONTH_COLUMNS) {
-        if (!monthFlags[num]) continue;
-
-        // Lọc ngày làm việc: tổng ngày trong tháng trừ ngày nghỉ lễ/Tết/chủ nhật
-        const totalDays = new Date(currentYear, num, 0).getDate();
-        const holidays = holidaysByMonth.get(num) ?? new Set();
-        const workingDays = [];
-        for (let d = 1; d <= totalDays; d++) {
-          if (!holidays.has(d)) workingDays.push(d);
+    if (newMachines.length > 0) {
+      if (existingMachines.length > 0) {
+        console.log(
+          `[AutoMaintenanceSchedule] Bỏ qua ${existingMachines.length} máy đã có lịch, xử lý ${newMachines.length} máy mới.`
+        );
+      }
+      const newGroups = buildGroups(newMachines);
+      for (const group of newGroups.values()) {
+        const { monthFlags, maintenanceContent, groupLabel, machineIds } =
+          group;
+        if (machineIds.length === 0) continue;
+        const rowsBefore = rows.length;
+        for (const { num } of MONTH_COLUMNS) {
+          if (!monthFlags[num]) continue;
+          rows.push(
+            ...distributeToWorkingDays(machineIds, num, maintenanceContent)
+          );
         }
-
-        const D = workingDays.length;
-        if (D === 0) continue;
-
-        // Công thức: N máy / D ngày làm việc = a dư b
-        //   → b ngày đầu: a+1 máy/ngày
-        //   → D-b ngày còn lại: a máy/ngày
-        const a = Math.floor(N / D);
-        const b = N % D;
-
-        let idx = 0;
-        for (let wi = 0; wi < D; wi++) {
-          const day = workingDays[wi];
-          const count = wi < b ? a + 1 : a;
-          for (let i = 0; i < count; i++) {
-            rows.push([
-              machineIds[idx],
-              currentYear,
-              num,
-              day,
-              maintenanceContent,
-            ]);
-            idx++;
-          }
+        if (rows.length > rowsBefore) {
+          const activeMonths = MONTH_COLUMNS.filter(
+            ({ num }) => monthFlags[num]
+          )
+            .map(({ num }) => `${num}`)
+            .join(", ");
+          pass1ActiveGroups.push({
+            groupLabel,
+            machineCount: machineIds.length,
+            activeMonths,
+          });
         }
       }
+    }
 
-      // Ghi nhận nhóm này nếu thực sự tạo được dòng
-      if (rows.length > rowsBefore) {
-        activeGroups.push({ groupLabel: group.groupLabel, machineCount: N });
+    // ── Pass 2: Máy đã có record nhưng có tháng mới được thêm vào ─────────────
+    // Xử lý riêng, không ảnh hưởng log của Pass 1
+    const pass2ActiveGroups = [];
+
+    if (existingMachines.length > 0) {
+      const existingGroups = buildGroups(existingMachines);
+      for (const group of existingGroups.values()) {
+        const { monthFlags, maintenanceContent, groupLabel, machineIds } =
+          group;
+        if (machineIds.length === 0) continue;
+        const newMonthsForGroup = [];
+        for (const { num } of MONTH_COLUMNS) {
+          if (!monthFlags[num]) continue;
+          // Tháng này là mới nếu KHÔNG CÓ máy nào trong nhóm đã có record cho tháng này
+          const noneHaveMonth = machineIds.every(
+            (id) => !existingMonthsByMachine.get(id)?.has(num)
+          );
+          if (!noneHaveMonth) continue;
+          rows.push(
+            ...distributeToWorkingDays(machineIds, num, maintenanceContent)
+          );
+          newMonthsForGroup.push(num);
+        }
+        if (newMonthsForGroup.length > 0) {
+          pass2ActiveGroups.push({
+            groupLabel,
+            machineCount: machineIds.length,
+            newMonths: newMonthsForGroup.join(", "),
+          });
+        }
       }
     }
 
     if (rows.length === 0) {
       console.log(
-        "[AutoMaintenanceSchedule] Không có tháng bảo dưỡng nào được cấu hình."
+        `[AutoMaintenanceSchedule] Tất cả lịch bảo dưỡng cho năm ${currentYear} đã được tạo đầy đủ. Bỏ qua.`
       );
       return;
     }
 
     await connection.beginTransaction();
-    await connection.query(
-      `INSERT INTO tb_maintenance_schedule_detail
+    const [insertResult] = await connection.query(
+      `INSERT IGNORE INTO tb_maintenance_schedule_detail
          (id_machine, year, month, day, maintenance_content_detail)
        VALUES ?`,
       [rows]
     );
     await connection.commit();
 
-    console.log(
-      `[AutoMaintenanceSchedule] Đã tạo ${rows.length} dòng lịch bảo dưỡng cho năm ${currentYear} cho các loại máy: ${activeGroups.map((g) => `${g.groupLabel} (${g.machineCount} máy)`).join(", ")}.`
-    );
+    const actualInserted = insertResult.affectedRows;
+
+    if (pass1ActiveGroups.length > 0) {
+      console.log(
+        `[AutoMaintenanceSchedule] Đã tạo ${actualInserted} dòng lịch bảo dưỡng cho năm ${currentYear} cho các loại máy: ${pass1ActiveGroups.map((g) => `${g.groupLabel} (${g.machineCount} máy x tháng ${g.activeMonths})`).join("; ")}.`
+      );
+    }
+    if (pass2ActiveGroups.length > 0) {
+      console.log(
+        `[AutoMaintenanceSchedule] Thêm ${actualInserted} dòng lịch bảo dưỡng mới cho năm ${currentYear}: ${pass2ActiveGroups.map((g) => `${g.groupLabel} (${g.machineCount} máy x tháng ${g.newMonths})`).join("; ")}.`
+      );
+    }
   } catch (error) {
     await connection.rollback();
     console.error(
@@ -12599,7 +12663,64 @@ async function autoCreateMaintenanceScheduleDetail() {
   }
 }
 autoCreateMaintenanceScheduleDetail();
-// 00:00 ngày 1/1 hàng năm (timezone Asia/Ho_Chi_Minh)
-// cron.schedule("15 34 9 11 4 *", autoCreateMaintenanceScheduleDetail, {
-//   timezone: "Asia/Ho_Chi_Minh",
-// });
+
+cron.schedule("30 * * * 1-6", autoCreateMaintenanceScheduleDetail, {
+  timezone: "Asia/Ho_Chi_Minh",
+});
+
+// GET /api/maintenance-schedule-detail — Lịch bảo dưỡng chi tiết theo năm/tháng
+app.get("/api/maintenance-schedule-detail", async (req, res) => {
+  try {
+    const { year, month } = req.query;
+
+    const now = new Date();
+    const vnNow = new Date(
+      now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" })
+    );
+    const targetYear = year ? parseInt(year) : vnNow.getFullYear();
+    const targetMonth = month ? parseInt(month) : null;
+
+    let whereClause = `msd.year = ?`;
+    const params = [targetYear];
+
+    if (targetMonth) {
+      whereClause += ` AND msd.month = ?`;
+      params.push(targetMonth);
+    }
+
+    const [rows] = await tpmConnection.query(
+      `SELECT
+        msd.id_maintenance_schedule_detail,
+        msd.uuid_maintenance_schedule_detail,
+        msd.id_machine,
+        msd.year,
+        msd.month,
+        msd.day,
+        msd.maintenance_content_detail,
+        m.uuid_machine,
+        m.code_machine,
+        m.type_machine,
+        m.attribute_machine,
+        m.model_machine,
+        m.manufacturer,
+        m.supplier,
+        m.serial_machine,
+        m.current_status,
+        l.name_location,
+        d.name_department
+      FROM tb_maintenance_schedule_detail msd
+      LEFT JOIN tb_machine m ON m.id_machine = msd.id_machine
+      LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
+      LEFT JOIN tb_location l ON l.id_location = ml.id_location
+      LEFT JOIN tb_department d ON d.id_department = l.id_department
+      WHERE ${whereClause}
+      ORDER BY msd.month, msd.day, m.type_machine, m.attribute_machine`,
+      params
+    );
+
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error("Error fetching maintenance schedule detail:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});

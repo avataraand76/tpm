@@ -18,6 +18,7 @@ import LocationTrackPage from "./pages/LocationTrackPage";
 import UpdateRfidPage from "./pages/UpdateRfidPage";
 import TestProposalPage from "./pages/TestProposalPage";
 import AdminPage from "./pages/AdminPage";
+import MaintenanceSchedulePage from "./pages/MaintenanceSchedulePage";
 import { useAuth } from "./hooks/useAuth";
 import { Box, CircularProgress } from "@mui/material";
 
@@ -216,6 +217,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <LocationTrackPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/maintenance-schedule"
+              element={
+                <ProtectedRoute>
+                  <MaintenanceSchedulePage />
                 </ProtectedRoute>
               }
             />

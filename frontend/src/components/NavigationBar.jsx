@@ -28,6 +28,7 @@ import {
   Update,
   AdminPanelSettings,
   QuestionMark,
+  CalendarMonth,
 } from "@mui/icons-material";
 import { useAuth } from "../hooks/useAuth";
 
@@ -55,13 +56,14 @@ const NavigationBar = () => {
     if (pathname === "/tickets2") return 1;
     if (pathname === "/machines") return 2;
     if (pathname === "/location-track") return 3;
-    // if (pathname === "/up-rfid") return 4;
-    // if (pathname === "/admin") return 5;
+    if (pathname === "/maintenance-schedule") return 4;
+    // if (pathname === "/up-rfid") return 5;
+    // if (pathname === "/admin") return 6;
     return 0;
   };
 
   const handleTabChange = (event, newValue) => {
-    const baseRoutes = ["/", "/tickets2", "/machines", "/location-track"];
+    const baseRoutes = ["/", "/tickets2", "/machines", "/location-track", "/maintenance-schedule"];
 
     // if (isAdmin || isPhongCoDien) {
     //   baseRoutes.push("/up-rfid");
@@ -132,6 +134,7 @@ const NavigationBar = () => {
     { label: "Quản lý phiếu", icon: <Receipt />, route: "/tickets2" },
     { label: "Máy móc", icon: <PrecisionManufacturing />, route: "/machines" },
     { label: "Vị trí", icon: <LocationOn />, route: "/location-track" },
+    { label: "Lịch Bảo Dưỡng", icon: <CalendarMonth />, route: "/maintenance-schedule" },
     // ...(isAdmin || isPhongCoDien
     //   ? [
     //       {
@@ -262,6 +265,11 @@ const NavigationBar = () => {
                 <Tab
                   icon={<LocationOn />}
                   label="Vị trí"
+                  iconPosition="start"
+                />
+                <Tab
+                  icon={<CalendarMonth />}
+                  label="Lịch Bảo Dưỡng"
                   iconPosition="start"
                 />
                 {/* {(isAdmin || isPhongCoDien) && (

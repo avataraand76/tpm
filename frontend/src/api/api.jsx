@@ -645,19 +645,27 @@ export const api = {
       return response.data;
     },
     addMaintenanceContent: async (name) => {
-      const response = await httpConnect.post("/api/admin/maintenance-contents", {
-        name_maintenance_content: name,
-      });
+      const response = await httpConnect.post(
+        "/api/admin/maintenance-contents",
+        {
+          name_maintenance_content: name,
+        }
+      );
       return response.data;
     },
     updateMaintenanceContent: async (id, name) => {
-      const response = await httpConnect.put(`/api/admin/maintenance-contents/${id}`, {
-        name_maintenance_content: name,
-      });
+      const response = await httpConnect.put(
+        `/api/admin/maintenance-contents/${id}`,
+        {
+          name_maintenance_content: name,
+        }
+      );
       return response.data;
     },
     deleteMaintenanceContent: async (id) => {
-      const response = await httpConnect.delete(`/api/admin/maintenance-contents/${id}`);
+      const response = await httpConnect.delete(
+        `/api/admin/maintenance-contents/${id}`
+      );
       return response.data;
     },
     getMachineTypesForMatrix: async () => {
@@ -757,6 +765,17 @@ export const api = {
       const response = await httpConnect.put(
         `/api/inventory-checks/${uuid}/confirm-missing`,
         data
+      );
+      return response.data;
+    },
+  },
+
+  // MARK: MAINTENANCE SCHEDULE DETAIL
+  maintenance: {
+    getScheduleDetail: async (params = {}) => {
+      const response = await httpConnect.get(
+        "/api/maintenance-schedule-detail",
+        { params }
       );
       return response.data;
     },
