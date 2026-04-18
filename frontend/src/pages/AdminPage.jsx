@@ -363,6 +363,17 @@ function useDebounce(value, delay) {
   return debouncedValue;
 }
 
+// Trả về mảng các key của các tháng nằm cùng quý với monthKey
+const getMonthsInSameQuarter = (monthKey) => {
+  const quarters = [
+    ["january", "february", "march"],
+    ["april", "may", "june"],
+    ["july", "august", "september"],
+    ["october", "november", "december"],
+  ];
+  return quarters.find((q) => q.includes(monthKey)) || [];
+};
+
 // Memoized: chỉ re-render khi đúng row này thay đổi
 const ScheduleRow = React.memo(
   function ScheduleRow({
@@ -389,25 +400,45 @@ const ScheduleRow = React.memo(
             )}
           </Box>
         </TableCell>
-        {visibleMonths.map(({ key }) => (
-          <TableCell
-            key={key}
-            align="center"
-            padding="checkbox"
-            sx={{ backgroundColor: rowBg, minWidth: 52, width: 52 }}
-          >
-            <Checkbox
-              checked={rowData?.[key] ?? false}
-              inputProps={{
-                "data-row-key": rowKey,
-                "data-month-key": key,
-              }}
-              onChange={onCheckboxChange}
-              size="large"
-              sx={CHECKBOX_SX}
-            />
-          </TableCell>
-        ))}
+        {visibleMonths.map(({ key }) => {
+          // --- LOGIC DISABLE THEO QUÝ ---
+          const monthsInQuarter = getMonthsInSameQuarter(key);
+          const isCurrentChecked = rowData?.[key] ?? false;
+
+          // Kiểm tra xem TRONG QUÝ NÀY đã có tháng nào KHÁC tháng hiện tại được tick chưa
+          const hasOtherInQuarterChecked = monthsInQuarter.some(
+            (mKey) => mKey !== key && (rowData?.[mKey] ?? false)
+          );
+
+          return (
+            <TableCell
+              key={key}
+              align="center"
+              padding="checkbox"
+              sx={{ backgroundColor: rowBg, minWidth: 52, width: 52 }}
+            >
+              <Checkbox
+                checked={isCurrentChecked}
+                // Disable nếu tháng khác trong quý đã được chọn
+                // và chính bản thân nó đang không được chọn
+                disabled={hasOtherInQuarterChecked && !isCurrentChecked}
+                inputProps={{
+                  "data-row-key": rowKey,
+                  "data-month-key": key,
+                }}
+                onChange={onCheckboxChange}
+                size="large"
+                sx={{
+                  ...CHECKBOX_SX,
+                  // Thêm style để nhìn rõ ô bị disable
+                  "&.Mui-disabled": {
+                    color: "rgba(0, 0, 0, 0.1)",
+                  },
+                }}
+              />
+            </TableCell>
+          );
+        })}
       </TableRow>
     );
   },

@@ -12342,24 +12342,24 @@ async function autoCancelInternalTransfers() {
 }
 
 // 16:00 thứ 2-6 (timezone Asia/Ho_Chi_Minh)
-cron.schedule("0 16 * * 1-5", autoCreateInventoryCheck, {
-  timezone: "Asia/Ho_Chi_Minh",
-});
+// cron.schedule("0 16 * * 1-5", autoCreateInventoryCheck, {
+//   timezone: "Asia/Ho_Chi_Minh",
+// });
 
 // 15:00 thứ 7 (timezone Asia/Ho_Chi_Minh)
-cron.schedule("0 15 * * 6", autoCreateInventoryCheck, {
-  timezone: "Asia/Ho_Chi_Minh",
-});
+// cron.schedule("0 15 * * 6", autoCreateInventoryCheck, {
+//   timezone: "Asia/Ho_Chi_Minh",
+// });
 
 // 16:30 thứ 2-6 (timezone Asia/Ho_Chi_Minh)
-cron.schedule("30 16 * * 1-5", autoCancelInternalTransfers, {
-  timezone: "Asia/Ho_Chi_Minh",
-});
+// cron.schedule("30 16 * * 1-5", autoCancelInternalTransfers, {
+//   timezone: "Asia/Ho_Chi_Minh",
+// });
 
 // 15:30 thứ 7 (timezone Asia/Ho_Chi_Minh)
-cron.schedule("30 15 * * 6", autoCancelInternalTransfers, {
-  timezone: "Asia/Ho_Chi_Minh",
-});
+// cron.schedule("30 15 * * 6", autoCancelInternalTransfers, {
+//   timezone: "Asia/Ho_Chi_Minh",
+// });
 
 // MARK: MAINTENANCE SCHEDULE DETAIL
 
@@ -12527,7 +12527,12 @@ async function autoCreateMaintenanceScheduleDetail() {
                 : rawContent;
             const filtered = Object.entries(contentObj)
               .filter(([, val]) => val === 1)
-              .map(([name]) => ({ name, is_check: 0 }));
+              .map(([name]) => ({
+                name,
+                is_check: 0,
+                checked_by: null,
+                checked_at: null,
+              }));
             maintenanceContent =
               filtered.length > 0 ? JSON.stringify(filtered) : null;
           }
@@ -12697,6 +12702,7 @@ app.get("/api/maintenance-schedule-detail", async (req, res) => {
         msd.month,
         msd.day,
         msd.maintenance_content_detail,
+        msd.status,
         m.uuid_machine,
         m.code_machine,
         m.type_machine,
@@ -12706,6 +12712,11 @@ app.get("/api/maintenance-schedule-detail", async (req, res) => {
         m.supplier,
         m.serial_machine,
         m.current_status,
+        m.power,
+        m.pressure,
+        m.voltage,
+        m.price,
+        m.note,
         l.name_location,
         d.name_department
       FROM tb_maintenance_schedule_detail msd
@@ -12724,3 +12735,142 @@ app.get("/api/maintenance-schedule-detail", async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 });
+
+// PUT /api/maintenance-schedule-detail/:uuid/status — Cập nhật trạng thái lịch bảo dưỡng
+app.put(
+  "/api/maintenance-schedule-detail/:uuid/status",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { uuid } = req.params;
+      const { status } = req.body;
+      const updatedBy = req.user?.id || null;
+
+      if (!["pending", "completed"].includes(status)) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Trạng thái không hợp lệ" });
+      }
+
+      // Lấy JSON hiện tại
+      const [[row]] = await tpmConnection.query(
+        `SELECT maintenance_content_detail
+         FROM tb_maintenance_schedule_detail
+         WHERE uuid_maintenance_schedule_detail = ?`,
+        [uuid]
+      );
+      if (!row) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Không tìm thấy bản ghi" });
+      }
+
+      // Bước 1: UPDATE status + updated_by → DB tự set updated_at
+      await tpmConnection.query(
+        `UPDATE tb_maintenance_schedule_detail
+         SET status = ?, updated_by = ?
+         WHERE uuid_maintenance_schedule_detail = ?`,
+        [status, updatedBy, uuid]
+      );
+
+      // Bước 2: Lấy updated_at vừa được DB set, dùng DATE_FORMAT để nhận đúng format string
+      const [[{ updatedAt }]] = await tpmConnection.query(
+        `SELECT DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
+         FROM tb_maintenance_schedule_detail
+         WHERE uuid_maintenance_schedule_detail = ?`,
+        [uuid]
+      );
+
+      // Bước 3: Build JSON — checked_at = updatedAt
+      let contentList = [];
+      try {
+        const raw = row.maintenance_content_detail;
+        const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+        contentList = Array.isArray(parsed) ? parsed : [];
+      } catch (_) {
+        contentList = [];
+      }
+
+      const isCompleted = status === "completed";
+      const updatedContent = contentList.map((item) => ({
+        ...item,
+        is_check: isCompleted ? 1 : 0,
+        checked_at: isCompleted ? updatedAt : null,
+        checked_by: isCompleted ? updatedBy : null,
+      }));
+
+      // Bước 4: Cập nhật JSON — updated_at = updated_at để DB không trigger lại
+      await tpmConnection.query(
+        `UPDATE tb_maintenance_schedule_detail
+         SET maintenance_content_detail = ?, updated_at = updated_at
+         WHERE uuid_maintenance_schedule_detail = ?`,
+        [JSON.stringify(updatedContent), uuid]
+      );
+
+      res.json({
+        success: true,
+        updated_by: updatedBy,
+        maintenance_content_detail: updatedContent,
+      });
+    } catch (error) {
+      console.error(
+        "Error updating maintenance schedule detail status:",
+        error
+      );
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+);
+
+// GET /api/maintenance-schedule-detail/machine/:id_machine — Lịch sử bảo dưỡng của 1 máy (tất cả năm)
+app.get(
+  "/api/maintenance-schedule-detail/machine/:id_machine",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { id_machine } = req.params;
+      const [rows] = await tpmConnection.query(
+        `SELECT
+          msd.uuid_maintenance_schedule_detail,
+          msd.year,
+          msd.month,
+          msd.day,
+          msd.status,
+          DATE_FORMAT(msd.updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at,
+          msd.updated_by,
+          CASE
+            WHEN msd.updated_by = 99999 THEN '99999'
+            WHEN msd.updated_by = 99990 THEN '99990'
+            WHEN msd.updated_by = 99900 THEN '99900'
+            WHEN msd.updated_by = 99991 THEN '99991'
+            WHEN msd.updated_by = 99992 THEN '99992'
+            WHEN msd.updated_by = 99993 THEN '99993'
+            WHEN msd.updated_by = 99994 THEN '99994'
+            WHEN msd.updated_by = 99995 THEN '99995'
+            ELSE updater.ma_nv
+          END AS updater_ma_nv,
+          CASE
+            WHEN msd.updated_by = 99999 THEN 'Quản Trị Viên (Test)'
+            WHEN msd.updated_by = 99990 THEN 'Phòng Cơ Điện (Test)'
+            WHEN msd.updated_by = 99900 THEN 'Phòng Cơ Điện (Test)'
+            WHEN msd.updated_by = 99991 THEN 'Cơ Điện Xưởng 1 (Test)'
+            WHEN msd.updated_by = 99992 THEN 'Cơ Điện Xưởng 2 (Test)'
+            WHEN msd.updated_by = 99993 THEN 'Cơ Điện Xưởng 3 (Test)'
+            WHEN msd.updated_by = 99994 THEN 'Cơ Điện Xưởng 4 (Test)'
+            WHEN msd.updated_by = 99995 THEN 'Viewer (Test)'
+            ELSE updater.ten_nv
+          END AS updater_ten_nv
+        FROM tb_maintenance_schedule_detail msd
+        LEFT JOIN ${process.env.DATA_HITIMESHEET_DATABASE}.sync_nhan_vien updater
+          ON updater.id = msd.updated_by
+        WHERE msd.id_machine = ?
+        ORDER BY msd.year ASC, msd.month ASC`,
+        [id_machine]
+      );
+      res.json({ success: true, data: rows });
+    } catch (error) {
+      console.error("Error fetching machine maintenance history:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+);

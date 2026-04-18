@@ -779,6 +779,19 @@ export const api = {
       );
       return response.data;
     },
+    updateScheduleStatus: async (uuid, status) => {
+      const response = await httpConnect.put(
+        `/api/maintenance-schedule-detail/${uuid}/status`,
+        { status }
+      );
+      return response.data;
+    },
+    getMachineHistory: async (id_machine) => {
+      const response = await httpConnect.get(
+        `/api/maintenance-schedule-detail/machine/${id_machine}`
+      );
+      return response.data;
+    },
   },
 };
 

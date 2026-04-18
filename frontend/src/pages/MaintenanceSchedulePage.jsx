@@ -1,6 +1,6 @@
 // frontend/src/pages/MaintenanceSchedulePage.jsx
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Container,
   Typography,
@@ -23,6 +23,17 @@ import {
   InputAdornment,
   Fab,
   Autocomplete,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Checkbox,
+  FormControlLabel,
+  Paper,
+  Table,
+  TableBody,
+  TableRow,
+  TableCell,
 } from "@mui/material";
 import {
   ChevronLeft,
@@ -43,6 +54,8 @@ import {
   Straighten,
   Factory,
   LocalShipping,
+  TaskAlt,
+  HourglassEmpty,
 } from "@mui/icons-material";
 import { alpha } from "@mui/material/styles";
 import NavigationBar from "../components/NavigationBar";
@@ -92,13 +105,820 @@ const STATUS_CONFIG = {
   broken: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Máy hư" },
 };
 
+const MAINT_STATUS_CONFIG = {
+  pending: {
+    label: "Chưa thực hiện",
+    color: "#e65100",
+    bg: "#fff3e0",
+    borderColor: "#ffcc80",
+    icon: HourglassEmpty,
+  },
+  completed: {
+    label: "Đã hoàn thành",
+    color: "#2e7d32",
+    bg: "#e8f5e9",
+    borderColor: "#a5d6a7",
+    icon: TaskAlt,
+  },
+};
+
+// ==================== MaintenanceHistoryDialog Component ====================
+const QUARTER_LABELS = {
+  1: "Quý 1",
+  2: "Quý 2",
+  3: "Quý 3",
+  4: "Quý 4",
+};
+const monthToQuarter = (m) => Math.ceil(m / 3);
+
+const MaintenanceHistoryDialog = ({
+  open,
+  onClose,
+  machine,
+  onStatusChange,
+}) => {
+  const [isNew, setIsNew] = useState(true);
+  const [statusUpdating, setStatusUpdating] = useState(false);
+  const [historyRows, setHistoryRows] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  const fetchHistory = useCallback(async (id_machine) => {
+    if (!id_machine) return;
+    setHistoryLoading(true);
+    try {
+      const res = await api.maintenance.getMachineHistory(id_machine);
+      if (res.success) setHistoryRows(res.data || []);
+    } catch {
+      setHistoryRows([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (open && machine) {
+      setIsNew(true);
+      fetchHistory(machine.id_machine);
+    }
+  }, [open, machine, fetchHistory]);
+
+  const handleToggleStatus = async () => {
+    if (!machine) return;
+    const newStatus = machine.status === "completed" ? "pending" : "completed";
+    setStatusUpdating(true);
+    try {
+      const result = await api.maintenance.updateScheduleStatus(
+        machine.uuid_maintenance_schedule_detail,
+        newStatus
+      );
+      onStatusChange &&
+        onStatusChange(
+          machine.uuid_maintenance_schedule_detail,
+          newStatus,
+          result
+        );
+      // Làm mới bảng lịch sử section C
+      await fetchHistory(machine.id_machine);
+    } catch (e) {
+      void e;
+    } finally {
+      setStatusUpdating(false);
+    }
+  };
+
+  if (!machine) return null;
+
+  let contentList = [];
+  try {
+    if (machine.maintenance_content_detail) {
+      const parsed =
+        typeof machine.maintenance_content_detail === "string"
+          ? JSON.parse(machine.maintenance_content_detail)
+          : machine.maintenance_content_detail;
+      contentList = Array.isArray(parsed) ? parsed : [];
+    }
+  } catch (e) {
+    void e;
+  }
+
+  const labelSx = {
+    fontWeight: 700,
+    fontSize: "0.82rem",
+    color: "#444",
+    minWidth: 160,
+    flexShrink: 0,
+  };
+  const valueSx = { fontSize: "0.82rem", color: "#1a1a2e" };
+
+  const InfoRow = ({ label, value }) => {
+    if (!value && value !== 0) return null;
+    return (
+      <TableRow sx={{ "&:last-child td": { border: 0 } }}>
+        <TableCell
+          sx={{
+            ...labelSx,
+            py: 0.6,
+            px: 1.5,
+            borderRight: "1px solid #e0e0e0",
+            bgcolor: "#fafafa",
+            width: "40%",
+          }}
+        >
+          {label}
+        </TableCell>
+        <TableCell sx={{ ...valueSx, py: 0.6, px: 1.5 }}>{value}</TableCell>
+      </TableRow>
+    );
+  };
+
+  const SectionTitle = ({ children }) => (
+    <Box
+      sx={{ bgcolor: "linear-gradient(90deg,#667eea,#764ba2)", mb: 1, mt: 2 }}
+    >
+      <Typography
+        variant="subtitle2"
+        fontWeight={700}
+        sx={{
+          background: "linear-gradient(90deg,#667eea,#764ba2)",
+          color: "#fff",
+          px: 1.5,
+          py: 0.5,
+          borderRadius: "6px",
+          fontSize: "0.8rem",
+          display: "inline-block",
+        }}
+      >
+        {children}
+      </Typography>
+    </Box>
+  );
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="md"
+      fullWidth
+      PaperProps={{ sx: { borderRadius: "16px", maxHeight: "90vh" } }}
+    >
+      <DialogTitle
+        sx={{
+          background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+          color: "#fff",
+          py: 2,
+          px: 3,
+        }}
+      >
+        <Stack
+          direction="row"
+          alignItems="center"
+          justifyContent="space-between"
+        >
+          <Box>
+            <Stack
+              direction="row"
+              alignItems="center"
+              spacing={1.5}
+              sx={{ flexWrap: "wrap", gap: 0.75 }}
+            >
+              <Typography
+                variant="h6"
+                fontWeight={700}
+                sx={{ lineHeight: 1.3 }}
+              >
+                Lý Lịch Bảo Dưỡng Thiết Bị
+              </Typography>
+              {(() => {
+                const sc =
+                  MAINT_STATUS_CONFIG[machine.status] ||
+                  MAINT_STATUS_CONFIG.pending;
+                const Icon = sc.icon;
+                return (
+                  <Chip
+                    icon={
+                      <Icon
+                        sx={{
+                          fontSize: "14px !important",
+                          color: `${sc.color} !important`,
+                        }}
+                      />
+                    }
+                    label={sc.label}
+                    size="small"
+                    sx={{
+                      bgcolor: sc.bg,
+                      color: sc.color,
+                      border: `1px solid ${sc.borderColor}`,
+                      fontWeight: 700,
+                      fontSize: "0.72rem",
+                    }}
+                  />
+                );
+              })()}
+            </Stack>
+            <Typography variant="caption" sx={{ opacity: 0.85 }}>
+              {machine.type_machine} {machine.attribute_machine}
+              {machine.model_machine ? `· ${machine.model_machine}` : ""}
+            </Typography>
+          </Box>
+          <IconButton onClick={onClose} sx={{ color: "#fff" }}>
+            <Close />
+          </IconButton>
+        </Stack>
+      </DialogTitle>
+
+      <DialogContent sx={{ p: 3, bgcolor: "#f8f9fc" }}>
+        {/* ── Section A: Lý lịch thiết bị ── */}
+        <Paper
+          elevation={0}
+          sx={{
+            border: "1px solid #e0e0e0",
+            borderRadius: "12px",
+            overflow: "hidden",
+            mb: 2,
+            mt: 2,
+          }}
+        >
+          <Box
+            sx={{
+              background: "linear-gradient(90deg,#667eea,#764ba2)",
+              px: 2,
+              py: 1,
+            }}
+          >
+            <Typography
+              variant="subtitle1"
+              fontWeight={700}
+              sx={{ color: "#fff", letterSpacing: "0.03em" }}
+            >
+              A. LÝ LỊCH THIẾT BỊ
+            </Typography>
+          </Box>
+
+          <Box sx={{ p: 2 }}>
+            {/* 1. Tên & định danh */}
+            <SectionTitle>1. Thông tin cơ bản</SectionTitle>
+            <Table
+              size="small"
+              sx={{
+                border: "1px solid #e0e0e0",
+                borderRadius: "8px",
+                overflow: "hidden",
+                mb: 1,
+              }}
+            >
+              <TableBody>
+                <InfoRow label="Tên thiết bị" value={machine.type_machine} />
+                <InfoRow
+                  label="Ký hiệu (Model)"
+                  value={machine.model_machine}
+                />
+                <InfoRow
+                  label="Số máy (Serial)"
+                  value={machine.serial_machine}
+                />
+                <InfoRow label="Công dụng" value={machine.attribute_machine} />
+                <InfoRow
+                  label="Nơi chế tạo / Hãng SX"
+                  value={machine.manufacturer}
+                />
+              </TableBody>
+            </Table>
+
+            {/* 5. Tình trạng thiết bị */}
+            <SectionTitle>2. Tình trạng thiết bị</SectionTitle>
+            <Box sx={{ px: 1, py: 0.5, mb: 1 }}>
+              <Stack direction="row" spacing={3}>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={isNew}
+                      onChange={() => setIsNew(true)}
+                      sx={{
+                        color: "#667eea",
+                        "&.Mui-checked": { color: "#667eea" },
+                      }}
+                    />
+                  }
+                  label={
+                    <Typography
+                      sx={{
+                        fontSize: "0.85rem",
+                        fontWeight: isNew ? 700 : 400,
+                      }}
+                    >
+                      Mới 100%
+                    </Typography>
+                  }
+                />
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={!isNew}
+                      onChange={() => setIsNew(false)}
+                      sx={{
+                        color: "#764ba2",
+                        "&.Mui-checked": { color: "#764ba2" },
+                      }}
+                    />
+                  }
+                  label={
+                    <Typography
+                      sx={{
+                        fontSize: "0.85rem",
+                        fontWeight: !isNew ? 700 : 400,
+                      }}
+                    >
+                      Đã qua sử dụng
+                    </Typography>
+                  }
+                />
+              </Stack>
+            </Box>
+
+            {/* 6. Thông số kỹ thuật */}
+            <SectionTitle>3. Thông số kỹ thuật thiết bị</SectionTitle>
+            <Table
+              size="small"
+              sx={{
+                border: "1px solid #e0e0e0",
+                borderRadius: "8px",
+                overflow: "hidden",
+                mb: 1,
+              }}
+            >
+              <TableBody>
+                <InfoRow label="Công suất (KW/HP)" value={machine.power} />
+                <InfoRow label="Áp suất" value={machine.pressure} />
+                <InfoRow label="Điện áp" value={machine.voltage} />
+                <InfoRow
+                  label="Đơn giá gốc (VNĐ)"
+                  value={
+                    machine.price
+                      ? Number(machine.price).toLocaleString("en-US") + " ₫"
+                      : null
+                  }
+                />
+              </TableBody>
+            </Table>
+            {!machine.power &&
+              !machine.pressure &&
+              !machine.voltage &&
+              !machine.price && (
+                <Typography
+                  variant="caption"
+                  color="text.disabled"
+                  sx={{ pl: 1 }}
+                >
+                  Chưa có thông số kỹ thuật
+                </Typography>
+              )}
+
+            {/* 7. Quy ước bảo dưỡng */}
+            <SectionTitle>4. Quy ước về bảo dưỡng thiết bị</SectionTitle>
+
+            {/* 7a. Lịch xích sửa chữa */}
+            <Box sx={{ pl: 1, mb: 1.5 }}>
+              <Typography
+                variant="body2"
+                fontWeight={700}
+                sx={{ mb: 0.75, fontSize: "0.8rem", color: "#555" }}
+              >
+                a. Lịch xích sửa chữa
+              </Typography>
+              <Box sx={{ pl: 1 }}>
+                <Typography
+                  variant="caption"
+                  fontWeight={600}
+                  color="text.secondary"
+                  sx={{ display: "block", mb: 0.5 }}
+                >
+                  Chu kỳ sửa chữa:
+                </Typography>
+                <Stack direction="row" spacing={2} sx={{ pl: 1, mb: 1 }}>
+                  <Paper
+                    variant="outlined"
+                    sx={{
+                      px: 1.5,
+                      py: 0.75,
+                      borderRadius: "8px",
+                      flex: 1,
+                      textAlign: "center",
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: "block" }}
+                    >
+                      Xem xét bảo dưỡng
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      fontWeight={700}
+                      color="#667eea"
+                    >
+                      3 tháng
+                    </Typography>
+                  </Paper>
+                  <Paper
+                    variant="outlined"
+                    sx={{
+                      px: 1.5,
+                      py: 0.75,
+                      borderRadius: "8px",
+                      flex: 1,
+                      textAlign: "center",
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: "block" }}
+                    >
+                      Bảo trì định kỳ
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      fontWeight={700}
+                      color="#764ba2"
+                    >
+                      5 năm
+                    </Typography>
+                  </Paper>
+                </Stack>
+
+                {machine.note && (
+                  <Box sx={{ pl: 1 }}>
+                    <Typography
+                      variant="caption"
+                      fontWeight={600}
+                      color="text.secondary"
+                      sx={{ display: "block", mb: 0.5 }}
+                    >
+                      Các lưu ý khác:
+                    </Typography>
+                    <Paper
+                      variant="outlined"
+                      sx={{
+                        p: 1.25,
+                        borderRadius: "8px",
+                      }}
+                    >
+                      <Typography
+                        variant="body2"
+                        sx={{ fontSize: "0.82rem", whiteSpace: "pre-wrap" }}
+                      >
+                        {machine.note}
+                      </Typography>
+                    </Paper>
+                  </Box>
+                )}
+              </Box>
+            </Box>
+
+            {/* 7b. Nội dung xem xét bảo dưỡng */}
+            <Box sx={{ pl: 1 }}>
+              <Typography
+                variant="body2"
+                fontWeight={700}
+                sx={{ mb: 0.75, fontSize: "0.8rem", color: "#555" }}
+              >
+                b. Nội dung xem xét bảo dưỡng
+              </Typography>
+              {contentList.length > 0 ? (
+                <Stack spacing={0.5} sx={{ pl: 1 }}>
+                  {contentList.map((item, idx) => (
+                    <Stack
+                      key={idx}
+                      direction="row"
+                      spacing={1}
+                      alignItems="flex-start"
+                    >
+                      <CheckCircle
+                        sx={{
+                          fontSize: 14,
+                          mt: 0.25,
+                          color: item.is_check ? "#2e7d32" : "#bdbdbd",
+                          flexShrink: 0,
+                        }}
+                      />
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          fontSize: "0.82rem",
+                          color: item.is_check ? "#2e7d32" : "text.primary",
+                          textDecoration: item.is_check
+                            ? "line-through"
+                            : "none",
+                        }}
+                      >
+                        {item.name}
+                      </Typography>
+                    </Stack>
+                  ))}
+                </Stack>
+              ) : (
+                <Typography
+                  variant="caption"
+                  color="text.disabled"
+                  sx={{ pl: 1 }}
+                >
+                  Chưa có nội dung bảo dưỡng
+                </Typography>
+              )}
+            </Box>
+          </Box>
+        </Paper>
+
+        {/* ── Section B: placeholder ── */}
+        <Paper
+          elevation={0}
+          sx={{
+            border: "1px dashed #bdbdbd",
+            borderRadius: "12px",
+            p: 2,
+            mb: 2,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            minHeight: 56,
+          }}
+        >
+          <Typography
+            variant="caption"
+            color="text.disabled"
+            sx={{ textAlign: "center", fontStyle: "italic" }}
+          >
+            B. Thông tin đơn vị quản lý thiết bị
+            <br />
+            (Đang phát triển)
+          </Typography>
+        </Paper>
+
+        {/* ── Section C: Bảng tổng hợp lịch bảo dưỡng ── */}
+        <Paper
+          elevation={0}
+          sx={{
+            border: "1px solid #e0e0e0",
+            borderRadius: "12px",
+            overflow: "hidden",
+          }}
+        >
+          <Box
+            sx={{
+              background: "linear-gradient(90deg,#00897b,#26a69a)",
+              px: 2,
+              py: 1,
+            }}
+          >
+            <Typography
+              variant="subtitle1"
+              fontWeight={700}
+              sx={{ color: "#fff", letterSpacing: "0.03em" }}
+            >
+              C. KIỂM TRA THAY DẦU, HOÁ CHẤT, VỆ SINH ĐỊNH KỲ
+            </Typography>
+          </Box>
+
+          {historyLoading ? (
+            <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
+              <CircularProgress size={28} sx={{ color: "#00897b" }} />
+            </Box>
+          ) : historyRows.length === 0 ? (
+            <Box sx={{ py: 3, textAlign: "center" }}>
+              <Typography
+                variant="caption"
+                color="text.disabled"
+                fontStyle="italic"
+              >
+                Chưa có dữ liệu lịch bảo dưỡng
+              </Typography>
+            </Box>
+          ) : (
+            <Box sx={{ overflowX: "auto" }}>
+              <Table size="small">
+                <TableBody>
+                  {/* Header row */}
+                  <TableRow sx={{ bgcolor: "#f5f5f5" }}>
+                    {[
+                      "Năm",
+                      "Quý",
+                      "Trạng thái",
+                      "Ngày cập nhật",
+                      "Người cập nhật",
+                    ].map((col) => (
+                      <TableCell
+                        key={col}
+                        sx={{
+                          fontWeight: 700,
+                          fontSize: "0.78rem",
+                          color: "#555",
+                          borderBottom: "2px solid #e0e0e0",
+                          py: 0.75,
+                          px: 1.5,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {col}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+
+                  {/* Data rows grouped by year */}
+                  {(() => {
+                    // Group by year for row-span rendering
+                    const yearGroups = {};
+                    historyRows.forEach((r) => {
+                      if (!yearGroups[r.year]) yearGroups[r.year] = [];
+                      yearGroups[r.year].push(r);
+                    });
+
+                    return historyRows.map((row, idx) => {
+                      const isCurrentRecord =
+                        row.uuid_maintenance_schedule_detail ===
+                        machine?.uuid_maintenance_schedule_detail;
+                      const sc =
+                        MAINT_STATUS_CONFIG[row.status] ||
+                        MAINT_STATUS_CONFIG.pending;
+                      const Icon = sc.icon;
+                      const quarter = monthToQuarter(row.month);
+                      const yearGroup = yearGroups[row.year];
+                      const isFirstInYear = yearGroup[0] === row;
+
+                      return (
+                        <TableRow
+                          key={row.uuid_maintenance_schedule_detail}
+                          sx={{
+                            bgcolor: isCurrentRecord
+                              ? alpha(sc.color, 0.06)
+                              : idx % 2 === 0
+                                ? "#fff"
+                                : "#fafafa",
+                          }}
+                        >
+                          {/* Năm — rowSpan cho nhóm cùng năm */}
+                          {isFirstInYear && (
+                            <TableCell
+                              rowSpan={yearGroup.length}
+                              sx={{
+                                fontWeight: 700,
+                                fontSize: "0.82rem",
+                                color: "#1a1a2e",
+                                verticalAlign: "middle",
+                                textAlign: "center",
+                                px: 1.5,
+                                borderRight: "1px solid #e0e0e0",
+                                bgcolor: "#f8f8f8",
+                              }}
+                            >
+                              {row.year}
+                            </TableCell>
+                          )}
+
+                          {/* Quý */}
+                          <TableCell
+                            sx={{
+                              px: 1.5,
+                              py: 0.75,
+                              fontSize: "0.8rem",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {QUARTER_LABELS[quarter]}
+                          </TableCell>
+
+                          {/* Trạng thái */}
+                          <TableCell sx={{ px: 1.5, py: 0.75 }}>
+                            <Chip
+                              icon={
+                                <Icon
+                                  sx={{
+                                    fontSize: "12px !important",
+                                    color: `${sc.color} !important`,
+                                  }}
+                                />
+                              }
+                              label={sc.label}
+                              size="small"
+                              sx={{
+                                bgcolor: sc.bg,
+                                color: sc.color,
+                                border: `1px solid ${sc.borderColor}`,
+                                fontWeight: 700,
+                                fontSize: "0.7rem",
+                                height: 20,
+                                "& .MuiChip-label": { px: 0.75 },
+                                "& .MuiChip-icon": { ml: 0.5 },
+                              }}
+                            />
+                          </TableCell>
+
+                          {/* Ngày cập nhật */}
+                          <TableCell
+                            sx={{
+                              px: 1.5,
+                              py: 0.75,
+                              fontSize: "0.78rem",
+                              color: "text.secondary",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {row.updated_at || "—"}
+                          </TableCell>
+
+                          {/* Người cập nhật */}
+                          <TableCell
+                            sx={{
+                              px: 1.5,
+                              py: 0.75,
+                              fontSize: "0.78rem",
+                              color: "text.secondary",
+                            }}
+                          >
+                            {row.updater_ten_nv
+                              ? row.updater_ma_nv
+                                ? `${row.updater_ma_nv}: ${row.updater_ten_nv}`
+                                : row.updater_ten_nv
+                              : "—"}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    });
+                  })()}
+                </TableBody>
+              </Table>
+            </Box>
+          )}
+        </Paper>
+      </DialogContent>
+
+      <DialogActions
+        sx={{
+          px: 3,
+          py: 2,
+          borderTop: "1px solid #e0e0e0",
+          justifyContent: "space-between",
+        }}
+      >
+        {/* Status toggle */}
+        {(() => {
+          const isCompleted = machine.status === "completed";
+          return (
+            <Button
+              variant="outlined"
+              startIcon={
+                statusUpdating ? (
+                  <CircularProgress size={14} />
+                ) : isCompleted ? (
+                  <HourglassEmpty />
+                ) : (
+                  <TaskAlt />
+                )
+              }
+              onClick={handleToggleStatus}
+              disabled={statusUpdating}
+              sx={{
+                borderRadius: "10px",
+                borderColor: isCompleted ? "#e65100" : "#2e7d32",
+                color: isCompleted ? "#e65100" : "#2e7d32",
+                "&:hover": {
+                  borderColor: isCompleted ? "#bf360c" : "#1b5e20",
+                  bgcolor: isCompleted ? "#fff3e0" : "#e8f5e9",
+                },
+                fontWeight: 600,
+              }}
+            >
+              {isCompleted ? "Đánh dấu chưa thực hiện" : "Đánh dấu hoàn thành"}
+            </Button>
+          );
+        })()}
+        <Button
+          onClick={onClose}
+          variant="contained"
+          sx={{
+            borderRadius: "10px",
+            background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+            px: 3,
+          }}
+        >
+          Đóng
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
 // ==================== MachineCard Component ====================
-const MachineCard = ({ machine }) => {
+const MachineCard = React.memo(({ machine, onClick }) => {
   const statusCfg = STATUS_CONFIG[machine.current_status] || {
     label: machine.current_status || "N/A",
     color: "#757575",
     bg: "#f5f5f5",
   };
+  const maintStatusCfg =
+    MAINT_STATUS_CONFIG[machine.status] || MAINT_STATUS_CONFIG.pending;
+  const MaintIcon = maintStatusCfg.icon;
 
   let contentList = [];
   try {
@@ -116,14 +936,20 @@ const MachineCard = ({ machine }) => {
   return (
     <Card
       elevation={1}
+      onClick={onClick}
       sx={{
         borderRadius: "16px",
-        border: "1px solid rgba(0,0,0,0.08)",
+        border: `1px solid ${machine.status === "completed" ? "#a5d6a7" : "rgba(0,0,0,0.08)"}`,
+        borderLeft: `4px solid ${maintStatusCfg.color}`,
         transition: "all 0.2s ease",
         height: "100%",
+        cursor: "pointer",
+        bgcolor: machine.status === "completed" ? "#f9fff9" : "#fff",
         "&:hover": {
-          boxShadow: "0 4px 20px rgba(0,0,0,0.12)",
+          boxShadow: "0 4px 20px rgba(102,126,234,0.2)",
           transform: "translateY(-2px)",
+          borderColor: `${maintStatusCfg.color}66`,
+          borderLeftColor: maintStatusCfg.color,
         },
       }}
     >
@@ -315,19 +1141,47 @@ const MachineCard = ({ machine }) => {
           </Box>
         )}
 
-        {/* Date badge */}
+        {/* Date badge + maintenance status */}
         <Box sx={{ mt: 1, pt: 0.75, borderTop: "1px dashed #e0e0e0" }}>
-          <Typography
-            variant="caption"
-            sx={{ color: "#667eea", fontWeight: 700, fontSize: "0.75rem" }}
+          <Stack
+            direction="row"
+            alignItems="center"
+            justifyContent="space-between"
           >
-            Ngày {machine.day}/{machine.month}/{machine.year}
-          </Typography>
+            <Typography
+              variant="caption"
+              sx={{ color: "#667eea", fontWeight: 700, fontSize: "0.75rem" }}
+            >
+              Ngày {machine.day}/{machine.month}/{machine.year}
+            </Typography>
+            <Chip
+              icon={
+                <MaintIcon
+                  sx={{
+                    fontSize: "11px !important",
+                    color: `${maintStatusCfg.color} !important`,
+                  }}
+                />
+              }
+              label={maintStatusCfg.label}
+              size="small"
+              sx={{
+                height: 18,
+                fontSize: "0.62rem",
+                fontWeight: 700,
+                bgcolor: maintStatusCfg.bg,
+                color: maintStatusCfg.color,
+                border: `1px solid ${maintStatusCfg.borderColor}`,
+                "& .MuiChip-label": { px: 0.75 },
+                "& .MuiChip-icon": { ml: 0.5 },
+              }}
+            />
+          </Stack>
         </Box>
       </CardContent>
     </Card>
   );
-};
+});
 
 // ==================== CalendarCard Component ====================
 const CalendarCard = ({
@@ -482,16 +1336,24 @@ const GroupedByDay = ({
   currentYear,
   currentMonth,
   vnToday,
+  onCardClick,
 }) => {
-  const grouped = {};
-  machines.forEach((m) => {
-    if (!grouped[m.day]) grouped[m.day] = [];
-    grouped[m.day].push(m);
-  });
+  const grouped = useMemo(() => {
+    const res = {};
+    machines.forEach((m) => {
+      if (!res[m.day]) res[m.day] = [];
+      res[m.day].push(m);
+    });
+    return res;
+  }, [machines]);
 
-  const sortedDays = Object.keys(grouped)
-    .map(Number)
-    .sort((a, b) => a - b);
+  const sortedDays = useMemo(
+    () =>
+      Object.keys(grouped)
+        .map(Number)
+        .sort((a, b) => a - b),
+    [grouped]
+  );
 
   const isToday = (day) =>
     day === vnToday.getDate() &&
@@ -597,12 +1459,15 @@ const GroupedByDay = ({
             </Stack>
 
             <Grid container spacing={2} sx={{ pl: 1 }}>
-              {dayMachines.map((machine, idx) => (
+              {grouped[day].map((machine, idx) => (
                 <Grid
-                  key={machine.id_maintenance_schedule_detail || idx}
+                  key={machine.uuid_maintenance_schedule_detail || idx}
                   size={{ xs: 12, sm: 6, md: 4, lg: 3 }}
                 >
-                  <MachineCard machine={machine} />
+                  <MachineCard
+                    machine={machine}
+                    onClick={() => onCardClick && onCardClick(machine)}
+                  />
                 </Grid>
               ))}
             </Grid>
@@ -695,6 +1560,41 @@ const MaintenanceSchedulePage = () => {
   const [filterModel, setFilterModel] = useState(null);
   const [filterManufacturer, setFilterManufacturer] = useState(null);
   const [filterSupplier, setFilterSupplier] = useState(null);
+  const [filterStatus, setFilterStatus] = useState(null); // null | 'pending' | 'completed'
+
+  // ── Maintenance history dialog ──
+  const [historyDialogMachine, setHistoryDialogMachine] = useState(null);
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+
+  const handleCardClick = (machine) => {
+    setHistoryDialogMachine(machine);
+    setHistoryDialogOpen(true);
+  };
+
+  const handleCloseHistoryDialog = () => {
+    setHistoryDialogOpen(false);
+  };
+
+  const handleStatusChange = (uuid, newStatus, result) => {
+    const patch = {
+      status: newStatus,
+      ...(result?.maintenance_content_detail
+        ? { maintenance_content_detail: result.maintenance_content_detail }
+        : {}),
+    };
+    setScheduleData((prev) =>
+      prev.map((item) =>
+        item.uuid_maintenance_schedule_detail === uuid
+          ? { ...item, ...patch }
+          : item
+      )
+    );
+    setHistoryDialogMachine((prev) =>
+      prev && prev.uuid_maintenance_schedule_detail === uuid
+        ? { ...prev, ...patch }
+        : prev
+    );
+  };
 
   // ── Scroll-to-top FAB ──
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -737,6 +1637,7 @@ const MaintenanceSchedulePage = () => {
     setFilterModel(null);
     setFilterManufacturer(null);
     setFilterSupplier(null);
+    setFilterStatus(null);
   };
 
   // Reset filters + day when month changes
@@ -845,7 +1746,8 @@ const MaintenanceSchedulePage = () => {
     filterAttribute ||
     filterModel ||
     filterManufacturer ||
-    filterSupplier;
+    filterSupplier ||
+    filterStatus;
 
   const clearFilters = () => {
     resetAllFilters();
@@ -853,46 +1755,96 @@ const MaintenanceSchedulePage = () => {
   };
 
   // ── Apply all filters → passed to CalendarCard ──
-  const deptLocationFiltered = scheduleData.filter((item) => {
-    if (filterDepartment && item.name_department !== filterDepartment)
-      return false;
-    if (filterLocation && item.name_location !== filterLocation) return false;
-    if (filterType && item.type_machine !== filterType) return false;
-    if (filterAttribute && item.attribute_machine !== filterAttribute)
-      return false;
-    if (filterModel && item.model_machine !== filterModel) return false;
-    if (filterManufacturer && item.manufacturer !== filterManufacturer)
-      return false;
-    if (filterSupplier && item.supplier !== filterSupplier) return false;
-    return true;
-  });
+  const deptLocationFiltered = useMemo(() => {
+    return scheduleData.filter((item) => {
+      if (filterDepartment && item.name_department !== filterDepartment)
+        return false;
+      if (filterLocation && item.name_location !== filterLocation) return false;
+      if (filterType && item.type_machine !== filterType) return false;
+      if (filterAttribute && item.attribute_machine !== filterAttribute)
+        return false;
+      if (filterModel && item.model_machine !== filterModel) return false;
+      if (filterManufacturer && item.manufacturer !== filterManufacturer)
+        return false;
+      if (filterSupplier && item.supplier !== filterSupplier) return false;
+      return true;
+    });
+  }, [
+    scheduleData,
+    filterDepartment,
+    filterLocation,
+    filterType,
+    filterAttribute,
+    filterModel,
+    filterManufacturer,
+    filterSupplier,
+  ]);
 
-  // ── Full filtered list for machine cards (+ day + search) ──
-  const filteredMachines = deptLocationFiltered.filter((item) => {
-    if (selectedDay && item.day !== selectedDay) return false;
-    if (!searchTerm) return true;
-    const q = searchTerm.toLowerCase();
-    return (
-      (item.type_machine || "").toLowerCase().includes(q) ||
-      (item.attribute_machine || "").toLowerCase().includes(q) ||
-      (item.model_machine || "").toLowerCase().includes(q) ||
-      (item.serial_machine || "").toLowerCase().includes(q) ||
-      (item.name_location || "").toLowerCase().includes(q) ||
-      (item.name_department || "").toLowerCase().includes(q) ||
-      (item.manufacturer || "").toLowerCase().includes(q) ||
-      (item.supplier || "").toLowerCase().includes(q)
-    );
-  });
+  // ── Số máy hiển thị trên lịch = chỉ tính pending (còn phải làm) ──
+  const calendarCountData = deptLocationFiltered.filter(
+    (i) => i.status !== "completed"
+  );
+
+  // ── Full filtered list for machine cards (+ day + search + status) ──
+  const filteredMachines = useMemo(() => {
+    return deptLocationFiltered.filter((item) => {
+      if (selectedDay && item.day !== selectedDay) return false;
+      if (filterStatus && item.status !== filterStatus) return false;
+      if (!searchTerm) return true;
+      const q = searchTerm.toLowerCase();
+      return (
+        (item.type_machine || "").toLowerCase().includes(q) ||
+        (item.attribute_machine || "").toLowerCase().includes(q) ||
+        (item.model_machine || "").toLowerCase().includes(q) ||
+        (item.serial_machine || "").toLowerCase().includes(q) ||
+        (item.name_location || "").toLowerCase().includes(q) ||
+        (item.name_department || "").toLowerCase().includes(q) ||
+        (item.manufacturer || "").toLowerCase().includes(q) ||
+        (item.supplier || "").toLowerCase().includes(q)
+      );
+    });
+  }, [deptLocationFiltered, selectedDay, filterStatus, searchTerm]);
+
+  // Thêm state quản lý số lượng hiển thị
+  const [visibleCount, setVisibleCount] = useState(40);
+
+  // Reset visibleCount khi filter hoặc đổi tháng
+  useEffect(() => {
+    setVisibleCount(40);
+  }, [searchTerm, filterDepartment, currentMonth, selectedDay]);
+
+  // Logic xử lý khi cuộn trang
+  useEffect(() => {
+    const handleScroll = () => {
+      if (
+        window.innerHeight + window.scrollY >=
+        document.body.offsetHeight - 500
+      ) {
+        setVisibleCount((prev) => Math.min(prev + 40, filteredMachines.length));
+      }
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [filteredMachines.length]);
+
+  // Cắt danh sách để hiển thị
+  const displayedMachines = useMemo(() => {
+    return filteredMachines.slice(0, visibleCount);
+  }, [filteredMachines, visibleCount]);
 
   // ── Stats (based on filtered data) ──
   const totalMachines = deptLocationFiltered.length;
+  // Hôm nay: chỉ tính pending (chưa hoàn thành)
   const todayMachines = deptLocationFiltered.filter(
     (i) =>
+      i.status !== "completed" &&
       i.day === vnToday.getDate() &&
       currentMonth === vnToday.getMonth() + 1 &&
       currentYear === vnToday.getFullYear()
   ).length;
-  const activeDays = new Set(deptLocationFiltered.map((i) => i.day)).size;
+  const completedMachines = deptLocationFiltered.filter(
+    (i) => i.status === "completed"
+  ).length;
 
   return (
     <>
@@ -1014,7 +1966,7 @@ const MaintenanceSchedulePage = () => {
                   <CalendarCard
                     year={currentYear}
                     month={currentMonth}
-                    scheduleData={deptLocationFiltered}
+                    scheduleData={calendarCountData}
                     selectedDay={selectedDay}
                     onDayClick={handleDayClick}
                   />
@@ -1178,6 +2130,61 @@ const MaintenanceSchedulePage = () => {
                     />
                   </FilterGroup>
 
+                  {/* Group 4: Trạng thái */}
+                  <FilterGroup label="Trạng thái">
+                    <Stack direction="row" spacing={0.75}>
+                      {[
+                        { value: null, label: "Tất cả" },
+                        {
+                          value: "pending",
+                          label: "Chưa thực hiện",
+                          color: MAINT_STATUS_CONFIG.pending.color,
+                          bg: MAINT_STATUS_CONFIG.pending.bg,
+                          border: MAINT_STATUS_CONFIG.pending.borderColor,
+                        },
+                        {
+                          value: "completed",
+                          label: "Hoàn thành",
+                          color: MAINT_STATUS_CONFIG.completed.color,
+                          bg: MAINT_STATUS_CONFIG.completed.bg,
+                          border: MAINT_STATUS_CONFIG.completed.borderColor,
+                        },
+                      ].map((opt) => {
+                        const isActive = filterStatus === opt.value;
+                        return (
+                          <Box
+                            key={String(opt.value)}
+                            onClick={() => setFilterStatus(opt.value)}
+                            sx={{
+                              flex: 1,
+                              textAlign: "center",
+                              py: 0.6,
+                              px: 0.5,
+                              borderRadius: "8px",
+                              border: `1px solid ${isActive ? opt.border || "#667eea" : "#e0e0e0"}`,
+                              bgcolor: isActive
+                                ? opt.bg || "rgba(102,126,234,0.1)"
+                                : "transparent",
+                              color: isActive
+                                ? opt.color || "#667eea"
+                                : "text.secondary",
+                              fontWeight: isActive ? 700 : 400,
+                              fontSize: "0.72rem",
+                              cursor: "pointer",
+                              transition: "all 0.15s ease",
+                              "&:hover": {
+                                bgcolor: opt.bg || "rgba(102,126,234,0.08)",
+                                borderColor: opt.border || "#667eea",
+                              },
+                            }}
+                          >
+                            {opt.label}
+                          </Box>
+                        );
+                      })}
+                    </Stack>
+                  </FilterGroup>
+
                   {/* Active filter chips */}
                   {hasActiveFilter && (
                     <Stack
@@ -1312,7 +2319,7 @@ const MaintenanceSchedulePage = () => {
                     fontWeight={600}
                     sx={{ display: "block", mb: 1 }}
                   >
-                    Thống kê tháng này{hasActiveFilter ? " (đã lọc)" : ""}
+                    Thống kê tháng này:
                   </Typography>
                   <Grid container spacing={1}>
                     {[
@@ -1325,12 +2332,13 @@ const MaintenanceSchedulePage = () => {
                       {
                         label: "Hôm nay",
                         value: todayMachines,
+                        sublabel: "còn lại",
                         color: "#764ba2",
                         bg: "rgba(118,75,162,0.08)",
                       },
                       {
-                        label: "Ngày BD",
-                        value: activeDays,
+                        label: "Hoàn thành",
+                        value: completedMachines,
                         color: "#2e7d32",
                         bg: "#e8f5e9",
                       },
@@ -1354,10 +2362,23 @@ const MaintenanceSchedulePage = () => {
                           <Typography
                             variant="caption"
                             color="text.secondary"
-                            sx={{ fontSize: "0.65rem" }}
+                            sx={{ fontSize: "0.62rem", lineHeight: 1.1 }}
                           >
                             {s.label}
                           </Typography>
+                          {s.sublabel && (
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                fontSize: "0.58rem",
+                                color: "text.secondary",
+                                display: "block",
+                                lineHeight: 1,
+                              }}
+                            >
+                              {s.sublabel}
+                            </Typography>
+                          )}
                         </Box>
                       </Grid>
                     ))}
@@ -1404,7 +2425,7 @@ const MaintenanceSchedulePage = () => {
                             : `${MONTH_NAMES[currentMonth - 1]} ${currentYear}`}
                         </Typography>
                         <Chip
-                          label={`${filteredMachines.length} máy`}
+                          label={`${displayedMachines.length} máy`}
                           size="small"
                           sx={{
                             bgcolor: "rgba(102,126,234,0.1)",
@@ -1478,7 +2499,7 @@ const MaintenanceSchedulePage = () => {
                   >
                     <CircularProgress />
                   </Box>
-                ) : filteredMachines.length === 0 ? (
+                ) : displayedMachines.length === 0 ? (
                   <Box
                     sx={{
                       display: "flex",
@@ -1514,22 +2535,26 @@ const MaintenanceSchedulePage = () => {
                   </Box>
                 ) : selectedDay ? (
                   <Grid container spacing={2}>
-                    {filteredMachines.map((machine, idx) => (
+                    {displayedMachines.map((machine, idx) => (
                       <Grid
-                        key={machine.id_maintenance_schedule_detail || idx}
+                        key={machine.uuid_maintenance_schedule_detail || idx}
                         size={{ xs: 12, sm: 6, md: 4, lg: 3 }}
                       >
-                        <MachineCard machine={machine} />
+                        <MachineCard
+                          machine={machine}
+                          onClick={() => handleCardClick(machine)}
+                        />
                       </Grid>
                     ))}
                   </Grid>
                 ) : (
                   <GroupedByDay
-                    machines={filteredMachines}
+                    machines={displayedMachines}
                     onDaySelect={handleDayClick}
                     currentYear={currentYear}
                     currentMonth={currentMonth}
                     vnToday={vnToday}
+                    onCardClick={handleCardClick}
                   />
                 )}
               </CardContent>
@@ -1537,6 +2562,14 @@ const MaintenanceSchedulePage = () => {
           </Grid>
         </Grid>
       </Container>
+
+      {/* ── Maintenance History Dialog ── */}
+      <MaintenanceHistoryDialog
+        open={historyDialogOpen}
+        onClose={handleCloseHistoryDialog}
+        machine={historyDialogMachine}
+        onStatusChange={handleStatusChange}
+      />
 
       {/* ── FAB: Scroll to top ── */}
       {showScrollTop && (
