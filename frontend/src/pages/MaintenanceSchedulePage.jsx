@@ -62,6 +62,7 @@ import {
 import { alpha } from "@mui/material/styles";
 import NavigationBar from "../components/NavigationBar";
 import { api } from "../api/api";
+import { useAuth } from "../hooks/useAuth";
 
 const MONTH_NAMES = [
   "Tháng 1",
@@ -139,6 +140,11 @@ const MaintenanceHistoryDialog = ({
   machine,
   onStatusChange,
 }) => {
+  const { permissions = [] } = useAuth() || {};
+  const isAdmin = permissions.includes("admin");
+  const canEdit = permissions.includes("edit");
+  const canToggleStatus = isAdmin || canEdit;
+
   const [isNew, setIsNew] = useState(true);
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [historyRows, setHistoryRows] = useState([]);
@@ -1307,38 +1313,44 @@ const MaintenanceHistoryDialog = ({
           justifyContent: "space-between",
         }}
       >
-        {/* Status toggle */}
-        {(() => {
-          const isCompleted = machine.status === "completed";
-          return (
-            <Button
-              variant="outlined"
-              startIcon={
-                statusUpdating ? (
-                  <CircularProgress size={14} />
-                ) : isCompleted ? (
-                  <HourglassEmpty />
-                ) : (
-                  <TaskAlt />
-                )
-              }
-              onClick={handleToggleStatus}
-              disabled={statusUpdating}
-              sx={{
-                borderRadius: "10px",
-                borderColor: isCompleted ? "#e65100" : "#2e7d32",
-                color: isCompleted ? "#e65100" : "#2e7d32",
-                "&:hover": {
-                  borderColor: isCompleted ? "#bf360c" : "#1b5e20",
-                  bgcolor: isCompleted ? "#fff3e0" : "#e8f5e9",
-                },
-                fontWeight: 600,
-              }}
-            >
-              {isCompleted ? "Đánh dấu chưa thực hiện" : "Đánh dấu hoàn thành"}
-            </Button>
-          );
-        })()}
+        {/* Status toggle — chỉ hiện cho admin hoặc user có quyền edit */}
+        {canToggleStatus ? (
+          (() => {
+            const isCompleted = machine.status === "completed";
+            return (
+              <Button
+                variant="outlined"
+                startIcon={
+                  statusUpdating ? (
+                    <CircularProgress size={14} />
+                  ) : isCompleted ? (
+                    <HourglassEmpty />
+                  ) : (
+                    <TaskAlt />
+                  )
+                }
+                onClick={handleToggleStatus}
+                disabled={statusUpdating}
+                sx={{
+                  borderRadius: "10px",
+                  borderColor: isCompleted ? "#e65100" : "#2e7d32",
+                  color: isCompleted ? "#e65100" : "#2e7d32",
+                  "&:hover": {
+                    borderColor: isCompleted ? "#bf360c" : "#1b5e20",
+                    bgcolor: isCompleted ? "#fff3e0" : "#e8f5e9",
+                  },
+                  fontWeight: 600,
+                }}
+              >
+                {isCompleted
+                  ? "Đánh dấu chưa thực hiện"
+                  : "Đánh dấu hoàn thành"}
+              </Button>
+            );
+          })()
+        ) : (
+          <Box />
+        )}
         <Stack direction="row" spacing={1}>
           <Button
             variant="outlined"
