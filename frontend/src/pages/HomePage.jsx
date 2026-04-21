@@ -369,6 +369,73 @@ const HomePage = () => {
                 </CardContent>
               </Card>
             </Grid>
+
+            {/* Lịch bảo dưỡng */}
+            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+              <Card
+                elevation={0}
+                sx={{
+                  height: "100%",
+                  borderRadius: "20px",
+                  border: "1px solid rgba(0, 0, 0, 0.05)",
+                  background:
+                    "linear-gradient(135deg, #ffa72622 0%, #fb8c0022 100%)",
+                  transition: "all 0.3s ease",
+                  "&:hover": {
+                    transform: "translateY(-8px)",
+                    boxShadow: "0 20px 40px rgba(255, 167, 38, 0.2)",
+                  },
+                }}
+              >
+                <CardContent sx={{ p: 4, textAlign: "center" }}>
+                  <Avatar
+                    sx={{
+                      width: 70,
+                      height: 70,
+                      background: "linear-gradient(45deg, #ffa726, #fb8c00)",
+                      mx: "auto",
+                      mb: 3,
+                    }}
+                  >
+                    <Dashboard sx={{ fontSize: 35 }} />
+                  </Avatar>
+
+                  <Typography variant="h5" fontWeight="bold" gutterBottom>
+                    🛠️ Lịch bảo dưỡng
+                  </Typography>
+
+                  <Typography
+                    variant="body1"
+                    color="text.secondary"
+                    sx={{ mb: 3 }}
+                  >
+                    Theo dõi và quản lý lịch bảo trì
+                    <br />
+                    máy móc theo ngày/tháng
+                  </Typography>
+
+                  <Button
+                    variant="contained"
+                    size="large"
+                    endIcon={<ArrowForward />}
+                    onClick={() => handleNavigate("/maintenance-schedule")}
+                    sx={{
+                      borderRadius: "12px",
+                      background: "linear-gradient(45deg, #ffa726, #fb8c00)",
+                      px: 4,
+                      py: 1.5,
+                      "&:hover": {
+                        transform: "translateY(-2px)",
+                        boxShadow: "0 8px 25px rgba(255, 167, 38, 0.3)",
+                      },
+                      transition: "all 0.3s ease",
+                    }}
+                  >
+                    Xem lịch
+                  </Button>
+                </CardContent>
+              </Card>
+            </Grid>
           </Grid>
 
           {/* <div style={{ marginTop: "50px" }}>

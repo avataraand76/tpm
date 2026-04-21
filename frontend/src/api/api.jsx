@@ -792,6 +792,12 @@ export const api = {
       );
       return response.data;
     },
+    getMachineByRfid: async (rfid) => {
+      const response = await httpConnect.get(
+        `/api/maintenance-schedule-detail/by-rfid/${encodeURIComponent(rfid)}`
+      );
+      return response.data;
+    },
   },
 };
 
