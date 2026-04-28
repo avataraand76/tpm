@@ -6729,8 +6729,16 @@ const handleInternalTransferApproval = async (
   // 3. Xác định trạng thái mới
   let newMachineStatus = "in_use"; // Mặc định nếu ra xưởng
 
-  if (toLocationName && toLocationName.toLowerCase().includes("kho")) {
-    // Nếu vào KHO:
+  const normalizedLocName = (toLocationName || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+  // Các kho đặc biệt (vật tư/thành phẩm) coi như "ra xưởng" -> in_use
+  const IN_USE_WAREHOUSES = ["kho npl", "kho tp1", "kho tp2"];
+  const isInUseWarehouse = IN_USE_WAREHOUSES.includes(normalizedLocName);
+
+  if (normalizedLocName.includes("kho") && !isInUseWarehouse) {
+    // Nếu vào KHO (trừ NPL/TP1/TP2):
     if (targetStatus && targetStatus.trim() !== "") {
       // Nếu có targetStatus (vd: pending_liquidation), DÙNG NGAY
       newMachineStatus = targetStatus;
@@ -6739,7 +6747,7 @@ const handleInternalTransferApproval = async (
       newMachineStatus = "available";
     }
   } else {
-    // Nếu ra XƯỞNG
+    // Nếu ra XƯỞNG hoặc vào kho NPL / TP1 / TP2
     newMachineStatus = "in_use";
   }
 

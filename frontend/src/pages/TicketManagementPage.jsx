@@ -1512,7 +1512,7 @@ const TicketManagementPage = () => {
       pending_approval: "warning",
       completed: "success",
       cancelled: "error",
-    }[status] || "default");
+    })[status] || "default";
   const getStatusLabel = (status) =>
     ({
       pending: "Chờ duyệt",
@@ -1520,7 +1520,7 @@ const TicketManagementPage = () => {
       pending_approval: "Chờ duyệt",
       completed: "Đã duyệt",
       cancelled: "Đã hủy",
-    }[status] || status);
+    })[status] || status;
   const getMachineStatusLabel = (status) => getStatusInfo(status).label;
   const getTypeLabel = (type) =>
     ({
@@ -1535,7 +1535,7 @@ const TicketManagementPage = () => {
       liquidation: "Xuất thanh lý",
       borrowed_return: "Xuất trả (máy mượn)",
       rented_return: "Xuất trả (máy thuê)",
-    }[type] || type);
+    })[type] || type;
 
   // Render Table Content for Tabs 0, 1, 2
   const renderTableContent = () => {
@@ -1576,8 +1576,8 @@ const TicketManagementPage = () => {
               activeTab === 0
                 ? "import"
                 : activeTab === 1
-                ? "export"
-                : "internal",
+                  ? "export"
+                  : "internal",
               item
             )
           }
@@ -2508,8 +2508,8 @@ const TicketManagementPage = () => {
                       dialogType === "import"
                         ? "nhập"
                         : dialogType === "export"
-                        ? "xuất"
-                        : "điều chuyển"
+                          ? "xuất"
+                          : "điều chuyển"
                     } 🐧🐧🐧`
                   : "Chi tiết phiếu"}
               </Typography>
@@ -2771,8 +2771,8 @@ const TicketManagementPage = () => {
                               dialogType === "import"
                                 ? "Nhập vào"
                                 : dialogType === "export"
-                                ? "Xuất đến"
-                                : "Đến vị trí"
+                                  ? "Xuất đến"
+                                  : "Đến vị trí"
                             }
                             required
                             sx={{
@@ -2806,12 +2806,25 @@ const TicketManagementPage = () => {
 
                       {dialogType === "internal" &&
                         formData.to_location_uuid &&
-                        filteredLocations
-                          .find(
-                            (l) => l.uuid_location === formData.to_location_uuid
-                          )
-                          ?.name_location?.toLowerCase()
-                          .includes("kho") && (
+                        (() => {
+                          const locName = filteredLocations
+                            .find(
+                              (l) =>
+                                l.uuid_location === formData.to_location_uuid
+                            )
+                            ?.name_location?.toLowerCase()
+                            .replace(/\s+/g, " ")
+                            .trim();
+                          if (!locName || !locName.includes("kho"))
+                            return false;
+                          // Ẩn với các kho đặc biệt (mặc định in_use)
+                          const HIDDEN_WAREHOUSES = [
+                            "kho npl",
+                            "kho tp1",
+                            "kho tp2",
+                          ];
+                          return !HIDDEN_WAREHOUSES.includes(locName);
+                        })() && (
                           <Box
                             sx={{
                               mt: 2,

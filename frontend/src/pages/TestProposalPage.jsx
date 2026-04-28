@@ -7089,12 +7089,24 @@ const TestProposalPage = () => {
                       {/* --- LOGIC TRẠNG THÁI (INTERNAL) - Giữ nguyên --- */}
                       {dialogType === "internal" &&
                         formData.to_location_uuid &&
-                        filteredLocations
-                          .find(
-                            (l) => l.uuid_location === formData.to_location_uuid
-                          )
-                          ?.name_location?.toLowerCase()
-                          .includes("kho") && (
+                        (() => {
+                          const locName = filteredLocations
+                            .find(
+                              (l) =>
+                                l.uuid_location === formData.to_location_uuid
+                            )
+                            ?.name_location?.toLowerCase()
+                            .replace(/\s+/g, " ")
+                            .trim();
+                          if (!locName || !locName.includes("kho")) return false;
+                          // Ẩn với các kho đặc biệt (mặc định in_use)
+                          const HIDDEN_WAREHOUSES = [
+                            "kho npl",
+                            "kho tp1",
+                            "kho tp2",
+                          ];
+                          return !HIDDEN_WAREHOUSES.includes(locName);
+                        })() && (
                           <Box
                             sx={{
                               mt: 2,
