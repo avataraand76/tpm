@@ -363,17 +363,6 @@ function useDebounce(value, delay) {
   return debouncedValue;
 }
 
-// Trả về mảng các key của các tháng nằm cùng quý với monthKey
-const getMonthsInSameQuarter = (monthKey) => {
-  const quarters = [
-    ["january", "february", "march"],
-    ["april", "may", "june"],
-    ["july", "august", "september"],
-    ["october", "november", "december"],
-  ];
-  return quarters.find((q) => q.includes(monthKey)) || [];
-};
-
 // Memoized: chỉ re-render khi đúng row này thay đổi
 const ScheduleRow = React.memo(
   function ScheduleRow({
@@ -388,28 +377,46 @@ const ScheduleRow = React.memo(
     return (
       <TableRow>
         <TableCell sx={{ ...SCHEDULE_LABEL_SX_BASE, backgroundColor: rowBg }}>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-            {col.machine_name}
-            {isDirty && (
-              <Box
-                component="span"
-                sx={{ color: "#f59e0b", fontSize: "0.7rem", lineHeight: 1 }}
-              >
-                ●
-              </Box>
-            )}
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 0.5,
+            }}
+          >
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+              {col.machine_name}
+              {isDirty && (
+                <Box
+                  component="span"
+                  sx={{ color: "#f59e0b", fontSize: "0.7rem", lineHeight: 1 }}
+                >
+                  ●
+                </Box>
+              )}
+            </Box>
+            <Box
+              component="span"
+              sx={{
+                px: 0.75,
+                py: 0.1,
+                borderRadius: "10px",
+                fontSize: "0.7rem",
+                fontWeight: 600,
+                color: "#4f46e5",
+                backgroundColor: "#eef0fb",
+                lineHeight: 1.4,
+                minWidth: 28,
+                textAlign: "center",
+              }}
+            >
+              {col.machine_count ?? 0}
+            </Box>
           </Box>
         </TableCell>
         {visibleMonths.map(({ key }) => {
-          // --- LOGIC DISABLE THEO QUÝ ---
-          const monthsInQuarter = getMonthsInSameQuarter(key);
           const isCurrentChecked = rowData?.[key] ?? false;
-
-          // Kiểm tra xem TRONG QUÝ NÀY đã có tháng nào KHÁC tháng hiện tại được tick chưa
-          const hasOtherInQuarterChecked = monthsInQuarter.some(
-            (mKey) => mKey !== key && (rowData?.[mKey] ?? false)
-          );
-
           return (
             <TableCell
               key={key}
@@ -419,22 +426,13 @@ const ScheduleRow = React.memo(
             >
               <Checkbox
                 checked={isCurrentChecked}
-                // Disable nếu tháng khác trong quý đã được chọn
-                // và chính bản thân nó đang không được chọn
-                disabled={hasOtherInQuarterChecked && !isCurrentChecked}
                 inputProps={{
                   "data-row-key": rowKey,
                   "data-month-key": key,
                 }}
                 onChange={onCheckboxChange}
                 size="large"
-                sx={{
-                  ...CHECKBOX_SX,
-                  // Thêm style để nhìn rõ ô bị disable
-                  "&.Mui-disabled": {
-                    color: "rgba(0, 0, 0, 0.1)",
-                  },
-                }}
+                sx={CHECKBOX_SX}
               />
             </TableCell>
           );
@@ -3469,7 +3467,25 @@ const AdminPage = () => {
                                   fontSize: "0.875rem",
                                 }}
                               >
-                                Loại máy
+                                <Box
+                                  sx={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    gap: 1,
+                                  }}
+                                >
+                                  <span>Loại máy</span>
+                                  <span
+                                    style={{
+                                      fontSize: "0.7rem",
+                                      fontWeight: 500,
+                                      color: "#6b7280",
+                                    }}
+                                  >
+                                    SL
+                                  </span>
+                                </Box>
                               </TableCell>
                               {filteredScheduleMonths.map(
                                 ({ key, fullLabel }) => (

@@ -2675,15 +2675,20 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
     }
 
     // Format date to YYYY-MM-DD with timezone handling
-    let formattedDate = date_of_use;
-    if (date_of_use) {
-      const dateObj = new Date(date_of_use);
-      // Get local date components to avoid timezone issues
-      const year = dateObj.getFullYear();
-      const month = String(dateObj.getMonth() + 1).padStart(2, "0");
-      const day = String(dateObj.getDate()).padStart(2, "0");
-      formattedDate = `${year}-${month}-${day}`;
-    }
+    const toMysqlDate = (value) => {
+      if (!value) return null;
+      const dateObj = new Date(value);
+      if (isNaN(dateObj.getTime())) return null;
+      const y = dateObj.getFullYear();
+      const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+      const d = String(dateObj.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    };
+
+    const formattedDate = toMysqlDate(date_of_use);
+    const formattedReturnDate = toMysqlDate(
+      is_borrowed_or_rented_or_borrowed_out_return_date
+    );
 
     // Get user ID from token
     const userId = req.user.id;
@@ -2730,7 +2735,7 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         repair_cost,
         note,
         current_status,
-        is_borrowed_or_rented_or_borrowed_out_return_date,
+        formattedReturnDate,
         attribute_machine,
         supplier,
         power,
@@ -8972,20 +8977,41 @@ app.post("/api/admin/maintenance-schedule", async (req, res) => {
 app.get("/api/admin/machine-types-for-matrix", async (req, res) => {
   try {
     const [rows] = await tpmConnection.query(`
-      SELECT 
+      SELECT
         mt.id_machine_type,
         NULL AS id_machine_attribute,
-        mt.name_machine_type AS machine_name
+        mt.name_machine_type AS machine_name,
+        (
+          SELECT COUNT(*) FROM tb_machine m
+          WHERE m.type_machine = mt.name_machine_type
+            AND (m.type_machine IS NOT NULL AND m.type_machine != '')
+            AND m.current_status NOT IN ('liquidation', 'temporary')
+            AND (
+              m.is_borrowed_or_rented_or_borrowed_out IS NULL
+              OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return')
+            )
+            AND (m.attribute_machine IS NULL OR m.attribute_machine = '')
+        ) AS machine_count
       FROM tb_machine_type mt
       UNION ALL
-      SELECT 
+      SELECT
         mt.id_machine_type,
         ma.id_machine_attribute,
-        CONCAT(mt.name_machine_type, ' ', ma.name_machine_attribute) AS machine_name
+        CONCAT(mt.name_machine_type, ' ', ma.name_machine_attribute) AS machine_name,
+        (
+          SELECT COUNT(*) FROM tb_machine m
+          WHERE m.type_machine = mt.name_machine_type
+            AND m.attribute_machine = ma.name_machine_attribute
+            AND m.current_status NOT IN ('liquidation', 'temporary')
+            AND (
+              m.is_borrowed_or_rented_or_borrowed_out IS NULL
+              OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return')
+            )
+        ) AS machine_count
       FROM tb_machine_type mt
-      JOIN tb_machine_type_attribute mta 
+      JOIN tb_machine_type_attribute mta
         ON mt.id_machine_type = mta.id_machine_type
-      JOIN tb_machine_attribute ma 
+      JOIN tb_machine_attribute ma
         ON mta.id_machine_attribute = ma.id_machine_attribute
       ORDER BY id_machine_type, machine_name
     `);
@@ -12463,7 +12489,7 @@ async function autoCreateMaintenanceScheduleDetail() {
         AND m.current_status NOT IN ('liquidation', 'temporary')
         AND (
           m.is_borrowed_or_rented_or_borrowed_out IS NULL
-          OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return', 'borrowed_out')
+          OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return')
         )
         AND mcata.id_machine_type IS NOT NULL
         AND ms.id_machine_type IS NOT NULL
@@ -12476,23 +12502,27 @@ async function autoCreateMaintenanceScheduleDetail() {
       return;
     }
 
-    // Helper: phân chia danh sách máy vào các ngày làm việc của một tháng
-    const distributeToWorkingDays = (
+    // Helper: phân chia danh sách máy vào các ngày làm việc của MỘT QUÝ
+    // (chỉ tính các tháng được chọn trong quý đó)
+    const distributeToQuarterWorkingDays = (
       machineIds,
-      monthNum,
+      selectedMonthsInQuarter,
       maintenanceContent
     ) => {
-      // Lọc ngày làm việc: tổng ngày trong tháng trừ ngày nghỉ lễ/Tết/chủ nhật
-      const totalDays = new Date(currentYear, monthNum, 0).getDate();
-      const holidays = holidaysByMonth.get(monthNum) ?? new Set();
-      const workingDays = [];
-      for (let d = 1; d <= totalDays; d++) {
-        if (!holidays.has(d)) workingDays.push(d);
+      // Gộp ngày làm việc của tất cả tháng được chọn trong quý
+      // workingSlots: mỗi phần tử là { month, day }
+      const workingSlots = [];
+      for (const monthNum of selectedMonthsInQuarter) {
+        const totalDays = new Date(currentYear, monthNum, 0).getDate();
+        const holidays = holidaysByMonth.get(monthNum) ?? new Set();
+        for (let d = 1; d <= totalDays; d++) {
+          if (!holidays.has(d)) workingSlots.push({ month: monthNum, day: d });
+        }
       }
-      // Công thức: N máy / D ngày làm việc = a dư b
+      // Công thức: N máy / D ngày làm việc theo quý = a dư b
       //   → b ngày đầu: a+1 máy/ngày
       //   → D-b ngày còn lại: a máy/ngày
-      const D = workingDays.length;
+      const D = workingSlots.length;
       if (D === 0) return [];
       const N = machineIds.length;
       const a = Math.floor(N / D);
@@ -12500,14 +12530,14 @@ async function autoCreateMaintenanceScheduleDetail() {
       const result = [];
       let idx = 0;
       for (let wi = 0; wi < D; wi++) {
-        const day = workingDays[wi];
+        const slot = workingSlots[wi];
         const count = wi < b ? a + 1 : a;
         for (let i = 0; i < count; i++) {
           result.push([
             machineIds[idx],
             currentYear,
-            monthNum,
-            day,
+            slot.month,
+            slot.day,
             maintenanceContent,
           ]);
           idx++;
@@ -12515,6 +12545,14 @@ async function autoCreateMaintenanceScheduleDetail() {
       }
       return result;
     };
+
+    // Bảng quý → danh sách tháng
+    const QUARTERS = [
+      { q: 1, months: [1, 2, 3] },
+      { q: 2, months: [4, 5, 6] },
+      { q: 3, months: [7, 8, 9] },
+      { q: 4, months: [10, 11, 12] },
+    ];
 
     // Helper: build group metadata từ danh sách máy
     const buildGroups = (machineList) => {
@@ -12583,22 +12621,24 @@ async function autoCreateMaintenanceScheduleDetail() {
           group;
         if (machineIds.length === 0) continue;
         const rowsBefore = rows.length;
-        for (const { num } of MONTH_COLUMNS) {
-          if (!monthFlags[num]) continue;
+        const quarterDescs = [];
+        for (const { q, months } of QUARTERS) {
+          const selected = months.filter((m) => monthFlags[m]);
+          if (selected.length === 0) continue;
           rows.push(
-            ...distributeToWorkingDays(machineIds, num, maintenanceContent)
+            ...distributeToQuarterWorkingDays(
+              machineIds,
+              selected,
+              maintenanceContent
+            )
           );
+          quarterDescs.push(`Q${q} (tháng ${selected.join(",")})`);
         }
         if (rows.length > rowsBefore) {
-          const activeMonths = MONTH_COLUMNS.filter(
-            ({ num }) => monthFlags[num]
-          )
-            .map(({ num }) => `${num}`)
-            .join(", ");
           pass1ActiveGroups.push({
             groupLabel,
             machineCount: machineIds.length,
-            activeMonths,
+            activeQuarters: quarterDescs.join(" + "),
           });
         }
       }
@@ -12614,24 +12654,33 @@ async function autoCreateMaintenanceScheduleDetail() {
         const { monthFlags, maintenanceContent, groupLabel, machineIds } =
           group;
         if (machineIds.length === 0) continue;
-        const newMonthsForGroup = [];
-        for (const { num } of MONTH_COLUMNS) {
-          if (!monthFlags[num]) continue;
-          // Tháng này là mới nếu KHÔNG CÓ máy nào trong nhóm đã có record cho tháng này
-          const noneHaveMonth = machineIds.every(
-            (id) => !existingMonthsByMachine.get(id)?.has(num)
-          );
-          if (!noneHaveMonth) continue;
+        const newQuarterDescs = [];
+        for (const { q, months } of QUARTERS) {
+          const selected = months.filter((m) => monthFlags[m]);
+          if (selected.length === 0) continue;
+          // Quý này là mới nếu KHÔNG CÓ máy nào trong nhóm đã có record
+          // ở BẤT KỲ tháng nào của quý (idempotent ở mức quý — tránh phân bổ
+          // lại khi đã có một phần dữ liệu của quý đó)
+          const noneHaveQuarter = machineIds.every((id) => {
+            const set = existingMonthsByMachine.get(id);
+            if (!set) return true;
+            return months.every((m) => !set.has(m));
+          });
+          if (!noneHaveQuarter) continue;
           rows.push(
-            ...distributeToWorkingDays(machineIds, num, maintenanceContent)
+            ...distributeToQuarterWorkingDays(
+              machineIds,
+              selected,
+              maintenanceContent
+            )
           );
-          newMonthsForGroup.push(num);
+          newQuarterDescs.push(`Q${q} (tháng ${selected.join(",")})`);
         }
-        if (newMonthsForGroup.length > 0) {
+        if (newQuarterDescs.length > 0) {
           pass2ActiveGroups.push({
             groupLabel,
             machineCount: machineIds.length,
-            newMonths: newMonthsForGroup.join(", "),
+            newQuarters: newQuarterDescs.join(" + "),
           });
         }
       }
@@ -12657,12 +12706,12 @@ async function autoCreateMaintenanceScheduleDetail() {
 
     if (pass1ActiveGroups.length > 0) {
       console.log(
-        `[AutoMaintenanceSchedule] Đã tạo ${actualInserted} dòng lịch bảo dưỡng cho năm ${currentYear} cho các loại máy: ${pass1ActiveGroups.map((g) => `${g.groupLabel} (${g.machineCount} máy x tháng ${g.activeMonths})`).join("; ")}.`
+        `[AutoMaintenanceSchedule] Đã tạo ${actualInserted} dòng lịch bảo dưỡng cho năm ${currentYear} cho các loại máy: ${pass1ActiveGroups.map((g) => `${g.groupLabel} (${g.machineCount} máy x ${g.activeQuarters})`).join("; ")}.`
       );
     }
     if (pass2ActiveGroups.length > 0) {
       console.log(
-        `[AutoMaintenanceSchedule] Thêm ${actualInserted} dòng lịch bảo dưỡng mới cho năm ${currentYear}: ${pass2ActiveGroups.map((g) => `${g.groupLabel} (${g.machineCount} máy x tháng ${g.newMonths})`).join("; ")}.`
+        `[AutoMaintenanceSchedule] Thêm ${actualInserted} dòng lịch bảo dưỡng mới cho năm ${currentYear}: ${pass2ActiveGroups.map((g) => `${g.groupLabel} (${g.machineCount} máy x ${g.newQuarters})`).join("; ")}.`
       );
     }
   } catch (error) {
@@ -12720,6 +12769,7 @@ app.get("/api/maintenance-schedule-detail", async (req, res) => {
         m.supplier,
         m.serial_machine,
         m.current_status,
+        m.is_borrowed_or_rented_or_borrowed_out,
         m.power,
         m.pressure,
         m.voltage,

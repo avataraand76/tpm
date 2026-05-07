@@ -1481,18 +1481,47 @@ const MachineCard = React.memo(({ machine, onClick }) => {
               </Typography>
             )}
           </Box>
-          <Chip
-            label={statusCfg.label}
-            size="small"
-            sx={{
-              fontSize: "0.65rem",
-              height: 20,
-              bgcolor: statusCfg.bg,
-              color: statusCfg.color,
-              fontWeight: 600,
-              flexShrink: 0,
-            }}
-          />
+          <Stack
+            direction="column"
+            spacing={0.5}
+            alignItems="flex-end"
+            sx={{ flexShrink: 0 }}
+          >
+            <Chip
+              label={statusCfg.label}
+              size="small"
+              sx={{
+                fontSize: "0.65rem",
+                height: 20,
+                bgcolor: statusCfg.bg,
+                color: statusCfg.color,
+                fontWeight: 600,
+              }}
+            />
+            {machine.is_borrowed_or_rented_or_borrowed_out &&
+              STATUS_CONFIG[machine.is_borrowed_or_rented_or_borrowed_out] && (
+                <Chip
+                  label={
+                    STATUS_CONFIG[machine.is_borrowed_or_rented_or_borrowed_out]
+                      .label
+                  }
+                  size="small"
+                  sx={{
+                    fontSize: "0.65rem",
+                    height: 20,
+                    bgcolor:
+                      STATUS_CONFIG[
+                        machine.is_borrowed_or_rented_or_borrowed_out
+                      ].bg,
+                    color:
+                      STATUS_CONFIG[
+                        machine.is_borrowed_or_rented_or_borrowed_out
+                      ].color,
+                    fontWeight: 600,
+                  }}
+                />
+              )}
+          </Stack>
         </Stack>
 
         <Divider sx={{ mb: 1 }} />
