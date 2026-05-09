@@ -315,6 +315,7 @@ create table if not exists tb_machine_import
 	is_borrowed_or_rented_or_borrowed_out_date date,
 	is_borrowed_or_rented_or_borrowed_out_return_date date,
     note text,
+    quantity int,
     attached_file text,
     approval_flow json,
     expansion_field json,
@@ -370,6 +371,7 @@ create table if not exists tb_machine_export
 	is_borrowed_or_rented_or_borrowed_out_date date,
 	is_borrowed_or_rented_or_borrowed_out_return_date date,
     note text,
+    confirm int,
     attached_file text,
     approval_flow json,
     expansion_field json,
@@ -415,6 +417,7 @@ create table if not exists tb_machine_internal_transfer
     to_location_id bigint,
 
     -- properties
+    target_status varchar(50),
     transfer_date date,
     status enum('pending_confirmation', 'pending_approval', 'completed', 'cancelled') default 'pending_confirmation',
     note text,
@@ -462,7 +465,7 @@ create table if not exists tb_machine_location
     id_location bigint,
 
     -- key
-    unique (id_machine, id_location),
+    unique (id_machine),
     
     -- timestamp
     created_at timestamp default current_timestamp,
@@ -612,7 +615,7 @@ create table if not exists tb_inventory_check_detail
     id_department bigint,
 
     -- properties
-    is_completed boolean default false, -- Đã kiểm xong vị trí này chưa
+    is_completed tinyint default 0, -- Đã kiểm xong vị trí này chưa
     -- Lưu danh sách máy quét được dưới dạng JSON scanned_result nếu lệch vị trí thì đánh dấu
     -- VD: 
     /*
@@ -659,7 +662,8 @@ create table if not exists tb_inventory_check_detail
         ],
     }
     */
-    scanned_result json, 
+    scanned_result json,
+    list_before_scan json,
 
     -- key
     unique (id_inventory_check, id_department),
@@ -758,6 +762,8 @@ create table if not exists tb_maintenance_schedule_detail
     day int,
     maintenance_content_detail json,
     status enum('pending', 'completed') default 'pending',
+    attached_file text,
+    confirm int,
 
     -- key
     primary key (id_maintenance_schedule_detail),

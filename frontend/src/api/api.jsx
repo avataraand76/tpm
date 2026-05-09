@@ -779,10 +779,14 @@ export const api = {
       );
       return response.data;
     },
-    updateScheduleStatus: async (uuid, status) => {
+    updateScheduleStatus: async (uuid, status, files = []) => {
+      const formData = new FormData();
+      formData.append("status", status);
+      (files || []).forEach((f) => formData.append("attachments", f));
       const response = await httpConnect.put(
         `/api/maintenance-schedule-detail/${uuid}/status`,
-        { status }
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" } }
       );
       return response.data;
     },

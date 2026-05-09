@@ -34,6 +34,8 @@ import {
   TableBody,
   TableRow,
   TableCell,
+  Modal,
+  Backdrop,
 } from "@mui/material";
 import {
   ChevronLeft,
@@ -58,6 +60,16 @@ import {
   HourglassEmpty,
   WifiTethering,
   PictureAsPdf,
+  AddPhotoAlternate,
+  DeleteOutline,
+  ZoomOutMap,
+  OpenInNew,
+  ZoomIn,
+  ZoomOut,
+  RotateLeft,
+  RotateRight,
+  Flip,
+  CenterFocusStrong,
 } from "@mui/icons-material";
 import { alpha } from "@mui/material/styles";
 import NavigationBar from "../components/NavigationBar";
@@ -125,6 +137,354 @@ const MAINT_STATUS_CONFIG = {
   },
 };
 
+// ==================== Evidence Image helpers ====================
+// Parse "filename|filelink; filename|filelink; " → [{name, link}]
+const parseAttachedFile = (str) => {
+  if (!str || typeof str !== "string") return [];
+  return str
+    .split(";")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((pair) => {
+      const idx = pair.indexOf("|");
+      if (idx === -1) return { name: pair, link: pair };
+      return {
+        name: pair.slice(0, idx).trim(),
+        link: pair.slice(idx + 1).trim(),
+      };
+    })
+    .filter((x) => x.link);
+};
+
+// Convert Google Drive link → thumbnail (for inline preview)
+const toDriveThumbnail = (url) => {
+  if (!url) return url;
+  const m = url.match(/\/d\/([^/]+)/) || url.match(/[?&]id=([^&]+)/);
+  if (m) return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w2000`;
+  return url;
+};
+
+// Convert to view URL (open in new tab)
+const toDriveViewUrl = (url) => {
+  if (!url) return url;
+  const m = url.match(/\/d\/([^/]+)/) || url.match(/[?&]id=([^&]+)/);
+  if (m) return `https://drive.google.com/file/d/${m[1]}/view`;
+  return url;
+};
+
+// Frame hiển thị 1 ảnh + nút phóng to / mở Drive — dùng cho Section D
+const EvidenceImageFrame = ({ src, title, onRemove }) => {
+  const [modalOpen, setModalOpen] = useState(false);
+  const [scale, setScale] = useState(1);
+  const [rotation, setRotation] = useState(0);
+  const [flipH, setFlipH] = useState(false);
+  const [flipV, setFlipV] = useState(false);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = React.useRef({ x: 0, y: 0 });
+
+  const handleResetAll = () => {
+    setScale(1);
+    setPosition({ x: 0, y: 0 });
+    setRotation(0);
+    setFlipH(false);
+    setFlipV(false);
+  };
+
+  const handleClose = () => {
+    setModalOpen(false);
+    handleResetAll();
+    setIsDragging(false);
+  };
+
+  const handleZoomIn = () => setScale((s) => Math.min(s * 1.2, 5));
+  const handleZoomOut = () => setScale((s) => Math.max(s / 1.2, 0.5));
+
+  const handleMouseDown = (e) => {
+    if (scale > 1) {
+      setIsDragging(true);
+      dragStartRef.current = {
+        x: e.clientX - position.x,
+        y: e.clientY - position.y,
+      };
+    }
+  };
+  const handleMouseMove = (e) => {
+    if (isDragging && scale > 1) {
+      setPosition({
+        x: e.clientX - dragStartRef.current.x,
+        y: e.clientY - dragStartRef.current.y,
+      });
+    }
+  };
+  const handleMouseUp = () => setIsDragging(false);
+
+  // Wheel zoom — đăng ký passive: false để preventDefault hoạt động
+  useEffect(() => {
+    if (!modalOpen) return;
+    const handleWheel = (e) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      const container = document.querySelector("[data-evidence-modal]");
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      setScale((prevScale) => {
+        const newScale = Math.min(Math.max(prevScale * delta, 0.5), 5);
+        setPosition((prevPos) => {
+          const curX = (mouseX - centerX - prevPos.x) / prevScale;
+          const curY = (mouseY - centerY - prevPos.y) / prevScale;
+          return {
+            x: mouseX - centerX - curX * newScale,
+            y: mouseY - centerY - curY * newScale,
+          };
+        });
+        return newScale;
+      });
+    };
+    document.addEventListener("wheel", handleWheel, { passive: false });
+    return () => document.removeEventListener("wheel", handleWheel);
+  }, [modalOpen]);
+
+  return (
+    <Box
+      sx={{
+        width: 140,
+        height: 140,
+        borderRadius: 2,
+        overflow: "hidden",
+        position: "relative",
+        border: "1px solid #e0e0e0",
+        bgcolor: "grey.50",
+        flexShrink: 0,
+      }}
+    >
+      <img
+        src={src}
+        alt={title || "evidence"}
+        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+        onError={(e) => {
+          e.currentTarget.style.display = "none";
+        }}
+      />
+      <Box
+        sx={{
+          position: "absolute",
+          inset: 0,
+          display: "flex",
+          alignItems: "flex-end",
+          justifyContent: "space-between",
+          p: 0.5,
+          background:
+            "linear-gradient(to top, rgba(0,0,0,0.65), rgba(0,0,0,0) 50%)",
+          opacity: 0,
+          transition: "opacity 0.2s",
+          "&:hover": { opacity: 1 },
+        }}
+      >
+        <Stack direction="row" spacing={0.5}>
+          <IconButton
+            size="small"
+            onClick={() => setModalOpen(true)}
+            sx={{ color: "#fff", bgcolor: "rgba(0,0,0,0.4)", p: 0.5 }}
+          >
+            <ZoomOutMap fontSize="small" />
+          </IconButton>
+          <IconButton
+            size="small"
+            component="a"
+            href={toDriveViewUrl(src)}
+            target="_blank"
+            rel="noreferrer"
+            sx={{ color: "#fff", bgcolor: "rgba(0,0,0,0.4)", p: 0.5 }}
+          >
+            <OpenInNew fontSize="small" />
+          </IconButton>
+        </Stack>
+        {onRemove && (
+          <IconButton
+            size="small"
+            onClick={onRemove}
+            sx={{ color: "#fff", bgcolor: "rgba(244,67,54,0.7)", p: 0.5 }}
+          >
+            <DeleteOutline fontSize="small" />
+          </IconButton>
+        )}
+      </Box>
+
+      <Modal
+        open={modalOpen}
+        onClose={handleClose}
+        closeAfterTransition
+        slots={{ backdrop: Backdrop }}
+        slotProps={{
+          backdrop: {
+            timeout: 300,
+            sx: { backgroundColor: "rgba(0,0,0,0.92)" },
+          },
+        }}
+      >
+        <Box
+          data-evidence-modal
+          sx={{
+            position: "fixed",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            outline: "none",
+            overflow: "hidden",
+            cursor: scale > 1 ? (isDragging ? "grabbing" : "grab") : "default",
+          }}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) handleClose();
+          }}
+        >
+          {/* Toolbar */}
+          <Box
+            sx={{
+              position: "absolute",
+              top: 16,
+              left: "50%",
+              transform: "translateX(-50%)",
+              display: "flex",
+              gap: 0.5,
+              bgcolor: "rgba(0,0,0,0.7)",
+              borderRadius: 2,
+              p: 0.5,
+              zIndex: 2,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Tooltip title="Phóng to" arrow>
+              <IconButton
+                size="small"
+                sx={{ color: "#fff" }}
+                onClick={handleZoomIn}
+              >
+                <ZoomIn />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Thu nhỏ" arrow>
+              <IconButton
+                size="small"
+                sx={{ color: "#fff" }}
+                onClick={handleZoomOut}
+              >
+                <ZoomOut />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Xoay trái" arrow>
+              <IconButton
+                size="small"
+                sx={{ color: "#fff" }}
+                onClick={() => setRotation((r) => r - 90)}
+              >
+                <RotateLeft />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Xoay phải" arrow>
+              <IconButton
+                size="small"
+                sx={{ color: "#fff" }}
+                onClick={() => setRotation((r) => r + 90)}
+              >
+                <RotateRight />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Lật ngang" arrow>
+              <IconButton
+                size="small"
+                sx={{
+                  color: "#fff",
+                  bgcolor: flipH ? "rgba(255,255,255,0.2)" : "transparent",
+                }}
+                onClick={() => setFlipH((v) => !v)}
+              >
+                <Flip />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Lật dọc" arrow>
+              <IconButton
+                size="small"
+                sx={{
+                  color: "#fff",
+                  bgcolor: flipV ? "rgba(255,255,255,0.2)" : "transparent",
+                  transform: "rotate(90deg)",
+                }}
+                onClick={() => setFlipV((v) => !v)}
+              >
+                <Flip />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Khôi phục mặc định" arrow>
+              <IconButton
+                size="small"
+                sx={{ color: "#fff" }}
+                onClick={handleResetAll}
+              >
+                <CenterFocusStrong />
+              </IconButton>
+            </Tooltip>
+            <Typography
+              sx={{
+                color: "#fff",
+                alignSelf: "center",
+                px: 1,
+                minWidth: 60,
+                textAlign: "center",
+                fontSize: "0.85rem",
+              }}
+            >
+              {Math.round(scale * 100)}%
+            </Typography>
+          </Box>
+
+          <IconButton
+            onClick={handleClose}
+            sx={{
+              position: "absolute",
+              top: 16,
+              right: 16,
+              color: "#fff",
+              bgcolor: "rgba(0,0,0,0.7)",
+              zIndex: 2,
+              "&:hover": { bgcolor: "rgba(0,0,0,0.9)" },
+            }}
+          >
+            <Close />
+          </IconButton>
+
+          <img
+            src={src}
+            alt={title || ""}
+            draggable={false}
+            onMouseDown={handleMouseDown}
+            style={{
+              maxWidth: "90vw",
+              maxHeight: "90vh",
+              objectFit: "contain",
+              transform: `translate(${position.x}px, ${position.y}px) scale(${
+                scale * (flipH ? -1 : 1)
+              }, ${scale * (flipV ? -1 : 1)}) rotate(${rotation}deg)`,
+              transition: isDragging ? "none" : "transform 0.15s",
+              userSelect: "none",
+              cursor:
+                scale > 1 ? (isDragging ? "grabbing" : "grab") : "default",
+            }}
+          />
+        </Box>
+      </Modal>
+    </Box>
+  );
+};
+
 // ==================== MaintenanceHistoryDialog Component ====================
 const QUARTER_LABELS = {
   1: "Quý 1",
@@ -149,6 +509,10 @@ const MaintenanceHistoryDialog = ({
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [historyRows, setHistoryRows] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  // Section D — ảnh minh chứng đã chọn (chưa upload)
+  const [evidenceFiles, setEvidenceFiles] = useState([]);
+  // attached_file hiện tại của bản ghi (parsed)
+  const [currentAttached, setCurrentAttached] = useState([]);
 
   const fetchHistory = useCallback(async (id_machine) => {
     if (!id_machine) return;
@@ -166,19 +530,68 @@ const MaintenanceHistoryDialog = ({
   useEffect(() => {
     if (open && machine) {
       setIsNew(true);
+      setEvidenceFiles([]);
+      setCurrentAttached(parseAttachedFile(machine.attached_file));
       fetchHistory(machine.id_machine);
     }
   }, [open, machine, fetchHistory]);
 
+  // Tạo Object URL cho file local để preview, revoke khi unmount
+  const evidencePreviews = useMemo(
+    () =>
+      evidenceFiles.map((f) => ({
+        file: f,
+        url: URL.createObjectURL(f),
+        name: f.name,
+      })),
+    [evidenceFiles]
+  );
+  useEffect(() => {
+    return () => {
+      evidencePreviews.forEach((p) => URL.revokeObjectURL(p.url));
+    };
+  }, [evidencePreviews]);
+
+  const handlePickFiles = (e) => {
+    const picked = Array.from(e.target.files || []).filter((f) =>
+      f.type.startsWith("image/")
+    );
+    if (picked.length === 0) return;
+    setEvidenceFiles((prev) => [...prev, ...picked]);
+    e.target.value = "";
+  };
+
+  const handleRemoveEvidence = (idx) => {
+    setEvidenceFiles((prev) => prev.filter((_, i) => i !== idx));
+  };
+
   const handleToggleStatus = async () => {
     if (!machine) return;
     const newStatus = machine.status === "completed" ? "pending" : "completed";
+
+    // Khi hoàn thành: bắt buộc phải có ít nhất 1 ảnh minh chứng (mới hoặc cũ)
+    if (
+      newStatus === "completed" &&
+      evidenceFiles.length === 0 &&
+      currentAttached.length === 0
+    ) {
+      return;
+    }
+
     setStatusUpdating(true);
     try {
       const result = await api.maintenance.updateScheduleStatus(
         machine.uuid_maintenance_schedule_detail,
-        newStatus
+        newStatus,
+        newStatus === "completed" ? evidenceFiles : []
       );
+      // Cập nhật local view
+      if (newStatus === "completed") {
+        setCurrentAttached(parseAttachedFile(result?.attached_file));
+        setEvidenceFiles([]);
+      } else {
+        setCurrentAttached([]);
+      }
       onStatusChange &&
         onStatusChange(
           machine.uuid_maintenance_schedule_detail,
@@ -1303,6 +1716,137 @@ const MaintenanceHistoryDialog = ({
             </Box>
           )}
         </Paper>
+
+        {/* ── Section D: Hình ảnh bảo dưỡng ── */}
+        <Paper
+          elevation={0}
+          sx={{
+            border: "1px solid #e0e0e0",
+            borderRadius: "12px",
+            overflow: "hidden",
+            mt: 2,
+          }}
+        >
+          <Box
+            sx={{
+              background: "linear-gradient(90deg,#ef6c00,#ff9800)",
+              px: 2,
+              py: 1,
+            }}
+          >
+            <Typography
+              variant="subtitle1"
+              fontWeight={700}
+              sx={{ color: "#fff", letterSpacing: "0.03em" }}
+            >
+              D. HÌNH ẢNH BẢO DƯỠNG
+            </Typography>
+          </Box>
+
+          <Box sx={{ p: 2 }}>
+            {/* Ảnh đã upload */}
+            {currentAttached.length > 0 && (
+              <Box sx={{ mb: 2 }}>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    fontWeight: 700,
+                    color: "#555",
+                    display: "block",
+                    mb: 1,
+                  }}
+                >
+                  Ảnh đã upload ({currentAttached.length})
+                </Typography>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{ flexWrap: "wrap", gap: 1 }}
+                >
+                  {currentAttached.map((att, idx) => (
+                    <EvidenceImageFrame
+                      key={`${att.link}-${idx}`}
+                      src={toDriveThumbnail(att.link)}
+                      title={att.name}
+                    />
+                  ))}
+                </Stack>
+              </Box>
+            )}
+
+            {/* Ảnh chưa upload (đang chọn) — chỉ hiện khi chưa hoàn thành & có quyền */}
+            {canToggleStatus && machine.status !== "completed" && (
+              <>
+                {evidencePreviews.length > 0 && (
+                  <Box sx={{ mb: 2 }}>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        fontWeight: 700,
+                        color: "#ef6c00",
+                        display: "block",
+                        mb: 1,
+                      }}
+                    >
+                      Ảnh sẽ upload khi đánh dấu hoàn thành (
+                      {evidencePreviews.length})
+                    </Typography>
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      sx={{ flexWrap: "wrap", gap: 1 }}
+                    >
+                      {evidencePreviews.map((p, idx) => (
+                        <EvidenceImageFrame
+                          key={p.url}
+                          src={p.url}
+                          title={p.name}
+                          onRemove={() => handleRemoveEvidence(idx)}
+                        />
+                      ))}
+                    </Stack>
+                  </Box>
+                )}
+
+                <Button
+                  component="label"
+                  variant="outlined"
+                  startIcon={<AddPhotoAlternate />}
+                  sx={{
+                    borderRadius: "10px",
+                    borderColor: "#ef6c00",
+                    color: "#ef6c00",
+                    "&:hover": {
+                      borderColor: "#bf360c",
+                      bgcolor: "#fff3e0",
+                    },
+                    fontWeight: 600,
+                  }}
+                >
+                  Chọn ảnh minh chứng
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    hidden
+                    onChange={handlePickFiles}
+                  />
+                </Button>
+              </>
+            )}
+
+            {currentAttached.length === 0 &&
+              (!canToggleStatus || machine.status === "completed") && (
+                <Typography
+                  variant="caption"
+                  color="text.disabled"
+                  fontStyle="italic"
+                >
+                  Chưa có ảnh minh chứng
+                </Typography>
+              )}
+          </Box>
+        </Paper>
       </DialogContent>
 
       <DialogActions
@@ -1317,6 +1861,10 @@ const MaintenanceHistoryDialog = ({
         {canToggleStatus ? (
           (() => {
             const isCompleted = machine.status === "completed";
+            const noEvidence =
+              !isCompleted &&
+              evidenceFiles.length === 0 &&
+              currentAttached.length === 0;
             return (
               <Button
                 variant="outlined"
@@ -1330,7 +1878,7 @@ const MaintenanceHistoryDialog = ({
                   )
                 }
                 onClick={handleToggleStatus}
-                disabled={statusUpdating}
+                disabled={statusUpdating || noEvidence}
                 sx={{
                   borderRadius: "10px",
                   borderColor: isCompleted ? "#e65100" : "#2e7d32",
@@ -2146,6 +2694,10 @@ const MaintenanceSchedulePage = () => {
       status: newStatus,
       ...(result?.maintenance_content_detail
         ? { maintenance_content_detail: result.maintenance_content_detail }
+        : {}),
+      ...(result &&
+      Object.prototype.hasOwnProperty.call(result, "attached_file")
+        ? { attached_file: result.attached_file }
         : {}),
     };
     setScheduleData((prev) =>

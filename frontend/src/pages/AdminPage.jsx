@@ -373,7 +373,9 @@ const ScheduleRow = React.memo(
     isDirty,
     onCheckboxChange,
     visibleMonths,
+    contentCount,
   }) {
+    const hasContent = contentCount > 0;
     return (
       <TableRow>
         <TableCell sx={{ ...SCHEDULE_LABEL_SX_BASE, backgroundColor: rowBg }}>
@@ -385,8 +387,37 @@ const ScheduleRow = React.memo(
               gap: 0.5,
             }}
           >
-            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-              {col.machine_name}
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 0.5,
+                minWidth: 0,
+              }}
+            >
+              <Box
+                component="span"
+                sx={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  backgroundColor: hasContent ? "#22c55e" : "#d1d5db",
+                  flexShrink: 0,
+                  boxShadow: hasContent
+                    ? "0 0 0 2px rgba(34,197,94,0.18)"
+                    : "none",
+                  mr: "2px",
+                }}
+              />
+              <Box
+                sx={{
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  color: hasContent ? "inherit" : "text.secondary",
+                }}
+              >
+                {col.machine_name}
+              </Box>
               {isDirty && (
                 <Box
                   component="span"
@@ -445,7 +476,8 @@ const ScheduleRow = React.memo(
     prev.isDirty === next.isDirty &&
     prev.rowBg === next.rowBg &&
     prev.visibleMonths === next.visibleMonths &&
-    prev.onCheckboxChange === next.onCheckboxChange
+    prev.onCheckboxChange === next.onCheckboxChange &&
+    prev.contentCount === next.contentCount
 );
 
 // Component TabPanel để quản lý nội dung các tab
@@ -743,6 +775,19 @@ const AdminPage = () => {
         .includes(debouncedSearchScheduleMachineType.toLowerCase())
     );
   }, [machineTypesForMatrix, debouncedSearchScheduleMachineType]);
+
+  // Đếm số nội dung bảo dưỡng đã tick cho mỗi colKey (để hiển thị
+  // ở bảng Lịch bảo dưỡng — biết loại máy nào đã có cấu hình nội dung)
+  const contentCountByColKey = useMemo(() => {
+    const counts = {};
+    Object.values(matrixChecked).forEach((row) => {
+      if (!row) return;
+      Object.entries(row).forEach(([colKey, val]) => {
+        if (val) counts[colKey] = (counts[colKey] ?? 0) + 1;
+      });
+    });
+    return counts;
+  }, [matrixChecked]);
 
   // Logic lọc tháng (cột) trong Lịch bảo dưỡng; [] = hiện tất cả
   const filteredScheduleMonths = useMemo(() => {
@@ -3523,6 +3568,9 @@ const AdminPage = () => {
                                   isDirty={dirtyScheduleKeys.has(rowKey)}
                                   onCheckboxChange={handleScheduleChange}
                                   visibleMonths={filteredScheduleMonths}
+                                  contentCount={
+                                    contentCountByColKey[rowKey] ?? 0
+                                  }
                                 />
                               );
                             })}

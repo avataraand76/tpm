@@ -12706,12 +12706,12 @@ async function autoCreateMaintenanceScheduleDetail() {
 
     if (pass1ActiveGroups.length > 0) {
       console.log(
-        `[AutoMaintenanceSchedule] Đã tạo ${actualInserted} dòng lịch bảo dưỡng cho năm ${currentYear} cho các loại máy: ${pass1ActiveGroups.map((g) => `${g.groupLabel} (${g.machineCount} máy x ${g.activeQuarters})`).join("; ")}.`
+        `[AutoMaintenanceSchedule] Đã tạo ${actualInserted} dòng lịch bảo dưỡng cho năm ${currentYear} cho các loại máy: ${pass1ActiveGroups.map((g) => `\n ● ${g.groupLabel} (${g.machineCount} máy x ${g.activeQuarters})`).join("; ")}.`
       );
     }
     if (pass2ActiveGroups.length > 0) {
       console.log(
-        `[AutoMaintenanceSchedule] Thêm ${actualInserted} dòng lịch bảo dưỡng mới cho năm ${currentYear}: ${pass2ActiveGroups.map((g) => `${g.groupLabel} (${g.machineCount} máy x ${g.newQuarters})`).join("; ")}.`
+        `[AutoMaintenanceSchedule] Thêm ${actualInserted} dòng lịch bảo dưỡng mới cho năm ${currentYear}: ${pass2ActiveGroups.map((g) => `\n ● ${g.groupLabel} (${g.machineCount} máy x ${g.newQuarters})`).join("; ")}.`
       );
     }
   } catch (error) {
@@ -12759,6 +12759,7 @@ app.get("/api/maintenance-schedule-detail", async (req, res) => {
         msd.month,
         msd.day,
         msd.maintenance_content_detail,
+        msd.attached_file,
         msd.status,
         m.uuid_machine,
         m.code_machine,
@@ -12799,6 +12800,7 @@ app.get("/api/maintenance-schedule-detail", async (req, res) => {
 app.put(
   "/api/maintenance-schedule-detail/:uuid/status",
   authenticateToken,
+  upload.array("attachments"),
   async (req, res) => {
     try {
       const { uuid } = req.params;
@@ -12811,9 +12813,9 @@ app.put(
           .json({ success: false, message: "Trạng thái không hợp lệ" });
       }
 
-      // Lấy JSON hiện tại
+      // Lấy JSON + attached_file hiện tại
       const [[row]] = await tpmConnection.query(
-        `SELECT maintenance_content_detail
+        `SELECT maintenance_content_detail, attached_file
          FROM tb_maintenance_schedule_detail
          WHERE uuid_maintenance_schedule_detail = ?`,
         [uuid]
@@ -12824,12 +12826,47 @@ app.put(
           .json({ success: false, message: "Không tìm thấy bản ghi" });
       }
 
-      // Bước 1: UPDATE status + updated_by → DB tự set updated_at
+      // Xử lý attached_file theo status
+      let newAttachedFile = row.attached_file ?? null;
+
+      if (status === "completed") {
+        // Upload files mới (nếu có)
+        let uploadedString = null;
+        if (req.files && req.files.length > 0) {
+          const uploadPromises = req.files.map((file) =>
+            uploadFileToDrive(file)
+          );
+          const fileInfos = await Promise.all(uploadPromises);
+          const pairs = fileInfos
+            .filter((fi) => fi && fi.link)
+            .map((fi) => `${fi.name}|${fi.link}`);
+          if (pairs.length > 0) uploadedString = pairs.join("; ");
+        }
+
+        // Bắt buộc phải có ảnh minh chứng để hoàn thành — append vào ảnh cũ
+        // (không ghi đè để giữ lại lịch sử ảnh đã upload trước đó, nếu có)
+        if (uploadedString) {
+          newAttachedFile = newAttachedFile
+            ? `${newAttachedFile}; ${uploadedString}`
+            : uploadedString;
+        } else if (!newAttachedFile) {
+          return res.status(400).json({
+            success: false,
+            message:
+              "Phải có ảnh minh chứng mới được đánh dấu hoàn thành bảo dưỡng.",
+          });
+        }
+      } else {
+        // status === "pending": xóa ảnh minh chứng để lần hoàn thành sau bắt buộc upload mới
+        newAttachedFile = null;
+      }
+
+      // Bước 1: UPDATE status + updated_by + attached_file → DB tự set updated_at
       await tpmConnection.query(
         `UPDATE tb_maintenance_schedule_detail
-         SET status = ?, updated_by = ?
+         SET status = ?, updated_by = ?, attached_file = ?
          WHERE uuid_maintenance_schedule_detail = ?`,
-        [status, updatedBy, uuid]
+        [status, updatedBy, newAttachedFile, uuid]
       );
 
       // Bước 2: Lấy updated_at vừa được DB set, dùng DATE_FORMAT để nhận đúng format string
@@ -12870,6 +12907,7 @@ app.put(
         success: true,
         updated_by: updatedBy,
         maintenance_content_detail: updatedContent,
+        attached_file: newAttachedFile,
       });
     } catch (error) {
       console.error(
