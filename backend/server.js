@@ -114,6 +114,58 @@ const uploadFileToDrive = async (fileObject) => {
   }
 };
 
+// Trích fileId từ link Google Drive: hỗ trợ /file/d/{ID}/..., open?id={ID}, uc?id={ID}, thumbnail?id={ID}
+const extractDriveFileId = (link) => {
+  if (!link || typeof link !== "string") return null;
+  const m =
+    link.match(/\/file\/d\/([^/?]+)/) ||
+    link.match(/[?&]id=([^&]+)/) ||
+    link.match(/\/d\/([^/?]+)/);
+  return m ? m[1] : null;
+};
+
+// Xoá 1 file trên Google Drive theo fileId. Yêu cầu scope drive.file (file do app tạo)
+const deleteFileFromDrive = async (fileId) => {
+  if (!fileId) return false;
+  try {
+    const drive = google.drive({ version: "v3", auth: oauth2Client });
+    await drive.files.delete({ fileId });
+    return true;
+  } catch (err) {
+    // 404 → file đã bị xoá trước đó, coi như thành công
+    if (err.code === 404 || err.response?.status === 404) {
+      console.warn(`deleteFileFromDrive: file ${fileId} không tồn tại (404).`);
+      return true;
+    }
+    console.error(
+      `Error deleting file ${fileId} from Google Drive:`,
+      err.message
+    );
+    return false;
+  }
+};
+
+// Xoá toàn bộ file từ chuỗi attached_file dạng "name|link; name|link; "
+const deleteAttachedFilesFromDrive = async (attachedFileString) => {
+  if (!attachedFileString) return { total: 0, deleted: 0 };
+  const ids = attachedFileString
+    .split(";")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((pair) => {
+      const idx = pair.indexOf("|");
+      return idx === -1 ? pair : pair.slice(idx + 1).trim();
+    })
+    .map(extractDriveFileId)
+    .filter(Boolean);
+
+  const results = await Promise.allSettled(ids.map((id) => deleteFileFromDrive(id)));
+  const deleted = results.filter(
+    (r) => r.status === "fulfilled" && r.value === true
+  ).length;
+  return { total: ids.length, deleted };
+};
+
 // MySQL Configuration for main database
 const tpmConnection = mysql.createPool({
   host: process.env.MYSQL_HOST,
@@ -12726,7 +12778,7 @@ async function autoCreateMaintenanceScheduleDetail() {
 }
 autoCreateMaintenanceScheduleDetail();
 
-cron.schedule("30 * * * 1-6", autoCreateMaintenanceScheduleDetail, {
+cron.schedule("*/30 * * * 1-6", autoCreateMaintenanceScheduleDetail, {
   timezone: "Asia/Ho_Chi_Minh",
 });
 
@@ -12807,10 +12859,28 @@ app.put(
       const { status } = req.body;
       const updatedBy = req.user?.id || null;
 
-      if (!["pending", "completed"].includes(status)) {
+      if (!["pending", "completed", "confirm_completed"].includes(status)) {
         return res
           .status(400)
           .json({ success: false, message: "Trạng thái không hợp lệ" });
+      }
+
+      // confirm_completed chỉ admin mới được duyệt
+      if (status === "confirm_completed") {
+        const [perms] = await tpmConnection.query(
+          `SELECT p.name_permission
+           FROM tb_user_permission up
+           JOIN tb_permission p ON up.id_permission = p.id_permission
+           WHERE up.id_nhan_vien = ?`,
+          [updatedBy]
+        );
+        const isAdmin = perms.some((p) => p.name_permission === "admin");
+        if (!isAdmin) {
+          return res.status(403).json({
+            success: false,
+            message: "Chỉ admin mới được duyệt hoàn thành.",
+          });
+        }
       }
 
       // Lấy JSON + attached_file hiện tại
@@ -12856,18 +12926,41 @@ app.put(
               "Phải có ảnh minh chứng mới được đánh dấu hoàn thành bảo dưỡng.",
           });
         }
+      } else if (status === "confirm_completed") {
+        // Admin duyệt hoàn thành — giữ nguyên ảnh minh chứng, không xoá
+        newAttachedFile = row.attached_file ?? null;
       } else {
-        // status === "pending": xóa ảnh minh chứng để lần hoàn thành sau bắt buộc upload mới
+        // status === "pending": xoá ảnh minh chứng trên Drive trước, rồi clear field
+        // (lần hoàn thành sau bắt buộc upload mới)
+        if (row.attached_file) {
+          const { total, deleted } = await deleteAttachedFilesFromDrive(
+            row.attached_file
+          );
+          console.log(
+            `[MaintenanceStatus] Đã xoá ${deleted}/${total} ảnh minh chứng trên Drive cho uuid=${uuid}.`
+          );
+        }
         newAttachedFile = null;
       }
 
-      // Bước 1: UPDATE status + updated_by + attached_file → DB tự set updated_at
-      await tpmConnection.query(
-        `UPDATE tb_maintenance_schedule_detail
-         SET status = ?, updated_by = ?, attached_file = ?
-         WHERE uuid_maintenance_schedule_detail = ?`,
-        [status, updatedBy, newAttachedFile, uuid]
-      );
+      // Bước 1: UPDATE status (+ updated_by + attached_file).
+      // confirm_completed: chỉ update status, GIỮ NGUYÊN updated_by và updated_at
+      // (đè trick "updated_at = updated_at" để chặn ON UPDATE CURRENT_TIMESTAMP)
+      if (status === "confirm_completed") {
+        await tpmConnection.query(
+          `UPDATE tb_maintenance_schedule_detail
+           SET status = ?, updated_at = updated_at
+           WHERE uuid_maintenance_schedule_detail = ?`,
+          [status, uuid]
+        );
+      } else {
+        await tpmConnection.query(
+          `UPDATE tb_maintenance_schedule_detail
+           SET status = ?, updated_by = ?, attached_file = ?
+           WHERE uuid_maintenance_schedule_detail = ?`,
+          [status, updatedBy, newAttachedFile, uuid]
+        );
+      }
 
       // Bước 2: Lấy updated_at vừa được DB set, dùng DATE_FORMAT để nhận đúng format string
       const [[{ updatedAt }]] = await tpmConnection.query(
@@ -12877,34 +12970,39 @@ app.put(
         [uuid]
       );
 
-      // Bước 3: Build JSON — checked_at = updatedAt
-      let contentList = [];
+      // Bước 3 & 4: Cập nhật JSON content
+      // - completed: set is_check=1, checked_by/at = người thao tác
+      // - pending: clear is_check, checked_by/at
+      // - confirm_completed: GIỮ NGUYÊN JSON cũ (admin chỉ duyệt, không phải người thực hiện)
+      let updatedContent;
       try {
         const raw = row.maintenance_content_detail;
         const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
-        contentList = Array.isArray(parsed) ? parsed : [];
+        updatedContent = Array.isArray(parsed) ? parsed : [];
       } catch (_) {
-        contentList = [];
+        updatedContent = [];
       }
 
-      const isCompleted = status === "completed";
-      const updatedContent = contentList.map((item) => ({
-        ...item,
-        is_check: isCompleted ? 1 : 0,
-        checked_at: isCompleted ? updatedAt : null,
-        checked_by: isCompleted ? updatedBy : null,
-      }));
+      if (status !== "confirm_completed") {
+        const isCompleted = status === "completed";
+        updatedContent = updatedContent.map((item) => ({
+          ...item,
+          is_check: isCompleted ? 1 : 0,
+          checked_at: isCompleted ? updatedAt : null,
+          checked_by: isCompleted ? updatedBy : null,
+        }));
 
-      // Bước 4: Cập nhật JSON — updated_at = updated_at để DB không trigger lại
-      await tpmConnection.query(
-        `UPDATE tb_maintenance_schedule_detail
-         SET maintenance_content_detail = ?, updated_at = updated_at
-         WHERE uuid_maintenance_schedule_detail = ?`,
-        [JSON.stringify(updatedContent), uuid]
-      );
+        await tpmConnection.query(
+          `UPDATE tb_maintenance_schedule_detail
+           SET maintenance_content_detail = ?, updated_at = updated_at
+           WHERE uuid_maintenance_schedule_detail = ?`,
+          [JSON.stringify(updatedContent), uuid]
+        );
+      }
 
       res.json({
         success: true,
+        status,
         updated_by: updatedBy,
         maintenance_content_detail: updatedContent,
         attached_file: newAttachedFile,

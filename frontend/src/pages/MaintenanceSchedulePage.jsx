@@ -36,6 +36,7 @@ import {
   TableCell,
   Modal,
   Backdrop,
+  LinearProgress,
 } from "@mui/material";
 import {
   ChevronLeft,
@@ -129,11 +130,18 @@ const MAINT_STATUS_CONFIG = {
     icon: HourglassEmpty,
   },
   completed: {
+    label: "Đã thực hiện",
+    color: "#1565c0",
+    bg: "#e3f2fd",
+    borderColor: "#90caf9",
+    icon: TaskAlt,
+  },
+  confirm_completed: {
     label: "Đã hoàn thành",
     color: "#2e7d32",
     bg: "#e8f5e9",
     borderColor: "#a5d6a7",
-    icon: TaskAlt,
+    icon: CheckCircle,
   },
 };
 
@@ -513,6 +521,9 @@ const MaintenanceHistoryDialog = ({
   const [evidenceFiles, setEvidenceFiles] = useState([]);
   // attached_file hiện tại của bản ghi (parsed)
   const [currentAttached, setCurrentAttached] = useState([]);
+  // Confirm dialog cho admin khi bấm "Duyệt hoàn thành" / "Duyệt chưa hoàn thành"
+  // null | { targetStatus, title, message, confirmLabel, confirmColor }
+  const [confirmAction, setConfirmAction] = useState(null);
 
   const fetchHistory = useCallback(async (id_machine) => {
     if (!id_machine) return;
@@ -565,11 +576,44 @@ const MaintenanceHistoryDialog = ({
     setEvidenceFiles((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  const handleToggleStatus = async () => {
-    if (!machine) return;
-    const newStatus = machine.status === "completed" ? "pending" : "completed";
+  // Mở dialog xác nhận cho thao tác admin
+  const requestAdminAction = (targetStatus) => {
+    if (targetStatus === "confirm_completed") {
+      setConfirmAction({
+        targetStatus,
+        title: "Xác nhận duyệt hoàn thành",
+        message:
+          "Khi duyệt, lý lịch sẽ chuyển sang trạng thái 'Đã duyệt hoàn thành' và người dùng sẽ không thể đổi lại.",
+        confirmLabel: "Duyệt hoàn thành",
+        confirmColor: "#2e7d32",
+      });
+    } else if (targetStatus === "pending") {
+      setConfirmAction({
+        targetStatus,
+        title: "Xác nhận duyệt chưa hoàn thành",
+        message:
+          "Khi xác nhận, lý lịch sẽ chuyển về trạng thái 'Chưa thực hiện' và TOÀN BỘ ảnh minh chứng đã upload sẽ bị xoá",
+        confirmLabel: "Chưa hoàn thành",
+        confirmColor: "#e65100",
+      });
+    }
+  };
 
-    // Khi hoàn thành: bắt buộc phải có ít nhất 1 ảnh minh chứng (mới hoặc cũ)
+  const handleConfirmAdminAction = async () => {
+    if (!confirmAction) return;
+    const target = confirmAction.targetStatus;
+    setConfirmAction(null);
+    await handleToggleStatus(target);
+  };
+
+  const handleToggleStatus = async (explicitStatus) => {
+    if (!machine) return;
+    // Nếu không truyền explicit → toggle giữa pending ↔ completed (giữ hành vi cũ cho user thường)
+    const newStatus =
+      explicitStatus ??
+      (machine.status === "completed" ? "pending" : "completed");
+
+    // Khi thực hiện: bắt buộc phải có ít nhất 1 ảnh minh chứng (mới hoặc cũ)
     if (
       newStatus === "completed" &&
       evidenceFiles.length === 0 &&
@@ -586,11 +630,12 @@ const MaintenanceHistoryDialog = ({
         newStatus === "completed" ? evidenceFiles : []
       );
       // Cập nhật local view
-      if (newStatus === "completed") {
+      if (newStatus === "pending") {
+        setCurrentAttached([]);
+      } else {
+        // completed | confirm_completed → cập nhật từ response
         setCurrentAttached(parseAttachedFile(result?.attached_file));
         setEvidenceFiles([]);
-      } else {
-        setCurrentAttached([]);
       }
       onStatusChange &&
         onStatusChange(
@@ -699,9 +744,6 @@ const MaintenanceHistoryDialog = ({
               <tr>
                 <td style="text-align:center;width:38px">${i + 1}</td>
                 <td>${esc(item.name)}</td>
-                <td style="text-align:center;width:90px">
-                  ${item.is_check ? "☑" : "☐"}
-                </td>
               </tr>`
             )
             .join("")
@@ -970,7 +1012,6 @@ const MaintenanceHistoryDialog = ({
             <tr>
               <th style="width:38px">STT</th>
               <th>Nội dung</th>
-              <th style="width:90px">Đã kiểm</th>
             </tr>
           </thead>
           <tbody>${contentRows}</tbody>
@@ -1774,8 +1815,8 @@ const MaintenanceHistoryDialog = ({
               </Box>
             )}
 
-            {/* Ảnh chưa upload (đang chọn) — chỉ hiện khi chưa hoàn thành & có quyền */}
-            {canToggleStatus && machine.status !== "completed" && (
+            {/* Ảnh chưa upload (đang chọn) — chỉ hiện khi đang pending & có quyền */}
+            {canToggleStatus && machine.status === "pending" && (
               <>
                 {evidencePreviews.length > 0 && (
                   <Box sx={{ mb: 2 }}>
@@ -1788,7 +1829,7 @@ const MaintenanceHistoryDialog = ({
                         mb: 1,
                       }}
                     >
-                      Ảnh sẽ upload khi đánh dấu hoàn thành (
+                      Ảnh sẽ upload khi đánh dấu thực hiện (
                       {evidencePreviews.length})
                     </Typography>
                     <Stack
@@ -1835,16 +1876,15 @@ const MaintenanceHistoryDialog = ({
               </>
             )}
 
-            {currentAttached.length === 0 &&
-              (!canToggleStatus || machine.status === "completed") && (
-                <Typography
-                  variant="caption"
-                  color="text.disabled"
-                  fontStyle="italic"
-                >
-                  Chưa có ảnh minh chứng
-                </Typography>
-              )}
+            {currentAttached.length === 0 && machine.status !== "pending" && (
+              <Typography
+                variant="caption"
+                color="text.disabled"
+                fontStyle="italic"
+              >
+                Chưa có ảnh minh chứng
+              </Typography>
+            )}
           </Box>
         </Paper>
       </DialogContent>
@@ -1857,44 +1897,125 @@ const MaintenanceHistoryDialog = ({
           justifyContent: "space-between",
         }}
       >
-        {/* Status toggle — chỉ hiện cho admin hoặc user có quyền edit */}
+        {/* Status toggle — hiển thị nút theo role + trạng thái */}
         {canToggleStatus ? (
           (() => {
-            const isCompleted = machine.status === "completed";
+            const st = machine.status;
             const noEvidence =
-              !isCompleted &&
-              evidenceFiles.length === 0 &&
-              currentAttached.length === 0;
-            return (
-              <Button
-                variant="outlined"
-                startIcon={
-                  statusUpdating ? (
-                    <CircularProgress size={14} />
-                  ) : isCompleted ? (
-                    <HourglassEmpty />
-                  ) : (
-                    <TaskAlt />
-                  )
-                }
-                onClick={handleToggleStatus}
-                disabled={statusUpdating || noEvidence}
-                sx={{
-                  borderRadius: "10px",
-                  borderColor: isCompleted ? "#e65100" : "#2e7d32",
-                  color: isCompleted ? "#e65100" : "#2e7d32",
-                  "&:hover": {
-                    borderColor: isCompleted ? "#bf360c" : "#1b5e20",
-                    bgcolor: isCompleted ? "#fff3e0" : "#e8f5e9",
-                  },
-                  fontWeight: 600,
-                }}
-              >
-                {isCompleted
-                  ? "Đánh dấu chưa thực hiện"
-                  : "Đánh dấu hoàn thành"}
-              </Button>
-            );
+              evidenceFiles.length === 0 && currentAttached.length === 0;
+            const spinner = <CircularProgress size={14} />;
+
+            // pending → "Đánh dấu thực hiện" (cả admin lẫn edit)
+            if (st === "pending") {
+              return (
+                <Button
+                  variant="outlined"
+                  startIcon={statusUpdating ? spinner : <TaskAlt />}
+                  onClick={() => handleToggleStatus("completed")}
+                  disabled={statusUpdating || noEvidence}
+                  sx={{
+                    borderRadius: "10px",
+                    borderColor: "#1565c0",
+                    color: "#1565c0",
+                    "&:hover": { borderColor: "#0d47a1", bgcolor: "#e3f2fd" },
+                    fontWeight: 600,
+                  }}
+                >
+                  Đánh dấu thực hiện
+                </Button>
+              );
+            }
+
+            // completed → admin thấy 2 nút duyệt, user thường thấy "Đánh dấu chưa thực hiện"
+            if (st === "completed") {
+              if (isAdmin) {
+                return (
+                  <Stack direction="row" spacing={1}>
+                    <Button
+                      variant="contained"
+                      startIcon={statusUpdating ? spinner : <CheckCircle />}
+                      onClick={() => requestAdminAction("confirm_completed")}
+                      disabled={statusUpdating}
+                      sx={{
+                        borderRadius: "10px",
+                        bgcolor: "#2e7d32",
+                        color: "#fff",
+                        "&:hover": { bgcolor: "#1b5e20" },
+                        fontWeight: 600,
+                      }}
+                    >
+                      Duyệt hoàn thành
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      startIcon={statusUpdating ? spinner : <HourglassEmpty />}
+                      onClick={() => requestAdminAction("pending")}
+                      disabled={statusUpdating}
+                      sx={{
+                        borderRadius: "10px",
+                        borderColor: "#e65100",
+                        color: "#e65100",
+                        "&:hover": {
+                          borderColor: "#bf360c",
+                          bgcolor: "#fff3e0",
+                        },
+                        fontWeight: 600,
+                      }}
+                    >
+                      Chưa hoàn thành
+                    </Button>
+                  </Stack>
+                );
+              }
+              // user thường
+              return (
+                <Button
+                  variant="outlined"
+                  startIcon={statusUpdating ? spinner : <HourglassEmpty />}
+                  onClick={() => handleToggleStatus("pending")}
+                  disabled={statusUpdating}
+                  sx={{
+                    borderRadius: "10px",
+                    borderColor: "#e65100",
+                    color: "#e65100",
+                    "&:hover": {
+                      borderColor: "#bf360c",
+                      bgcolor: "#fff3e0",
+                    },
+                    fontWeight: 600,
+                  }}
+                >
+                  Đánh dấu chưa thực hiện
+                </Button>
+              );
+            }
+
+            // confirm_completed → chỉ admin được hủy duyệt về pending
+            if (st === "confirm_completed" && isAdmin) {
+              return (
+                <Button
+                  variant="outlined"
+                  startIcon={statusUpdating ? spinner : <HourglassEmpty />}
+                  onClick={() => requestAdminAction("pending")}
+                  disabled={statusUpdating}
+                  sx={{
+                    borderRadius: "10px",
+                    borderColor: "#e65100",
+                    color: "#e65100",
+                    "&:hover": {
+                      borderColor: "#bf360c",
+                      bgcolor: "#fff3e0",
+                    },
+                    fontWeight: 600,
+                  }}
+                >
+                  Chưa hoàn thành
+                </Button>
+              );
+            }
+
+            // confirm_completed cho user thường → không hiện nút
+            return <Box />;
           })()
         ) : (
           <Box />
@@ -1930,6 +2051,54 @@ const MaintenanceHistoryDialog = ({
           </Button>
         </Stack>
       </DialogActions>
+
+      {/* Confirm dialog cho thao tác admin (Duyệt hoàn thành / Duyệt chưa hoàn thành) */}
+      <Dialog
+        open={!!confirmAction}
+        onClose={() => !statusUpdating && setConfirmAction(null)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: "16px" } }}
+      >
+        <DialogTitle sx={{ fontWeight: 700, fontSize: "1.05rem", pb: 1 }}>
+          {confirmAction?.title}
+        </DialogTitle>
+        <DialogContent sx={{ pb: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            {confirmAction?.message}
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            onClick={() => setConfirmAction(null)}
+            disabled={statusUpdating}
+            sx={{ borderRadius: "10px", color: "text.secondary" }}
+          >
+            Huỷ
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleConfirmAdminAction}
+            disabled={statusUpdating}
+            startIcon={
+              statusUpdating ? (
+                <CircularProgress size={14} sx={{ color: "#fff" }} />
+              ) : null
+            }
+            sx={{
+              borderRadius: "10px",
+              bgcolor: confirmAction?.confirmColor,
+              "&:hover": {
+                bgcolor: confirmAction?.confirmColor,
+                filter: "brightness(0.92)",
+              },
+              fontWeight: 600,
+            }}
+          >
+            {confirmAction?.confirmLabel}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Dialog>
   );
 };
@@ -1964,12 +2133,12 @@ const MachineCard = React.memo(({ machine, onClick }) => {
       onClick={onClick}
       sx={{
         borderRadius: "16px",
-        border: `1px solid ${machine.status === "completed" ? "#a5d6a7" : "rgba(0,0,0,0.08)"}`,
+        border: `1px solid ${machine.status === "confirm_completed" ? "#a5d6a7" : "rgba(0,0,0,0.08)"}`,
         borderLeft: `4px solid ${maintStatusCfg.color}`,
         transition: "all 0.2s ease",
         height: "100%",
         cursor: "pointer",
-        bgcolor: machine.status === "completed" ? "#f9fff9" : "#fff",
+        bgcolor: machine.status === "confirm_completed" ? "#f9fff9" : "#fff",
         "&:hover": {
           boxShadow: "0 4px 20px rgba(102,126,234,0.2)",
           transform: "translateY(-2px)",
@@ -2991,7 +3160,7 @@ const MaintenanceSchedulePage = () => {
 
   // ── Stats (based on filtered data) ──
   const totalMachines = deptLocationFiltered.length;
-  // Hôm nay: chỉ tính pending (chưa hoàn thành)
+  // Hôm nay: chỉ tính pending (chưa thực hiện)
   const todayMachines = deptLocationFiltered.filter(
     (i) =>
       i.status !== "completed" &&
@@ -3001,6 +3170,12 @@ const MaintenanceSchedulePage = () => {
   ).length;
   const completedMachines = deptLocationFiltered.filter(
     (i) => i.status === "completed"
+  ).length;
+  const pendingMachines = deptLocationFiltered.filter(
+    (i) => i.status === "pending" || !i.status
+  ).length;
+  const confirmedMachines = deptLocationFiltered.filter(
+    (i) => i.status === "confirm_completed"
   ).length;
 
   return (
@@ -3456,22 +3631,35 @@ const MaintenanceSchedulePage = () => {
 
                   {/* Group 4: Trạng thái */}
                   <FilterGroup label="Trạng thái">
-                    <Stack direction="row" spacing={0.75}>
+                    <Stack
+                      direction="row"
+                      spacing={0.5}
+                      useFlexGap
+                      flexWrap="wrap"
+                    >
                       {[
                         { value: null, label: "Tất cả" },
                         {
                           value: "pending",
-                          label: "Chưa thực hiện",
+                          label: "Chưa TH",
                           color: MAINT_STATUS_CONFIG.pending.color,
                           bg: MAINT_STATUS_CONFIG.pending.bg,
                           border: MAINT_STATUS_CONFIG.pending.borderColor,
                         },
                         {
                           value: "completed",
-                          label: "Hoàn thành",
+                          label: "Đã TH",
                           color: MAINT_STATUS_CONFIG.completed.color,
                           bg: MAINT_STATUS_CONFIG.completed.bg,
                           border: MAINT_STATUS_CONFIG.completed.borderColor,
+                        },
+                        {
+                          value: "confirm_completed",
+                          label: "Đã HT",
+                          color: MAINT_STATUS_CONFIG.confirm_completed.color,
+                          bg: MAINT_STATUS_CONFIG.confirm_completed.bg,
+                          border:
+                            MAINT_STATUS_CONFIG.confirm_completed.borderColor,
                         },
                       ].map((opt) => {
                         const isActive = filterStatus === opt.value;
@@ -3480,7 +3668,8 @@ const MaintenanceSchedulePage = () => {
                             key={String(opt.value)}
                             onClick={() => setFilterStatus(opt.value)}
                             sx={{
-                              flex: 1,
+                              flex: "1 1 calc(25% - 4px)",
+                              minWidth: 0,
                               textAlign: "center",
                               py: 0.6,
                               px: 0.5,
@@ -3652,22 +3841,38 @@ const MaintenanceSchedulePage = () => {
                         value: totalMachines,
                         color: "#667eea",
                         bg: "rgba(102,126,234,0.08)",
+                        size: 6,
                       },
                       {
-                        label: "Hôm nay",
+                        label: "Số máy hôm nay",
                         value: todayMachines,
-                        sublabel: "còn lại",
                         color: "#764ba2",
                         bg: "rgba(118,75,162,0.08)",
+                        size: 6,
                       },
                       {
-                        label: "Hoàn thành",
-                        value: completedMachines,
-                        color: "#2e7d32",
-                        bg: "#e8f5e9",
+                        label: "Chưa thực hiện",
+                        value: pendingMachines,
+                        color: MAINT_STATUS_CONFIG.pending.color,
+                        bg: MAINT_STATUS_CONFIG.pending.bg,
+                        size: 4,
+                      },
+                      {
+                        label: "Đã thực hiện",
+                        value: completedMachines + confirmedMachines,
+                        color: MAINT_STATUS_CONFIG.completed.color,
+                        bg: MAINT_STATUS_CONFIG.completed.bg,
+                        size: 4,
+                      },
+                      {
+                        label: "Đã hoàn thành",
+                        value: confirmedMachines,
+                        color: MAINT_STATUS_CONFIG.confirm_completed.color,
+                        bg: MAINT_STATUS_CONFIG.confirm_completed.bg,
+                        size: 4,
                       },
                     ].map((s) => (
-                      <Grid key={s.label} size={4}>
+                      <Grid key={s.label} size={s.size}>
                         <Box
                           sx={{
                             textAlign: "center",
@@ -3707,6 +3912,80 @@ const MaintenanceSchedulePage = () => {
                       </Grid>
                     ))}
                   </Grid>
+
+                  {/* Tiến độ thực hiện & hoàn thành */}
+                  {(() => {
+                    const doneCount = completedMachines + confirmedMachines;
+                    const pctDone =
+                      totalMachines > 0
+                        ? Math.round((doneCount / totalMachines) * 100)
+                        : 0;
+                    const pctConfirmed =
+                      totalMachines > 0
+                        ? Math.round((confirmedMachines / totalMachines) * 100)
+                        : 0;
+                    const bars = [
+                      {
+                        label: "Tiến độ thực hiện",
+                        pct: pctDone,
+                        value: doneCount,
+                        color: MAINT_STATUS_CONFIG.completed.color,
+                        gradient:
+                          "linear-gradient(90deg, #64b5f6 0%, #1565c0 100%)",
+                      },
+                      {
+                        label: "Tiến độ hoàn thành",
+                        pct: pctConfirmed,
+                        value: confirmedMachines,
+                        color: MAINT_STATUS_CONFIG.confirm_completed.color,
+
+                        gradient:
+                          "linear-gradient(90deg, #66bb6a 0%, #2e7d32 100%)",
+                      },
+                    ];
+                    return (
+                      <Stack spacing={1} sx={{ mt: 1.5 }}>
+                        {bars.map((b) => (
+                          <Box key={b.label}>
+                            <Stack
+                              direction="row"
+                              justifyContent="space-between"
+                              alignItems="center"
+                              sx={{ mb: 0.5 }}
+                            >
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                fontWeight={600}
+                              >
+                                {b.label}
+                              </Typography>
+                              <Typography
+                                variant="caption"
+                                fontWeight={700}
+                                sx={{ color: b.color }}
+                              >
+                                {b.pct}% ({b.value}/{totalMachines})
+                              </Typography>
+                            </Stack>
+                            <LinearProgress
+                              variant="determinate"
+                              value={b.pct}
+                              sx={{
+                                height: 8,
+                                borderRadius: 4,
+                                bgcolor: "rgba(0,0,0,0.06)",
+                                "& .MuiLinearProgress-bar": {
+                                  borderRadius: 4,
+                                  background: b.gradient,
+                                },
+                              }}
+                            />
+                          </Box>
+                        ))}
+                      </Stack>
+                    );
+                  })()}
                 </Box>
               </CardContent>
             </Card>

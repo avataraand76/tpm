@@ -761,9 +761,8 @@ create table if not exists tb_maintenance_schedule_detail
     month int,
     day int,
     maintenance_content_detail json,
-    status enum('pending', 'completed') default 'pending',
+    status enum('pending', 'completed', 'confirm_completed') default 'pending',
     attached_file text,
-    confirm int,
 
     -- key
     primary key (id_maintenance_schedule_detail),
