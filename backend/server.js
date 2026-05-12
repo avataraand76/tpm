@@ -159,7 +159,9 @@ const deleteAttachedFilesFromDrive = async (attachedFileString) => {
     .map(extractDriveFileId)
     .filter(Boolean);
 
-  const results = await Promise.allSettled(ids.map((id) => deleteFileFromDrive(id)));
+  const results = await Promise.allSettled(
+    ids.map((id) => deleteFileFromDrive(id))
+  );
   const deleted = results.filter(
     (r) => r.status === "fulfilled" && r.value === true
   ).length;
@@ -12548,10 +12550,16 @@ async function autoCreateMaintenanceScheduleDetail() {
     `);
 
     if (!machines || machines.length === 0) {
-      console.log(
-        "[AutoMaintenanceSchedule] Không có máy nào đủ điều kiện tạo lịch bảo dưỡng."
-      );
-      return;
+      const msg = "Không có máy nào đủ điều kiện tạo lịch bảo dưỡng.";
+      console.log(`[AutoMaintenanceSchedule] ${msg}`);
+      return {
+        success: true,
+        year: currentYear,
+        inserted: 0,
+        messages: [msg],
+        pass1: [],
+        pass2: [],
+      };
     }
 
     // Helper: phân chia danh sách máy vào các ngày làm việc của MỘT QUÝ
@@ -12738,11 +12746,19 @@ async function autoCreateMaintenanceScheduleDetail() {
       }
     }
 
+    const messages = [];
+
     if (rows.length === 0) {
-      console.log(
-        `[AutoMaintenanceSchedule] Tất cả lịch bảo dưỡng cho năm ${currentYear} đã được tạo đầy đủ. Bỏ qua.`
-      );
-      return;
+      const msg = `Tất cả lịch bảo dưỡng cho năm ${currentYear} đã được tạo đầy đủ. Bỏ qua.`;
+      console.log(`[AutoMaintenanceSchedule] ${msg}`);
+      return {
+        success: true,
+        year: currentYear,
+        inserted: 0,
+        messages: [msg],
+        pass1: [],
+        pass2: [],
+      };
     }
 
     await connection.beginTransaction();
@@ -12757,26 +12773,60 @@ async function autoCreateMaintenanceScheduleDetail() {
     const actualInserted = insertResult.affectedRows;
 
     if (pass1ActiveGroups.length > 0) {
-      console.log(
-        `[AutoMaintenanceSchedule] Đã tạo ${actualInserted} dòng lịch bảo dưỡng cho năm ${currentYear} cho các loại máy: ${pass1ActiveGroups.map((g) => `\n ● ${g.groupLabel} (${g.machineCount} máy x ${g.activeQuarters})`).join("; ")}.`
-      );
+      const msg = `Đã tạo ${actualInserted} dòng lịch bảo dưỡng cho năm ${currentYear} cho các loại máy: ${pass1ActiveGroups.map((g) => `\n ● ${g.groupLabel} (${g.machineCount} máy x ${g.activeQuarters})`).join("; ")}.`;
+      console.log(`[AutoMaintenanceSchedule] ${msg}`);
+      messages.push(msg);
     }
     if (pass2ActiveGroups.length > 0) {
-      console.log(
-        `[AutoMaintenanceSchedule] Thêm ${actualInserted} dòng lịch bảo dưỡng mới cho năm ${currentYear}: ${pass2ActiveGroups.map((g) => `\n ● ${g.groupLabel} (${g.machineCount} máy x ${g.newQuarters})`).join("; ")}.`
-      );
+      const msg = `Thêm ${actualInserted} dòng lịch bảo dưỡng mới cho năm ${currentYear}: ${pass2ActiveGroups.map((g) => `\n ● ${g.groupLabel} (${g.machineCount} máy x ${g.newQuarters})`).join("; ")}.`;
+      console.log(`[AutoMaintenanceSchedule] ${msg}`);
+      messages.push(msg);
     }
+
+    return {
+      success: true,
+      year: currentYear,
+      inserted: actualInserted,
+      messages,
+      pass1: pass1ActiveGroups,
+      pass2: pass2ActiveGroups,
+    };
   } catch (error) {
     await connection.rollback();
     console.error(
       "[AutoMaintenanceSchedule] Lỗi khi tự động tạo lịch bảo dưỡng:",
       error
     );
+    return {
+      success: false,
+      message: error.message,
+    };
   } finally {
     connection.release();
   }
 }
 autoCreateMaintenanceScheduleDetail();
+
+// POST /api/admin/auto-create-maintenance-schedule — Trigger thủ công
+app.post(
+  "/api/admin/auto-create-maintenance-schedule",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const result = await autoCreateMaintenanceScheduleDetail();
+      if (!result?.success) {
+        return res.status(500).json({
+          success: false,
+          message: result?.message || "Có lỗi khi tạo lịch bảo dưỡng",
+        });
+      }
+      res.json(result);
+    } catch (error) {
+      console.error("API error:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+);
 
 cron.schedule("*/30 * * * 1-6", autoCreateMaintenanceScheduleDetail, {
   timezone: "Asia/Ho_Chi_Minh",
@@ -12937,7 +12987,7 @@ app.put(
             row.attached_file
           );
           console.log(
-            `[MaintenanceStatus] Đã xoá ${deleted}/${total} ảnh minh chứng trên Drive cho uuid=${uuid}.`
+            `[AutoMaintenanceSchedule] Đã xoá ${deleted}/${total} ảnh minh chứng trên Drive cho uuid=${uuid}.`
           );
         }
         newAttachedFile = null;

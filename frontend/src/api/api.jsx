@@ -696,6 +696,12 @@ export const api = {
       );
       return response.data;
     },
+    autoCreateMaintenanceSchedule: async () => {
+      const response = await httpConnect.post(
+        "/api/admin/auto-create-maintenance-schedule"
+      );
+      return response.data;
+    },
   },
 
   // MARK: TEST PROPOSALS

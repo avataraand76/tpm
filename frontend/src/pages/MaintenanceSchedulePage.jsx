@@ -592,7 +592,7 @@ const MaintenanceHistoryDialog = ({
         targetStatus,
         title: "Xác nhận duyệt chưa hoàn thành",
         message:
-          "Khi xác nhận, lý lịch sẽ chuyển về trạng thái 'Chưa thực hiện' và TOÀN BỘ ảnh minh chứng đã upload sẽ bị xoá",
+          "Khi xác nhận, lý lịch sẽ chuyển về trạng thái 'Chưa thực hiện' và TOÀN BỘ ảnh minh chứng đã upload sẽ bị xoá.",
         confirmLabel: "Chưa hoàn thành",
         confirmColor: "#e65100",
       });

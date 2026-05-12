@@ -62,7 +62,6 @@ import {
   Add,
   Business,
   LocationOn,
-  Category,
   ExpandMore,
   People,
   Person,
@@ -570,6 +569,11 @@ const AdminPage = () => {
   const [scheduleData, setScheduleData] = useState({});
   const [dirtyScheduleKeys, setDirtyScheduleKeys] = useState(new Set());
   const [savingSchedule, setSavingSchedule] = useState(false);
+  const [autoCreating, setAutoCreating] = useState(false);
+  // Dialog xác nhận chạy thủ công autoCreateMaintenanceScheduleDetail
+  const [autoCreateConfirmOpen, setAutoCreateConfirmOpen] = useState(false);
+  // Dialog kết quả sau khi chạy
+  const [autoCreateResult, setAutoCreateResult] = useState(null);
   // Dùng DOM ref thay vì state để tránh re-render khi hover
   const headerCellRefs = useRef({});
   const prevHoveredColKeyRef = useRef(null);
@@ -1437,6 +1441,43 @@ const AdminPage = () => {
       );
     } finally {
       setSavingSchedule(false);
+    }
+  };
+
+  const handleAutoCreateSchedule = async () => {
+    setAutoCreating(true);
+    try {
+      const res = await api.admin.autoCreateMaintenanceSchedule();
+      setAutoCreateConfirmOpen(false);
+      if (!res?.success) {
+        showNotification(
+          "error",
+          "Lỗi tạo lịch bảo dưỡng",
+          res?.message || "Có lỗi xảy ra khi tạo lịch bảo dưỡng"
+        );
+        return;
+      }
+      setAutoCreateResult(res);
+      // Notification tóm tắt
+      showNotification(
+        res.inserted > 0 ? "success" : "info",
+        `Tạo lịch bảo dưỡng ${res.year}`,
+        res.inserted > 0
+          ? `Đã chèn ${res.inserted} dòng vào lịch bảo dưỡng năm ${res.year}.`
+          : `Lịch bảo dưỡng năm ${res.year} đã đầy đủ. Không có dòng nào được tạo thêm.`
+      );
+      // Reload data nếu có dòng được tạo (để chip "loại máy đã có lịch" v.v. cập nhật)
+      if (res.inserted > 0) {
+        fetchMaintenanceMatrix();
+      }
+    } catch (error) {
+      showNotification(
+        "error",
+        "Lỗi tạo lịch bảo dưỡng",
+        error.response?.data?.message || error.message
+      );
+    } finally {
+      setAutoCreating(false);
     }
   };
 
@@ -3393,6 +3434,27 @@ const AdminPage = () => {
                           />
                         )}
                         <Button
+                          variant="outlined"
+                          onClick={() => setAutoCreateConfirmOpen(true)}
+                          disabled={autoCreating || savingSchedule}
+                          sx={{
+                            borderRadius: "10px",
+                            borderColor: "#9333ea",
+                            color: "#9333ea",
+                            fontWeight: 600,
+                            px: 2.5,
+                            py: 1,
+                            "&:hover": {
+                              borderColor: "#7e22ce",
+                              bgcolor: "rgba(147,51,234,0.06)",
+                            },
+                          }}
+                        >
+                          {autoCreating
+                            ? "Đang chạy..."
+                            : "Chạy tạo lịch tự động"}
+                        </Button>
+                        <Button
                           variant="contained"
                           startIcon={
                             savingSchedule ? (
@@ -3866,6 +3928,122 @@ const AdminPage = () => {
               sx={{ borderRadius: "10px" }}
             >
               {deletingContentId ? "Đang xoá..." : "Xoá"}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* --- Dialog xác nhận chạy tạo lịch tự động --- */}
+        <Dialog
+          open={autoCreateConfirmOpen}
+          onClose={() => !autoCreating && setAutoCreateConfirmOpen(false)}
+          maxWidth="xs"
+          fullWidth
+          PaperProps={{ sx: { borderRadius: "16px" } }}
+        >
+          <DialogTitle sx={{ fontWeight: 700 }}>
+            Xác nhận tạo lịch bảo dưỡng tự động
+          </DialogTitle>
+          <DialogContent>
+            <Typography variant="body2" color="text.secondary">
+              Hệ thống sẽ quét tất cả máy đủ điều kiện và tự động phân bổ lịch
+              bảo dưỡng cho các tháng được cấu hình trong năm hiện tại. Lịch đã
+              có sẽ không bị tạo trùng.
+              <br />
+              <br />
+              <strong>Lưu ý:</strong> nếu vừa lưu thay đổi cấu hình lịch ở trên,
+              hãy đảm bảo đã nhấn <strong>Lưu lịch</strong> trước khi chạy.
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2 }}>
+            <Button
+              onClick={() => setAutoCreateConfirmOpen(false)}
+              disabled={autoCreating}
+              sx={{ borderRadius: "10px", color: "text.secondary" }}
+            >
+              Huỷ
+            </Button>
+            <Button
+              variant="contained"
+              onClick={handleAutoCreateSchedule}
+              disabled={autoCreating}
+              sx={{
+                borderRadius: "10px",
+                bgcolor: "#9333ea",
+                "&:hover": { bgcolor: "#7e22ce" },
+                fontWeight: 600,
+              }}
+            >
+              {autoCreating ? "Đang chạy..." : "Xác nhận"}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* --- Dialog kết quả --- */}
+        <Dialog
+          open={!!autoCreateResult}
+          onClose={() => setAutoCreateResult(null)}
+          maxWidth="md"
+          fullWidth
+          PaperProps={{ sx: { borderRadius: "16px" } }}
+        >
+          <DialogTitle sx={{ fontWeight: 700 }}>
+            Kết quả tạo lịch bảo dưỡng {autoCreateResult?.year}
+          </DialogTitle>
+          <DialogContent>
+            <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+              <Chip
+                label={`Đã chèn: ${autoCreateResult?.inserted ?? 0} dòng`}
+                color={autoCreateResult?.inserted > 0 ? "success" : "default"}
+                size="small"
+                sx={{ fontWeight: 600 }}
+              />
+              {(autoCreateResult?.pass1?.length ?? 0) > 0 && (
+                <Chip
+                  label={`Pass 1: ${autoCreateResult.pass1.length} nhóm`}
+                  color="info"
+                  size="small"
+                  variant="outlined"
+                  sx={{ fontWeight: 600 }}
+                />
+              )}
+              {(autoCreateResult?.pass2?.length ?? 0) > 0 && (
+                <Chip
+                  label={`Pass 2: ${autoCreateResult.pass2.length} nhóm`}
+                  color="warning"
+                  size="small"
+                  variant="outlined"
+                  sx={{ fontWeight: 600 }}
+                />
+              )}
+            </Stack>
+            <Box
+              sx={{
+                bgcolor: "#0f172a",
+                color: "#e2e8f0",
+                p: 2,
+                borderRadius: "10px",
+                fontFamily: "monospace",
+                fontSize: "0.8rem",
+                whiteSpace: "pre-wrap",
+                maxHeight: 480,
+                overflowY: "auto",
+                lineHeight: 1.6,
+              }}
+            >
+              {(autoCreateResult?.messages ?? []).length === 0
+                ? `[AutoMaintenanceSchedule] Lịch bảo dưỡng năm ${autoCreateResult?.year} đã đầy đủ. Không có dòng nào được tạo thêm.`
+                : autoCreateResult.messages
+                    .map((m) => `[AutoMaintenanceSchedule] ${m}`)
+                    .join("\n\n")}
+            </Box>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2 }}>
+            <Button
+              variant="contained"
+              onClick={() => setAutoCreateResult(null)}
+              sx={{ ...btnGradientStyle, borderRadius: "10px", px: 3 }}
+            >
+              Đóng
             </Button>
           </DialogActions>
         </Dialog>
