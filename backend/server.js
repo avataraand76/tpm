@@ -13174,13 +13174,20 @@ app.get(
 
       const machine = mrows[0];
 
-      // Lấy bản ghi lịch bảo dưỡng gần nhất (ưu tiên tháng hiện tại của VN)
+      // Lấy bản ghi lịch bảo dưỡng phù hợp với QUÝ hiện tại của VN
+      // (1 máy / quý → ưu tiên bản ghi cùng quý đang chạy, không phải cùng tháng).
+      // Thứ tự ưu tiên:
+      //   1) Cùng năm + cùng quý hiện tại (kể cả status nào)
+      //   2) Trong năm hiện tại: bản ghi pending có tháng nhỏ nhất ≥ tháng hiện tại
+      //      (lịch sắp tới trong cùng năm)
+      //   3) Bản ghi mới nhất theo year/month/day
       const now = new Date();
       const vnNow = new Date(
         now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" })
       );
       const curY = vnNow.getFullYear();
       const curM = vnNow.getMonth() + 1;
+      const curQ = Math.ceil(curM / 3);
 
       const [srows] = await tpmConnection.query(
         `SELECT
@@ -13190,16 +13197,19 @@ app.get(
            month,
            day,
            status,
-           maintenance_content_detail
+           maintenance_content_detail,
+           attached_file
          FROM tb_maintenance_schedule_detail
          WHERE id_machine = ?
          ORDER BY
-           (year = ? AND month = ?) DESC,
+           (year = ? AND CEILING(month / 3) = ?) DESC,
+           (year = ? AND month >= ? AND status = 'pending') DESC,
+           (year = ? AND month >= ?) DESC,
            year DESC,
            month DESC,
            day DESC
          LIMIT 1`,
-        [machine.id_machine, curY, curM]
+        [machine.id_machine, curY, curQ, curY, curM, curY, curM]
       );
 
       // Kiểm tra có lịch bảo dưỡng hay không
