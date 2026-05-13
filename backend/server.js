@@ -13154,6 +13154,7 @@ app.get(
            m.voltage,
            m.price,
            m.note,
+           DATE_FORMAT(m.date_of_use, '%d/%m/%Y') AS date_of_use,
            l.name_location,
            d.name_department
          FROM tb_machine m

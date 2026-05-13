@@ -511,6 +511,79 @@ function MachineCatalogSubTabPanel(props) {
   );
 }
 
+// ============================================================================
+// RfidTableRow — memoized row component for "Quản lý RFID" table.
+// Tách ra ngoài + React.memo để mỗi keystroke ô tìm kiếm không re-render
+// lại toàn bộ MUI Chip/Typography/Box của hàng nghìn dòng RFID.
+// ============================================================================
+const RfidTableRow = React.memo(function RfidTableRow({ row, onClick }) {
+  const isActive = row.counts_as_active_usage ?? row.active === 1;
+  const handleClick = useCallback(() => onClick(row), [onClick, row]);
+  const createdAtText = useMemo(
+    () =>
+      row.created_at ? new Date(row.created_at).toLocaleString("vi-VN") : "—",
+    [row.created_at]
+  );
+
+  return (
+    <TableRow hover sx={RFID_ROW_SX} onClick={handleClick}>
+      <TableCell>
+        <Typography fontWeight={600}>{row.RFID_machine || "—"}</Typography>
+      </TableCell>
+      <TableCell>
+        <Chip
+          size="small"
+          label={isActive ? "Đang sử dụng" : "Không sử dụng"}
+          color={isActive ? "success" : "default"}
+          variant={isActive ? "filled" : "outlined"}
+        />
+      </TableCell>
+      <TableCell>
+        {row.machine ? (
+          <Box>
+            <Typography variant="body2">
+              {row.machine.serial_machine}
+            </Typography>
+            {row.machine.type_machine ? (
+              <Typography variant="caption" color="text.secondary">
+                {row.machine.type_machine}
+              </Typography>
+            ) : null}
+          </Box>
+        ) : (
+          <Typography variant="body2" color="text.secondary">
+            —
+          </Typography>
+        )}
+      </TableCell>
+      <TableCell>
+        {row.location ? (
+          <Box>
+            <Typography variant="body2">
+              {row.location.name_location || "—"}
+            </Typography>
+            {row.location.name_department ? (
+              <Typography variant="caption" color="text.secondary">
+                {row.location.name_department}
+              </Typography>
+            ) : null}
+          </Box>
+        ) : (
+          <Typography variant="body2" color="text.secondary">
+            —
+          </Typography>
+        )}
+      </TableCell>
+      <TableCell>{createdAtText}</TableCell>
+    </TableRow>
+  );
+});
+
+const RFID_ROW_SX = {
+  cursor: "pointer",
+  "&:hover": { bgcolor: "rgba(102, 126, 234, 0.06)" },
+};
+
 const AdminPage = () => {
   const [currentTab, setCurrentTab] = useState(0);
   const [machineCatalogSubTab, setMachineCatalogSubTab] = useState(0);
@@ -550,6 +623,11 @@ const AdminPage = () => {
   const [rfidHistory, setRfidHistory] = useState([]);
   /** 'all' | 'active' | 'inactive' — lọc bảng theo paper đã bấm */
   const [rfidStatusFilter, setRfidStatusFilter] = useState("all");
+  /** Từ khoá tìm kiếm trong bảng RFID — khớp mã RFID, mã máy, serial, loại máy, vị trí, đơn vị */
+  const [rfidSearchInput, setRfidSearchInput] = useState("");
+  // Debounced query — chỉ trigger filter sau khi user ngừng gõ 200ms,
+  // tránh re-render bảng hàng nghìn dòng trên từng keystroke.
+  const [rfidSearchQuery, setRfidSearchQuery] = useState("");
   const [openUnusedRfidSearchDialog, setOpenUnusedRfidSearchDialog] =
     useState(false);
 
@@ -826,7 +904,17 @@ const AdminPage = () => {
     setCurrentTab(newValue);
   };
 
-  const handleRfidRowClick = async (row) => {
+  // Debounce: rfidSearchInput → rfidSearchQuery (200ms)
+  useEffect(() => {
+    const t = setTimeout(() => setRfidSearchQuery(rfidSearchInput), 200);
+    return () => clearTimeout(t);
+  }, [rfidSearchInput]);
+
+  // Dùng ref để giữ logic mới nhất (đọc state/showNotification),
+  // còn callback truyền xuống RfidTableRow memoized là STABLE để không
+  // phá vỡ React.memo khi parent re-render do gõ ô search hoặc thay state khác.
+  const rfidRowClickLogicRef = useRef(null);
+  rfidRowClickLogicRef.current = async (row) => {
     setSelectedRfidRow(row);
     setRfidDetailOpen(true);
     setRfidDetailLoading(true);
@@ -846,6 +934,9 @@ const AdminPage = () => {
       setRfidDetailLoading(false);
     }
   };
+  const handleRfidRowClick = useCallback((row) => {
+    rfidRowClickLogicRef.current?.(row);
+  }, []);
 
   const handleCloseRfidDetail = () => {
     setRfidDetailOpen(false);
@@ -853,17 +944,39 @@ const AdminPage = () => {
     setRfidHistory([]);
   };
 
-  const rfidFilteredItems = useMemo(() => {
+  // Pre-compute lowercase search blob 1 lần khi rfidPayload thay đổi,
+  // tránh lặp toLowerCase() trên hàng nghìn rows ở mỗi keystroke.
+  const rfidIndexedItems = useMemo(() => {
     const items = rfidPayload?.items || [];
-    const isUsageActive = (r) => r.counts_as_active_usage ?? r.active === 1;
+    return items.map((r) => ({
+      item: r,
+      isActive: r.counts_as_active_usage ?? r.active === 1,
+      searchBlob: [
+        r.RFID_machine,
+        r.machine?.serial_machine,
+        r.machine?.type_machine,
+        r.location?.name_location,
+        r.location?.name_department,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase(),
+    }));
+  }, [rfidPayload]);
+
+  const rfidFilteredItems = useMemo(() => {
+    let result = rfidIndexedItems;
     if (rfidStatusFilter === "active") {
-      return items.filter((r) => isUsageActive(r));
+      result = result.filter((r) => r.isActive);
+    } else if (rfidStatusFilter === "inactive") {
+      result = result.filter((r) => !r.isActive);
     }
-    if (rfidStatusFilter === "inactive") {
-      return items.filter((r) => !isUsageActive(r));
+    const q = rfidSearchQuery.trim().toLowerCase();
+    if (q) {
+      result = result.filter((r) => r.searchBlob.includes(q));
     }
-    return items;
-  }, [rfidPayload, rfidStatusFilter]);
+    return result.map((r) => r.item);
+  }, [rfidIndexedItems, rfidStatusFilter, rfidSearchQuery]);
 
   /** Mục tiêu dò RFID (chế độ chỉ RFID) — các thẻ không sử dụng theo logic counts_as_active_usage */
   const unusedRfidTargetsForSearch = useMemo(() => {
@@ -2661,6 +2774,46 @@ const AdminPage = () => {
                         </Button>
                       </Stack>
 
+                      <Box sx={{ mb: 2 }}>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          variant="outlined"
+                          placeholder="Tìm mã RFID, serial, loại máy, vị trí, đơn vị..."
+                          value={rfidSearchInput}
+                          onChange={(e) => setRfidSearchInput(e.target.value)}
+                          slotProps={{
+                            input: {
+                              startAdornment: (
+                                <Search
+                                  sx={{ color: "text.secondary", mr: 1 }}
+                                  fontSize="small"
+                                />
+                              ),
+                              endAdornment: rfidSearchInput ? (
+                                <IconButton
+                                  size="small"
+                                  onClick={() => setRfidSearchInput("")}
+                                  aria-label="Xoá tìm kiếm"
+                                >
+                                  <Close fontSize="small" />
+                                </IconButton>
+                              ) : null,
+                            },
+                          }}
+                          sx={inputStyle}
+                        />
+                        {rfidSearchQuery.trim() && (
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ display: "block", mt: 0.5, ml: 0.5 }}
+                          >
+                            {`Tìm thấy ${rfidFilteredItems.length} kết quả khớp "${rfidSearchQuery.trim()}"`}
+                          </Typography>
+                        )}
+                      </Box>
+
                       <TableContainer
                         component={Paper}
                         variant="outlined"
@@ -2711,103 +2864,11 @@ const AdminPage = () => {
                               </TableRow>
                             ) : (
                               rfidFilteredItems.map((row) => (
-                                <TableRow
+                                <RfidTableRow
                                   key={row.uuid_machine_rfid}
-                                  hover
-                                  sx={{
-                                    cursor: "pointer",
-                                    "&:hover": {
-                                      bgcolor: "rgba(102, 126, 234, 0.06)",
-                                    },
-                                  }}
-                                  onClick={() => handleRfidRowClick(row)}
-                                >
-                                  <TableCell>
-                                    <Typography fontWeight={600}>
-                                      {row.RFID_machine || "—"}
-                                    </Typography>
-                                  </TableCell>
-                                  <TableCell>
-                                    <Chip
-                                      size="small"
-                                      label={
-                                        (row.counts_as_active_usage ??
-                                        row.active === 1)
-                                          ? "Đang sử dụng"
-                                          : "Không sử dụng"
-                                      }
-                                      color={
-                                        (row.counts_as_active_usage ??
-                                        row.active === 1)
-                                          ? "success"
-                                          : "default"
-                                      }
-                                      variant={
-                                        (row.counts_as_active_usage ??
-                                        row.active === 1)
-                                          ? "filled"
-                                          : "outlined"
-                                      }
-                                    />
-                                  </TableCell>
-                                  <TableCell>
-                                    {row.machine ? (
-                                      <Box>
-                                        <Typography variant="body2">
-                                          {row.machine.code_machine +
-                                            "—" +
-                                            row.machine.serial_machine || "—"}
-                                        </Typography>
-                                        {row.machine.type_machine ? (
-                                          <Typography
-                                            variant="caption"
-                                            color="text.secondary"
-                                          >
-                                            {row.machine.type_machine}
-                                          </Typography>
-                                        ) : null}
-                                      </Box>
-                                    ) : (
-                                      <Typography
-                                        variant="body2"
-                                        color="text.secondary"
-                                      >
-                                        —
-                                      </Typography>
-                                    )}
-                                  </TableCell>
-                                  <TableCell>
-                                    {row.location ? (
-                                      <Box>
-                                        <Typography variant="body2">
-                                          {row.location.name_location || "—"}
-                                        </Typography>
-                                        {row.location.name_department ? (
-                                          <Typography
-                                            variant="caption"
-                                            color="text.secondary"
-                                          >
-                                            {row.location.name_department}
-                                          </Typography>
-                                        ) : null}
-                                      </Box>
-                                    ) : (
-                                      <Typography
-                                        variant="body2"
-                                        color="text.secondary"
-                                      >
-                                        —
-                                      </Typography>
-                                    )}
-                                  </TableCell>
-                                  <TableCell>
-                                    {row.created_at
-                                      ? new Date(row.created_at).toLocaleString(
-                                          "vi-VN"
-                                        )
-                                      : "—"}
-                                  </TableCell>
-                                </TableRow>
+                                  row={row}
+                                  onClick={handleRfidRowClick}
+                                />
                               ))
                             )}
                           </TableBody>
@@ -3814,11 +3875,7 @@ const AdminPage = () => {
                             ? new Date(h.created_at).toLocaleString("vi-VN")
                             : "—"}
                         </TableCell>
-                        <TableCell>
-                          {[h.code_machine, h.serial_machine]
-                            .filter(Boolean)
-                            .join(" · ") || "—"}
-                        </TableCell>
+                        <TableCell>{h.serial_machine}</TableCell>
                         <TableCell>{h.type_machine || "—"}</TableCell>
                       </TableRow>
                     ))}
