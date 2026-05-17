@@ -765,6 +765,8 @@ const MaintenanceHistoryDialog = ({
         .map((row) => {
           const sc =
             MAINT_STATUS_CONFIG[row.status] || MAINT_STATUS_CONFIG.pending;
+          const displayLabel =
+            row.status === "confirm_completed" ? "Đã thực hiện" : sc.label;
           const quarter = monthToQuarter(row.month);
           const yearGroup = yearGroups[row.year];
           const isFirstInYear = yearGroup[0] === row;
@@ -782,7 +784,7 @@ const MaintenanceHistoryDialog = ({
               <td>${esc(QUARTER_LABELS[quarter])}</td>
               <td>
                 <span class="chip" style="background:${sc.bg};color:${sc.color};border:1px solid ${sc.borderColor}">
-                  ${esc(sc.label)}
+                  ${esc(displayLabel)}
                 </span>
               </td>
               <td>${esc(row.updated_at || "—")}</td>

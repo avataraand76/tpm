@@ -50,6 +50,8 @@ import {
   Autocomplete,
   Fab,
   Badge,
+  Tabs,
+  Tab,
 } from "@mui/material";
 import {
   PrecisionManufacturing,
@@ -74,6 +76,7 @@ import {
   KeyboardArrowUp,
   HourglassFull,
   Radar,
+  PictureAsPdf,
 } from "@mui/icons-material";
 import { alpha } from "@mui/material/styles";
 import * as XLSX from "xlsx-js-style";
@@ -81,6 +84,7 @@ import ExcelJS from "exceljs";
 import { QRCodeSVG } from "qrcode.react";
 import NavigationBar from "../components/NavigationBar";
 import RfidSearch from "../components/RfidSearch";
+import MachineProfileCard from "../components/MachineProfileCard";
 import { api } from "../api/api";
 import { useAuth } from "../hooks/useAuth"; // <<< 1. THÊM MỚI: IMPORT USEAUTH
 
@@ -721,6 +725,10 @@ const MachineListPage = () => {
   const [selectedMachine, setSelectedMachine] = useState(null);
   const [editedData, setEditedData] = useState({});
   const [isCreateMode, setIsCreateMode] = useState(false);
+  // Tab trong dialog chi tiết: 0 = Chi tiết máy móc, 1 = Lý lịch bảo dưỡng
+  const [detailTab, setDetailTab] = useState(0);
+  // Hàm xuất PDF do MachineProfileCard đăng ký lên, gắn ở footer dialog
+  const profileExportFnRef = useRef(null);
 
   // QR Code states
   const [showQRCode, setShowQRCode] = useState(false);
@@ -1081,6 +1089,7 @@ const MachineListPage = () => {
     try {
       setMachineHistory([]); // Đặt lại lịch sử
       setHistoryLoading(true);
+      setDetailTab(0); // Reset về tab "Chi tiết máy móc" mỗi khi mở dialog
 
       const result = await api.machines.getById(uuid);
       if (result.success) {
@@ -1141,6 +1150,7 @@ const MachineListPage = () => {
     setFormAttributes([]);
     setIsCreateMode(true);
     setOpenDialog(true);
+    setDetailTab(0);
   };
 
   const handleCloseDialog = () => {
@@ -1151,6 +1161,7 @@ const MachineListPage = () => {
     setShowQRCode(false);
     setMachineHistory([]);
     setHistoryLoading(false);
+    setDetailTab(0);
   };
 
   const handlePrintQRCode = () => {
@@ -4327,56 +4338,113 @@ const MachineListPage = () => {
               </IconButton>
             </Stack>
           </DialogTitle>
-          <Divider />
-          <DialogContent sx={{ pt: 3 }}>
-            {(selectedMachine || isCreateMode) && (
-              <Grid container spacing={3}>
-                {/* QR Code Section */}
-                {showQRCode && editedData.serial_machine && (
-                  <Grid size={{ xs: 12 }}>
-                    <Card
-                      elevation={0}
-                      sx={{
-                        borderRadius: "16px",
-                        border: "2px solid #667eea",
-                        background:
-                          "linear-gradient(135deg, #667eea11 0%, #764ba211 100%)",
-                      }}
-                    >
-                      <CardContent>
-                        <Stack
-                          direction={{ xs: "column", sm: "row" }}
-                          spacing={3}
-                          alignItems="center"
-                        >
-                          {/* QR Code Display */}
-                          <Box
-                            sx={{
-                              p: 3,
-                              bgcolor: "white",
-                              borderRadius: "12px",
-                              display: "flex",
-                              flexDirection: "column",
-                              alignItems: "center",
-                              gap: 2,
-                            }}
-                          >
-                            <QRCodeSVG
-                              id="qr-code-svg"
-                              value={`${
-                                editedData.name_category === "Máy móc thiết bị"
-                                  ? "MAY"
-                                  : "PHUKIEN"
-                              }-${editedData.serial_machine}`}
-                              size={150}
-                              level="H"
-                              includeMargin={true}
-                            />
-                          </Box>
 
-                          {/* QR Code Info */}
-                          <Box sx={{ flex: 1 }}>
-                            {/* <Box sx={{ textAlign: "left", display: "", mb: 2 }}>
+          {/* Tab switcher: chỉ hiển thị ở chế độ xem chi tiết (không hiển thị khi tạo mới) */}
+          {!isCreateMode && selectedMachine && (
+            <Box
+              sx={{
+                borderBottom: "1px solid #e0e0e0",
+                px: { xs: 1, sm: 3 },
+                bgcolor: "#fafbfc",
+              }}
+            >
+              <Tabs
+                value={detailTab}
+                onChange={(_, v) => setDetailTab(v)}
+                variant={isMobile ? "fullWidth" : "standard"}
+                sx={{
+                  minHeight: 44,
+                  "& .MuiTab-root": {
+                    minHeight: 44,
+                    textTransform: "none",
+                    fontWeight: 600,
+                    fontSize: "0.88rem",
+                  },
+                  "& .Mui-selected": { color: "#667eea !important" },
+                  "& .MuiTabs-indicator": {
+                    background: "linear-gradient(90deg,#667eea,#764ba2)",
+                    height: 3,
+                    borderRadius: "3px 3px 0 0",
+                  },
+                }}
+              >
+                <Tab
+                  icon={<PrecisionManufacturing sx={{ fontSize: 18 }} />}
+                  iconPosition="start"
+                  label="Chi tiết máy móc"
+                />
+                <Tab
+                  icon={<ReceiptLong sx={{ fontSize: 18 }} />}
+                  iconPosition="start"
+                  label="Lý lịch bảo dưỡng"
+                />
+              </Tabs>
+            </Box>
+          )}
+          {isCreateMode && <Divider />}
+
+          <DialogContent sx={{ pt: 3 }}>
+            {/* Tab 1: Lý lịch bảo dưỡng */}
+            {!isCreateMode && selectedMachine && detailTab === 1 && (
+              <MachineProfileCard
+                machine={selectedMachine}
+                onRegisterExport={(fn) => {
+                  profileExportFnRef.current = fn;
+                }}
+              />
+            )}
+
+            {/* Tab 0: Chi tiết máy móc (form gốc) */}
+            {(isCreateMode || detailTab === 0) &&
+              (selectedMachine || isCreateMode) && (
+                <Grid container spacing={3}>
+                  {/* QR Code Section */}
+                  {showQRCode && editedData.serial_machine && (
+                    <Grid size={{ xs: 12 }}>
+                      <Card
+                        elevation={0}
+                        sx={{
+                          borderRadius: "16px",
+                          border: "2px solid #667eea",
+                          background:
+                            "linear-gradient(135deg, #667eea11 0%, #764ba211 100%)",
+                        }}
+                      >
+                        <CardContent>
+                          <Stack
+                            direction={{ xs: "column", sm: "row" }}
+                            spacing={3}
+                            alignItems="center"
+                          >
+                            {/* QR Code Display */}
+                            <Box
+                              sx={{
+                                p: 3,
+                                bgcolor: "white",
+                                borderRadius: "12px",
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "center",
+                                gap: 2,
+                              }}
+                            >
+                              <QRCodeSVG
+                                id="qr-code-svg"
+                                value={`${
+                                  editedData.name_category ===
+                                  "Máy móc thiết bị"
+                                    ? "MAY"
+                                    : "PHUKIEN"
+                                }-${editedData.serial_machine}`}
+                                size={150}
+                                level="H"
+                                includeMargin={true}
+                              />
+                            </Box>
+
+                            {/* QR Code Info */}
+                            <Box sx={{ flex: 1 }}>
+                              {/* <Box sx={{ textAlign: "left", display: "", mb: 2 }}>
                               <Typography variant="h6" fontWeight="bold">
                                 {editedData.code_machine}
                               </Typography>
@@ -4398,163 +4466,163 @@ const MachineListPage = () => {
                                 {editedData.model_machine}
                               </Typography>
                             </Box> */}
-                            <Typography
-                              variant={isMobile ? "subtitle1" : "h6"}
-                              fontWeight="bold"
-                              gutterBottom
-                            >
-                              Mã QR đã được tạo
-                            </Typography>
-                            <Typography
-                              variant="body2"
-                              color="text.secondary"
-                              paragraph
-                            >
-                              Mã QR được tạo từ Serial Number của máy móc. Bạn
-                              có thể in hoặc tải xuống mã QR này để dán lên máy
-                              móc.
-                            </Typography>
-                            <Stack
-                              direction={{ xs: "column", sm: "row" }}
-                              spacing={2}
-                              sx={{ mt: 2 }}
-                              flexWrap="wrap"
-                            >
-                              <Button
-                                variant="contained"
-                                startIcon={<Print />}
-                                onClick={handlePrintQRCode}
-                                sx={{
-                                  borderRadius: "12px",
-                                  background:
-                                    "linear-gradient(45deg, #667eea, #764ba2)",
-                                  width: { xs: "100%", sm: "auto" },
-                                }}
+                              <Typography
+                                variant={isMobile ? "subtitle1" : "h6"}
+                                fontWeight="bold"
+                                gutterBottom
                               >
-                                In mã QR
-                              </Button>
-                              <Button
-                                variant="contained"
-                                startIcon={<Download />}
-                                onClick={handleDownloadQRCode}
-                                sx={{
-                                  borderRadius: "12px",
-                                  background:
-                                    "linear-gradient(45deg, #2e7d32, #4caf50)",
-                                  width: { xs: "100%", sm: "auto" },
-                                }}
+                                Mã QR đã được tạo
+                              </Typography>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                paragraph
                               >
-                                Tải xuống
-                              </Button>
-                              <Button
-                                variant="outlined"
-                                onClick={() => setShowQRCode(false)}
-                                sx={{
-                                  borderRadius: "12px",
-                                  width: { xs: "100%", sm: "auto" },
-                                }}
+                                Mã QR được tạo từ Serial Number của máy móc. Bạn
+                                có thể in hoặc tải xuống mã QR này để dán lên
+                                máy móc.
+                              </Typography>
+                              <Stack
+                                direction={{ xs: "column", sm: "row" }}
+                                spacing={2}
+                                sx={{ mt: 2 }}
+                                flexWrap="wrap"
                               >
-                                Ẩn mã QR
-                              </Button>
-                            </Stack>
-                          </Box>
-                        </Stack>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                )}
+                                <Button
+                                  variant="contained"
+                                  startIcon={<Print />}
+                                  onClick={handlePrintQRCode}
+                                  sx={{
+                                    borderRadius: "12px",
+                                    background:
+                                      "linear-gradient(45deg, #667eea, #764ba2)",
+                                    width: { xs: "100%", sm: "auto" },
+                                  }}
+                                >
+                                  In mã QR
+                                </Button>
+                                <Button
+                                  variant="contained"
+                                  startIcon={<Download />}
+                                  onClick={handleDownloadQRCode}
+                                  sx={{
+                                    borderRadius: "12px",
+                                    background:
+                                      "linear-gradient(45deg, #2e7d32, #4caf50)",
+                                    width: { xs: "100%", sm: "auto" },
+                                  }}
+                                >
+                                  Tải xuống
+                                </Button>
+                                <Button
+                                  variant="outlined"
+                                  onClick={() => setShowQRCode(false)}
+                                  sx={{
+                                    borderRadius: "12px",
+                                    width: { xs: "100%", sm: "auto" },
+                                  }}
+                                >
+                                  Ẩn mã QR
+                                </Button>
+                              </Stack>
+                            </Box>
+                          </Stack>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  )}
 
-                {/* Show QR Code Button */}
-                {!showQRCode && editedData.serial_machine && (
+                  {/* Show QR Code Button */}
+                  {!showQRCode && editedData.serial_machine && (
+                    <Grid size={{ xs: 12 }}>
+                      <Button
+                        fullWidth
+                        variant="outlined"
+                        startIcon={<QrCode2 />}
+                        onClick={() => setShowQRCode(true)}
+                        sx={{
+                          borderRadius: "12px",
+                          py: 1.5,
+                          borderColor: "#667eea",
+                          color: "#667eea",
+                          "&:hover": {
+                            borderColor: "#764ba2",
+                            bgcolor: "#667eea11",
+                          },
+                        }}
+                      >
+                        Tạo mã QR từ Serial
+                      </Button>
+                    </Grid>
+                  )}
+
                   <Grid size={{ xs: 12 }}>
-                    <Button
-                      fullWidth
-                      variant="outlined"
-                      startIcon={<QrCode2 />}
-                      onClick={() => setShowQRCode(true)}
-                      sx={{
-                        borderRadius: "12px",
-                        py: 1.5,
-                        borderColor: "#667eea",
-                        color: "#667eea",
-                        "&:hover": {
-                          borderColor: "#764ba2",
-                          bgcolor: "#667eea11",
-                        },
-                      }}
-                    >
-                      Tạo mã QR từ Serial
-                    </Button>
+                    <Divider sx={{ my: 2 }}>
+                      <Chip label="Thông tin chung" />
+                    </Divider>
                   </Grid>
-                )}
-
-                <Grid size={{ xs: 12 }}>
-                  <Divider sx={{ my: 2 }}>
-                    <Chip label="Thông tin chung" />
-                  </Divider>
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="Mã máy"
-                    required
-                    value={editedData.code_machine || ""}
-                    onChange={(e) =>
-                      handleInputChange("code_machine", e.target.value)
-                    }
-                    disabled={!canCreateOrImport}
-                    sx={
-                      !(isAdmin || canEdit) || !isCreateMode
-                        ? DISABLED_VIEW_SX
-                        : {}
-                    }
-                    // THÊM: Nút refresh nhỏ ở cuối ô để tạo lại mã nếu cần
-                    InputProps={{
-                      endAdornment: canCreateOrImport && (
-                        <InputAdornment position="end">
-                          <Tooltip title="Tự động tạo mã theo Hãng SX">
-                            <IconButton
-                              onClick={() => handleGenerateCode(true)}
-                              edge="end"
-                            >
-                              <Refresh />
-                            </IconButton>
-                          </Tooltip>
-                        </InputAdornment>
-                      ),
-                    }}
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="Serial"
-                    required
-                    value={editedData.serial_machine || ""}
-                    onChange={(e) =>
-                      handleInputChange("serial_machine", e.target.value)
-                    }
-                    disabled={!canCreateOrImport || !isCreateMode} // Bị khóa nếu là view-only và cơ điện xưởng HOẶC là chế độ xem chi tiết
-                    sx={
-                      !(isAdmin || canEdit) || !isCreateMode
-                        ? DISABLED_VIEW_SX
-                        : {}
-                    }
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="RFID"
-                    value={editedData.RFID_machine || ""}
-                    onChange={(e) =>
-                      handleInputChange("RFID_machine", e.target.value)
-                    }
-                    disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
-                    sx={DISABLED_VIEW_SX}
-                  />
-                </Grid>
-                {/* <Grid size={{ xs: 12, sm: 6 }}>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      fullWidth
+                      label="Mã máy"
+                      required
+                      value={editedData.code_machine || ""}
+                      onChange={(e) =>
+                        handleInputChange("code_machine", e.target.value)
+                      }
+                      disabled={!canCreateOrImport}
+                      sx={
+                        !(isAdmin || canEdit) || !isCreateMode
+                          ? DISABLED_VIEW_SX
+                          : {}
+                      }
+                      // THÊM: Nút refresh nhỏ ở cuối ô để tạo lại mã nếu cần
+                      InputProps={{
+                        endAdornment: canCreateOrImport && (
+                          <InputAdornment position="end">
+                            <Tooltip title="Tự động tạo mã theo Hãng SX">
+                              <IconButton
+                                onClick={() => handleGenerateCode(true)}
+                                edge="end"
+                              >
+                                <Refresh />
+                              </IconButton>
+                            </Tooltip>
+                          </InputAdornment>
+                        ),
+                      }}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      fullWidth
+                      label="Serial"
+                      required
+                      value={editedData.serial_machine || ""}
+                      onChange={(e) =>
+                        handleInputChange("serial_machine", e.target.value)
+                      }
+                      disabled={!canCreateOrImport || !isCreateMode} // Bị khóa nếu là view-only và cơ điện xưởng HOẶC là chế độ xem chi tiết
+                      sx={
+                        !(isAdmin || canEdit) || !isCreateMode
+                          ? DISABLED_VIEW_SX
+                          : {}
+                      }
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      fullWidth
+                      label="RFID"
+                      value={editedData.RFID_machine || ""}
+                      onChange={(e) =>
+                        handleInputChange("RFID_machine", e.target.value)
+                      }
+                      disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
+                      sx={DISABLED_VIEW_SX}
+                    />
+                  </Grid>
+                  {/* <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
                     fullWidth
                     label="NFC"
@@ -4566,503 +4634,507 @@ const MachineListPage = () => {
                     sx={DISABLED_VIEW_SX}
                   />
                 </Grid> */}
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="Phân loại"
-                    value="Máy móc thiết bị"
-                    disabled={true}
-                    sx={DISABLED_VIEW_SX}
-                  />
-                </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      fullWidth
+                      label="Phân loại"
+                      value="Máy móc thiết bị"
+                      disabled={true}
+                      sx={DISABLED_VIEW_SX}
+                    />
+                  </Grid>
 
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <Autocomplete
-                    options={formMachineTypes}
-                    getOptionLabel={(option) => option.name || ""}
-                    value={
-                      formMachineTypes.find(
-                        (t) => t.name === editedData.type_machine
-                      ) || null
-                    }
-                    onChange={(event, newValue) => {
-                      const typeName = newValue ? newValue.name : "";
-                      handleInputChange("type_machine", typeName);
-                      fetchAttributesByTypeName(typeName);
-                    }}
-                    disabled={!canCreateOrImport}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        label="Loại máy"
-                        required
-                        sx={DISABLED_VIEW_SX}
-                      />
-                    )}
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <Autocomplete
-                    options={formAttributes}
-                    getOptionLabel={(option) => option.name || ""}
-                    // Map string (trong state) sang object (trong options)
-                    value={
-                      formAttributes.find(
-                        (a) => a.name === editedData.attribute_machine
-                      ) || null
-                    }
-                    onChange={(event, newValue) => {
-                      handleInputChange(
-                        "attribute_machine",
-                        newValue ? newValue.name : ""
-                      );
-                    }}
-                    disabled={!canCreateOrImport}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        label="Đặc tính"
-                        sx={DISABLED_VIEW_SX}
-                      />
-                    )}
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="Model máy"
-                    value={editedData.model_machine || ""}
-                    onChange={(e) =>
-                      handleInputChange("model_machine", e.target.value)
-                    }
-                    disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
-                    sx={DISABLED_VIEW_SX}
-                  />
-                </Grid>
-
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <FormControl
-                    fullWidth
-                    disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
-                    sx={DISABLED_VIEW_SX}
-                  >
-                    <InputLabel>Trạng thái</InputLabel>
-                    <Select
-                      value={editedData.current_status}
-                      label="Trạng thái"
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <Autocomplete
+                      options={formMachineTypes}
+                      getOptionLabel={(option) => option.name || ""}
+                      value={
+                        formMachineTypes.find(
+                          (t) => t.name === editedData.type_machine
+                        ) || null
+                      }
+                      onChange={(event, newValue) => {
+                        const typeName = newValue ? newValue.name : "";
+                        handleInputChange("type_machine", typeName);
+                        fetchAttributesByTypeName(typeName);
+                      }}
+                      disabled={!canCreateOrImport}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          label="Loại máy"
+                          required
+                          sx={DISABLED_VIEW_SX}
+                        />
+                      )}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <Autocomplete
+                      options={formAttributes}
+                      getOptionLabel={(option) => option.name || ""}
+                      // Map string (trong state) sang object (trong options)
+                      value={
+                        formAttributes.find(
+                          (a) => a.name === editedData.attribute_machine
+                        ) || null
+                      }
+                      onChange={(event, newValue) => {
+                        handleInputChange(
+                          "attribute_machine",
+                          newValue ? newValue.name : ""
+                        );
+                      }}
+                      disabled={!canCreateOrImport}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          label="Đặc tính"
+                          sx={DISABLED_VIEW_SX}
+                        />
+                      )}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      fullWidth
+                      label="Model máy"
+                      value={editedData.model_machine || ""}
                       onChange={(e) =>
-                        handleInputChange("current_status", e.target.value)
+                        handleInputChange("model_machine", e.target.value)
                       }
+                      disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
+                      sx={DISABLED_VIEW_SX}
+                    />
+                  </Grid>
+
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <FormControl
+                      fullWidth
+                      disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
+                      sx={DISABLED_VIEW_SX}
                     >
-                      <MenuItem value="available">Có thể sử dụng</MenuItem>
-                      <MenuItem value="in_use">Đang sử dụng</MenuItem>
-                      <MenuItem value="maintenance">Bảo trì</MenuItem>
-                      {/* <MenuItem value="liquidation">Thanh lý</MenuItem> */}
-                      <MenuItem value="pending_liquidation">
-                        Chờ thanh lý
-                      </MenuItem>
-                      <MenuItem value="disabled">Chưa sử dụng</MenuItem>
-                      <MenuItem value="broken">Máy hư</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Grid>
+                      <InputLabel>Trạng thái</InputLabel>
+                      <Select
+                        value={editedData.current_status}
+                        label="Trạng thái"
+                        onChange={(e) =>
+                          handleInputChange("current_status", e.target.value)
+                        }
+                      >
+                        <MenuItem value="available">Có thể sử dụng</MenuItem>
+                        <MenuItem value="in_use">Đang sử dụng</MenuItem>
+                        <MenuItem value="maintenance">Bảo trì</MenuItem>
+                        {/* <MenuItem value="liquidation">Thanh lý</MenuItem> */}
+                        <MenuItem value="pending_liquidation">
+                          Chờ thanh lý
+                        </MenuItem>
+                        <MenuItem value="disabled">Chưa sử dụng</MenuItem>
+                        <MenuItem value="broken">Máy hư</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
 
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <Autocomplete
-                    options={formManufacturers}
-                    getOptionLabel={(option) => option.name || ""}
-                    value={
-                      formManufacturers.find(
-                        (m) => m.name === editedData.manufacturer
-                      ) || null
-                    }
-                    onChange={(event, newValue) => {
-                      const manufacturerName = newValue ? newValue.name : "";
-                      handleInputChange("manufacturer", manufacturerName);
-                      if (manufacturerName && !editedData.code_machine) {
-                        handleGenerateCode();
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <Autocomplete
+                      options={formManufacturers}
+                      getOptionLabel={(option) => option.name || ""}
+                      value={
+                        formManufacturers.find(
+                          (m) => m.name === editedData.manufacturer
+                        ) || null
                       }
-                    }}
-                    onBlur={() => handleGenerateCode(false)} // Giữ nguyên logic tạo mã
-                    disabled={!canCreateOrImport}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        label="Hãng sản xuất"
-                        sx={DISABLED_VIEW_SX}
-                      />
-                    )}
-                  />
-                </Grid>
+                      onChange={(event, newValue) => {
+                        const manufacturerName = newValue ? newValue.name : "";
+                        handleInputChange("manufacturer", manufacturerName);
+                        if (manufacturerName && !editedData.code_machine) {
+                          handleGenerateCode();
+                        }
+                      }}
+                      onBlur={() => handleGenerateCode(false)} // Giữ nguyên logic tạo mã
+                      disabled={!canCreateOrImport}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          label="Hãng sản xuất"
+                          sx={DISABLED_VIEW_SX}
+                        />
+                      )}
+                    />
+                  </Grid>
 
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <Autocomplete
-                    options={formSuppliers}
-                    getOptionLabel={(option) => option.name || ""}
-                    value={
-                      formSuppliers.find(
-                        (s) => s.name === editedData.supplier
-                      ) || null
-                    }
-                    onChange={(event, newValue) => {
-                      handleInputChange(
-                        "supplier",
-                        newValue ? newValue.name : ""
-                      );
-                    }}
-                    disabled={!canCreateOrImport}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        label="Nhà cung cấp"
-                        sx={DISABLED_VIEW_SX}
-                      />
-                    )}
-                  />
-                </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <Autocomplete
+                      options={formSuppliers}
+                      getOptionLabel={(option) => option.name || ""}
+                      value={
+                        formSuppliers.find(
+                          (s) => s.name === editedData.supplier
+                        ) || null
+                      }
+                      onChange={(event, newValue) => {
+                        handleInputChange(
+                          "supplier",
+                          newValue ? newValue.name : ""
+                        );
+                      }}
+                      disabled={!canCreateOrImport}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          label="Nhà cung cấp"
+                          sx={DISABLED_VIEW_SX}
+                        />
+                      )}
+                    />
+                  </Grid>
 
-                <Grid size={{ xs: 12 }}>
-                  <Divider sx={{ my: 2 }}>
-                    <Chip label="Thông tin kỹ thuật" />
-                  </Divider>
-                </Grid>
+                  <Grid size={{ xs: 12 }}>
+                    <Divider sx={{ my: 2 }}>
+                      <Chip label="Thông tin kỹ thuật" />
+                    </Divider>
+                  </Grid>
 
-                <Grid size={{ xs: 12, sm: 4 }}>
-                  <TextField
-                    fullWidth
-                    label="Công suất"
-                    value={editedData.power || ""}
-                    onChange={(e) => handleInputChange("power", e.target.value)}
-                    disabled={!canCreateOrImport}
-                    sx={DISABLED_VIEW_SX}
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 4 }}>
-                  <TextField
-                    fullWidth
-                    label="Áp suất"
-                    value={editedData.pressure || ""}
-                    onChange={(e) =>
-                      handleInputChange("pressure", e.target.value)
-                    }
-                    disabled={!canCreateOrImport}
-                    sx={DISABLED_VIEW_SX}
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 4 }}>
-                  <TextField
-                    fullWidth
-                    label="Điện áp"
-                    value={editedData.voltage || ""}
-                    onChange={(e) =>
-                      handleInputChange("voltage", e.target.value)
-                    }
-                    disabled={!canCreateOrImport}
-                    sx={DISABLED_VIEW_SX}
-                  />
-                </Grid>
+                  <Grid size={{ xs: 12, sm: 4 }}>
+                    <TextField
+                      fullWidth
+                      label="Công suất"
+                      value={editedData.power || ""}
+                      onChange={(e) =>
+                        handleInputChange("power", e.target.value)
+                      }
+                      disabled={!canCreateOrImport}
+                      sx={DISABLED_VIEW_SX}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 4 }}>
+                    <TextField
+                      fullWidth
+                      label="Áp suất"
+                      value={editedData.pressure || ""}
+                      onChange={(e) =>
+                        handleInputChange("pressure", e.target.value)
+                      }
+                      disabled={!canCreateOrImport}
+                      sx={DISABLED_VIEW_SX}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 4 }}>
+                    <TextField
+                      fullWidth
+                      label="Điện áp"
+                      value={editedData.voltage || ""}
+                      onChange={(e) =>
+                        handleInputChange("voltage", e.target.value)
+                      }
+                      disabled={!canCreateOrImport}
+                      sx={DISABLED_VIEW_SX}
+                    />
+                  </Grid>
 
-                {!isCreateMode && (
-                  <>
-                    <Grid size={{ xs: 12 }}>
-                      <Divider sx={{ my: 2 }}>
-                        <Chip label="Lịch sử vị trí" />
-                      </Divider>
-                    </Grid>
-                    <Grid size={{ xs: 12 }}>
-                      <TextField
-                        fullWidth
-                        label="Vị trí hiện tại"
-                        value={editedData.name_location || "Chưa có vị trí"}
-                        disabled
-                        sx={DISABLED_VIEW_SX}
-                        InputLabelProps={{ shrink: true }}
-                      />
-                    </Grid>
-                    <Grid size={{ xs: 12 }}>
-                      {historyLoading ? (
-                        <Box
-                          sx={{
-                            display: "flex",
-                            justifyContent: "center",
-                            my: 3,
-                          }}
-                        >
-                          <CircularProgress />
-                        </Box>
-                      ) : machineHistory.length === 0 ? (
-                        <Typography
-                          align="center"
-                          color="text.secondary"
-                          sx={{ my: 2 }}
-                        >
-                          Không có lịch sử di chuyển.
-                        </Typography>
-                      ) : (
-                        <TableContainer
-                          component={Paper}
-                          elevation={0}
-                          variant="outlined"
-                          sx={{ borderRadius: "12px", maxHeight: 300 }}
-                        >
-                          <Table stickyHeader size="small">
-                            <TableHead>
-                              <TableRow>
-                                <TableCell sx={{ fontWeight: "bold" }}>
-                                  Ngày di chuyển
-                                </TableCell>
-                                <TableCell sx={{ fontWeight: "bold" }}>
-                                  Từ vị trí
-                                </TableCell>
-                                <TableCell sx={{ fontWeight: "bold" }}>
-                                  Đến vị trí
-                                </TableCell>
-                                <TableCell sx={{ fontWeight: "bold" }}>
-                                  Người thực hiện
-                                </TableCell>
-                              </TableRow>
-                            </TableHead>
-                            <TableBody>
-                              {machineHistory.map((entry, index) => (
-                                <TableRow key={index}>
-                                  <TableCell>
-                                    {formatDate(entry.move_date)}
+                  {!isCreateMode && (
+                    <>
+                      <Grid size={{ xs: 12 }}>
+                        <Divider sx={{ my: 2 }}>
+                          <Chip label="Lịch sử vị trí" />
+                        </Divider>
+                      </Grid>
+                      <Grid size={{ xs: 12 }}>
+                        <TextField
+                          fullWidth
+                          label="Vị trí hiện tại"
+                          value={editedData.name_location || "Chưa có vị trí"}
+                          disabled
+                          sx={DISABLED_VIEW_SX}
+                          InputLabelProps={{ shrink: true }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12 }}>
+                        {historyLoading ? (
+                          <Box
+                            sx={{
+                              display: "flex",
+                              justifyContent: "center",
+                              my: 3,
+                            }}
+                          >
+                            <CircularProgress />
+                          </Box>
+                        ) : machineHistory.length === 0 ? (
+                          <Typography
+                            align="center"
+                            color="text.secondary"
+                            sx={{ my: 2 }}
+                          >
+                            Không có lịch sử di chuyển.
+                          </Typography>
+                        ) : (
+                          <TableContainer
+                            component={Paper}
+                            elevation={0}
+                            variant="outlined"
+                            sx={{ borderRadius: "12px", maxHeight: 300 }}
+                          >
+                            <Table stickyHeader size="small">
+                              <TableHead>
+                                <TableRow>
+                                  <TableCell sx={{ fontWeight: "bold" }}>
+                                    Ngày di chuyển
                                   </TableCell>
-                                  <TableCell>
-                                    {entry.from_location_name || "-"}
+                                  <TableCell sx={{ fontWeight: "bold" }}>
+                                    Từ vị trí
                                   </TableCell>
-                                  <TableCell>
-                                    {entry.to_location_name || "-"}
+                                  <TableCell sx={{ fontWeight: "bold" }}>
+                                    Đến vị trí
                                   </TableCell>
-                                  <TableCell sx={{ whiteSpace: "nowrap" }}>
-                                    {entry.ma_nv
-                                      ? `${entry.ma_nv}: ${
-                                          entry.ten_nv || "--"
-                                        }`
-                                      : entry.created_by || "--"}
+                                  <TableCell sx={{ fontWeight: "bold" }}>
+                                    Người thực hiện
                                   </TableCell>
                                 </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </TableContainer>
-                      )}
-                    </Grid>
-                  </>
-                )}
-
-                {/* Thêm thông tin Mượn/Thuê (chỉ đọc) */}
-                {!isCreateMode && (
-                  <>
-                    <Grid size={{ xs: 12 }}>
-                      <Divider sx={{ my: 2 }}>
-                        <Chip label="Thông tin Mượn / Thuê / Cho mượn" />
-                      </Divider>
-                    </Grid>
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                      <TextField
-                        fullWidth
-                        value={(() => {
-                          if (
-                            editedData.is_borrowed_or_rented_or_borrowed_out ===
-                            "borrowed"
-                          )
-                            return "Mượn";
-                          if (
-                            editedData.is_borrowed_or_rented_or_borrowed_out ===
-                            "rented"
-                          )
-                            return "Thuê";
-                          if (
-                            editedData.is_borrowed_or_rented_or_borrowed_out ===
-                            "borrowed_out"
-                          )
-                            return "Cho mượn";
-                          return "NULL";
-                        })()}
-                        label="Trạng thái Mượn/Thuê"
-                        disabled
-                        sx={DISABLED_VIEW_SX}
-                        InputLabelProps={{ shrink: true }}
-                      />
-                    </Grid>
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                      <TextField
-                        fullWidth
-                        label="Đơn vị (mượn/thuê)"
-                        value={
-                          editedData.is_borrowed_or_rented_or_borrowed_out_name ||
-                          "NULL"
-                        }
-                        disabled
-                        sx={DISABLED_VIEW_SX}
-                        InputLabelProps={{ shrink: true }}
-                      />
-                    </Grid>
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                      <TextField
-                        fullWidth
-                        label="Ngày (mượn/thuê)"
-                        type="date"
-                        value={formatDateForInput(
-                          editedData.is_borrowed_or_rented_or_borrowed_out_date
+                              </TableHead>
+                              <TableBody>
+                                {machineHistory.map((entry, index) => (
+                                  <TableRow key={index}>
+                                    <TableCell>
+                                      {formatDate(entry.move_date)}
+                                    </TableCell>
+                                    <TableCell>
+                                      {entry.from_location_name || "-"}
+                                    </TableCell>
+                                    <TableCell>
+                                      {entry.to_location_name || "-"}
+                                    </TableCell>
+                                    <TableCell sx={{ whiteSpace: "nowrap" }}>
+                                      {entry.ma_nv
+                                        ? `${entry.ma_nv}: ${
+                                            entry.ten_nv || "--"
+                                          }`
+                                        : entry.created_by || "--"}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </TableContainer>
                         )}
-                        disabled
-                        sx={DISABLED_VIEW_SX}
-                        InputLabelProps={{ shrink: true }}
-                      />
-                    </Grid>
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                      <TextField
-                        fullWidth
-                        label="Ngày trả (dự kiến)"
-                        type="date"
-                        value={formatDateForInput(
-                          editedData.is_borrowed_or_rented_or_borrowed_out_return_date
-                        )}
-                        onChange={(e) =>
-                          handleInputChange(
-                            "is_borrowed_or_rented_or_borrowed_out_return_date",
-                            e.target.value || null // Gửi null nếu ngày bị xóa
-                          )
-                        }
-                        InputLabelProps={{ shrink: true }}
-                        disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
-                        sx={DISABLED_VIEW_SX}
-                      />
-                    </Grid>
-                  </>
-                )}
+                      </Grid>
+                    </>
+                  )}
 
-                <Grid size={{ xs: 12 }}>
-                  <Divider sx={{ my: 2 }}>
-                    <Chip label="Thông tin Chi phí & Thời gian" />
-                  </Divider>
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="Giá (VNĐ)"
-                    value={formatNumberVN(editedData.price)}
-                    onChange={(e) => {
-                      const parsedValue = parseNumberVN(e.target.value);
-                      handleInputChange(
-                        "price",
-                        parsedValue ? parseFloat(parsedValue) : ""
-                      );
-                    }}
-                    disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
-                    sx={DISABLED_VIEW_SX}
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="Tuổi thọ (năm)"
-                    value={editedData.lifespan?.toString() || ""}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      // Chỉ cho phép số
-                      if (value === "" || /^\d+$/.test(value)) {
-                        handleInputChange(
-                          "lifespan",
-                          value ? parseInt(value) : ""
-                        );
-                      }
-                    }}
-                    onKeyPress={(e) => {
-                      // Chặn các ký tự không phải số
-                      if (!/[0-9]/.test(e.key)) {
-                        e.preventDefault();
-                      }
-                    }}
-                    inputProps={{
-                      inputMode: "numeric",
-                      pattern: "[0-9]*",
-                    }}
-                    disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
-                    sx={DISABLED_VIEW_SX}
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="Chi phí sửa chữa (VNĐ)"
-                    value={formatNumberVN(editedData.repair_cost) || ""}
-                    onChange={(e) => {
-                      const parsedValue = parseNumberVN(e.target.value);
-                      handleInputChange(
-                        "repair_cost",
-                        parsedValue ? parseFloat(parsedValue) : ""
-                      );
-                    }}
-                    disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
-                    sx={DISABLED_VIEW_SX}
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="Ngày sử dụng"
-                    type="date"
-                    value={formatDateForInput(editedData.date_of_use)}
-                    onChange={(e) =>
-                      handleInputChange("date_of_use", e.target.value)
-                    }
-                    InputLabelProps={{ shrink: true }}
-                    disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
-                    sx={DISABLED_VIEW_SX}
-                  />
-                </Grid>
-                <Grid size={{ xs: 12 }}>
-                  <TextField
-                    fullWidth
-                    label="Ghi chú"
-                    multiline
-                    rows={3}
-                    value={editedData.note || ""}
-                    onChange={(e) => handleInputChange("note", e.target.value)}
-                    disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
-                    sx={DISABLED_VIEW_SX}
-                  />
-                </Grid>
+                  {/* Thêm thông tin Mượn/Thuê (chỉ đọc) */}
+                  {!isCreateMode && (
+                    <>
+                      <Grid size={{ xs: 12 }}>
+                        <Divider sx={{ my: 2 }}>
+                          <Chip label="Thông tin Mượn / Thuê / Cho mượn" />
+                        </Divider>
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <TextField
+                          fullWidth
+                          value={(() => {
+                            if (
+                              editedData.is_borrowed_or_rented_or_borrowed_out ===
+                              "borrowed"
+                            )
+                              return "Mượn";
+                            if (
+                              editedData.is_borrowed_or_rented_or_borrowed_out ===
+                              "rented"
+                            )
+                              return "Thuê";
+                            if (
+                              editedData.is_borrowed_or_rented_or_borrowed_out ===
+                              "borrowed_out"
+                            )
+                              return "Cho mượn";
+                            return "NULL";
+                          })()}
+                          label="Trạng thái Mượn/Thuê"
+                          disabled
+                          sx={DISABLED_VIEW_SX}
+                          InputLabelProps={{ shrink: true }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <TextField
+                          fullWidth
+                          label="Đơn vị (mượn/thuê)"
+                          value={
+                            editedData.is_borrowed_or_rented_or_borrowed_out_name ||
+                            "NULL"
+                          }
+                          disabled
+                          sx={DISABLED_VIEW_SX}
+                          InputLabelProps={{ shrink: true }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <TextField
+                          fullWidth
+                          label="Ngày (mượn/thuê)"
+                          type="date"
+                          value={formatDateForInput(
+                            editedData.is_borrowed_or_rented_or_borrowed_out_date
+                          )}
+                          disabled
+                          sx={DISABLED_VIEW_SX}
+                          InputLabelProps={{ shrink: true }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <TextField
+                          fullWidth
+                          label="Ngày trả (dự kiến)"
+                          type="date"
+                          value={formatDateForInput(
+                            editedData.is_borrowed_or_rented_or_borrowed_out_return_date
+                          )}
+                          onChange={(e) =>
+                            handleInputChange(
+                              "is_borrowed_or_rented_or_borrowed_out_return_date",
+                              e.target.value || null // Gửi null nếu ngày bị xóa
+                            )
+                          }
+                          InputLabelProps={{ shrink: true }}
+                          disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
+                          sx={DISABLED_VIEW_SX}
+                        />
+                      </Grid>
+                    </>
+                  )}
 
-                {!isCreateMode && selectedMachine && (
                   <Grid size={{ xs: 12 }}>
-                    <Alert severity="info" sx={{ borderRadius: "12px" }}>
-                      <Typography variant="body2">
-                        <strong>Người tạo:</strong>{" "}
-                        {editedData.creator_ma_nv
-                          ? `${editedData.creator_ma_nv}: ${
-                              editedData.creator_ten_nv || "--"
-                            }`
-                          : selectedMachine.created_by || "--"}
-                      </Typography>
-                      <Typography variant="body2">
-                        <strong>Tạo lúc:</strong>{" "}
-                        {new Date(selectedMachine.created_at).toLocaleString(
-                          "vi-VN"
-                        )}
-                      </Typography>
-                      <Typography variant="body2">
-                        <strong>Người cập nhật:</strong>{" "}
-                        {editedData.updater_ma_nv
-                          ? `${editedData.updater_ma_nv}: ${
-                              editedData.updater_ten_nv || "--"
-                            }`
-                          : selectedMachine.updated_by || "--"}
-                      </Typography>
-                      <Typography variant="body2">
-                        <strong>Cập nhật lần cuối:</strong>{" "}
-                        {new Date(selectedMachine.updated_at).toLocaleString(
-                          "vi-VN"
-                        )}
-                      </Typography>
-                    </Alert>
+                    <Divider sx={{ my: 2 }}>
+                      <Chip label="Thông tin Chi phí & Thời gian" />
+                    </Divider>
                   </Grid>
-                )}
-              </Grid>
-            )}
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      fullWidth
+                      label="Giá (VNĐ)"
+                      value={formatNumberVN(editedData.price)}
+                      onChange={(e) => {
+                        const parsedValue = parseNumberVN(e.target.value);
+                        handleInputChange(
+                          "price",
+                          parsedValue ? parseFloat(parsedValue) : ""
+                        );
+                      }}
+                      disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
+                      sx={DISABLED_VIEW_SX}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      fullWidth
+                      label="Tuổi thọ (năm)"
+                      value={editedData.lifespan?.toString() || ""}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        // Chỉ cho phép số
+                        if (value === "" || /^\d+$/.test(value)) {
+                          handleInputChange(
+                            "lifespan",
+                            value ? parseInt(value) : ""
+                          );
+                        }
+                      }}
+                      onKeyPress={(e) => {
+                        // Chặn các ký tự không phải số
+                        if (!/[0-9]/.test(e.key)) {
+                          e.preventDefault();
+                        }
+                      }}
+                      inputProps={{
+                        inputMode: "numeric",
+                        pattern: "[0-9]*",
+                      }}
+                      disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
+                      sx={DISABLED_VIEW_SX}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      fullWidth
+                      label="Chi phí sửa chữa (VNĐ)"
+                      value={formatNumberVN(editedData.repair_cost) || ""}
+                      onChange={(e) => {
+                        const parsedValue = parseNumberVN(e.target.value);
+                        handleInputChange(
+                          "repair_cost",
+                          parsedValue ? parseFloat(parsedValue) : ""
+                        );
+                      }}
+                      disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
+                      sx={DISABLED_VIEW_SX}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      fullWidth
+                      label="Ngày sử dụng"
+                      type="date"
+                      value={formatDateForInput(editedData.date_of_use)}
+                      onChange={(e) =>
+                        handleInputChange("date_of_use", e.target.value)
+                      }
+                      InputLabelProps={{ shrink: true }}
+                      disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
+                      sx={DISABLED_VIEW_SX}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12 }}>
+                    <TextField
+                      fullWidth
+                      label="Ghi chú"
+                      multiline
+                      rows={3}
+                      value={editedData.note || ""}
+                      onChange={(e) =>
+                        handleInputChange("note", e.target.value)
+                      }
+                      disabled={!canCreateOrImport} // Bị khóa nếu là view-only và cơ điện xưởng
+                      sx={DISABLED_VIEW_SX}
+                    />
+                  </Grid>
+
+                  {!isCreateMode && selectedMachine && (
+                    <Grid size={{ xs: 12 }}>
+                      <Alert severity="info" sx={{ borderRadius: "12px" }}>
+                        <Typography variant="body2">
+                          <strong>Người tạo:</strong>{" "}
+                          {editedData.creator_ma_nv
+                            ? `${editedData.creator_ma_nv}: ${
+                                editedData.creator_ten_nv || "--"
+                              }`
+                            : selectedMachine.created_by || "--"}
+                        </Typography>
+                        <Typography variant="body2">
+                          <strong>Tạo lúc:</strong>{" "}
+                          {new Date(selectedMachine.created_at).toLocaleString(
+                            "vi-VN"
+                          )}
+                        </Typography>
+                        <Typography variant="body2">
+                          <strong>Người cập nhật:</strong>{" "}
+                          {editedData.updater_ma_nv
+                            ? `${editedData.updater_ma_nv}: ${
+                                editedData.updater_ten_nv || "--"
+                              }`
+                            : selectedMachine.updated_by || "--"}
+                        </Typography>
+                        <Typography variant="body2">
+                          <strong>Cập nhật lần cuối:</strong>{" "}
+                          {new Date(selectedMachine.updated_at).toLocaleString(
+                            "vi-VN"
+                          )}
+                        </Typography>
+                      </Alert>
+                    </Grid>
+                  )}
+                </Grid>
+              )}
           </DialogContent>
           <Divider />
           <DialogActions
@@ -5083,8 +5155,28 @@ const MachineListPage = () => {
               Đóng
             </Button>
 
+            {/* Nút Xuất PDF — chỉ hiện ở tab "Lý lịch bảo dưỡng" */}
+            {!isCreateMode && detailTab === 1 && (
+              <Button
+                onClick={() => profileExportFnRef.current?.()}
+                variant="outlined"
+                startIcon={<PictureAsPdf />}
+                sx={{
+                  borderRadius: "12px",
+                  borderColor: "#c62828",
+                  color: "#c62828",
+                  "&:hover": { borderColor: "#8e0000", bgcolor: "#ffebee" },
+                  width: { xs: "100%", sm: "auto" },
+                  fontWeight: 600,
+                }}
+              >
+                Xuất PDF
+              </Button>
+            )}
+
             {/* <<< 5. THAY ĐỔI: ẨN NÚT LƯU CHO VIEW-ONLY VÀ CƠ ĐIỆN XƯỞNG >>> */}
-            {canCreateOrImport && (
+            {/* Chỉ hiện nút Lưu khi đang ở tab "Chi tiết máy móc" (tab 0) hoặc đang tạo mới */}
+            {canCreateOrImport && (isCreateMode || detailTab === 0) && (
               <Button
                 onClick={handleSave}
                 variant="contained"

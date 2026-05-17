@@ -1764,6 +1764,7 @@ app.get("/api/machines/:uuid", authenticateToken, async (req, res) => {
       `
       SELECT 
         m.uuid_machine,
+        m.id_machine,
         m.serial_machine,
         m.RFID_machine,
         m.NFC_machine,
@@ -1792,6 +1793,7 @@ app.get("/api/machines/:uuid", authenticateToken, async (req, res) => {
         c.uuid_category,
         tl.name_location,
         tl.uuid_location,
+        mcata.maintenance_content AS maintenance_content,
 
         -- Thêm thông tin người tạo (creator)
         CASE
@@ -1845,6 +1847,11 @@ app.get("/api/machines/:uuid", authenticateToken, async (req, res) => {
       LEFT JOIN tb_category c ON c.id_category = m.id_category
       LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
       LEFT JOIN tb_location tl ON tl.id_location = ml.id_location
+      LEFT JOIN tb_machine_type mt ON mt.name_machine_type = m.type_machine
+      LEFT JOIN tb_machine_attribute ma ON ma.name_machine_attribute = m.attribute_machine
+      LEFT JOIN tb_maintenance_content_machine_type_attribute mcata
+        ON mcata.id_machine_type = mt.id_machine_type
+        AND mcata.id_machine_attribute <=> ma.id_machine_attribute
       
       -- JOIN sang CSDL HiTimesheet 2 LẦN (cho người tạo và người cập nhật)
       LEFT JOIN ${process.env.DATA_HITIMESHEET_DATABASE}.sync_nhan_vien creator ON creator.id = m.created_by
@@ -1862,10 +1869,69 @@ app.get("/api/machines/:uuid", authenticateToken, async (req, res) => {
       });
     }
 
+    // Parse maintenance_content (JSON) thành danh sách phẳng để FE dễ render.
+    // Có 2 dạng dữ liệu khả dĩ (giữ khả năng tương thích ngược):
+    //   1) Object dạng matrix do AdminPage lưu:
+    //        { "<contentName>": 0 | 1, ... }
+    //      → Chỉ lấy các content có value = 1
+    //   2) Array dạng schedule_detail:
+    //        [{ id, name, is_check, ... }, ...]
+    //   3) Object dạng object-of-objects (legacy):
+    //        { "<id>": { name, is_check } }
+    const machineRow = machines[0];
+    try {
+      const rawMC = machineRow.maintenance_content;
+      let contentArr = [];
+      if (rawMC) {
+        const parsed = typeof rawMC === "string" ? JSON.parse(rawMC) : rawMC;
+        if (Array.isArray(parsed)) {
+          contentArr = parsed
+            .filter((it) => it && (it.name || it.id))
+            .map((it) => ({
+              id: it.id ?? null,
+              name: it.name ?? "",
+              is_check: !!it.is_check,
+            }));
+        } else if (parsed && typeof parsed === "object") {
+          contentArr = Object.entries(parsed)
+            .map(([key, v]) => {
+              // Dạng (1): value là 0/1 (hoặc boolean/string)
+              if (
+                v === 0 ||
+                v === 1 ||
+                v === true ||
+                v === false ||
+                typeof v === "string" ||
+                typeof v === "number"
+              ) {
+                const enabled = v === 1 || v === "1" || v === true;
+                return enabled
+                  ? { id: null, name: key, is_check: false }
+                  : null;
+              }
+              // Dạng (3): value là object { name, is_check }
+              if (v && typeof v === "object" && v.name) {
+                return {
+                  id: key,
+                  name: v.name,
+                  is_check: !!v.is_check,
+                };
+              }
+              return null;
+            })
+            .filter(Boolean);
+        }
+      }
+      machineRow.maintenance_content_list = contentArr;
+    } catch (e) {
+      console.error("Error parsing maintenance_content:", e);
+      machineRow.maintenance_content_list = [];
+    }
+
     res.json({
       success: true,
       message: "Machine details retrieved successfully",
-      data: machines[0],
+      data: machineRow,
     });
   } catch (error) {
     console.error("Error fetching machine details:", error);
