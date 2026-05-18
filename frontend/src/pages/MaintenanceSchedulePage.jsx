@@ -1,6 +1,6 @@
 // frontend/src/pages/MaintenanceSchedulePage.jsx
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Container,
   Typography,
@@ -93,6 +93,18 @@ const MONTH_NAMES = [
 ];
 
 const DAY_OF_WEEK = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
+
+const PHONGBAN_TO_DEPARTMENT = {
+  10: "Xưởng 1",
+  30: "Xưởng 2",
+  24: "Xưởng 3",
+  31: "Xưởng 4",
+};
+
+const getDefaultDepartmentsForPhongban = (phongbanId) => {
+  const dept = PHONGBAN_TO_DEPARTMENT[Number(phongbanId)];
+  return dept ? [dept] : [];
+};
 
 const STATUS_CONFIG = {
   available: { bg: "#2e7d3222", color: "#2e7d32", label: "Có thể sử dụng" },
@@ -2708,12 +2720,21 @@ const FILTER_INPUT_SX = {
   "& .MuiOutlinedInput-root": { borderRadius: "10px", fontSize: "0.82rem" },
 };
 
-const FilterSelect = ({ value, onChange, options, placeholder, icon }) => (
+const FilterSelect = ({
+  value,
+  onChange,
+  options,
+  placeholder,
+  icon,
+  multiple = false,
+}) => (
   <Autocomplete
-    value={value}
+    multiple={multiple}
+    value={multiple ? value || [] : value}
     onChange={onChange}
     options={options}
     size="small"
+    disableCloseOnSelect={multiple}
     renderInput={(params) => (
       <TextField
         {...params}
@@ -2762,6 +2783,13 @@ const FilterGroup = ({ label, children }) => (
 // ==================== Main Page ====================
 const MaintenanceSchedulePage = () => {
   const isMobile = useMediaQuery(useTheme().breakpoints.down("sm"));
+  const { user, permissions } = useAuth();
+  const isAdmin = permissions.includes("admin");
+  const canEdit = permissions.includes("edit");
+  const isCoDienXuong =
+    canEdit &&
+    !isAdmin &&
+    PHONGBAN_TO_DEPARTMENT[Number(user?.phongban_id)] != null;
 
   const today = new Date();
   const vnToday = new Date(
@@ -2778,7 +2806,17 @@ const MaintenanceSchedulePage = () => {
 
   // ── Filter state ──
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterDepartment, setFilterDepartment] = useState(null);
+  const [filterDepartments, setFilterDepartments] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("user") || "null");
+      if (saved?.phongban_id != null) {
+        return getDefaultDepartmentsForPhongban(saved.phongban_id);
+      }
+    } catch {
+      /* ignore */
+    }
+    return [];
+  });
   const [filterLocation, setFilterLocation] = useState(null);
   const [filterType, setFilterType] = useState(null);
   const [filterAttribute, setFilterAttribute] = useState(null);
@@ -2938,8 +2976,22 @@ const MaintenanceSchedulePage = () => {
     fetchData();
   }, [fetchData]);
 
+  // Áp dụng bộ lọc mặc định theo xưởng sau khi auth load xong (một lần)
+  const coDienDefaultAppliedRef = useRef(false);
+  useEffect(() => {
+    if (coDienDefaultAppliedRef.current || !user) return;
+    coDienDefaultAppliedRef.current = true;
+    if (isCoDienXuong) {
+      setFilterDepartments(getDefaultDepartmentsForPhongban(user.phongban_id));
+    }
+  }, [user, isCoDienXuong]);
+
   const resetAllFilters = () => {
-    setFilterDepartment(null);
+    setFilterDepartments(
+      isCoDienXuong
+        ? getDefaultDepartmentsForPhongban(user?.phongban_id)
+        : []
+    );
     setFilterLocation(null);
     setFilterType(null);
     setFilterAttribute(null);
@@ -2991,7 +3043,9 @@ const MaintenanceSchedulePage = () => {
     ...new Set(
       scheduleData
         .filter(
-          (i) => !filterDepartment || i.name_department === filterDepartment
+          (i) =>
+            filterDepartments.length === 0 ||
+            filterDepartments.includes(i.name_department)
         )
         .map((i) => i.name_location)
         .filter(Boolean)
@@ -3033,7 +3087,7 @@ const MaintenanceSchedulePage = () => {
 
   // Cascade resets
   const handleDepartmentChange = (_, value) => {
-    setFilterDepartment(value);
+    setFilterDepartments(value || []);
     setFilterLocation(null);
   };
 
@@ -3049,7 +3103,7 @@ const MaintenanceSchedulePage = () => {
   };
 
   const hasActiveFilter =
-    filterDepartment ||
+    filterDepartments.length > 0 ||
     filterLocation ||
     filterType ||
     filterAttribute ||
@@ -3066,7 +3120,10 @@ const MaintenanceSchedulePage = () => {
   // ── Apply all filters → passed to CalendarCard ──
   const deptLocationFiltered = useMemo(() => {
     return scheduleData.filter((item) => {
-      if (filterDepartment && item.name_department !== filterDepartment)
+      if (
+        filterDepartments.length > 0 &&
+        !filterDepartments.includes(item.name_department)
+      )
         return false;
       if (filterLocation && item.name_location !== filterLocation) return false;
       if (filterType && item.type_machine !== filterType) return false;
@@ -3080,7 +3137,7 @@ const MaintenanceSchedulePage = () => {
     });
   }, [
     scheduleData,
-    filterDepartment,
+    filterDepartments,
     filterLocation,
     filterType,
     filterAttribute,
@@ -3123,7 +3180,7 @@ const MaintenanceSchedulePage = () => {
     setVisibleCount(PAGE_SIZE);
   }, [
     searchTerm,
-    filterDepartment,
+    filterDepartments,
     filterLocation,
     filterType,
     filterAttribute,
@@ -3510,7 +3567,8 @@ const MaintenanceSchedulePage = () => {
                   {/* Group 1: Đơn vị / Vị trí */}
                   <FilterGroup label="Đơn vị / Vị trí">
                     <FilterSelect
-                      value={filterDepartment}
+                      multiple
+                      value={filterDepartments}
                       onChange={handleDepartmentChange}
                       options={allDepartments}
                       placeholder="Tất cả đơn vị"
@@ -3710,15 +3768,17 @@ const MaintenanceSchedulePage = () => {
                       useFlexGap
                     >
                       {[
-                        {
-                          val: filterDepartment,
+                        ...filterDepartments.map((dept) => ({
+                          val: dept,
                           icon: <Business />,
                           color: "#667eea",
                           onDel: () => {
-                            setFilterDepartment(null);
+                            setFilterDepartments((prev) =>
+                              prev.filter((d) => d !== dept)
+                            );
                             setFilterLocation(null);
                           },
-                        },
+                        })),
                         {
                           val: filterLocation,
                           icon: <LocationOn />,
