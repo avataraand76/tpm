@@ -12898,6 +12898,244 @@ cron.schedule("*/30 * * * 1-6", autoCreateMaintenanceScheduleDetail, {
   timezone: "Asia/Ho_Chi_Minh",
 });
 
+// Phân bổ lại máy chưa bảo dưỡng (pending) từ các ngày đã qua trong tháng vào các ngày làm việc còn lại
+async function autoRedistributeOverdueMaintenanceInMonth() {
+  const connection = await tpmConnection.getConnection();
+  try {
+    const now = new Date();
+    const vnNow = new Date(
+      now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" })
+    );
+    const currentYear = vnNow.getFullYear();
+    const currentMonth = vnNow.getMonth() + 1;
+    const today = vnNow.getDate();
+    const totalDays = new Date(currentYear, currentMonth, 0).getDate();
+
+    const holidaysByMonth = new Map();
+    try {
+      if (!higmfConnection.connected) {
+        await higmfConnection.connect();
+      }
+      const holidayResult = await higmfConnection.request().query(`
+        SELECT NgayThang FROM [dbo].[Lib_NgayNghi_ChiTiet]
+        WHERE NgayThang IS NOT NULL
+          AND YEAR(NgayThang) = ${currentYear}
+      `);
+      for (const row of holidayResult.recordset) {
+        const d = new Date(row.NgayThang);
+        const m = d.getMonth() + 1;
+        const day = d.getDate();
+        if (!holidaysByMonth.has(m)) holidaysByMonth.set(m, new Set());
+        holidaysByMonth.get(m).add(day);
+      }
+    } catch (err) {
+      console.warn(
+        "[RedistributeMaintenance] Không thể lấy ngày nghỉ từ eGMF, tiếp tục không trừ ngày nghỉ:",
+        err.message
+      );
+    }
+
+    const holidays = holidaysByMonth.get(currentMonth) ?? new Set();
+    const availableDays = [];
+    for (let d = today; d <= totalDays; d++) {
+      if (!holidays.has(d)) availableDays.push(d);
+    }
+
+    if (availableDays.length === 0) {
+      const msg = `Tháng ${currentMonth}/${currentYear}: không còn ngày làm việc để phân bổ.`;
+      console.log(`[RedistributeMaintenance] ${msg}`);
+      return {
+        success: true,
+        year: currentYear,
+        month: currentMonth,
+        moved: 0,
+        messages: [msg],
+      };
+    }
+
+    const [overdueRows] = await connection.query(
+      `SELECT id_maintenance_schedule_detail, id_machine, day
+       FROM tb_maintenance_schedule_detail
+       WHERE year = ? AND month = ? AND day < ? AND status = 'pending'
+       ORDER BY day ASC, id_machine ASC`,
+      [currentYear, currentMonth, today]
+    );
+
+    if (!overdueRows.length) {
+      const msg = `Tháng ${currentMonth}/${currentYear}: không có máy quá hạn cần điều chỉnh.`;
+      console.log(`[RedistributeMaintenance] ${msg}`);
+      return {
+        success: true,
+        year: currentYear,
+        month: currentMonth,
+        moved: 0,
+        messages: [msg],
+      };
+    }
+
+    const [existingInMonth] = await connection.query(
+      `SELECT id_maintenance_schedule_detail, id_machine, day
+       FROM tb_maintenance_schedule_detail
+       WHERE year = ? AND month = ?`,
+      [currentYear, currentMonth]
+    );
+    const dayByMachine = new Map();
+    for (const row of existingInMonth) {
+      if (!dayByMachine.has(row.id_machine)) {
+        dayByMachine.set(row.id_machine, new Map());
+      }
+      dayByMachine
+        .get(row.id_machine)
+        .set(row.day, row.id_maintenance_schedule_detail);
+    }
+
+    const isDayFreeForMachine = (idMachine, day, excludeDetailId) => {
+      const slots = dayByMachine.get(idMachine);
+      if (!slots) return true;
+      const existingId = slots.get(day);
+      return !existingId || existingId === excludeDetailId;
+    };
+
+    const pickTargetDay = (idMachine, preferredDay, excludeDetailId) => {
+      if (isDayFreeForMachine(idMachine, preferredDay, excludeDetailId)) {
+        return preferredDay;
+      }
+      for (const d of availableDays) {
+        if (isDayFreeForMachine(idMachine, d, excludeDetailId)) return d;
+      }
+      return null;
+    };
+
+    // Công thức chia đều giống autoCreateMaintenanceScheduleDetail
+    const D = availableDays.length;
+    const N = overdueRows.length;
+    const a = Math.floor(N / D);
+    const b = N % D;
+    const assignments = [];
+    let idx = 0;
+    const skipped = [];
+
+    for (let wi = 0; wi < D; wi++) {
+      const preferredDay = availableDays[wi];
+      const count = wi < b ? a + 1 : a;
+      for (let i = 0; i < count; i++) {
+        const row = overdueRows[idx];
+        const detailId = row.id_maintenance_schedule_detail;
+        const targetDay = pickTargetDay(row.id_machine, preferredDay, detailId);
+        if (targetDay == null) {
+          skipped.push({
+            id_machine: row.id_machine,
+            oldDay: row.day,
+          });
+          idx++;
+          continue;
+        }
+        assignments.push({
+          id: detailId,
+          id_machine: row.id_machine,
+          oldDay: row.day,
+          newDay: targetDay,
+        });
+        dayByMachine.get(row.id_machine).delete(row.day);
+        dayByMachine.get(row.id_machine).set(targetDay, detailId);
+        idx++;
+      }
+    }
+
+    const needsUpdate = assignments.filter(
+      (item) => item.oldDay !== item.newDay
+    );
+    if (needsUpdate.length === 0) {
+      const msg = `Tháng ${currentMonth}/${currentYear}: lịch quá hạn đã đúng vị trí, không cần điều chỉnh.`;
+      console.log(`[RedistributeMaintenance] ${msg}`);
+      return {
+        success: true,
+        year: currentYear,
+        month: currentMonth,
+        moved: 0,
+        skipped: skipped.length,
+        messages: [msg],
+      };
+    }
+
+    await connection.beginTransaction();
+    for (const item of needsUpdate) {
+      await connection.query(
+        `UPDATE tb_maintenance_schedule_detail
+         SET day = ?
+         WHERE id_maintenance_schedule_detail = ?`,
+        [10000 + item.id, item.id]
+      );
+    }
+    for (const item of needsUpdate) {
+      await connection.query(
+        `UPDATE tb_maintenance_schedule_detail
+         SET day = ?
+         WHERE id_maintenance_schedule_detail = ?`,
+        [item.newDay, item.id]
+      );
+    }
+    await connection.commit();
+
+    const msg = `Tháng ${currentMonth}/${currentYear}: đã chuyển ${needsUpdate.length}/${overdueRows.length} máy quá hạn vào ${availableDays.length} ngày làm việc còn lại (${availableDays[0]}–${availableDays[availableDays.length - 1]}).`;
+    console.log(`[RedistributeMaintenance] ${msg}`);
+    if (skipped.length > 0) {
+      console.warn(
+        `[RedistributeMaintenance] Bỏ qua ${skipped.length} máy do không còn slot trống trong tháng.`
+      );
+    }
+
+    return {
+      success: true,
+      year: currentYear,
+      month: currentMonth,
+      moved: needsUpdate.length,
+      totalOverdue: overdueRows.length,
+      availableDays,
+      skipped: skipped.length,
+      messages: [msg],
+    };
+  } catch (error) {
+    await connection.rollback();
+    console.error(
+      "[RedistributeMaintenance] Lỗi khi điều chỉnh lịch bảo dưỡng:",
+      error
+    );
+    return {
+      success: false,
+      message: error.message,
+    };
+  } finally {
+    connection.release();
+  }
+}
+autoRedistributeOverdueMaintenanceInMonth();
+
+// POST /api/admin/redistribute-overdue-maintenance — Điều chỉnh lịch quá hạn trong tháng (trigger thủ công)
+app.post(
+  "/api/admin/redistribute-overdue-maintenance",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const result = await autoRedistributeOverdueMaintenanceInMonth();
+      if (!result?.success) {
+        return res.status(500).json({
+          success: false,
+          message: result?.message || "Có lỗi khi điều chỉnh lịch bảo dưỡng",
+        });
+      }
+      res.json(result);
+    } catch (error) {
+      console.error("API error:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+);
+
+cron.schedule("20 * * * 1-6", autoRedistributeOverdueMaintenanceInMonth, {
+  timezone: "Asia/Ho_Chi_Minh",
+});
+
 // GET /api/maintenance-schedule-detail — Lịch bảo dưỡng chi tiết theo năm/tháng
 app.get("/api/maintenance-schedule-detail", async (req, res) => {
   try {
