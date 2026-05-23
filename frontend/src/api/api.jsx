@@ -759,6 +759,13 @@ export const api = {
       const response = await httpConnect.get("/api/inventory-checks/stats");
       return response.data;
     },
+    getRecurringMissed: async (params = {}) => {
+      const response = await httpConnect.get(
+        "/api/inventory-checks/recurring-missed-machines",
+        { params }
+      );
+      return response.data;
+    },
     getMissingMachines: async (uuid, params) => {
       const response = await httpConnect.get(
         `/api/inventory-checks/${uuid}/missing-machines`,

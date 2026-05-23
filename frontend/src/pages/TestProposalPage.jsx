@@ -28,6 +28,7 @@ import {
   Stack,
   Avatar,
   Tooltip,
+  Popover,
   Alert,
   Snackbar,
   CircularProgress,
@@ -560,6 +561,36 @@ const TestProposalPage = () => {
   const [inventoryStats, setInventoryStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(false);
 
+  const getDefaultRecurringMissWeekRange = () => {
+    const now = new Date();
+    const day = now.getDay();
+    const mondayOffset = day === 0 ? -6 : 1 - day;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() + mondayOffset);
+    const saturday = new Date(monday);
+    saturday.setDate(monday.getDate() + 5);
+    const toInput = (d) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${dd}`;
+    };
+    return { from: toInput(monday), to: toInput(saturday) };
+  };
+
+  const defaultRecurringMissWeek = getDefaultRecurringMissWeekRange();
+  const [recurringMissFrom, setRecurringMissFrom] = useState(
+    defaultRecurringMissWeek.from
+  );
+  const [recurringMissTo, setRecurringMissTo] = useState(
+    defaultRecurringMissWeek.to
+  );
+  const [recurringMissedMachines, setRecurringMissedMachines] = useState([]);
+  const [recurringMissLoading, setRecurringMissLoading] = useState(false);
+  const [recurringMissMeta, setRecurringMissMeta] = useState(null);
+  const [recurringMissExpanded, setRecurringMissExpanded] = useState(false);
+  const [rfidReplacePopover, setRfidReplacePopover] = useState(null);
+
   // Location Data
   const [filteredLocations, setFilteredLocations] = useState([]);
   const [locationLoading, setLocationLoading] = useState(false);
@@ -1028,6 +1059,36 @@ const TestProposalPage = () => {
     } finally {
       setStatsLoading(false);
     }
+  }, [activeTab]);
+
+  const fetchRecurringMissedStats = useCallback(async () => {
+    if (!recurringMissFrom || !recurringMissTo) return;
+    setRecurringMissLoading(true);
+    try {
+      const response = await api.inventory.getRecurringMissed({
+        date_from: recurringMissFrom,
+        date_to: recurringMissTo,
+        min_streak: 3,
+      });
+      setRecurringMissedMachines(response.data || []);
+      setRecurringMissMeta(response.meta || null);
+    } catch (error) {
+      console.error("Error fetching recurring missed machines:", error);
+      setRecurringMissedMachines([]);
+      setRecurringMissMeta(null);
+      showNotification(
+        "error",
+        "Lỗi",
+        error.response?.data?.message ||
+          "Không thể tải thống kê máy quét sót liên tiếp"
+      );
+    } finally {
+      setRecurringMissLoading(false);
+    }
+  }, [recurringMissFrom, recurringMissTo, showNotification]);
+
+  useEffect(() => {
+    if (activeTab !== 3) setRfidReplacePopover(null);
   }, [activeTab]);
 
   useEffect(() => {
@@ -5152,6 +5213,271 @@ const TestProposalPage = () => {
                     </Grid>
                   </Box>
                 )}
+
+                {activeTab === 3 && (
+                  <Accordion
+                    expanded={recurringMissExpanded}
+                    onChange={(_, expanded) =>
+                      setRecurringMissExpanded(expanded)
+                    }
+                    disableGutters
+                    elevation={0}
+                    sx={{
+                      mt: 2,
+                      borderRadius: "12px !important",
+                      bgcolor: "#fff8e1",
+                      border: "1px solid #ffe082",
+                      "&:before": { display: "none" },
+                      overflow: "hidden",
+                    }}
+                  >
+                    <AccordionSummary
+                      expandIcon={<ExpandMore sx={{ color: "#f57c00" }} />}
+                      sx={{
+                        minHeight: 48,
+                        "& .MuiAccordionSummary-content": { my: 1 },
+                      }}
+                    >
+                      <Typography
+                        variant="subtitle2"
+                        sx={{ fontWeight: 600, color: "#f57c00" }}
+                      >
+                        Thống kê máy quét sót/chưa xác định liên tiếp (≥ 3 lần)
+                      </Typography>
+                      {!recurringMissExpanded &&
+                        recurringMissedMachines.length > 0 && (
+                          <Chip
+                            label={`${recurringMissedMachines.length} máy`}
+                            size="small"
+                            color="error"
+                            sx={{ ml: 1.5, fontWeight: 600 }}
+                          />
+                        )}
+                    </AccordionSummary>
+                    <AccordionDetails sx={{ pt: 0, pb: 2, px: 2 }}>
+                      <Grid container spacing={2} sx={{ mb: 2 }}>
+                        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                          <TextField
+                            fullWidth
+                            type="date"
+                            label="Từ ngày"
+                            value={recurringMissFrom}
+                            onChange={(e) =>
+                              setRecurringMissFrom(e.target.value)
+                            }
+                            InputLabelProps={{ shrink: true }}
+                            sx={{
+                              "& .MuiOutlinedInput-root": {
+                                borderRadius: "12px",
+                              },
+                            }}
+                          />
+                        </Grid>
+                        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                          <TextField
+                            fullWidth
+                            type="date"
+                            label="Đến ngày"
+                            value={recurringMissTo}
+                            onChange={(e) => setRecurringMissTo(e.target.value)}
+                            InputLabelProps={{ shrink: true }}
+                            sx={{
+                              "& .MuiOutlinedInput-root": {
+                                borderRadius: "12px",
+                              },
+                            }}
+                          />
+                        </Grid>
+                        <Grid
+                          size={{ xs: 12, md: 4 }}
+                          sx={{ display: "flex", alignItems: "center" }}
+                        >
+                          <Button
+                            variant="contained"
+                            onClick={fetchRecurringMissedStats}
+                            disabled={recurringMissLoading}
+                            sx={{
+                              borderRadius: "12px",
+                              bgcolor: "#f57c00",
+                              "&:hover": { bgcolor: "#ef6c00" },
+                            }}
+                          >
+                            {recurringMissLoading ? (
+                              <CircularProgress size={22} color="inherit" />
+                            ) : (
+                              "Xem thống kê"
+                            )}
+                          </Button>
+                        </Grid>
+                      </Grid>
+                      {recurringMissMeta && (
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ display: "block", mb: 1 }}
+                        >
+                          {recurringMissMeta.ticket_days_count} ngày có phiếu
+                          kiểm kê trong khoảng đã chọn
+                          {recurringMissedMachines.length > 0 &&
+                            ` · ${recurringMissedMachines.length} máy đạt chuỗi ≥ 3`}
+                          {recurringMissMeta?.rfid_replaced_count > 0 &&
+                            ` · ${recurringMissMeta.rfid_replaced_count} máy đã thay thẻ RFID`}
+                        </Typography>
+                      )}
+                      {recurringMissLoading ? (
+                        <Box sx={{ textAlign: "center", py: 3 }}>
+                          <CircularProgress size={32} />
+                        </Box>
+                      ) : recurringMissedMachines.length === 0 ? (
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{ py: 2, textAlign: "center" }}
+                        >
+                          Không có máy quét sót/chưa xác định liên tiếp từ 3 lần
+                          trở lên trong khoảng ngày đã chọn
+                        </Typography>
+                      ) : (
+                        <TableContainer
+                          component={Paper}
+                          elevation={0}
+                          sx={{ border: "1px solid #ffe082", borderRadius: 2 }}
+                        >
+                          <Table size="small">
+                            <TableHead>
+                              <TableRow sx={{ bgcolor: "#fff3e0" }}>
+                                <TableCell sx={{ fontWeight: "bold" }}>
+                                  STT
+                                </TableCell>
+                                <TableCell sx={{ fontWeight: "bold" }}>
+                                  Tên thiết bị
+                                </TableCell>
+                                <TableCell sx={{ fontWeight: "bold" }}>
+                                  Serial
+                                </TableCell>
+                                <TableCell sx={{ fontWeight: "bold" }}>
+                                  RFID
+                                </TableCell>
+                                <TableCell sx={{ fontWeight: "bold" }}>
+                                  Vị trí ghi nhận
+                                </TableCell>
+                                <TableCell
+                                  align="center"
+                                  sx={{ fontWeight: "bold", color: "#d32f2f" }}
+                                >
+                                  Số lần sót/chưa xác định liên tiếp
+                                </TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {recurringMissedMachines.map((machine, index) => (
+                                <TableRow key={machine.uuid_machine} hover>
+                                  <TableCell>{index + 1}</TableCell>
+                                  <TableCell>
+                                    {`${machine.type_machine || ""} ${
+                                      machine.attribute_machine || ""
+                                    } - ${machine.model_machine || ""}`.trim()}
+                                  </TableCell>
+                                  <TableCell>
+                                    {machine.serial_machine || "-"}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Stack
+                                      direction="row"
+                                      alignItems="center"
+                                      spacing={0.5}
+                                      flexWrap="wrap"
+                                      useFlexGap
+                                    >
+                                      <Typography
+                                        component="span"
+                                        sx={{
+                                          fontSize: "0.89rem",
+                                        }}
+                                      >
+                                        {machine.RFID_machine || "-"}
+                                      </Typography>
+                                      {machine.rfid_replaced && (
+                                        <Chip
+                                          label="Đã thay thẻ"
+                                          size="small"
+                                          color="success"
+                                          variant="outlined"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setRfidReplacePopover({
+                                              anchorEl: e.currentTarget,
+                                              machine,
+                                            });
+                                          }}
+                                          sx={{
+                                            cursor: "pointer",
+                                            fontWeight: 600,
+                                            height: 22,
+                                          }}
+                                        />
+                                      )}
+                                    </Stack>
+                                  </TableCell>
+                                  <TableCell>
+                                    {machine.previous_location_name || "-"}
+                                  </TableCell>
+                                  <TableCell align="center">
+                                    <Chip
+                                      label={machine.consecutive_miss_count}
+                                      size="small"
+                                      color="error"
+                                      sx={{ fontWeight: 700 }}
+                                    />
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                      )}
+                    </AccordionDetails>
+                  </Accordion>
+                )}
+
+                <Popover
+                  open={Boolean(rfidReplacePopover)}
+                  anchorEl={rfidReplacePopover?.anchorEl}
+                  onClose={() => setRfidReplacePopover(null)}
+                  anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                  transformOrigin={{ vertical: "top", horizontal: "left" }}
+                >
+                  <Box sx={{ p: 2, maxWidth: 360 }}>
+                    <Typography
+                      variant="subtitle2"
+                      sx={{ fontWeight: 700, mb: 1, color: "#2e7d32" }}
+                    >
+                      RFID mới
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        wordBreak: "break-all",
+                        mb: 1.5,
+                      }}
+                    >
+                      {rfidReplacePopover?.machine?.RFID_machine_current || "-"}
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: "block", mb: 0.5 }}
+                    >
+                      RFID trên phiếu kiểm kê:
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      sx={{ wordBreak: "break-all" }}
+                    >
+                      {rfidReplacePopover?.machine?.RFID_machine || "-"}
+                    </Typography>
+                  </Box>
+                </Popover>
               </Box>
             )}
 
@@ -7098,7 +7424,8 @@ const TestProposalPage = () => {
                             ?.name_location?.toLowerCase()
                             .replace(/\s+/g, " ")
                             .trim();
-                          if (!locName || !locName.includes("kho")) return false;
+                          if (!locName || !locName.includes("kho"))
+                            return false;
                           // Ẩn với các kho đặc biệt (mặc định in_use)
                           const HIDDEN_WAREHOUSES = [
                             "kho npl",

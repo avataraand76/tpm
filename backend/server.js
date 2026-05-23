@@ -10599,44 +10599,10 @@ app.get("/api/inventory-checks", authenticateToken, async (req, res) => {
       [...params, limit, offset]
     );
 
-    // Enrich approval flow names and fetch details for each inventory
-    const enrichedInventories = await Promise.all(
-      inventories.map(async (item) => {
-        if (item.approval_flow) {
-          item.approval_flow = await enrichApprovalFlowWithNames(
-            item.approval_flow
-          );
-        }
-
-        // Fetch details (departments) for this inventory
-        const [details] = await tpmConnection.query(
-          `
-          SELECT 
-            d.id_department,
-            d.is_completed,
-            d.scanned_result,
-            dep.name_department,
-            dep.uuid_department,
-            dep.id_phong_ban
-          FROM tb_inventory_check_detail d
-          JOIN tb_department dep ON dep.id_department = d.id_department
-          WHERE d.id_inventory_check = (
-            SELECT id_inventory_check FROM tb_inventory_check WHERE uuid_inventory_check = ?
-          )
-          `,
-          [item.uuid_inventory_check]
-        );
-
-        item.inventoryDetails = details;
-
-        return item;
-      })
-    );
-
     res.json({
       success: true,
       message: "Inventory checks retrieved successfully",
-      data: enrichedInventories,
+      data: inventories,
       pagination: { page, limit, total, totalPages },
     });
   } catch (error) {
@@ -10695,6 +10661,276 @@ app.get("/api/inventory-checks/stats", authenticateToken, async (req, res) => {
     });
   }
 });
+
+// Helper: Gom UUID máy đã quét trong toàn phiếu (mọi đơn vị)
+function buildInventoryGlobalScannedSet(allDetails) {
+  const scanned = new Set();
+  (allDetails || []).forEach((detail) => {
+    try {
+      const parsed =
+        typeof detail.scanned_result === "string"
+          ? JSON.parse(detail.scanned_result)
+          : detail.scanned_result;
+      const locations = Array.isArray(parsed)
+        ? parsed
+        : parsed?.locations || [];
+      locations.forEach((loc) => {
+        (loc.scanned_machine || []).forEach((m) => {
+          const mUuid = m.uuid || m.uuid_machine;
+          if (mUuid && !String(mUuid).startsWith("NOT_FOUND")) {
+            scanned.add(mUuid);
+          }
+        });
+      });
+    } catch (e) {
+      console.error("Lỗi parse scanned_result:", e);
+    }
+  });
+  return scanned;
+}
+
+// Helper: Trạng thái máy theo ngày kiểm kê (sót / đã quét) từ list_before_scan + scanned_result
+function getInventoryTicketDayMachineStatus(allDetails) {
+  const globalScanned = buildInventoryGlobalScannedSet(allDetails);
+  const machinesInSnapshot = new Map();
+
+  (allDetails || []).forEach((detail) => {
+    let listBeforeScan = [];
+    try {
+      listBeforeScan =
+        typeof detail.list_before_scan === "string"
+          ? JSON.parse(detail.list_before_scan)
+          : detail.list_before_scan || [];
+    } catch {
+      listBeforeScan = [];
+    }
+    if (!Array.isArray(listBeforeScan)) return;
+
+    listBeforeScan.forEach((loc) => {
+      (loc.machines || []).forEach((m) => {
+        const uuid = m?.uuid_machine;
+        if (!uuid || String(uuid).startsWith("NOT_FOUND")) return;
+        machinesInSnapshot.set(uuid, {
+          uuid_machine: uuid,
+          code_machine: m.code_machine,
+          serial_machine: m.serial_machine,
+          type_machine: m.type_machine,
+          model_machine: m.model_machine,
+          attribute_machine: m.attribute_machine,
+          RFID_machine: m.RFID_machine,
+          NFC_machine: m.NFC_machine,
+          previous_location_name: loc.location_name || "",
+          previous_location_uuid: loc.location_uuid || null,
+          is_missed: !globalScanned.has(uuid),
+        });
+      });
+    });
+  });
+
+  return machinesInSnapshot;
+}
+
+function formatCheckDateKey(checkDate) {
+  if (!checkDate) return "";
+  if (checkDate instanceof Date) {
+    const y = checkDate.getFullYear();
+    const m = String(checkDate.getMonth() + 1).padStart(2, "0");
+    const d = String(checkDate.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+  const s = String(checkDate);
+  return s.length >= 10 ? s.slice(0, 10) : s;
+}
+
+function normalizeRfidForCompare(rfid) {
+  if (rfid == null || rfid === "") return "";
+  return String(rfid).trim().toUpperCase();
+}
+
+function isMachineRfidReplaced(snapshotRfid, currentRfid) {
+  const a = normalizeRfidForCompare(snapshotRfid);
+  const b = normalizeRfidForCompare(currentRfid);
+  if (!a && !b) return false;
+  return a !== b;
+}
+
+// GET /api/inventory-checks/recurring-missed-machines - Máy sót liên tiếp >= N lần trong khoảng ngày
+app.get(
+  "/api/inventory-checks/recurring-missed-machines",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const date_from = req.query.date_from || "";
+      const date_to = req.query.date_to || "";
+      const minStreak = Math.max(1, parseInt(req.query.min_streak, 10) || 3);
+
+      if (!date_from || !date_to) {
+        return res.status(400).json({
+          success: false,
+          message: "date_from và date_to là bắt buộc",
+        });
+      }
+
+      const [tickets] = await tpmConnection.query(
+        `SELECT id_inventory_check, check_date
+         FROM tb_inventory_check
+         WHERE DATE(check_date) >= ? AND DATE(check_date) <= ?
+           AND status != 'cancelled'
+         ORDER BY check_date ASC`,
+        [date_from, date_to]
+      );
+
+      if (tickets.length === 0) {
+        return res.json({
+          success: true,
+          data: [],
+          meta: {
+            date_from,
+            date_to,
+            min_streak: minStreak,
+            ticket_days_count: 0,
+          },
+        });
+      }
+
+      const ticketIds = tickets.map((t) => t.id_inventory_check);
+      const [allDetailRows] = await tpmConnection.query(
+        `SELECT id_inventory_check, scanned_result, list_before_scan
+         FROM tb_inventory_check_detail
+         WHERE id_inventory_check IN (?)`,
+        [ticketIds]
+      );
+
+      const detailsByTicket = new Map();
+      allDetailRows.forEach((row) => {
+        if (!detailsByTicket.has(row.id_inventory_check)) {
+          detailsByTicket.set(row.id_inventory_check, []);
+        }
+        detailsByTicket.get(row.id_inventory_check).push(row);
+      });
+
+      const ticketsByDate = new Map();
+      tickets.forEach((t) => {
+        const dateKey = formatCheckDateKey(t.check_date);
+        if (!ticketsByDate.has(dateKey)) {
+          ticketsByDate.set(dateKey, []);
+        }
+        ticketsByDate.get(dateKey).push(t.id_inventory_check);
+      });
+
+      const sortedDates = [...ticketsByDate.keys()].sort();
+      const streakState = new Map();
+
+      sortedDates.forEach((dateKey) => {
+        const ticketIdsOnDay = ticketsByDate.get(dateKey);
+        const dayMachines = new Map();
+
+        ticketIdsOnDay.forEach((idInv) => {
+          const details = detailsByTicket.get(idInv) || [];
+          const statusMap = getInventoryTicketDayMachineStatus(details);
+          statusMap.forEach((info, uuid) => {
+            const existing = dayMachines.get(uuid);
+            if (!existing) {
+              dayMachines.set(uuid, { ...info });
+            } else {
+              // Sót trong ngày chỉ khi CHƯA quét ở mọi phiếu cùng ngày (đã quét 1 phiếu = reset ngày)
+              dayMachines.set(uuid, {
+                ...existing,
+                ...info,
+                is_missed: existing.is_missed && info.is_missed,
+              });
+            }
+          });
+        });
+
+        dayMachines.forEach((info, uuid) => {
+          if (!streakState.has(uuid)) {
+            streakState.set(uuid, {
+              currentStreak: 0,
+              maxStreak: 0,
+              machineInfo: null,
+              last_miss_date: null,
+            });
+          }
+          const state = streakState.get(uuid);
+
+          if (info.is_missed) {
+            state.currentStreak += 1;
+            if (state.currentStreak > state.maxStreak) {
+              state.maxStreak = state.currentStreak;
+            }
+            state.machineInfo = { ...info };
+            state.last_miss_date = dateKey;
+          } else {
+            state.currentStreak = 0;
+          }
+        });
+      });
+
+      const results = [];
+      streakState.forEach((state, uuid) => {
+        if (state.maxStreak >= minStreak && state.machineInfo) {
+          const m = state.machineInfo;
+          results.push({
+            uuid_machine: uuid,
+            code_machine: m.code_machine,
+            serial_machine: m.serial_machine,
+            type_machine: m.type_machine,
+            model_machine: m.model_machine,
+            attribute_machine: m.attribute_machine,
+            RFID_machine: m.RFID_machine,
+            NFC_machine: m.NFC_machine,
+            previous_location_name: m.previous_location_name,
+            consecutive_miss_count: state.maxStreak,
+            last_miss_date: state.last_miss_date,
+          });
+        }
+      });
+
+      results.sort(
+        (a, b) => b.consecutive_miss_count - a.consecutive_miss_count
+      );
+
+      // Đối chiếu RFID trên phiếu sót (snapshot) với tb_machine hiện tại
+      if (results.length > 0) {
+        const uuids = results.map((r) => r.uuid_machine);
+        const [currentMachines] = await tpmConnection.query(
+          `SELECT uuid_machine, RFID_machine
+           FROM tb_machine
+           WHERE uuid_machine IN (?)`,
+          [uuids]
+        );
+        const currentRfidByUuid = new Map(
+          currentMachines.map((row) => [row.uuid_machine, row.RFID_machine])
+        );
+
+        results.forEach((row) => {
+          const currentRfid = currentRfidByUuid.get(row.uuid_machine) ?? null;
+          row.RFID_machine_current = currentRfid;
+          row.rfid_replaced = isMachineRfidReplaced(
+            row.RFID_machine,
+            currentRfid
+          );
+        });
+      }
+
+      res.json({
+        success: true,
+        data: results,
+        meta: {
+          date_from,
+          date_to,
+          min_streak: minStreak,
+          ticket_days_count: sortedDates.length,
+          rfid_replaced_count: results.filter((r) => r.rfid_replaced).length,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching recurring missed machines:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+);
 
 // Helper: Loại máy có uuid/uuid_machine bắt đầu "NOT_FOUND" khỏi scanned_result (không đếm trong thống kê)
 function filterScannedResultExcludeNotFound(scannedResult) {
