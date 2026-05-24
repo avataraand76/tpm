@@ -1,6 +1,12 @@
 // frontend/src/pages/MaintenanceSchedulePage.jsx
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import {
   Container,
   Typography,
@@ -74,6 +80,7 @@ import {
 } from "@mui/icons-material";
 import { alpha } from "@mui/material/styles";
 import NavigationBar from "../components/NavigationBar";
+import RfidDialog from "../components/rfid/RfidDialog";
 import { api } from "../api/api";
 import { useAuth } from "../hooks/useAuth";
 
@@ -2834,23 +2841,9 @@ const MaintenanceSchedulePage = () => {
 
   // ── RFID lookup ──
   const [rfidDialogOpen, setRfidDialogOpen] = useState(false);
-  const [rfidInput, setRfidInput] = useState("");
-  const [rfidLoading, setRfidLoading] = useState(false);
-  const [rfidError, setRfidError] = useState(null);
-  const [rfidWarning, setRfidWarning] = useState(null);
 
   const handleOpenRfidDialog = () => {
     setRfidDialogOpen(true);
-    setRfidInput("");
-    setRfidError(null);
-    setRfidWarning(null);
-  };
-
-  const handleCloseRfidDialog = () => {
-    setRfidDialogOpen(false);
-    setRfidInput("");
-    setRfidError(null);
-    setRfidWarning(null);
   };
 
   const handleCardClick = (machine) => {
@@ -2860,42 +2853,6 @@ const MaintenanceSchedulePage = () => {
 
   const handleCloseHistoryDialog = () => {
     setHistoryDialogOpen(false);
-  };
-
-  const RFID_LENGTH = 24;
-
-  const handleRfidLookup = async (overrideCode) => {
-    const code = (overrideCode ?? rfidInput).trim();
-    if (!code || rfidLoading) return;
-    setRfidLoading(true);
-    setRfidError(null);
-    setRfidWarning(null);
-    try {
-      const res = await api.maintenance.getMachineByRfid(code);
-      if (res.success && res.data) {
-        setHistoryDialogMachine(res.data);
-        setHistoryDialogOpen(true);
-        setRfidDialogOpen(false);
-        setRfidInput("");
-      } else {
-        setRfidError(res.message || "Không tìm thấy máy");
-      }
-    } catch (err) {
-      const data = err?.response?.data;
-      // Phân biệt: chưa có lịch / chưa có nội dung → cảnh báo (warning)
-      // Còn lại (không tìm thấy máy, lỗi server) → lỗi (error)
-      if (data?.code === "NO_SCHEDULE" || data?.code === "NO_CONTENT") {
-        setRfidWarning({
-          code: data.code,
-          message: data.message,
-          machine: data.machine,
-        });
-      } else {
-        setRfidError(data?.message || `Không tìm thấy máy với mã "${code}"`);
-      }
-    } finally {
-      setRfidLoading(false);
-    }
   };
 
   const handleStatusChange = (uuid, newStatus, result) => {
@@ -2988,9 +2945,7 @@ const MaintenanceSchedulePage = () => {
 
   const resetAllFilters = () => {
     setFilterDepartments(
-      isCoDienXuong
-        ? getDefaultDepartmentsForPhongban(user?.phongban_id)
-        : []
+      isCoDienXuong ? getDefaultDepartmentsForPhongban(user?.phongban_id) : []
     );
     setFilterLocation(null);
     setFilterType(null);
@@ -4208,258 +4163,15 @@ const MaintenanceSchedulePage = () => {
         onStatusChange={handleStatusChange}
       />
 
-      {/* ── RFID Lookup Dialog ── */}
-      <Dialog
+      <RfidDialog
+        mode="lookup"
         open={rfidDialogOpen}
-        onClose={rfidLoading ? undefined : handleCloseRfidDialog}
-        maxWidth="xs"
-        fullWidth
-        PaperProps={{ sx: { borderRadius: "16px" } }}
-      >
-        <DialogTitle
-          sx={{
-            background: "linear-gradient(135deg, #00897b 0%, #26a69a 100%)",
-            color: "#fff",
-            py: 2,
-            px: 3,
-          }}
-        >
-          <Stack
-            direction="row"
-            alignItems="center"
-            justifyContent="space-between"
-          >
-            <Stack direction="row" alignItems="center" spacing={1.5}>
-              <Avatar
-                sx={{
-                  width: 36,
-                  height: 36,
-                  bgcolor: "rgba(255,255,255,0.2)",
-                }}
-              >
-                <WifiTethering sx={{ fontSize: 20, color: "#fff" }} />
-              </Avatar>
-              <Box>
-                <Typography
-                  variant="h6"
-                  fontWeight={700}
-                  sx={{ lineHeight: 1.2 }}
-                >
-                  Quét RFID
-                </Typography>
-                <Typography variant="caption" sx={{ opacity: 0.9 }}>
-                  Tra cứu lý lịch bảo dưỡng thiết bị
-                </Typography>
-              </Box>
-            </Stack>
-            <IconButton
-              onClick={handleCloseRfidDialog}
-              disabled={rfidLoading}
-              sx={{ color: "#fff" }}
-            >
-              <Close />
-            </IconButton>
-          </Stack>
-        </DialogTitle>
-
-        <DialogContent sx={{ p: 3, bgcolor: "#f8f9fc" }}>
-          <TextField
-            fullWidth
-            autoFocus
-            placeholder={`Quét mã RFID để tra cứu`}
-            value={rfidInput}
-            onChange={(e) => {
-              const next = e.target.value.slice(0, RFID_LENGTH);
-              setRfidInput(next);
-              if (rfidError) setRfidError(null);
-              if (rfidWarning) setRfidWarning(null);
-              // Tự động submit khi đủ 24 ký tự
-              if (next.trim().length === RFID_LENGTH && !rfidLoading) {
-                handleRfidLookup(next);
-              }
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                handleRfidLookup();
-              }
-            }}
-            disabled={rfidLoading}
-            sx={{
-              "& .MuiOutlinedInput-root": {
-                borderRadius: "12px",
-                bgcolor: "#fff",
-                fontFamily:
-                  "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                letterSpacing: "0.04em",
-              },
-              mt: 2,
-            }}
-            inputProps={{
-              maxLength: RFID_LENGTH,
-              spellCheck: false,
-              autoCapitalize: "off",
-              autoCorrect: "off",
-            }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <WifiTethering sx={{ fontSize: 20, color: "#00897b" }} />
-                </InputAdornment>
-              ),
-              endAdornment: rfidInput ? (
-                <InputAdornment position="end">
-                  <IconButton
-                    size="small"
-                    onClick={() => {
-                      setRfidInput("");
-                      setRfidError(null);
-                      setRfidWarning(null);
-                    }}
-                    edge="end"
-                    disabled={rfidLoading}
-                  >
-                    <Close fontSize="small" />
-                  </IconButton>
-                </InputAdornment>
-              ) : null,
-            }}
-          />
-
-          {rfidError && (
-            <Alert
-              severity="error"
-              onClose={() => setRfidError(null)}
-              sx={{
-                mt: 2,
-                borderRadius: "12px",
-                fontSize: "0.82rem",
-              }}
-            >
-              {rfidError}
-            </Alert>
-          )}
-
-          {rfidWarning && (
-            <Alert
-              severity="warning"
-              icon={<HourglassEmpty fontSize="inherit" />}
-              onClose={() => setRfidWarning(null)}
-              sx={{
-                mt: 2,
-                borderRadius: "12px",
-                fontSize: "0.82rem",
-                "& .MuiAlert-message": { width: "100%" },
-              }}
-            >
-              <Typography variant="body2" fontWeight={700} sx={{ mb: 0.5 }}>
-                {rfidWarning.code === "NO_SCHEDULE"
-                  ? "Chưa có lịch bảo dưỡng"
-                  : "Chưa có nội dung bảo dưỡng"}
-              </Typography>
-              <Typography variant="caption" sx={{ display: "block" }}>
-                {rfidWarning.message}
-              </Typography>
-              {rfidWarning.machine && (
-                <Box
-                  sx={{
-                    mt: 1,
-                    p: 1,
-                    bgcolor: "rgba(255,152,0,0.08)",
-                    borderRadius: "8px",
-                    border: "1px dashed rgba(255,152,0,0.4)",
-                  }}
-                >
-                  <Typography
-                    variant="caption"
-                    fontWeight={600}
-                    sx={{ display: "block", color: "#e65100" }}
-                  >
-                    {rfidWarning.machine.type_machine}{" "}
-                    {rfidWarning.machine.attribute_machine}
-                  </Typography>
-                  {rfidWarning.machine.serial_machine && (
-                    <Typography
-                      variant="caption"
-                      sx={{ display: "block", color: "#bf360c" }}
-                    >
-                      Serial: {rfidWarning.machine.serial_machine}
-                    </Typography>
-                  )}
-                  {rfidWarning.machine.model_machine && (
-                    <Typography
-                      variant="caption"
-                      sx={{ display: "block", color: "#bf360c" }}
-                    >
-                      Model: {rfidWarning.machine.model_machine}
-                    </Typography>
-                  )}
-                </Box>
-              )}
-              <Typography
-                variant="caption"
-                sx={{
-                  display: "block",
-                  mt: 1,
-                  fontStyle: "italic",
-                  color: "text.secondary",
-                }}
-              >
-                Vui lòng liên hệ bộ phận cơ điện để bổ sung{" "}
-                {rfidWarning.code === "NO_SCHEDULE"
-                  ? "lịch bảo dưỡng"
-                  : "nội dung bảo dưỡng"}{" "}
-                cho thiết bị này.
-              </Typography>
-            </Alert>
-          )}
-        </DialogContent>
-
-        <DialogActions sx={{ p: 2.5, bgcolor: "#f8f9fc" }}>
-          <Button
-            onClick={handleCloseRfidDialog}
-            disabled={rfidLoading}
-            sx={{
-              borderRadius: "10px",
-              textTransform: "none",
-              fontWeight: 600,
-              color: "text.secondary",
-            }}
-          >
-            Đóng
-          </Button>
-          <Button
-            variant="contained"
-            onClick={handleRfidLookup}
-            disabled={!rfidInput.trim() || rfidLoading}
-            startIcon={
-              rfidLoading ? (
-                <CircularProgress size={16} sx={{ color: "#fff" }} />
-              ) : (
-                <WifiTethering sx={{ fontSize: 18 }} />
-              )
-            }
-            sx={{
-              borderRadius: "10px",
-              textTransform: "none",
-              fontWeight: 600,
-              px: 2.5,
-              background: "linear-gradient(45deg, #00897b 0%, #26a69a 100%)",
-              boxShadow: "0 3px 10px rgba(0,137,123,0.3)",
-              "&:hover": {
-                background: "linear-gradient(45deg, #00796b 0%, #00897b 100%)",
-                boxShadow: "0 5px 14px rgba(0,137,123,0.4)",
-              },
-              "&.Mui-disabled": {
-                background: "#e0e0e0",
-                color: "#9e9e9e",
-              },
-            }}
-          >
-            {rfidLoading ? "Đang tra cứu..." : "Xem lý lịch bảo dưỡng"}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        onClose={() => setRfidDialogOpen(false)}
+        onMachineFound={(machine) => {
+          setHistoryDialogMachine(machine);
+          setHistoryDialogOpen(true);
+        }}
+      />
 
       {/* ── FAB: Open calendar drawer (mobile only) ── */}
       <Fab

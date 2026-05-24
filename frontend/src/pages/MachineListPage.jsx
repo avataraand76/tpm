@@ -83,7 +83,7 @@ import * as XLSX from "xlsx-js-style";
 import ExcelJS from "exceljs";
 import { QRCodeSVG } from "qrcode.react";
 import NavigationBar from "../components/NavigationBar";
-import RfidSearch from "../components/RfidSearch";
+import RfidDialog from "../components/rfid/RfidDialog";
 import MachineProfileCard from "../components/MachineProfileCard";
 import { api } from "../api/api";
 import { useAuth } from "../hooks/useAuth"; // <<< 1. THÊM MỚI: IMPORT USEAUTH
@@ -5433,61 +5433,21 @@ const MachineListPage = () => {
           </DialogActions>
         </Dialog>
 
-        {/* RFID Search Dialog */}
-        <Dialog
+        <RfidDialog
+          mode="radar"
           open={rfidDialogOpen}
-          onClose={() => setRfidDialogOpen(false)}
-          maxWidth="md"
-          fullWidth
-          fullScreen={isMobile}
-          PaperProps={{
-            sx: {
-              borderRadius: isMobile ? 0 : "20px",
-            },
+          onClose={() => {
+            setRfidDialogOpen(false);
+            setSelectedMachines(new Set());
+            setSelectedMachinesData(new Map());
           }}
-        >
-          <DialogTitle
-            sx={{
-              pb: 1,
-              background: "linear-gradient(45deg, #667eea, #764ba2)",
-              color: "white",
-              fontWeight: 700,
-            }}
-          >
-            <Stack
-              direction="row"
-              alignItems="center"
-              justifyContent="space-between"
-            >
-              <Typography variant={isMobile ? "h6" : "h5"} fontWeight="bold">
-                Dò Tìm Thiết Bị (RFID)
-              </Typography>
-              <IconButton
-                onClick={() => setRfidDialogOpen(false)}
-                size="small"
-                sx={{ color: "white" }}
-              >
-                <Close />
-              </IconButton>
-            </Stack>
-          </DialogTitle>
-          <Divider />
-          <DialogContent sx={{ p: 0 }}>
-            <RfidSearch
-              onClose={() => {
-                setRfidDialogOpen(false);
-                setSelectedMachines(new Set()); // Reset selection khi đóng dialog
-                setSelectedMachinesData(new Map()); // Reset data khi đóng dialog
-              }}
-              selectedMachines={Array.from(selectedMachinesData.values())}
-              onClearSelection={() => {
-                // Bỏ chọn tất cả máy khi bấm CLEAR trong dialog
-                setSelectedMachines(new Set());
-                setSelectedMachinesData(new Map());
-              }}
-            />
-          </DialogContent>
-        </Dialog>
+          title="Dò tìm thiết bị (RFID)"
+          selectedMachines={Array.from(selectedMachinesData.values())}
+          onClearSelection={() => {
+            setSelectedMachines(new Set());
+            setSelectedMachinesData(new Map());
+          }}
+        />
 
         {/* Notification Snackbar */}
         <Snackbar

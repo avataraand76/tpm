@@ -1,6 +1,12 @@
 // frontend/src/pages/TestProposalPage.jsx
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useMemo,
+} from "react";
 import {
   Container,
   Typography,
@@ -82,8 +88,8 @@ import NavigationBar from "../components/NavigationBar";
 import { api } from "../api/api";
 import MachineQRScanner from "../components/MachineQRScanner";
 import FileUploadComponent from "../components/FileUploadComponent";
-import RfidScannerDialog from "../components/RfidScannerDialog";
-import RfidSearch from "../components/RfidSearch";
+import RfidDialog from "../components/rfid/RfidDialog";
+import { mergeMachinesByRfid } from "../components/rfid/rfidMachineUtils";
 import { useAuth } from "../hooks/useAuth";
 
 // Component con để hiển thị từng vị trí kiểm kê (Accordion + Filter)
@@ -589,6 +595,8 @@ const TestProposalPage = () => {
   const [recurringMissLoading, setRecurringMissLoading] = useState(false);
   const [recurringMissMeta, setRecurringMissMeta] = useState(null);
   const [recurringMissExpanded, setRecurringMissExpanded] = useState(false);
+  const [openRecurringMissRfidDialog, setOpenRecurringMissRfidDialog] =
+    useState(false);
   const [rfidReplacePopover, setRfidReplacePopover] = useState(null);
 
   // Location Data
@@ -1086,6 +1094,80 @@ const TestProposalPage = () => {
       setRecurringMissLoading(false);
     }
   }, [recurringMissFrom, recurringMissTo, showNotification]);
+
+  const recurringMissRfidReplaceTargets = useMemo(
+    () =>
+      recurringMissedMachines.filter(
+        (m) =>
+          m.RFID_machine &&
+          String(m.RFID_machine).trim() !== "" &&
+          m.serial_machine &&
+          String(m.serial_machine).trim() !== ""
+      ),
+    [recurringMissedMachines]
+  );
+
+  const handleRecurringMissRfidReplace = async (
+    target,
+    newRfid,
+    machineRecord
+  ) => {
+    const machine =
+      machineRecord ||
+      recurringMissedMachines.find(
+        (m) =>
+          m.RFID_machine &&
+          m.RFID_machine.toUpperCase() === target.targetRfid.toUpperCase()
+      );
+
+    if (!machine?.serial_machine) {
+      throw new Error("Không tìm thấy serial máy để cập nhật RFID.");
+    }
+
+    const result = await api.machines.batchUpdateRfid({
+      updates: [{ serial: machine.serial_machine.trim(), rfid: newRfid }],
+    });
+
+    const successCount = result?.data?.successCount ?? 0;
+    if (!result?.success || successCount < 1) {
+      const detail =
+        result?.data?.errors?.join("; ") ||
+        result?.message ||
+        "Không thể cập nhật RFID mới.";
+      throw new Error(detail);
+    }
+
+    const wasReplaced = machine.rfid_replaced;
+
+    setRecurringMissedMachines((prev) =>
+      prev.map((m) =>
+        m.uuid_machine === machine.uuid_machine
+          ? {
+              ...m,
+              RFID_machine_current: newRfid,
+              rfid_replaced: true,
+            }
+          : m
+      )
+    );
+
+    if (!wasReplaced) {
+      setRecurringMissMeta((prev) =>
+        prev
+          ? {
+              ...prev,
+              rfid_replaced_count: (prev.rfid_replaced_count || 0) + 1,
+            }
+          : prev
+      );
+    }
+
+    showNotification(
+      "success",
+      "Đã cập nhật RFID",
+      `${machine.serial_machine}: thẻ cũ ${target.targetRfid} → ${newRfid}`
+    );
+  };
 
   useEffect(() => {
     if (activeTab !== 3) setRfidReplacePopover(null);
@@ -2581,40 +2663,17 @@ const TestProposalPage = () => {
       );
     };
 
-    // 1. Từ danh sách tạm hiện tại: Lấy các RFID:
-    //    - Không có trong hệ thống (isNotFound)
-    //    - Đã quét trước đó (isDuplicate hoặc có duplicateLocationName)
-    //    KHÔNG lấy các RFID chỉ sai vị trí nhưng chưa quét trước đó
-    const rfidsFromCurrentList = inventoryScannedList
-      .filter(
+    const machinesForSearch = mergeMachinesByRfid([
+      ...inventoryScannedList.filter(
         (machine) =>
           isNotFoundMachine(machine) || isPreviouslyScannedMachine(machine)
-      )
-      .map((m) => m.RFID_machine)
-      .filter((rfid) => rfid && rfid.trim() !== "");
+      ),
+      ...(scannedLocationsList || []).flatMap((loc) =>
+        Array.isArray(loc.scanned_machine) ? loc.scanned_machine : []
+      ),
+    ]);
 
-    // 2. Từ các vị trí đã quét trước đó: Lấy TẤT CẢ các RFID (vì đã quét trước đó rồi)
-    const rfidsFromScannedLocations = [];
-    if (scannedLocationsList && Array.isArray(scannedLocationsList)) {
-      scannedLocationsList.forEach((location) => {
-        if (
-          location.scanned_machine &&
-          Array.isArray(location.scanned_machine)
-        ) {
-          location.scanned_machine.forEach((machine) => {
-            if (machine.RFID_machine && machine.RFID_machine.trim() !== "") {
-              rfidsFromScannedLocations.push(machine.RFID_machine);
-            }
-          });
-        }
-      });
-    }
-
-    // 3. Kết hợp và loại bỏ trùng lặp (dùng Set để đảm bảo unique)
-    const allRfids = [...rfidsFromCurrentList, ...rfidsFromScannedLocations];
-    const uniqueRfids = Array.from(new Set(allRfids));
-
-    if (uniqueRfids.length === 0) {
+    if (machinesForSearch.length === 0) {
       showNotification(
         "info",
         "Không có RFID",
@@ -2623,12 +2682,7 @@ const TestProposalPage = () => {
       return;
     }
 
-    // 4. Chuyển thành dạng "máy" đơn giản để truyền vào RfidSearch
-    const targets = uniqueRfids.map((rfid) => ({
-      RFID_machine: rfid,
-    }));
-
-    setInventoryRfidSearchTargets(targets);
+    setInventoryRfidSearchTargets(machinesForSearch);
     setOpenInventoryRfidSearchDialog(true);
   };
 
@@ -2660,8 +2714,7 @@ const TestProposalPage = () => {
       return;
     }
 
-    const targets = rfids.map((rfid) => ({ RFID_machine: rfid }));
-    setInventoryRfidSearchTargets(targets);
+    setInventoryRfidSearchTargets(mergeMachinesByRfid(unscannedMachines));
     setOpenInventoryRfidSearchDialog(true);
   };
 
@@ -2741,12 +2794,11 @@ const TestProposalPage = () => {
     // Lấy toàn bộ RFID của máy chưa quét trên TOÀN BỘ phiếu (từ cache riêng, không dùng missingMachines UI)
     const sourceList =
       batchScanAllMissing.length > 0 ? batchScanAllMissing : missingMachines;
-    const rfids = sourceList
-      .filter(missingMachineEligibleForRfidSearch)
-      .map((m) => m.RFID_machine);
-
-    const targets = rfids.map((rfid) => ({ RFID_machine: rfid }));
-    setInventoryRfidSearchTargets(targets);
+    setInventoryRfidSearchTargets(
+      mergeMachinesByRfid(
+        sourceList.filter(missingMachineEligibleForRfidSearch)
+      )
+    );
 
     // Lưu vị trí đã chọn sẵn
     setBatchScanPreSelectedLocation(batchPickerLocation.uuid_location);
@@ -5324,6 +5376,27 @@ const TestProposalPage = () => {
                             ` · ${recurringMissMeta.rfid_replaced_count} máy đã thay thẻ RFID`}
                         </Typography>
                       )}
+                      {recurringMissRfidReplaceTargets.length > 0 && (
+                        <Button
+                          variant="outlined"
+                          startIcon={<WifiTethering />}
+                          onClick={() => setOpenRecurringMissRfidDialog(true)}
+                          sx={{
+                            mb: 2,
+                            borderRadius: "12px",
+                            borderColor: "#f57c00",
+                            color: "#f57c00",
+                            fontWeight: 600,
+                            "&:hover": {
+                              borderColor: "#ef6c00",
+                              bgcolor: "rgba(245, 124, 0, 0.06)",
+                            },
+                          }}
+                        >
+                          Dò tìm & cập nhật thẻ RFID (
+                          {recurringMissRfidReplaceTargets.length} máy)
+                        </Button>
+                      )}
                       {recurringMissLoading ? (
                         <Box sx={{ textAlign: "center", py: 3 }}>
                           <CircularProgress size={32} />
@@ -5449,8 +5522,8 @@ const TestProposalPage = () => {
                 >
                   <Box sx={{ p: 2, maxWidth: 360 }}>
                     <Typography
-                      variant="subtitle2"
-                      sx={{ fontWeight: 700, mb: 1, color: "#2e7d32" }}
+                      variant="caption"
+                      sx={{ fontWeight: 600, mb: 1, color: "#2e7d32" }}
                     >
                       RFID mới
                     </Typography>
@@ -5458,6 +5531,7 @@ const TestProposalPage = () => {
                       variant="body2"
                       sx={{
                         wordBreak: "break-all",
+                        fontWeight: 600,
                         mb: 1.5,
                       }}
                     >
@@ -5470,10 +5544,7 @@ const TestProposalPage = () => {
                     >
                       RFID trên phiếu kiểm kê:
                     </Typography>
-                    <Typography
-                      variant="caption"
-                      sx={{ wordBreak: "break-all" }}
-                    >
+                    <Typography variant="body2" sx={{ wordBreak: "break-all" }}>
                       {rfidReplacePopover?.machine?.RFID_machine || "-"}
                     </Typography>
                   </Box>
@@ -9588,7 +9659,8 @@ const TestProposalPage = () => {
           );
         })()}
 
-        <RfidScannerDialog
+        <RfidDialog
+          mode="bulk-import"
           open={openRfidDialog}
           onClose={() => setOpenRfidDialog(false)}
           onAddMachines={handleAddMachinesFromRfid}
@@ -9602,95 +9674,65 @@ const TestProposalPage = () => {
           isInventoryMode={openInventoryScanDialog}
         />
 
-        {/* RFID Search dialog cho các RFID không có trong hệ thống (kiểm kê) */}
-        <Dialog
-          open={openInventoryRfidSearchDialog}
-          onClose={() => setOpenInventoryRfidSearchDialog(false)}
-          maxWidth="md"
-          fullWidth
-          fullScreen={isMobile}
-          PaperProps={{ sx: { borderRadius: isMobile ? 0 : "20px" } }}
-        >
-          <DialogTitle
-            sx={{
-              background: batchScanPreSelectedLocation
-                ? "linear-gradient(45deg, #ff9800, #ff5722)"
-                : "linear-gradient(45deg, #667eea, #764ba2)",
-              color: "white",
-              fontWeight: 700,
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <Box>
-              <Typography
-                component="span"
-                variant={isMobile ? "h6" : "h5"}
-                sx={{ fontWeight: 700, display: "block" }}
-              >
-                {batchScanPreSelectedLocation
-                  ? "Quét hàng loạt (RFID)"
-                  : "Dò tìm thiết bị (RFID)"}
-              </Typography>
-              {batchScanPreSelectedLocation && (
-                <Typography variant="caption" sx={{ opacity: 0.9 }}>
-                  {currentDepartment?.name_department} —{" "}
-                  {inventoryAllLocations.find(
-                    (l) => l.uuid_location === batchScanPreSelectedLocation
-                  )?.name_location ||
-                    batchPickerLocation?.name_location ||
-                    ""}
-                </Typography>
-              )}
-            </Box>
-            <IconButton
-              onClick={() => {
-                setOpenInventoryRfidSearchDialog(false);
-                setBatchScanPreSelectedLocation(null);
-              }}
-              sx={{ color: "white" }}
-            >
-              <Close />
-            </IconButton>
-          </DialogTitle>
-          <DialogContent sx={{ p: 0 }}>
-            <RfidSearch
-              onClose={() => {
-                setOpenInventoryRfidSearchDialog(false);
-                setBatchScanPreSelectedLocation(null);
-                setBatchScanAllMissing([]);
-              }}
-              selectedMachines={inventoryRfidSearchTargets}
-              skipResolveApi
-              inventoryLocations={(() => {
-                // Chỉ lọc danh sách vị trí hiển thị trong dialog "Đã tìm thấy thiết bị!"
-                // theo `id_phong_ban` của user. Các phần khác (tải missing machines, lưu kết quả...) giữ nguyên.
-                if (isAdmin || isPhongCoDien) return inventoryAllLocations;
-                const userDeptId = Number(user?.phongban_id);
-                if (Number.isNaN(userDeptId)) return [];
+        <RfidDialog
+          mode="radar"
+          open={openRecurringMissRfidDialog}
+          onClose={() => setOpenRecurringMissRfidDialog(false)}
+          title="Cập nhật thẻ RFID"
+          subtitle="Quét thẻ cũ trong danh sách → nhập mã thẻ mới"
+          variant="batch"
+          selectedMachines={recurringMissRfidReplaceTargets}
+          skipResolveApi
+          onReplaceRfid={handleRecurringMissRfidReplace}
+        />
 
-                return (inventoryAllLocations || []).filter((loc) => {
-                  const dept = (formData.inventoryDetails || []).find(
-                    (d) => d.uuid_department === loc?._dept_uuid
-                  );
-                  return Number(dept?.id_phong_ban) === userDeptId;
-                });
-              })()}
-              onFoundMachineInventory={
-                batchScanPreSelectedLocation
-                  ? null
-                  : handleInventoryMachineFoundFromRfidSearch
-              }
-              preSelectedLocationUuid={batchScanPreSelectedLocation}
-              onBatchConfirm={
-                batchScanPreSelectedLocation
-                  ? handleBatchConfirmFromRfidSearch
-                  : null
-              }
-            />
-          </DialogContent>
-        </Dialog>
+        <RfidDialog
+          mode="radar"
+          open={openInventoryRfidSearchDialog}
+          hideScanModeToggle
+          onClose={() => {
+            setOpenInventoryRfidSearchDialog(false);
+            setBatchScanPreSelectedLocation(null);
+            setBatchScanAllMissing([]);
+          }}
+          subtitle={
+            batchScanPreSelectedLocation
+              ? [
+                  currentDepartment?.name_department,
+                  inventoryAllLocations.find(
+                    (l) => l.uuid_location === batchScanPreSelectedLocation
+                  )?.name_location || batchPickerLocation?.name_location,
+                ]
+                  .filter(Boolean)
+                  .join(" — ") || undefined
+              : undefined
+          }
+          selectedMachines={inventoryRfidSearchTargets}
+          skipResolveApi
+          inventoryLocations={(() => {
+            if (isAdmin || isPhongCoDien) return inventoryAllLocations;
+            const userDeptId = Number(user?.phongban_id);
+            if (Number.isNaN(userDeptId)) return [];
+
+            return (inventoryAllLocations || []).filter((loc) => {
+              const dept = (formData.inventoryDetails || []).find(
+                (d) => d.uuid_department === loc?._dept_uuid
+              );
+              return Number(dept?.id_phong_ban) === userDeptId;
+            });
+          })()}
+          onFoundMachineInventory={
+            batchScanPreSelectedLocation
+              ? null
+              : handleInventoryMachineFoundFromRfidSearch
+          }
+          preSelectedLocationUuid={batchScanPreSelectedLocation}
+          onBatchConfirm={
+            batchScanPreSelectedLocation
+              ? handleBatchConfirmFromRfidSearch
+              : null
+          }
+        />
 
         {/* Missing Machines Dialog */}
         <Dialog

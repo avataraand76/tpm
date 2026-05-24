@@ -80,7 +80,7 @@ import {
   PlaylistAddCheck,
 } from "@mui/icons-material";
 import NavigationBar from "../components/NavigationBar";
-import RfidSearch from "../components/RfidSearch";
+import RfidDialog from "../components/rfid/RfidDialog";
 import { api } from "../api/api"; // Import API
 
 // --- STYLES ĐỒNG NHẤT ---
@@ -3891,53 +3891,15 @@ const AdminPage = () => {
           </DialogActions>
         </Dialog>
 
-        <Dialog
+        <RfidDialog
+          mode="radar"
           open={openUnusedRfidSearchDialog}
           onClose={() => setOpenUnusedRfidSearchDialog(false)}
-          maxWidth="md"
-          fullWidth
-          fullScreen={isMobile}
-          PaperProps={{
-            sx: { borderRadius: isMobile ? 0 : "20px" },
-          }}
-        >
-          <DialogTitle
-            sx={{
-              background: "linear-gradient(45deg, #667eea, #764ba2)",
-              color: "white",
-              fontWeight: 700,
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <Box>
-              <Typography
-                component="span"
-                variant={isMobile ? "h6" : "h5"}
-                sx={{ fontWeight: 700, display: "block" }}
-              >
-                Dò tìm thẻ RFID không sử dụng
-              </Typography>
-              <Typography variant="caption" sx={{ opacity: 0.9 }}>
-                Chế độ chỉ RFID — quét để khớp từng mã trong danh sách mục tiêu
-              </Typography>
-            </Box>
-            <IconButton
-              onClick={() => setOpenUnusedRfidSearchDialog(false)}
-              sx={{ color: "white" }}
-            >
-              <Close />
-            </IconButton>
-          </DialogTitle>
-          <DialogContent sx={{ p: 0 }}>
-            <RfidSearch
-              onClose={() => setOpenUnusedRfidSearchDialog(false)}
-              selectedMachines={unusedRfidTargetsForSearch}
-              skipResolveApi
-            />
-          </DialogContent>
-        </Dialog>
+          title="Dò tìm thẻ RFID không sử dụng"
+          subtitle="Chế độ chỉ RFID — quét để khớp từng mã trong danh sách mục tiêu"
+          selectedMachines={unusedRfidTargetsForSearch}
+          skipResolveApi
+        />
 
         {/* --- Dialog xác nhận xoá nội dung bảo dưỡng --- */}
         <Dialog

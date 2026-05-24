@@ -71,7 +71,7 @@ import NavigationBar from "../components/NavigationBar";
 import { api } from "../api/api";
 import MachineQRScanner from "../components/MachineQRScanner";
 import FileUploadComponent from "../components/FileUploadComponent";
-import RfidScannerDialog from "../components/RfidScannerDialog";
+import RfidDialog from "../components/rfid/RfidDialog";
 import { useAuth } from "../hooks/useAuth";
 
 const excelHeaderMapping = {
@@ -4645,7 +4645,8 @@ const TicketManagementPage = () => {
           );
         })()}
 
-        <RfidScannerDialog
+        <RfidDialog
+          mode="bulk-import"
           open={openRfidDialog}
           onClose={() => setOpenRfidDialog(false)}
           onAddMachines={handleAddMachinesFromRfid}

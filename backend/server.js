@@ -3396,7 +3396,7 @@ app.post(
           if (!machine.RFID_machine || machine.RFID_machine.trim() === "") {
             errors.push({
               keyword: cleanKey,
-              message: `Máy "${machine.type_machine} ${machine.attribute_machine} - ${machine.model_machine}" (Serial: ${machine.serial_machine}) chưa được gán thẻ RFID.`,
+              message: `Máy "${machine.type_machine} ${machine.attribute_machine ? ` ${machine.attribute_machine}` : ""} ${machine.model_machine ? `- ${machine.model_machine}` : ""}" (Serial: ${machine.serial_machine}) chưa được gán thẻ RFID.`,
             });
             continue;
           }
@@ -3404,7 +3404,7 @@ app.post(
           targets.push({
             targetRfid: machine.RFID_machine,
             info: {
-              name: `${machine.type_machine} ${machine.attribute_machine} - ${machine.model_machine}`,
+              name: `${machine.type_machine} ${machine.attribute_machine ? ` ${machine.attribute_machine}` : ""} ${machine.model_machine ? `- ${machine.model_machine}` : ""}`,
               serial: machine.serial_machine,
               code: machine.code_machine,
               status: machine.current_status,
