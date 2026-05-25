@@ -80,7 +80,7 @@ import {
   PlaylistAddCheck,
 } from "@mui/icons-material";
 import NavigationBar from "../components/NavigationBar";
-import RfidDialog from "../components/rfid/RfidDialog";
+import RfidDialog from "../components/rfidScanner/RfidDialog";
 import { api } from "../api/api"; // Import API
 
 // --- STYLES ĐỒNG NHẤT ---

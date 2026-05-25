@@ -1,5 +1,3 @@
-// frontend/src/components/rfid/RfidRadarPanel.jsx
-
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   Typography,

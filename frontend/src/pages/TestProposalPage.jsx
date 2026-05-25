@@ -88,8 +88,8 @@ import NavigationBar from "../components/NavigationBar";
 import { api } from "../api/api";
 import MachineQRScanner from "../components/MachineQRScanner";
 import FileUploadComponent from "../components/FileUploadComponent";
-import RfidDialog from "../components/rfid/RfidDialog";
-import { mergeMachinesByRfid } from "../components/rfid/rfidMachineUtils";
+import RfidDialog from "../components/rfidScanner/RfidDialog";
+import { mergeMachinesByRfid } from "../components/rfidScanner/rfidMachineUtils";
 import { useAuth } from "../hooks/useAuth";
 
 // Component con để hiển thị từng vị trí kiểm kê (Accordion + Filter)

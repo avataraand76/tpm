@@ -83,7 +83,7 @@ import * as XLSX from "xlsx-js-style";
 import ExcelJS from "exceljs";
 import { QRCodeSVG } from "qrcode.react";
 import NavigationBar from "../components/NavigationBar";
-import RfidDialog from "../components/rfid/RfidDialog";
+import RfidDialog from "../components/rfidScanner/RfidDialog";
 import MachineProfileCard from "../components/MachineProfileCard";
 import { api } from "../api/api";
 import { useAuth } from "../hooks/useAuth"; // <<< 1. THÊM MỚI: IMPORT USEAUTH

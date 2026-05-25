@@ -71,7 +71,7 @@ import NavigationBar from "../components/NavigationBar";
 import { api } from "../api/api";
 import MachineQRScanner from "../components/MachineQRScanner";
 import FileUploadComponent from "../components/FileUploadComponent";
-import RfidDialog from "../components/rfid/RfidDialog";
+import RfidDialog from "../components/rfidScanner/RfidDialog";
 import { useAuth } from "../hooks/useAuth";
 
 const excelHeaderMapping = {

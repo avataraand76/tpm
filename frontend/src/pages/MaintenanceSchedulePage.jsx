@@ -80,7 +80,7 @@ import {
 } from "@mui/icons-material";
 import { alpha } from "@mui/material/styles";
 import NavigationBar from "../components/NavigationBar";
-import RfidDialog from "../components/rfid/RfidDialog";
+import RfidDialog from "../components/rfidScanner/RfidDialog";
 import { api } from "../api/api";
 import { useAuth } from "../hooks/useAuth";
 
