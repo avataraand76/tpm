@@ -3396,7 +3396,7 @@ app.post(
           if (!machine.RFID_machine || machine.RFID_machine.trim() === "") {
             errors.push({
               keyword: cleanKey,
-              message: `Máy "${machine.type_machine} ${machine.attribute_machine ? ` ${machine.attribute_machine}` : ""} ${machine.model_machine ? `- ${machine.model_machine}` : ""}" (Serial: ${machine.serial_machine}) chưa được gán thẻ RFID.`,
+              message: `Máy "${machine.type_machine} ${machine.attribute_machine || ""} ${machine.model_machine ? `- ${machine.model_machine}` : ""}" (Serial: ${machine.serial_machine}) chưa được gán thẻ RFID.`,
             });
             continue;
           }
@@ -3404,7 +3404,7 @@ app.post(
           targets.push({
             targetRfid: machine.RFID_machine,
             info: {
-              name: `${machine.type_machine} ${machine.attribute_machine ? ` ${machine.attribute_machine}` : ""} ${machine.model_machine ? `- ${machine.model_machine}` : ""}`,
+              name: `${machine.type_machine} ${machine.attribute_machine || ""} ${machine.model_machine ? `- ${machine.model_machine}` : ""}`,
               serial: machine.serial_machine,
               code: machine.code_machine,
               status: machine.current_status,
@@ -10762,7 +10762,7 @@ app.get(
     try {
       const date_from = req.query.date_from || "";
       const date_to = req.query.date_to || "";
-      const minStreak = Math.max(1, parseInt(req.query.min_streak, 10) || 3);
+      const minStreak = Math.max(1, parseInt(req.query.min_streak, 10) || 4);
 
       if (!date_from || !date_to) {
         return res.status(400).json({
@@ -10848,6 +10848,7 @@ app.get(
             streakState.set(uuid, {
               currentStreak: 0,
               maxStreak: 0,
+              lastMissRfid: null,
               machineInfo: null,
               last_miss_date: null,
             });
@@ -10855,7 +10856,17 @@ app.get(
           const state = streakState.get(uuid);
 
           if (info.is_missed) {
-            state.currentStreak += 1;
+            const currentRfid = normalizeRfidForCompare(info.RFID_machine);
+            const rfidChanged =
+              state.lastMissRfid && state.lastMissRfid !== currentRfid;
+            // Sau khi thay thẻ, nếu RFID trong snapshot đổi thì bắt đầu lại cả chuỗi thống kê.
+            if (rfidChanged) {
+              state.currentStreak = 1;
+              state.maxStreak = 1;
+            } else {
+              state.currentStreak += 1;
+            }
+            state.lastMissRfid = currentRfid;
             if (state.currentStreak > state.maxStreak) {
               state.maxStreak = state.currentStreak;
             }
@@ -10863,6 +10874,7 @@ app.get(
             state.last_miss_date = dateKey;
           } else {
             state.currentStreak = 0;
+            state.lastMissRfid = null;
           }
         });
       });

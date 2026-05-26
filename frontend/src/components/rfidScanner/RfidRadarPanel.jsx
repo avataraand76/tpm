@@ -144,6 +144,8 @@ const RfidRadarPanel = ({
   const [newRfidInput, setNewRfidInput] = useState("");
   const [replacingRfid, setReplacingRfid] = useState(false);
   const [replaceError, setReplaceError] = useState("");
+  const [replaceSerialInput, setReplaceSerialInput] = useState("");
+  const [replaceSerialError, setReplaceSerialError] = useState("");
 
   useEffect(() => {
     openReplaceDialogRef.current = openReplaceDialog;
@@ -251,6 +253,65 @@ const RfidRadarPanel = ({
     });
     return map;
   }, [selectedMachines, getMachineRfidValue]);
+
+  const openReplaceDialogByTarget = useCallback((target, source = "scan") => {
+    if (!target) return;
+    setPendingReplaceTarget({ ...target, source });
+    setNewRfidInput("");
+    setReplaceError("");
+    setOpenReplaceDialog(true);
+  }, []);
+
+  const handleOpenReplaceDialogBySerial = useCallback(() => {
+    const serial = replaceSerialInput.trim();
+    if (!serial) {
+      setReplaceSerialError("Vui lòng nhập serial máy.");
+      return;
+    }
+
+    const machine = (selectedMachines || []).find(
+      (m) =>
+        m?.serial_machine &&
+        String(m.serial_machine).trim().toUpperCase() === serial.toUpperCase()
+    );
+
+    if (!machine) {
+      setReplaceSerialError(
+        "Không tìm thấy serial này trong danh sách máy sót."
+      );
+      return;
+    }
+
+    const rfid = getMachineRfidValue(machine);
+    if (!rfid) {
+      setReplaceSerialError("Máy này chưa có RFID cũ để đối chiếu.");
+      return;
+    }
+
+    const target =
+      targets.find(
+        (t) =>
+          t?.info?.serial &&
+          String(t.info.serial).trim().toUpperCase() === serial.toUpperCase()
+      ) || buildRadarTargetFromMachine(machine, rfid);
+
+    if (!target) {
+      setReplaceSerialError(
+        "Không thể tạo thông tin cập nhật RFID cho máy này."
+      );
+      return;
+    }
+
+    setReplaceSerialInput("");
+    setReplaceSerialError("");
+    openReplaceDialogByTarget(target, "serial");
+  }, [
+    getMachineRfidValue,
+    openReplaceDialogByTarget,
+    replaceSerialInput,
+    selectedMachines,
+    targets,
+  ]);
 
   /** Tra cứu tên/serial từ RFID qua API, gộp với dữ liệu đã có */
   const enrichMachinesByRfidApi = async (rfidList, existingMap) => {
@@ -416,9 +477,15 @@ const RfidRadarPanel = ({
         scanInputRef.current.focus();
       }
       const interval = setInterval(() => {
+        const activeElement = document.activeElement;
+        const isUserTyping =
+          activeElement &&
+          activeElement !== scanInputRef.current &&
+          ["INPUT", "TEXTAREA"].includes(activeElement.tagName);
         if (
           scanInputRef.current &&
           document.activeElement !== scanInputRef.current &&
+          !isUserTyping &&
           !openLocationDialogRef.current &&
           !openReplaceDialogRef.current
         ) {
@@ -487,10 +554,7 @@ const RfidRadarPanel = ({
             return [...prev, { target, locationUuid: preSelectedLocationUuid }];
           });
         } else if (skipResolveApi && onReplaceRfid) {
-          setPendingReplaceTarget(target);
-          setNewRfidInput("");
-          setReplaceError("");
-          setOpenReplaceDialog(true);
+          openReplaceDialogByTarget(target, "scan");
         } else if (skipResolveApi && onFoundMachineInventory) {
           // Chế độ kiểm kê thông thường: hiện dialog chọn vị trí
           setPendingFoundTarget(target);
@@ -546,7 +610,7 @@ const RfidRadarPanel = ({
     if (!newRfid || !pendingReplaceTarget || !onReplaceRfid) return;
 
     if (newRfid === pendingReplaceTarget.targetRfid.toUpperCase()) {
-      setReplaceError("RFID mới phải khác thẻ cũ vừa quét.");
+      setReplaceError("RFID mới phải khác RFID cũ.");
       return;
     }
 
@@ -620,6 +684,8 @@ const RfidRadarPanel = ({
     setError("");
     setErrors([]);
     setBatchFoundList([]);
+    setReplaceSerialInput("");
+    setReplaceSerialError("");
   };
 
   // Batch mode: user bấm xác nhận → lưu toàn bộ 1 lần
@@ -939,7 +1005,7 @@ const RfidRadarPanel = ({
                   color="text.secondary"
                   display="block"
                 >
-                  Thẻ RFID vừa quét (cũ)
+                  RFID cũ trên danh sách
                 </Typography>
                 <Typography variant="body1" sx={{ wordBreak: "break-all" }}>
                   {pendingReplaceTarget.targetRfid}
@@ -1051,7 +1117,7 @@ const RfidRadarPanel = ({
             />
             <RfidInfoAlert>
               {onReplaceRfid
-                ? "Danh sách RFID thẻ cũ cần tìm. Khi quét trúng, nhập mã thẻ mới để cập nhật vào hệ thống."
+                ? "Danh sách RFID thẻ cũ cần tìm. Nếu thẻ cũ/hư, nhập serial bên dưới để mở cập nhật RFID mới."
                 : isInventoryLocationMode
                   ? "Mỗi dòng một mã RFID. Khi quét trúng, chọn vị trí để cập nhật máy vào phiếu kiểm kê."
                   : isStandaloneRfidRadar
@@ -1074,6 +1140,72 @@ const RfidRadarPanel = ({
               onClear={handleClearInput}
               disabled={loading}
             />
+            {onReplaceRfid ? (
+              <Box
+                sx={{
+                  p: 1.5,
+                  bgcolor: "#fff",
+                  borderRadius: RFID_DIALOG_RADIUS.input,
+                  border: "1px solid rgba(0,0,0,0.08)",
+                }}
+              >
+                <Typography variant="body2" fontWeight={700} gutterBottom>
+                  Thẻ RFID cũ/hư không quét được?
+                </Typography>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ display: "block", mb: 1 }}
+                >
+                  Nhập serial máy trong danh sách để cập nhật trực tiếp RFID
+                  mới.
+                </Typography>
+                <Stack
+                  direction={{ xs: "column", sm: "row" }}
+                  spacing={1}
+                  alignItems={{ xs: "stretch", sm: "flex-start" }}
+                >
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="Serial máy"
+                    value={replaceSerialInput}
+                    onChange={(e) => {
+                      setReplaceSerialInput(e.target.value);
+                      if (replaceSerialError) setReplaceSerialError("");
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleOpenReplaceDialogBySerial();
+                      }
+                    }}
+                    disabled={loading}
+                    sx={{
+                      "& .MuiOutlinedInput-root": {
+                        borderRadius: RFID_DIALOG_RADIUS.input,
+                      },
+                    }}
+                  />
+                  <RfidSecondaryButton
+                    onClick={handleOpenReplaceDialogBySerial}
+                    disabled={loading}
+                    sx={{ whiteSpace: "nowrap" }}
+                  >
+                    Cập nhật bằng serial
+                  </RfidSecondaryButton>
+                </Stack>
+                {replaceSerialError ? (
+                  <Typography
+                    variant="caption"
+                    color="error"
+                    sx={{ display: "block", mt: 0.75 }}
+                  >
+                    {replaceSerialError}
+                  </Typography>
+                ) : null}
+              </Box>
+            ) : null}
             {error ? (
               <Alert
                 severity="error"
@@ -1170,6 +1302,62 @@ const RfidRadarPanel = ({
             variant={uiVariant}
           />
           <RfidTargetList targets={targets} foundSet={foundTargets} />
+          {onReplaceRfid ? (
+            <Box
+              sx={{
+                p: 1.5,
+                bgcolor: "#fff",
+                borderRadius: RFID_DIALOG_RADIUS.input,
+                border: "1px solid rgba(0,0,0,0.08)",
+              }}
+            >
+              <Typography variant="body2" fontWeight={700} gutterBottom>
+                Thẻ RFID cũ không quét được?
+              </Typography>
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                spacing={1}
+                alignItems={{ xs: "stretch", sm: "flex-start" }}
+              >
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="Nhập serial để cập nhật RFID mới"
+                  value={replaceSerialInput}
+                  onChange={(e) => {
+                    setReplaceSerialInput(e.target.value);
+                    if (replaceSerialError) setReplaceSerialError("");
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleOpenReplaceDialogBySerial();
+                    }
+                  }}
+                  sx={{
+                    "& .MuiOutlinedInput-root": {
+                      borderRadius: RFID_DIALOG_RADIUS.input,
+                    },
+                  }}
+                />
+                <RfidSecondaryButton
+                  onClick={handleOpenReplaceDialogBySerial}
+                  sx={{ whiteSpace: "nowrap" }}
+                >
+                  Cập nhật bằng serial
+                </RfidSecondaryButton>
+              </Stack>
+              {replaceSerialError ? (
+                <Typography
+                  variant="caption"
+                  color="error"
+                  sx={{ display: "block", mt: 0.75 }}
+                >
+                  {replaceSerialError}
+                </Typography>
+              ) : null}
+            </Box>
+          ) : null}
           {allFound ? (
             <Alert
               severity="success"

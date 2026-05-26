@@ -81,6 +81,7 @@ import {
   EditNote,
   ArrowForward,
   ArrowBack,
+  SwapHoriz,
 } from "@mui/icons-material";
 import * as XLSX from "xlsx-js-style";
 import ExcelJS from "exceljs";
@@ -90,6 +91,8 @@ import MachineQRScanner from "../components/MachineQRScanner";
 import FileUploadComponent from "../components/FileUploadComponent";
 import RfidDialog from "../components/rfidScanner/RfidDialog";
 import { mergeMachinesByRfid } from "../components/rfidScanner/rfidMachineUtils";
+import { RFID_LOOKUP_LENGTH } from "../components/rfidScanner/rfidCodeUtils";
+import { rfidMonoInputSx } from "../components/rfidScanner/rfidDialogTheme";
 import { useAuth } from "../hooks/useAuth";
 
 // Component con để hiển thị từng vị trí kiểm kê (Accordion + Filter)
@@ -598,6 +601,11 @@ const TestProposalPage = () => {
   const [openRecurringMissRfidDialog, setOpenRecurringMissRfidDialog] =
     useState(false);
   const [rfidReplacePopover, setRfidReplacePopover] = useState(null);
+  const [directRfidReplaceMachine, setDirectRfidReplaceMachine] =
+    useState(null);
+  const [directRfidError, setDirectRfidError] = useState("");
+  const [directRfidSaving, setDirectRfidSaving] = useState(false);
+  const directRfidInputRef = useRef(null);
 
   // Location Data
   const [filteredLocations, setFilteredLocations] = useState([]);
@@ -1076,7 +1084,7 @@ const TestProposalPage = () => {
       const response = await api.inventory.getRecurringMissed({
         date_from: recurringMissFrom,
         date_to: recurringMissTo,
-        min_streak: 3,
+        min_streak: 4,
       });
       setRecurringMissedMachines(response.data || []);
       setRecurringMissMeta(response.meta || null);
@@ -1169,8 +1177,88 @@ const TestProposalPage = () => {
     );
   };
 
+  const handleOpenDirectRfidReplace = (machine) => {
+    if (!machine?.serial_machine) {
+      showNotification(
+        "warning",
+        "Thiếu serial",
+        "Máy này không có serial nên không thể cập nhật RFID."
+      );
+      return;
+    }
+    setDirectRfidReplaceMachine(machine);
+    setDirectRfidError("");
+    setRfidReplacePopover(null);
+    setTimeout(() => {
+      if (directRfidInputRef.current) {
+        directRfidInputRef.current.value = "";
+        directRfidInputRef.current.focus();
+      }
+    }, 150);
+  };
+
+  const handleCloseDirectRfidReplace = () => {
+    if (directRfidSaving) return;
+    setDirectRfidReplaceMachine(null);
+    setDirectRfidError("");
+    if (directRfidInputRef.current) {
+      directRfidInputRef.current.value = "";
+    }
+  };
+
+  const handleConfirmDirectRfidReplace = async () => {
+    const newRfid = (directRfidInputRef.current?.value || "")
+      .trim()
+      .toUpperCase();
+    const machine = directRfidReplaceMachine;
+    if (!machine || !newRfid) return;
+
+    const oldRfid = String(machine.RFID_machine || "")
+      .trim()
+      .toUpperCase();
+    if (oldRfid && newRfid === oldRfid) {
+      setDirectRfidError("RFID mới phải khác RFID trên phiếu kiểm kê.");
+      return;
+    }
+
+    setDirectRfidSaving(true);
+    setDirectRfidError("");
+    try {
+      await handleRecurringMissRfidReplace(
+        {
+          targetRfid: oldRfid,
+          machineRecord: machine,
+          info: {
+            serial: machine.serial_machine,
+            name: `${machine.type_machine || ""} ${
+              machine.attribute_machine || ""
+            } - ${machine.model_machine || ""}`.trim(),
+          },
+        },
+        newRfid,
+        machine
+      );
+      setDirectRfidReplaceMachine(null);
+      setDirectRfidError("");
+      if (directRfidInputRef.current) {
+        directRfidInputRef.current.value = "";
+      }
+    } catch (error) {
+      setDirectRfidError(
+        error?.response?.data?.message ||
+          error?.message ||
+          "Không thể cập nhật RFID mới."
+      );
+    } finally {
+      setDirectRfidSaving(false);
+    }
+  };
+
   useEffect(() => {
-    if (activeTab !== 3) setRfidReplacePopover(null);
+    if (activeTab !== 3) {
+      setRfidReplacePopover(null);
+      setDirectRfidReplaceMachine(null);
+    }
   }, [activeTab]);
 
   useEffect(() => {
@@ -5294,7 +5382,7 @@ const TestProposalPage = () => {
                         variant="subtitle2"
                         sx={{ fontWeight: 600, color: "#f57c00" }}
                       >
-                        Thống kê máy quét sót/chưa xác định liên tiếp (≥ 3 lần)
+                        Thống kê máy quét sót/chưa xác định liên tiếp (≥ 4 lần)
                       </Typography>
                       {!recurringMissExpanded &&
                         recurringMissedMachines.length > 0 && (
@@ -5371,7 +5459,7 @@ const TestProposalPage = () => {
                           {recurringMissMeta.ticket_days_count} ngày có phiếu
                           kiểm kê trong khoảng đã chọn
                           {recurringMissedMachines.length > 0 &&
-                            ` · ${recurringMissedMachines.length} máy đạt chuỗi ≥ 3`}
+                            ` · ${recurringMissedMachines.length} máy đạt chuỗi ≥ 4`}
                           {recurringMissMeta?.rfid_replaced_count > 0 &&
                             ` · ${recurringMissMeta.rfid_replaced_count} máy đã thay thẻ RFID`}
                         </Typography>
@@ -5407,7 +5495,7 @@ const TestProposalPage = () => {
                           color="text.secondary"
                           sx={{ py: 2, textAlign: "center" }}
                         >
-                          Không có máy quét sót/chưa xác định liên tiếp từ 3 lần
+                          Không có máy quét sót/chưa xác định liên tiếp từ 4 lần
                           trở lên trong khoảng ngày đã chọn
                         </Typography>
                       ) : (
@@ -5444,7 +5532,15 @@ const TestProposalPage = () => {
                             </TableHead>
                             <TableBody>
                               {recurringMissedMachines.map((machine, index) => (
-                                <TableRow key={machine.uuid_machine} hover>
+                                <TableRow
+                                  key={machine.uuid_machine}
+                                  hover
+                                  sx={{
+                                    "&:hover": {
+                                      bgcolor: "rgba(245, 124, 0, 0.06)",
+                                    },
+                                  }}
+                                >
                                   <TableCell>{index + 1}</TableCell>
                                   <TableCell>
                                     {`${machine.type_machine || ""} ${
@@ -5482,6 +5578,25 @@ const TestProposalPage = () => {
                                               anchorEl: e.currentTarget,
                                               machine,
                                             });
+                                          }}
+                                          sx={{
+                                            cursor: "pointer",
+                                            fontWeight: 600,
+                                            height: 22,
+                                          }}
+                                        />
+                                      )}
+                                      {!machine.rfid_replaced && (
+                                        <Chip
+                                          label="Chưa thay thẻ"
+                                          size="small"
+                                          color="warning"
+                                          variant="outlined"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleOpenDirectRfidReplace(
+                                              machine
+                                            );
                                           }}
                                           sx={{
                                             cursor: "pointer",
@@ -5549,6 +5664,164 @@ const TestProposalPage = () => {
                     </Typography>
                   </Box>
                 </Popover>
+
+                <Dialog
+                  open={Boolean(directRfidReplaceMachine)}
+                  onClose={handleCloseDirectRfidReplace}
+                  maxWidth="sm"
+                  fullWidth
+                  PaperProps={{ sx: { borderRadius: "20px" } }}
+                >
+                  <DialogTitle
+                    sx={{
+                      background:
+                        "linear-gradient(135deg, #ff9800 0%, #f57c00 100%)",
+                      color: "white",
+                      fontWeight: 700,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1,
+                    }}
+                  >
+                    <SwapHoriz sx={{ fontSize: 28 }} />
+                    <Box>
+                      <Typography variant="h6" fontWeight={700}>
+                        Cập nhật thẻ RFID mới
+                      </Typography>
+                      <Typography variant="caption" sx={{ opacity: 0.85 }}>
+                        Quét được thẻ cũ — nhập mã thẻ mới gắn cho máy
+                      </Typography>
+                    </Box>
+                  </DialogTitle>
+                  <DialogContent sx={{ pt: 3, bgcolor: "#f8f9fc" }}>
+                    {directRfidReplaceMachine && (
+                      <Stack spacing={2.5} sx={{ pt: 2 }}>
+                        <Box
+                          sx={{
+                            p: 2,
+                            bgcolor: "#fff8e1",
+                            borderRadius: "14px",
+                            border: "1px solid #ffe082",
+                          }}
+                        >
+                          <Typography variant="h6" fontWeight={700}>
+                            {`${directRfidReplaceMachine.type_machine || ""} ${
+                              directRfidReplaceMachine.attribute_machine || ""
+                            } ${
+                              directRfidReplaceMachine.model_machine
+                                ? `- ${directRfidReplaceMachine.model_machine}`
+                                : ""
+                            }`.trim() ||
+                              directRfidReplaceMachine.serial_machine}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            Serial:{" "}
+                            {directRfidReplaceMachine.serial_machine || "-"}
+                          </Typography>
+                        </Box>
+                        <Box>
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            display="block"
+                          >
+                            RFID cũ trên danh sách
+                          </Typography>
+                          <Typography
+                            variant="body1"
+                            sx={{ wordBreak: "break-all" }}
+                          >
+                            {directRfidReplaceMachine.RFID_machine || "-"}
+                          </Typography>
+                        </Box>
+                        {directRfidReplaceMachine.RFID_machine_current !=
+                          null && (
+                          <Box>
+                            <Typography
+                              variant="caption"
+                              fontWeight={600}
+                              color="#2e7d32"
+                              display="block"
+                            >
+                              RFID hiện trên hệ thống
+                            </Typography>
+                            <Typography
+                              variant="body1"
+                              fontWeight={600}
+                              sx={{ wordBreak: "break-all" }}
+                            >
+                              {directRfidReplaceMachine.RFID_machine_current ||
+                                "(chưa gán)"}
+                            </Typography>
+                          </Box>
+                        )}
+                        <TextField
+                          fullWidth
+                          autoFocus
+                          inputRef={directRfidInputRef}
+                          label="RFID mới"
+                          placeholder="Quét hoặc nhập mã thẻ mới"
+                          onChange={(e) => {
+                            e.target.value = e.target.value
+                              .slice(0, RFID_LOOKUP_LENGTH)
+                              .toUpperCase();
+                            if (directRfidError) setDirectRfidError("");
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleConfirmDirectRfidReplace();
+                            }
+                          }}
+                          disabled={directRfidSaving}
+                          sx={rfidMonoInputSx()}
+                          inputProps={{ maxLength: RFID_LOOKUP_LENGTH }}
+                        />
+                        {directRfidError ? (
+                          <Alert severity="error" sx={{ borderRadius: "12px" }}>
+                            {directRfidError}
+                          </Alert>
+                        ) : null}
+                      </Stack>
+                    )}
+                  </DialogContent>
+                  <DialogActions
+                    sx={{
+                      p: 2,
+                      gap: 1,
+                      bgcolor: "#f8f9fc",
+                      borderTop: "1px solid rgba(0,0,0,0.06)",
+                    }}
+                  >
+                    <Button
+                      variant="outlined"
+                      onClick={handleCloseDirectRfidReplace}
+                      disabled={directRfidSaving}
+                      sx={{ borderRadius: "12px" }}
+                    >
+                      Bỏ qua
+                    </Button>
+                    <Button
+                      variant="contained"
+                      onClick={handleConfirmDirectRfidReplace}
+                      disabled={directRfidSaving}
+                      startIcon={
+                        directRfidSaving ? (
+                          <CircularProgress size={18} color="inherit" />
+                        ) : (
+                          <Save />
+                        )
+                      }
+                      sx={{
+                        borderRadius: "12px",
+                        bgcolor: "#f57c00",
+                        "&:hover": { bgcolor: "#ef6c00" },
+                      }}
+                    >
+                      {directRfidSaving ? "Đang lưu..." : "Xác nhận cập nhật"}
+                    </Button>
+                  </DialogActions>
+                </Dialog>
               </Box>
             )}
 

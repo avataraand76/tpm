@@ -13,14 +13,13 @@ export function mergeMachinesByRfid(machines) {
 
 export function getMachineDisplayName(machine) {
   if (!machine) return "";
-  const parts = [
-    machine.type_machine,
-    machine.attribute_machine,
-    machine.model_machine,
-  ]
-    .map((p) => (p && String(p).trim()) || "")
-    .filter(Boolean);
-  const joined = parts.join(" ").trim();
+  const type = (machine.type_machine && String(machine.type_machine).trim()) || "";
+  const attribute =
+    (machine.attribute_machine && String(machine.attribute_machine).trim()) || "";
+  const model = (machine.model_machine && String(machine.model_machine).trim()) || "";
+
+  const head = [type, attribute].filter(Boolean).join(" ").trim();
+  const joined = model ? (head ? `${head} - ${model}` : model) : head;
   if (joined) return joined;
   if (machine.serial_machine && String(machine.serial_machine).trim()) {
     return String(machine.serial_machine).trim();
