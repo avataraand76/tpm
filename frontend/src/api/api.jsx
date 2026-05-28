@@ -337,6 +337,12 @@ export const api = {
       const response = await httpConnect.post("/api/internal-transfers", data);
       return response.data;
     },
+    getCreateAvailability: async () => {
+      const response = await httpConnect.get(
+        "/api/internal-transfers/create-availability"
+      );
+      return response.data;
+    },
     confirm: async (uuid) => {
       const response = await httpConnect.put(
         `/api/internal-transfers/${uuid}/confirm`

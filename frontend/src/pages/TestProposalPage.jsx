@@ -95,6 +95,15 @@ import { RFID_LOOKUP_LENGTH } from "../components/rfidScanner/rfidCodeUtils";
 import { rfidMonoInputSx } from "../components/rfidScanner/rfidDialogTheme";
 import { useAuth } from "../hooks/useAuth";
 
+const getInventorySnapshotLocationCount = (scannedResult) => {
+  if (!scannedResult || Array.isArray(scannedResult)) return 0;
+
+  const snapshots = scannedResult.location_snapshots;
+  if (!snapshots || typeof snapshots !== "object") return 0;
+
+  return Object.values(snapshots).filter((count) => Number(count) > 0).length;
+};
+
 // Component con để hiển thị từng vị trí kiểm kê (Accordion + Filter)
 const InventoryLocationItem = ({ location, snapshotCount }) => {
   const [filter, setFilter] = useState("all"); // 'all', 'same', 'diff', 'wrong_location', 'wrong_same', 'wrong_diff'
@@ -623,6 +632,10 @@ const TestProposalPage = () => {
   const [filesToUpload, setFilesToUpload] = useState([]);
   const [confirmingExportGate, setConfirmingExportGate] = useState(false);
   const [hoveredRowUuid, setHoveredRowUuid] = useState(null);
+  const [internalTransferCreateGate, setInternalTransferCreateGate] = useState({
+    allowed: true,
+    reason: "",
+  });
 
   // Helper function to format date without timezone issues
   const formatDateTicket = (dateString) => {
@@ -1077,6 +1090,23 @@ const TestProposalPage = () => {
     }
   }, [activeTab]);
 
+  const fetchInternalTransferCreateGate = useCallback(async () => {
+    try {
+      const response = await api.internal_transfers.getCreateAvailability();
+      const data = response?.data || { allowed: true, reason: "" };
+      setInternalTransferCreateGate({
+        allowed: data.allowed !== false,
+        reason: data.reason || "",
+      });
+      return data;
+    } catch (error) {
+      console.error("Error checking internal transfer create gate:", error);
+      // Nếu không kiểm tra được thì không khóa cứng UI, backend vẫn chặn khi tạo.
+      setInternalTransferCreateGate({ allowed: true, reason: "" });
+      return { allowed: true, reason: "" };
+    }
+  }, []);
+
   const fetchRecurringMissedStats = useCallback(async () => {
     if (!recurringMissFrom || !recurringMissTo) return;
     setRecurringMissLoading(true);
@@ -1269,6 +1299,11 @@ const TestProposalPage = () => {
     fetchStatistics();
   }, [fetchStatistics]);
 
+  useEffect(() => {
+    if (activeTab !== 2) return;
+    fetchInternalTransferCreateGate();
+  }, [activeTab, fetchInternalTransferCreateGate]);
+
   // Bảo vệ chỉ được ở tab Phiếu nhập/xuất
   useEffect(() => {
     if (isBaoVe && activeTab > 1) setActiveTab(0); // tránh nội bộ/kiểm kê
@@ -1438,6 +1473,18 @@ const TestProposalPage = () => {
         "Bảo vệ không thể tạo phiếu xuất."
       );
       return;
+    }
+    if (mode === "create" && type === "internal") {
+      const gate = await fetchInternalTransferCreateGate();
+      if (gate.allowed === false) {
+        showNotification(
+          "warning",
+          "Tạm khóa tạo phiếu điều chuyển",
+          gate.reason ||
+            "Chưa thể tạo phiếu điều chuyển trong khung giờ hiện tại."
+        );
+        return;
+      }
     }
     setDialogMode(mode);
     setDialogType(type);
@@ -2137,6 +2184,20 @@ const TestProposalPage = () => {
   const handleSubmit = async () => {
     setLoading(true);
     try {
+      if (dialogType === "internal") {
+        const gate = await fetchInternalTransferCreateGate();
+        if (gate.allowed === false) {
+          showNotification(
+            "warning",
+            "Tạm khóa tạo phiếu điều chuyển",
+            gate.reason ||
+              "Chưa thể tạo phiếu điều chuyển trong khung giờ hiện tại."
+          );
+          setLoading(false);
+          return;
+        }
+      }
+
       // Bảo vệ không được tạo phiếu xuất
       if (isBaoVe && dialogType === "export") {
         showNotification(
@@ -4917,25 +4978,39 @@ const TestProposalPage = () => {
                   sx={{ width: { xs: "100%", md: "auto" } }}
                 >
                   {(isAdmin || canEdit) && (
-                    <Button
-                      variant="contained"
-                      startIcon={<Add />}
-                      onClick={() => handleOpenDialog("create", "internal")}
-                      sx={{
-                        borderRadius: "12px",
-                        background: "linear-gradient(45deg, #2e7d32, #4caf50)",
-                        px: 4,
-                        py: 1.5,
-                        "&:hover": {
-                          transform: "translateY(-2px)",
-                          boxShadow: "0 8px 25px rgba(46, 125, 50, 0.3)",
-                        },
-                        transition: "all 0.3s ease",
-                        width: { xs: "100%", sm: "auto" },
-                      }}
+                    <Tooltip
+                      title={
+                        internalTransferCreateGate.allowed
+                          ? ""
+                          : internalTransferCreateGate.reason
+                      }
                     >
-                      Tạo phiếu điều chuyển
-                    </Button>
+                      <span>
+                        <Button
+                          variant="contained"
+                          startIcon={<Add />}
+                          onClick={() =>
+                            handleOpenDialog("create", "internal")
+                          }
+                          disabled={!internalTransferCreateGate.allowed}
+                          sx={{
+                            borderRadius: "12px",
+                            background:
+                              "linear-gradient(45deg, #2e7d32, #4caf50)",
+                            px: 4,
+                            py: 1.5,
+                            "&:hover": {
+                              transform: "translateY(-2px)",
+                              boxShadow: "0 8px 25px rgba(46, 125, 50, 0.3)",
+                            },
+                            transition: "all 0.3s ease",
+                            width: { xs: "100%", sm: "auto" },
+                          }}
+                        >
+                          Tạo phiếu điều chuyển
+                        </Button>
+                      </span>
+                    </Tooltip>
                   )}
 
                   <Button
@@ -6420,17 +6495,21 @@ const TestProposalPage = () => {
                                           (dept) => {
                                             // Calculate summary stats from dept.scanned_result array
                                             let scannedArr = [];
+                                            let scannedResultData = null;
                                             try {
-                                              const parsed =
+                                              scannedResultData =
                                                 typeof dept.scanned_result ===
                                                 "string"
                                                   ? JSON.parse(
                                                       dept.scanned_result
                                                     )
                                                   : dept.scanned_result;
-                                              scannedArr = Array.isArray(parsed)
-                                                ? parsed
-                                                : parsed?.locations || [];
+                                              scannedArr = Array.isArray(
+                                                scannedResultData
+                                              )
+                                                ? scannedResultData
+                                                : scannedResultData?.locations ||
+                                                  [];
                                             } catch {
                                               scannedArr = [];
                                             }
@@ -6453,7 +6532,9 @@ const TestProposalPage = () => {
                                             const scannedLocationsCount =
                                               scannedArr.length;
                                             const totalLocationsCount =
-                                              dept.total_locations || 0;
+                                              getInventorySnapshotLocationCount(
+                                                scannedResultData
+                                              );
 
                                             return (
                                               <TableRow
@@ -6729,9 +6810,10 @@ const TestProposalPage = () => {
                                                 let scannedArr = [];
                                                 let systemSnapshot = 0;
                                                 let listBeforeScan = [];
+                                                let scannedResultData = null;
 
                                                 try {
-                                                  const parsed =
+                                                  scannedResultData =
                                                     typeof dept.scanned_result ===
                                                     "string"
                                                       ? JSON.parse(
@@ -6739,31 +6821,30 @@ const TestProposalPage = () => {
                                                         )
                                                       : dept.scanned_result;
 
-                                                  if (Array.isArray(parsed)) {
-                                                    scannedArr = parsed;
-                                                    systemSnapshot =
-                                                      dept.total_machines_system ||
-                                                      0;
-                                                  } else if (
-                                                    parsed &&
-                                                    parsed.locations
+                                                  if (
+                                                    Array.isArray(
+                                                      scannedResultData
+                                                    )
                                                   ) {
                                                     scannedArr =
-                                                      parsed.locations;
+                                                      scannedResultData;
+                                                    systemSnapshot = 0;
+                                                  } else if (
+                                                    scannedResultData &&
+                                                    scannedResultData.locations
+                                                  ) {
+                                                    scannedArr =
+                                                      scannedResultData.locations;
                                                     systemSnapshot =
-                                                      parsed.snapshot_count ||
+                                                      scannedResultData.snapshot_count ||
                                                       0;
                                                   } else {
                                                     scannedArr = [];
-                                                    systemSnapshot =
-                                                      dept.total_machines_system ||
-                                                      0;
+                                                    systemSnapshot = 0;
                                                   }
                                                 } catch {
                                                   scannedArr = [];
-                                                  systemSnapshot =
-                                                    dept.total_machines_system ||
-                                                    0;
+                                                  systemSnapshot = 0;
                                                 }
 
                                                 try {
@@ -6782,7 +6863,9 @@ const TestProposalPage = () => {
                                                 const checkedCount =
                                                   scannedArr.length;
                                                 const totalLocs =
-                                                  dept.total_locations || 0;
+                                                  getInventorySnapshotLocationCount(
+                                                    scannedResultData
+                                                  );
 
                                                 let totalScanned = 0;
                                                 let correctDeptCount = 0;
