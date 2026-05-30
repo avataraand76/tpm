@@ -2753,6 +2753,9 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
       repair_cost,
       note,
       current_status,
+      is_borrowed_or_rented_or_borrowed_out,
+      is_borrowed_or_rented_or_borrowed_out_name,
+      is_borrowed_or_rented_or_borrowed_out_date,
       is_borrowed_or_rented_or_borrowed_out_return_date,
       attribute_machine,
       supplier,
@@ -2806,6 +2809,9 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
     };
 
     const formattedDate = toMysqlDate(date_of_use);
+    const formattedBorrowDate = toMysqlDate(
+      is_borrowed_or_rented_or_borrowed_out_date
+    );
     const formattedReturnDate = toMysqlDate(
       is_borrowed_or_rented_or_borrowed_out_return_date
     );
@@ -2831,6 +2837,9 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         repair_cost = ?,
         note = ?,
         current_status = ?,
+        is_borrowed_or_rented_or_borrowed_out = ?,
+        is_borrowed_or_rented_or_borrowed_out_name = ?,
+        is_borrowed_or_rented_or_borrowed_out_date = ?,
         is_borrowed_or_rented_or_borrowed_out_return_date = ?,
         attribute_machine = ?,
         supplier = ?,
@@ -2855,6 +2864,9 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         repair_cost,
         note,
         current_status,
+        is_borrowed_or_rented_or_borrowed_out || null,
+        is_borrowed_or_rented_or_borrowed_out_name || null,
+        formattedBorrowDate,
         formattedReturnDate,
         attribute_machine,
         supplier,
@@ -3488,7 +3500,7 @@ app.get("/api/departments", authenticateToken, async (req, res) => {
 // GET /api/locations - Get all locations for dropdowns
 app.get("/api/locations", authenticateToken, async (req, res) => {
   try {
-    const { filter_type, department_uuid } = req.query;
+    const { filter_type, department_uuid, id_department } = req.query;
 
     let query = `
       SELECT 
@@ -3515,6 +3527,11 @@ app.get("/api/locations", authenticateToken, async (req, res) => {
     if (department_uuid) {
       whereConditions.push(`td.uuid_department = ?`);
       params.push(department_uuid);
+    }
+
+    if (id_department) {
+      whereConditions.push(`tl.id_department = ?`);
+      params.push(id_department);
     }
 
     if (filter_type === "internal") {

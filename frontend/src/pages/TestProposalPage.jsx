@@ -4989,9 +4989,7 @@ const TestProposalPage = () => {
                         <Button
                           variant="contained"
                           startIcon={<Add />}
-                          onClick={() =>
-                            handleOpenDialog("create", "internal")
-                          }
+                          onClick={() => handleOpenDialog("create", "internal")}
                           disabled={!internalTransferCreateGate.allowed}
                           sx={{
                             borderRadius: "12px",

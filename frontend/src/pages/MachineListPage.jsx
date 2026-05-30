@@ -773,6 +773,9 @@ const MachineListPage = () => {
   const [formAttributes, setFormAttributes] = useState([]);
   const [formManufacturers, setFormManufacturers] = useState([]);
   const [formSuppliers, setFormSuppliers] = useState([]);
+  const [borrowUnitLocations, setBorrowUnitLocations] = useState([]);
+  const [borrowUnitLocationsLoading, setBorrowUnitLocationsLoading] =
+    useState(false);
 
   // State for selected filter values
   const [filters, setFilters] = useState({
@@ -1010,6 +1013,23 @@ const MachineListPage = () => {
     fetchMatrixStats();
     fetchFormData();
   }, []);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const fetchBorrowUnitLocations = async () => {
+      setBorrowUnitLocationsLoading(true);
+      try {
+        const response = await api.locations.getAll({ id_department: 10 });
+        setBorrowUnitLocations(response.data || []);
+      } catch (err) {
+        console.error("Error fetching borrow unit locations:", err);
+        setBorrowUnitLocations([]);
+      } finally {
+        setBorrowUnitLocationsLoading(false);
+      }
+    };
+    fetchBorrowUnitLocations();
+  }, [isAdmin]);
 
   useEffect(() => {
     fetchMachines(searchTerm);
@@ -4921,7 +4941,7 @@ const MachineListPage = () => {
                     </>
                   )}
 
-                  {/* Thêm thông tin Mượn/Thuê (chỉ đọc) */}
+                  {/* Thông tin Mượn/Thuê — admin có thể chỉnh sửa */}
                   {!isCreateMode && (
                     <>
                       <Grid size={{ xs: 12 }}>
@@ -4930,44 +4950,121 @@ const MachineListPage = () => {
                         </Divider>
                       </Grid>
                       <Grid size={{ xs: 12, sm: 6 }}>
-                        <TextField
-                          fullWidth
-                          value={(() => {
-                            if (
-                              editedData.is_borrowed_or_rented_or_borrowed_out ===
-                              "borrowed"
-                            )
-                              return "Mượn";
-                            if (
-                              editedData.is_borrowed_or_rented_or_borrowed_out ===
-                              "rented"
-                            )
-                              return "Thuê";
-                            if (
-                              editedData.is_borrowed_or_rented_or_borrowed_out ===
-                              "borrowed_out"
-                            )
-                              return "Cho mượn";
-                            return "NULL";
-                          })()}
-                          label="Trạng thái Mượn/Thuê"
-                          disabled
-                          sx={DISABLED_VIEW_SX}
-                          InputLabelProps={{ shrink: true }}
-                        />
+                        {isAdmin ? (
+                          <FormControl fullWidth>
+                            <InputLabel shrink>Trạng thái Mượn/Thuê</InputLabel>
+                            <Select
+                              value={
+                                editedData.is_borrowed_or_rented_or_borrowed_out ||
+                                ""
+                              }
+                              label="Trạng thái Mượn/Thuê"
+                              onChange={(e) =>
+                                handleInputChange(
+                                  "is_borrowed_or_rented_or_borrowed_out",
+                                  e.target.value || null
+                                )
+                              }
+                              displayEmpty
+                            >
+                              <MenuItem value="">
+                                Nội bộ (không mượn/thuê)
+                              </MenuItem>
+                              <MenuItem value="borrowed">Mượn</MenuItem>
+                              <MenuItem value="rented">Thuê</MenuItem>
+                              <MenuItem value="borrowed_out">Cho mượn</MenuItem>
+                              <MenuItem value="borrowed_return">
+                                Đã trả (mượn)
+                              </MenuItem>
+                              <MenuItem value="rented_return">
+                                Đã trả (thuê)
+                              </MenuItem>
+                            </Select>
+                          </FormControl>
+                        ) : (
+                          <TextField
+                            fullWidth
+                            value={(() => {
+                              if (
+                                editedData.is_borrowed_or_rented_or_borrowed_out ===
+                                "borrowed"
+                              )
+                                return "Mượn";
+                              if (
+                                editedData.is_borrowed_or_rented_or_borrowed_out ===
+                                "rented"
+                              )
+                                return "Thuê";
+                              if (
+                                editedData.is_borrowed_or_rented_or_borrowed_out ===
+                                "borrowed_out"
+                              )
+                                return "Cho mượn";
+                              return "NULL";
+                            })()}
+                            label="Trạng thái Mượn/Thuê"
+                            disabled
+                            sx={DISABLED_VIEW_SX}
+                            InputLabelProps={{ shrink: true }}
+                          />
+                        )}
                       </Grid>
                       <Grid size={{ xs: 12, sm: 6 }}>
-                        <TextField
-                          fullWidth
-                          label="Đơn vị (mượn/thuê)"
-                          value={
-                            editedData.is_borrowed_or_rented_or_borrowed_out_name ||
-                            "NULL"
-                          }
-                          disabled
-                          sx={DISABLED_VIEW_SX}
-                          InputLabelProps={{ shrink: true }}
-                        />
+                        {isAdmin ? (
+                          <Autocomplete
+                            fullWidth
+                            options={borrowUnitLocations}
+                            loading={borrowUnitLocationsLoading}
+                            getOptionLabel={(option) =>
+                              option.name_location || ""
+                            }
+                            value={
+                              borrowUnitLocations.find(
+                                (loc) =>
+                                  loc.name_location ===
+                                  editedData.is_borrowed_or_rented_or_borrowed_out_name
+                              ) || null
+                            }
+                            onChange={(event, newValue) =>
+                              handleInputChange(
+                                "is_borrowed_or_rented_or_borrowed_out_name",
+                                newValue ? newValue.name_location : null
+                              )
+                            }
+                            renderInput={(params) => (
+                              <TextField
+                                {...params}
+                                label="Đơn vị (mượn/thuê)"
+                                InputProps={{
+                                  ...params.InputProps,
+                                  endAdornment: (
+                                    <>
+                                      {borrowUnitLocationsLoading ? (
+                                        <CircularProgress
+                                          color="inherit"
+                                          size={20}
+                                        />
+                                      ) : null}
+                                      {params.InputProps.endAdornment}
+                                    </>
+                                  ),
+                                }}
+                              />
+                            )}
+                          />
+                        ) : (
+                          <TextField
+                            fullWidth
+                            label="Đơn vị (mượn/thuê)"
+                            value={
+                              editedData.is_borrowed_or_rented_or_borrowed_out_name ||
+                              "NULL"
+                            }
+                            disabled
+                            sx={DISABLED_VIEW_SX}
+                            InputLabelProps={{ shrink: true }}
+                          />
+                        )}
                       </Grid>
                       <Grid size={{ xs: 12, sm: 6 }}>
                         <TextField
@@ -4977,8 +5074,17 @@ const MachineListPage = () => {
                           value={formatDateForInput(
                             editedData.is_borrowed_or_rented_or_borrowed_out_date
                           )}
-                          disabled
-                          sx={DISABLED_VIEW_SX}
+                          onChange={
+                            isAdmin
+                              ? (e) =>
+                                  handleInputChange(
+                                    "is_borrowed_or_rented_or_borrowed_out_date",
+                                    e.target.value || null
+                                  )
+                              : undefined
+                          }
+                          disabled={!isAdmin}
+                          sx={isAdmin ? undefined : DISABLED_VIEW_SX}
                           InputLabelProps={{ shrink: true }}
                         />
                       </Grid>
