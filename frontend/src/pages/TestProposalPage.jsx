@@ -632,10 +632,6 @@ const TestProposalPage = () => {
   const [filesToUpload, setFilesToUpload] = useState([]);
   const [confirmingExportGate, setConfirmingExportGate] = useState(false);
   const [hoveredRowUuid, setHoveredRowUuid] = useState(null);
-  const [internalTransferCreateGate, setInternalTransferCreateGate] = useState({
-    allowed: true,
-    reason: "",
-  });
 
   // Helper function to format date without timezone issues
   const formatDateTicket = (dateString) => {
@@ -1090,23 +1086,6 @@ const TestProposalPage = () => {
     }
   }, [activeTab]);
 
-  const fetchInternalTransferCreateGate = useCallback(async () => {
-    try {
-      const response = await api.internal_transfers.getCreateAvailability();
-      const data = response?.data || { allowed: true, reason: "" };
-      setInternalTransferCreateGate({
-        allowed: data.allowed !== false,
-        reason: data.reason || "",
-      });
-      return data;
-    } catch (error) {
-      console.error("Error checking internal transfer create gate:", error);
-      // Nếu không kiểm tra được thì không khóa cứng UI, backend vẫn chặn khi tạo.
-      setInternalTransferCreateGate({ allowed: true, reason: "" });
-      return { allowed: true, reason: "" };
-    }
-  }, []);
-
   const fetchRecurringMissedStats = useCallback(async () => {
     if (!recurringMissFrom || !recurringMissTo) return;
     setRecurringMissLoading(true);
@@ -1299,11 +1278,6 @@ const TestProposalPage = () => {
     fetchStatistics();
   }, [fetchStatistics]);
 
-  useEffect(() => {
-    if (activeTab !== 2) return;
-    fetchInternalTransferCreateGate();
-  }, [activeTab, fetchInternalTransferCreateGate]);
-
   // Bảo vệ chỉ được ở tab Phiếu nhập/xuất
   useEffect(() => {
     if (isBaoVe && activeTab > 1) setActiveTab(0); // tránh nội bộ/kiểm kê
@@ -1473,18 +1447,6 @@ const TestProposalPage = () => {
         "Bảo vệ không thể tạo phiếu xuất."
       );
       return;
-    }
-    if (mode === "create" && type === "internal") {
-      const gate = await fetchInternalTransferCreateGate();
-      if (gate.allowed === false) {
-        showNotification(
-          "warning",
-          "Tạm khóa tạo phiếu điều chuyển",
-          gate.reason ||
-            "Chưa thể tạo phiếu điều chuyển trong khung giờ hiện tại."
-        );
-        return;
-      }
     }
     setDialogMode(mode);
     setDialogType(type);
@@ -2184,20 +2146,6 @@ const TestProposalPage = () => {
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      if (dialogType === "internal") {
-        const gate = await fetchInternalTransferCreateGate();
-        if (gate.allowed === false) {
-          showNotification(
-            "warning",
-            "Tạm khóa tạo phiếu điều chuyển",
-            gate.reason ||
-              "Chưa thể tạo phiếu điều chuyển trong khung giờ hiện tại."
-          );
-          setLoading(false);
-          return;
-        }
-      }
-
       // Bảo vệ không được tạo phiếu xuất
       if (isBaoVe && dialogType === "export") {
         showNotification(
@@ -4978,37 +4926,25 @@ const TestProposalPage = () => {
                   sx={{ width: { xs: "100%", md: "auto" } }}
                 >
                   {(isAdmin || canEdit) && (
-                    <Tooltip
-                      title={
-                        internalTransferCreateGate.allowed
-                          ? ""
-                          : internalTransferCreateGate.reason
-                      }
+                    <Button
+                      variant="contained"
+                      startIcon={<Add />}
+                      onClick={() => handleOpenDialog("create", "internal")}
+                      sx={{
+                        borderRadius: "12px",
+                        background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                        px: 4,
+                        py: 1.5,
+                        "&:hover": {
+                          transform: "translateY(-2px)",
+                          boxShadow: "0 8px 25px rgba(46, 125, 50, 0.3)",
+                        },
+                        transition: "all 0.3s ease",
+                        width: { xs: "100%", sm: "auto" },
+                      }}
                     >
-                      <span>
-                        <Button
-                          variant="contained"
-                          startIcon={<Add />}
-                          onClick={() => handleOpenDialog("create", "internal")}
-                          disabled={!internalTransferCreateGate.allowed}
-                          sx={{
-                            borderRadius: "12px",
-                            background:
-                              "linear-gradient(45deg, #2e7d32, #4caf50)",
-                            px: 4,
-                            py: 1.5,
-                            "&:hover": {
-                              transform: "translateY(-2px)",
-                              boxShadow: "0 8px 25px rgba(46, 125, 50, 0.3)",
-                            },
-                            transition: "all 0.3s ease",
-                            width: { xs: "100%", sm: "auto" },
-                          }}
-                        >
-                          Tạo phiếu điều chuyển
-                        </Button>
-                      </span>
-                    </Tooltip>
+                      Tạo phiếu điều chuyển
+                    </Button>
                   )}
 
                   <Button

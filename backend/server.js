@@ -6010,86 +6010,6 @@ const updateMachineLocationAndStatus = async (
 
 // MARK: MACHINE INTERNAL TRANSFER
 
-function getVietnamNow() {
-  return new Date(
-    new Date().toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" })
-  );
-}
-
-function formatDateYmd(dateObj) {
-  const yyyy = dateObj.getFullYear();
-  const mm = String(dateObj.getMonth() + 1).padStart(2, "0");
-  const dd = String(dateObj.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function isInternalTransferLockWindow(vnNow) {
-  const minutes = vnNow.getHours() * 60 + vnNow.getMinutes();
-  return minutes >= 16 * 60 && minutes < 17 * 60 + 30;
-}
-
-async function getInternalTransferCreateAvailability(connection) {
-  const vnNow = getVietnamNow();
-  if (!isInternalTransferLockWindow(vnNow)) {
-    return { allowed: true, reason: null, date: formatDateYmd(vnNow) };
-  }
-
-  const todayVn = formatDateYmd(vnNow);
-  const [invSummary] = await connection.query(
-    `
-      SELECT
-        COUNT(*) AS total_today,
-        SUM(CASE WHEN status NOT IN ('completed', 'cancelled') THEN 1 ELSE 0 END) AS unapproved_today
-      FROM tb_inventory_check
-      WHERE DATE(check_date) = ?
-    `,
-    [todayVn]
-  );
-
-  const totalToday = Number(invSummary?.[0]?.total_today || 0);
-  const unapprovedToday = Number(invSummary?.[0]?.unapproved_today || 0);
-
-  const shouldBlock = totalToday > 0 && unapprovedToday === totalToday;
-  if (!shouldBlock) {
-    return { allowed: true, reason: null, date: todayVn };
-  }
-
-  return {
-    allowed: false,
-    reason:
-      "Trong khung giờ 16:00-17:30, không thể tạo phiếu điều chuyển khi đang trong hoạt động kiểm kê.",
-    date: todayVn,
-    total_today: totalToday,
-    unapproved_today: unapprovedToday,
-  };
-}
-
-// GET /api/internal-transfers/create-availability - Kiểm tra điều kiện tạo phiếu điều chuyển
-app.get(
-  "/api/internal-transfers/create-availability",
-  authenticateToken,
-  async (req, res) => {
-    try {
-      const availability =
-        await getInternalTransferCreateAvailability(tpmConnection);
-      res.json({
-        success: true,
-        data: availability,
-      });
-    } catch (error) {
-      console.error(
-        "Error checking internal transfer create availability:",
-        error
-      );
-      res.status(500).json({
-        success: false,
-        message: "Internal server error",
-        error: error.message,
-      });
-    }
-  }
-);
-
 // GET /api/internal-transfers - Get all internal transfer slips
 app.get("/api/internal-transfers", authenticateToken, async (req, res) => {
   try {
@@ -6466,17 +6386,6 @@ app.post(
     const connection = await tpmConnection.getConnection();
     try {
       await connection.beginTransaction();
-
-      const availability =
-        await getInternalTransferCreateAvailability(connection);
-      if (!availability.allowed) {
-        await connection.rollback();
-        return res.status(403).json({
-          success: false,
-          message: availability.reason,
-          data: availability,
-        });
-      }
 
       const { to_location_uuid, transfer_date, note, target_status } = req.body;
       const machines = JSON.parse(req.body.machines || "[]");
@@ -12833,23 +12742,23 @@ async function autoCancelInternalTransfers() {
   }
 }
 
-// // 16:01 thứ 2-6 tạo phiếu kiểm kê tự động
-// cron.schedule("01 16 * * 1-5", autoCreateInventoryCheck, {
+// // 16:45 thứ 2-6 tạo phiếu kiểm kê tự động
+// cron.schedule("45 16 * * 1-5", autoCreateInventoryCheck, {
 //   timezone: "Asia/Ho_Chi_Minh",
 // });
 
-// // 15:01 thứ 7 tạo phiếu kiểm kê tự động
-// cron.schedule("01 15 * * 6", autoCreateInventoryCheck, {
+// // 15:45 thứ 7 tạo phiếu kiểm kê tự động
+// cron.schedule("45 15 * * 6", autoCreateInventoryCheck, {
 //   timezone: "Asia/Ho_Chi_Minh",
 // });
 
-// // 16:00 thứ 2-6 huỷ phiếu điều chuyển
-// cron.schedule("00 16 * * 1-5", autoCancelInternalTransfers, {
+// // 16:44 thứ 2-6 huỷ phiếu điều chuyển
+// cron.schedule("44 16 * * 1-5", autoCancelInternalTransfers, {
 //   timezone: "Asia/Ho_Chi_Minh",
 // });
 
-// // 15:00 thứ 7 huỷ phiếu điều chuyển
-// cron.schedule("00 15 * * 6", autoCancelInternalTransfers, {
+// // 15:44 thứ 7 huỷ phiếu điều chuyển
+// cron.schedule("44 15 * * 6", autoCancelInternalTransfers, {
 //   timezone: "Asia/Ho_Chi_Minh",
 // });
 
