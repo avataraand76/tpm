@@ -12742,23 +12742,23 @@ async function autoCancelInternalTransfers() {
   }
 }
 
-// // 16:45 thứ 2-6 tạo phiếu kiểm kê tự động
-// cron.schedule("45 16 * * 1-5", autoCreateInventoryCheck, {
+// // 16:30 thứ 2-6 tạo phiếu kiểm kê tự động
+// cron.schedule("30 16 * * 1-5", autoCreateInventoryCheck, {
 //   timezone: "Asia/Ho_Chi_Minh",
 // });
 
-// // 15:45 thứ 7 tạo phiếu kiểm kê tự động
-// cron.schedule("45 15 * * 6", autoCreateInventoryCheck, {
+// // 15:30 thứ 7 tạo phiếu kiểm kê tự động
+// cron.schedule("30 15 * * 6", autoCreateInventoryCheck, {
 //   timezone: "Asia/Ho_Chi_Minh",
 // });
 
-// // 16:44 thứ 2-6 huỷ phiếu điều chuyển
-// cron.schedule("44 16 * * 1-5", autoCancelInternalTransfers, {
+// // 16:29 thứ 2-6 huỷ phiếu điều chuyển
+// cron.schedule("29 16 * * 1-5", autoCancelInternalTransfers, {
 //   timezone: "Asia/Ho_Chi_Minh",
 // });
 
-// // 15:44 thứ 7 huỷ phiếu điều chuyển
-// cron.schedule("44 15 * * 6", autoCancelInternalTransfers, {
+// // 15:29 thứ 7 huỷ phiếu điều chuyển
+// cron.schedule("29 15 * * 6", autoCancelInternalTransfers, {
 //   timezone: "Asia/Ho_Chi_Minh",
 // });
 

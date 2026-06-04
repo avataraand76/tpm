@@ -1062,6 +1062,7 @@ const MachineListPage = () => {
       ...prev,
       [filterName]: newValue || [],
     }));
+    setPage(1); // Reset về trang 1 khi lọc
     // useEffect [searchTerm, filters] sẽ tự động kích hoạt refetch
   };
 

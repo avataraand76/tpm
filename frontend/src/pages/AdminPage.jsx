@@ -55,6 +55,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Switch,
 } from "@mui/material";
 import {
   AdminPanelSettings,
@@ -333,6 +334,13 @@ const MONTHS_CONFIG = [
   { key: "october", label: "T10", fullLabel: "Tháng 10" },
   { key: "november", label: "T11", fullLabel: "Tháng 11" },
   { key: "december", label: "T12", fullLabel: "Tháng 12" },
+];
+
+// Nhóm các tháng đồng bộ với nhau (Các tháng đầu/giữa/cuối của mỗi quý)
+const SYNC_MONTH_GROUPS = [
+  ["january", "april", "july", "october"], // T1, T4, T7, T10
+  ["february", "may", "august", "november"], // T2, T5, T8, T11
+  ["march", "june", "september", "december"], // T3, T6, T9, T12
 ];
 
 const SCHEDULE_LABEL_SX_BASE = {
@@ -647,6 +655,7 @@ const AdminPage = () => {
   const [scheduleData, setScheduleData] = useState({});
   const [dirtyScheduleKeys, setDirtyScheduleKeys] = useState(new Set());
   const [savingSchedule, setSavingSchedule] = useState(false);
+  const [isSyncEnabled, setIsSyncEnabled] = useState(true);
   const [autoCreating, setAutoCreating] = useState(false);
   // Dialog xác nhận chạy thủ công autoCreateMaintenanceScheduleDetail
   const [autoCreateConfirmOpen, setAutoCreateConfirmOpen] = useState(false);
@@ -1503,20 +1512,44 @@ const AdminPage = () => {
   };
 
   // Stable handler — scheduleData[rowKey][monthKey]
-  const handleScheduleChange = useCallback((e) => {
-    const rowKey = e.target.dataset.rowKey;
-    const monthKey = e.target.dataset.monthKey;
-    const checked = e.target.checked;
-    setScheduleData((prev) => ({
-      ...prev,
-      [rowKey]: { ...prev[rowKey], [monthKey]: checked },
-    }));
-    setDirtyScheduleKeys((prev) => {
-      const next = new Set(prev);
-      next.add(rowKey);
-      return next;
-    });
-  }, []);
+  const handleScheduleChange = useCallback(
+    (e) => {
+      const rowKey = e.target.dataset.rowKey;
+      const monthKey = e.target.dataset.monthKey;
+      const checked = e.target.checked;
+
+      let monthsToUpdate = [monthKey];
+
+      // Chỉ đồng bộ nếu Switch đang bật
+      if (isSyncEnabled) {
+        const group = SYNC_MONTH_GROUPS.find((g) => g.includes(monthKey));
+        if (group) {
+          monthsToUpdate = group;
+        }
+      }
+
+      setScheduleData((prev) => {
+        const currentRowData = prev[rowKey] || {};
+        const updatedRowData = { ...currentRowData };
+
+        monthsToUpdate.forEach((month) => {
+          updatedRowData[month] = checked;
+        });
+
+        return {
+          ...prev,
+          [rowKey]: updatedRowData,
+        };
+      });
+
+      setDirtyScheduleKeys((prev) => {
+        const next = new Set(prev);
+        next.add(rowKey);
+        return next;
+      });
+    },
+    [isSyncEnabled]
+  );
 
   const handleSaveSchedule = async () => {
     if (dirtyScheduleKeys.size === 0) return;
@@ -3592,6 +3625,15 @@ const AdminPage = () => {
                           </Select>
                         </FormControl>
                       </Grid>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={isSyncEnabled}
+                            onChange={(e) => setIsSyncEnabled(e.target.checked)}
+                          />
+                        }
+                        sx={{ mb: 1 }}
+                      />
                     </Grid>
 
                     {machineTypesForMatrix.length === 0 ? (
