@@ -58,6 +58,8 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
+  Switch,
+  FormControlLabel,
 } from "@mui/material";
 import {
   Add,
@@ -607,6 +609,7 @@ const TestProposalPage = () => {
   const [recurringMissLoading, setRecurringMissLoading] = useState(false);
   const [recurringMissMeta, setRecurringMissMeta] = useState(null);
   const [recurringMissExpanded, setRecurringMissExpanded] = useState(false);
+  const [onlyCurrentMissed, setOnlyCurrentMissed] = useState(false);
   const [openRecurringMissRfidDialog, setOpenRecurringMissRfidDialog] =
     useState(false);
   const [rfidReplacePopover, setRfidReplacePopover] = useState(null);
@@ -1094,6 +1097,7 @@ const TestProposalPage = () => {
         date_from: recurringMissFrom,
         date_to: recurringMissTo,
         min_streak: 4,
+        only_current_missed: onlyCurrentMissed,
       });
       setRecurringMissedMachines(response.data || []);
       setRecurringMissMeta(response.meta || null);
@@ -1110,7 +1114,7 @@ const TestProposalPage = () => {
     } finally {
       setRecurringMissLoading(false);
     }
-  }, [recurringMissFrom, recurringMissTo, showNotification]);
+  }, [recurringMissFrom, recurringMissTo, onlyCurrentMissed, showNotification]);
 
   const recurringMissRfidReplaceTargets = useMemo(
     () =>
@@ -5439,8 +5443,25 @@ const TestProposalPage = () => {
                         </Grid>
                         <Grid
                           size={{ xs: 12, md: 4 }}
-                          sx={{ display: "flex", alignItems: "center" }}
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 2,
+                          }}
                         >
+                          {isAdmin && (
+                            <FormControlLabel
+                              control={
+                                <Switch
+                                  checked={onlyCurrentMissed}
+                                  onChange={(e) =>
+                                    setOnlyCurrentMissed(e.target.checked)
+                                  }
+                                  color="warning"
+                                />
+                              }
+                            />
+                          )}
                           <Button
                             variant="contained"
                             onClick={fetchRecurringMissedStats}
@@ -5473,27 +5494,28 @@ const TestProposalPage = () => {
                             ` · ${recurringMissMeta.rfid_replaced_count} máy đã thay thẻ RFID`}
                         </Typography>
                       )}
-                      {recurringMissRfidReplaceTargets.length > 0 && (
-                        <Button
-                          variant="outlined"
-                          startIcon={<WifiTethering />}
-                          onClick={() => setOpenRecurringMissRfidDialog(true)}
-                          sx={{
-                            mb: 2,
-                            borderRadius: "12px",
-                            borderColor: "#f57c00",
-                            color: "#f57c00",
-                            fontWeight: 600,
-                            "&:hover": {
-                              borderColor: "#ef6c00",
-                              bgcolor: "rgba(245, 124, 0, 0.06)",
-                            },
-                          }}
-                        >
-                          Dò tìm & cập nhật thẻ RFID (
-                          {recurringMissRfidReplaceTargets.length} máy)
-                        </Button>
-                      )}
+                      {!isViewOnly &&
+                        recurringMissRfidReplaceTargets.length > 0 && (
+                          <Button
+                            variant="outlined"
+                            startIcon={<WifiTethering />}
+                            onClick={() => setOpenRecurringMissRfidDialog(true)}
+                            sx={{
+                              mb: 2,
+                              borderRadius: "12px",
+                              borderColor: "#f57c00",
+                              color: "#f57c00",
+                              fontWeight: 600,
+                              "&:hover": {
+                                borderColor: "#ef6c00",
+                                bgcolor: "rgba(245, 124, 0, 0.06)",
+                              },
+                            }}
+                          >
+                            Dò tìm & cập nhật thẻ RFID (
+                            {recurringMissRfidReplaceTargets.length} máy)
+                          </Button>
+                        )}
                       {recurringMissLoading ? (
                         <Box sx={{ textAlign: "center", py: 3 }}>
                           <CircularProgress size={32} />
@@ -5601,14 +5623,20 @@ const TestProposalPage = () => {
                                           size="small"
                                           color="warning"
                                           variant="outlined"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleOpenDirectRfidReplace(
-                                              machine
-                                            );
-                                          }}
+                                          onClick={
+                                            isViewOnly
+                                              ? null
+                                              : (e) => {
+                                                  e.stopPropagation();
+                                                  handleOpenDirectRfidReplace(
+                                                    machine
+                                                  );
+                                                }
+                                          }
                                           sx={{
-                                            cursor: "pointer",
+                                            cursor: isViewOnly
+                                              ? "default"
+                                              : "pointer",
                                             fontWeight: 600,
                                             height: 22,
                                           }}

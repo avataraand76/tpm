@@ -10780,6 +10780,7 @@ app.get(
       const date_from = req.query.date_from || "";
       const date_to = req.query.date_to || "";
       const minStreak = Math.max(1, parseInt(req.query.min_streak, 10) || 4);
+      const onlyCurrentMissed = req.query.only_current_missed === "true";
 
       if (!date_from || !date_to) {
         return res.status(400).json({
@@ -10898,7 +10899,12 @@ app.get(
 
       const results = [];
       streakState.forEach((state, uuid) => {
-        if (state.maxStreak >= minStreak && state.machineInfo) {
+        const meetsStreak = state.maxStreak >= minStreak;
+        const meetsCurrentMissed = onlyCurrentMissed
+          ? state.currentStreak > 0
+          : true;
+
+        if (meetsStreak && meetsCurrentMissed && state.machineInfo) {
           const m = state.machineInfo;
           results.push({
             uuid_machine: uuid,
@@ -12747,8 +12753,8 @@ async function autoCancelInternalTransfers() {
 //   timezone: "Asia/Ho_Chi_Minh",
 // });
 
-// // 15:30 thứ 7 tạo phiếu kiểm kê tự động
-// cron.schedule("30 15 * * 6", autoCreateInventoryCheck, {
+// // 15:00 thứ 7 tạo phiếu kiểm kê tự động
+// cron.schedule("00 15 * * 6", autoCreateInventoryCheck, {
 //   timezone: "Asia/Ho_Chi_Minh",
 // });
 
@@ -12757,8 +12763,8 @@ async function autoCancelInternalTransfers() {
 //   timezone: "Asia/Ho_Chi_Minh",
 // });
 
-// // 15:29 thứ 7 huỷ phiếu điều chuyển
-// cron.schedule("29 15 * * 6", autoCancelInternalTransfers, {
+// // 14:59 thứ 7 huỷ phiếu điều chuyển
+// cron.schedule("59 14 * * 6", autoCancelInternalTransfers, {
 //   timezone: "Asia/Ho_Chi_Minh",
 // });
 
@@ -13380,8 +13386,8 @@ app.post(
   }
 );
 
-// 20h thứ 2-6 sắp xếp lại các máy chưa bảo dưỡng trong tháng vào các ngày làm việc còn lại của tháng đó
-cron.schedule("00 20 * * 1-6", autoRedistributeOverdueMaintenanceInMonth, {
+// 0h thứ 2-7 sắp xếp lại các máy chưa bảo dưỡng trong tháng vào các ngày làm việc còn lại của tháng đó
+cron.schedule("00 00 * * 1-6", autoRedistributeOverdueMaintenanceInMonth, {
   timezone: "Asia/Ho_Chi_Minh",
 });
 
