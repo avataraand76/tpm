@@ -815,6 +815,12 @@ export const api = {
       );
       return response.data;
     },
+    getMachineBySerial: async (serial) => {
+      const response = await httpConnect.get(
+        `/api/maintenance-schedule-detail/by-serial/${encodeURIComponent(serial)}`
+      );
+      return response.data;
+    },
   },
 };
 

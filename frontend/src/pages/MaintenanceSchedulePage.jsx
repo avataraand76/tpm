@@ -2813,6 +2813,11 @@ const MaintenanceSchedulePage = () => {
 
   // ── Filter state ──
   const [searchTerm, setSearchTerm] = useState("");
+
+  // ── Machine code search (tra cứu lý lịch bảo dưỡng theo mã máy) ──
+  const [machineCodeInput, setMachineCodeInput] = useState("");
+  const [machineCodeLoading, setMachineCodeLoading] = useState(false);
+  const [machineCodeError, setMachineCodeError] = useState(null);
   const [filterDepartments, setFilterDepartments] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem("user") || "null");
@@ -2844,6 +2849,32 @@ const MaintenanceSchedulePage = () => {
 
   const handleOpenRfidDialog = () => {
     setRfidDialogOpen(true);
+  };
+
+  // ── Tìm kiếm theo số serial máy (manual) ──
+  const handleMachineCodeSearch = async () => {
+    const code = machineCodeInput.trim();
+    if (!code || machineCodeLoading) return;
+    setMachineCodeLoading(true);
+    setMachineCodeError(null);
+    try {
+      const res = await api.maintenance.getMachineBySerial(code);
+      if (res.success && res.data) {
+        setHistoryDialogMachine(res.data);
+        setHistoryDialogOpen(true);
+        setMachineCodeInput("");
+        setMachineCodeError(null);
+      } else {
+        setMachineCodeError(res.message || "Không tìm thấy máy");
+      }
+    } catch (err) {
+      const data = err?.response?.data;
+      setMachineCodeError(
+        data?.message || `Không tìm thấy máy với serial "${code}"`
+      );
+    } finally {
+      setMachineCodeLoading(false);
+    }
   };
 
   const handleCardClick = (machine) => {
@@ -3401,13 +3432,13 @@ const MaintenanceSchedulePage = () => {
                   />
                 )}
 
-                {/* ── Search (tháng hiện tại) ── */}
+                {/* ── Tìm kiếm mã máy → mở dialog lý lịch ── */}
                 <Box sx={{ mt: 2, pt: 1.5, borderTop: "1px dashed #e0e0e0" }}>
                   <Stack direction="row" alignItems="center" sx={{ mb: 1 }}>
                     <Search
                       sx={{
                         fontSize: 14,
-                        color: searchTerm ? "#667eea" : "text.disabled",
+                        color: machineCodeInput ? "#667eea" : "text.disabled",
                         mr: 0.5,
                       }}
                     />
@@ -3415,7 +3446,7 @@ const MaintenanceSchedulePage = () => {
                       variant="caption"
                       fontWeight={600}
                       sx={{
-                        color: searchTerm ? "#667eea" : "text.secondary",
+                        color: machineCodeInput ? "#667eea" : "text.secondary",
                         textTransform: "uppercase",
                         letterSpacing: "0.04em",
                         fontSize: "0.7rem",
@@ -3424,37 +3455,89 @@ const MaintenanceSchedulePage = () => {
                       Tìm kiếm máy
                     </Typography>
                   </Stack>
-                  <TextField
-                    fullWidth
-                    placeholder="Tên, serial..."
-                    size="small"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    sx={{
-                      "& .MuiOutlinedInput-root": {
+                  <Stack direction="row" spacing={0.75} alignItems="flex-start">
+                    <TextField
+                      fullWidth
+                      placeholder="Nhập mã máy..."
+                      size="small"
+                      value={machineCodeInput}
+                      onChange={(e) => {
+                        setMachineCodeInput(e.target.value);
+                        if (machineCodeError) setMachineCodeError(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleMachineCodeSearch();
+                      }}
+                      error={!!machineCodeError}
+                      helperText={machineCodeError || ""}
+                      sx={{
+                        "& .MuiOutlinedInput-root": {
+                          borderRadius: "10px",
+                          fontSize: "0.82rem",
+                        },
+                        "& .MuiFormHelperText-root": {
+                          fontSize: "0.68rem",
+                          mx: 0.5,
+                        },
+                      }}
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <Search sx={{ fontSize: 16 }} />
+                          </InputAdornment>
+                        ),
+                        endAdornment: machineCodeInput ? (
+                          <InputAdornment position="end">
+                            <IconButton
+                              size="small"
+                              onClick={() => {
+                                setMachineCodeInput("");
+                                setMachineCodeError(null);
+                              }}
+                              edge="end"
+                            >
+                              <Close sx={{ fontSize: 14 }} />
+                            </IconButton>
+                          </InputAdornment>
+                        ) : null,
+                      }}
+                    />
+                    <IconButton
+                      onClick={handleMachineCodeSearch}
+                      disabled={!machineCodeInput.trim() || machineCodeLoading}
+                      sx={{
+                        width: 100,
+                        height: 36,
                         borderRadius: "10px",
-                        fontSize: "0.82rem",
-                      },
-                    }}
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <Search sx={{ fontSize: 16 }} />
-                        </InputAdornment>
-                      ),
-                      endAdornment: searchTerm ? (
-                        <InputAdornment position="end">
-                          <IconButton
-                            size="small"
-                            onClick={() => setSearchTerm("")}
-                            edge="end"
-                          >
-                            <Close sx={{ fontSize: 14 }} />
-                          </IconButton>
-                        </InputAdornment>
-                      ) : null,
-                    }}
-                  />
+                        bgcolor:
+                          machineCodeInput.trim() && !machineCodeLoading
+                            ? "#667eea"
+                            : "rgba(0,0,0,0.06)",
+                        color:
+                          machineCodeInput.trim() && !machineCodeLoading
+                            ? "#fff"
+                            : "text.disabled",
+                        flexShrink: 0,
+                        transition: "all 0.2s ease",
+                        "&:hover": {
+                          bgcolor:
+                            machineCodeInput.trim() && !machineCodeLoading
+                              ? "#5a6fd6"
+                              : "rgba(0,0,0,0.06)",
+                        },
+                        "&.Mui-disabled": {
+                          bgcolor: "rgba(0,0,0,0.06)",
+                          color: "text.disabled",
+                        },
+                      }}
+                    >
+                      {machineCodeLoading ? (
+                        <CircularProgress size={16} sx={{ color: "#667eea" }} />
+                      ) : (
+                        <Search sx={{ fontSize: 18 }} />
+                      )}
+                    </IconButton>
+                  </Stack>
                 </Box>
 
                 {/* ── RFID Lookup Button ── */}

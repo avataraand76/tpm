@@ -13679,6 +13679,148 @@ app.get(
   }
 );
 
+// GET /api/maintenance-schedule-detail/by-serial/:serial — Tra cứu máy theo Serial Number
+app.get(
+  "/api/maintenance-schedule-detail/by-serial/:serial",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { serial } = req.params;
+      const code = String(serial || "").trim();
+
+      if (!code) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Số serial không hợp lệ" });
+      }
+
+      const [mrows] = await tpmConnection.query(
+        `SELECT
+           m.id_machine,
+           m.uuid_machine,
+           m.code_machine,
+           m.type_machine,
+           m.attribute_machine,
+           m.model_machine,
+           m.manufacturer,
+           m.supplier,
+           m.serial_machine,
+           m.RFID_machine,
+           m.NFC_machine,
+           m.current_status,
+           m.power,
+           m.pressure,
+           m.voltage,
+           m.price,
+           m.note,
+           DATE_FORMAT(m.date_of_use, '%d/%m/%Y') AS date_of_use,
+           l.name_location,
+           d.name_department
+         FROM tb_machine m
+         LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
+         LEFT JOIN tb_location l ON l.id_location = ml.id_location
+         LEFT JOIN tb_department d ON d.id_department = l.id_department
+         WHERE m.serial_machine = ?
+         LIMIT 1`,
+        [code]
+      );
+
+      if (!mrows.length) {
+        return res.status(404).json({
+          success: false,
+          message: `Không tìm thấy máy với serial "${code}"`,
+        });
+      }
+
+      const machine = mrows[0];
+
+      // Lấy bản ghi lịch bảo dưỡng phù hợp với QUÝ hiện tại của VN
+      const now = new Date();
+      const vnNow = new Date(
+        now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" })
+      );
+      const curY = vnNow.getFullYear();
+      const curM = vnNow.getMonth() + 1;
+      const curQ = Math.ceil(curM / 3);
+
+      const [srows] = await tpmConnection.query(
+        `SELECT
+           id_maintenance_schedule_detail,
+           uuid_maintenance_schedule_detail,
+           year,
+           month,
+           day,
+           status,
+           maintenance_content_detail,
+           attached_file
+         FROM tb_maintenance_schedule_detail
+         WHERE id_machine = ?
+         ORDER BY
+           (year = ? AND CEILING(month / 3) = ?) DESC,
+           (year = ? AND month >= ? AND status = 'pending') DESC,
+           (year = ? AND month >= ?) DESC,
+           year DESC,
+           month DESC,
+           day DESC
+         LIMIT 1`,
+        [machine.id_machine, curY, curQ, curY, curM, curY, curM]
+      );
+
+      if (!srows.length) {
+        return res.status(404).json({
+          success: false,
+          code: "NO_SCHEDULE",
+          message: `Máy "${
+            machine.type_machine || machine.serial_machine || code
+          }" chưa có lịch bảo dưỡng được thiết lập`,
+          machine: {
+            type_machine: machine.type_machine,
+            attribute_machine: machine.attribute_machine,
+            model_machine: machine.model_machine,
+            serial_machine: machine.serial_machine,
+          },
+        });
+      }
+
+      const current = srows[0];
+
+      const [contentCheck] = await tpmConnection.query(
+        `SELECT COUNT(*) AS cnt
+         FROM tb_maintenance_schedule_detail
+         WHERE id_machine = ?
+           AND maintenance_content_detail IS NOT NULL
+           AND TRIM(maintenance_content_detail) NOT IN ('', '[]', 'null')`,
+        [machine.id_machine]
+      );
+      const hasContent = (contentCheck[0]?.cnt || 0) > 0;
+
+      if (!hasContent) {
+        return res.status(404).json({
+          success: false,
+          code: "NO_CONTENT",
+          message: `Máy "${
+            machine.type_machine || machine.serial_machine || code
+          }" chưa có nội dung bảo dưỡng`,
+          machine: {
+            type_machine: machine.type_machine,
+            attribute_machine: machine.attribute_machine,
+            model_machine: machine.model_machine,
+            serial_machine: machine.serial_machine,
+          },
+        });
+      }
+
+      res.json({
+        success: true,
+        data: { ...machine, ...current },
+      });
+    } catch (error) {
+      console.error("Error looking up machine by serial:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+);
+
 // GET /api/maintenance-schedule-detail/by-rfid/:rfid — Tra cứu máy theo RFID/NFC/Serial
 app.get(
   "/api/maintenance-schedule-detail/by-rfid/:rfid",
