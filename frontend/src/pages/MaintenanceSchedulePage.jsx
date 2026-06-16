@@ -2695,7 +2695,12 @@ const GroupedByDay = ({
                   )}
                 </Stack>
                 <Typography variant="caption" color="text.secondary">
-                  {dayMachines.length} máy cần bảo dưỡng
+                  {
+                    dayMachines.filter(
+                      (m) => m.status === "pending" || !m.status
+                    ).length
+                  }
+                  /{dayMachines.length} máy cần bảo dưỡng
                 </Typography>
               </Box>
 
@@ -3134,7 +3139,7 @@ const MaintenanceSchedulePage = () => {
 
   // ── Số máy hiển thị trên lịch = chỉ tính pending (còn phải làm) ──
   const calendarCountData = deptLocationFiltered.filter(
-    (i) => i.status !== "completed"
+    (i) => i.status === "pending" || !i.status
   );
 
   // ── Full filtered list for machine cards (+ day + search + status) ──
@@ -3208,7 +3213,7 @@ const MaintenanceSchedulePage = () => {
   // Hôm nay: chỉ tính pending (chưa thực hiện)
   const todayMachines = deptLocationFiltered.filter(
     (i) =>
-      i.status !== "completed" &&
+      (i.status === "pending" || !i.status) &&
       i.day === vnToday.getDate() &&
       currentMonth === vnToday.getMonth() + 1 &&
       currentYear === vnToday.getFullYear()

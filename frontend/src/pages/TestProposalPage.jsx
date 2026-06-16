@@ -1096,7 +1096,7 @@ const TestProposalPage = () => {
       const response = await api.inventory.getRecurringMissed({
         date_from: recurringMissFrom,
         date_to: recurringMissTo,
-        min_streak: 4,
+        min_streak: 3,
         only_current_missed: onlyCurrentMissed,
       });
       setRecurringMissedMachines(response.data || []);
@@ -5395,7 +5395,7 @@ const TestProposalPage = () => {
                         variant="subtitle2"
                         sx={{ fontWeight: 600, color: "#f57c00" }}
                       >
-                        Thống kê máy quét sót/chưa xác định liên tiếp (≥ 4 lần)
+                        Thống kê máy quét sót/chưa xác định liên tiếp (≥ 3 lần)
                       </Typography>
                       {!recurringMissExpanded &&
                         recurringMissedMachines.length > 0 && (
@@ -5460,6 +5460,14 @@ const TestProposalPage = () => {
                                   color="warning"
                                 />
                               }
+                              label={
+                                <Typography
+                                  variant="caption"
+                                  sx={{ fontWeight: 600, color: "#666" }}
+                                >
+                                  Chỉ hiện máy còn bị sót
+                                </Typography>
+                              }
                             />
                           )}
                           <Button
@@ -5489,7 +5497,7 @@ const TestProposalPage = () => {
                           {recurringMissMeta.ticket_days_count} ngày có phiếu
                           kiểm kê trong khoảng đã chọn
                           {recurringMissedMachines.length > 0 &&
-                            ` · ${recurringMissedMachines.length} máy đạt chuỗi ≥ 4`}
+                            ` · ${recurringMissedMachines.length} máy đạt chuỗi ≥ 3`}
                           {recurringMissMeta?.rfid_replaced_count > 0 &&
                             ` · ${recurringMissMeta.rfid_replaced_count} máy đã thay thẻ RFID`}
                         </Typography>
@@ -5526,7 +5534,7 @@ const TestProposalPage = () => {
                           color="text.secondary"
                           sx={{ py: 2, textAlign: "center" }}
                         >
-                          Không có máy quét sót/chưa xác định liên tiếp từ 4 lần
+                          Không có máy quét sót/chưa xác định liên tiếp từ 3 lần
                           trở lên trong khoảng ngày đã chọn
                         </Typography>
                       ) : (

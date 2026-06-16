@@ -10779,7 +10779,7 @@ app.get(
     try {
       const date_from = req.query.date_from || "";
       const date_to = req.query.date_to || "";
-      const minStreak = Math.max(1, parseInt(req.query.min_streak, 10) || 4);
+      const minStreak = Math.max(1, parseInt(req.query.min_streak, 10) || 3);
       const onlyCurrentMissed = req.query.only_current_missed === "true";
 
       if (!date_from || !date_to) {
@@ -12895,7 +12895,11 @@ async function autoCreateMaintenanceScheduleDetail() {
         const totalDays = new Date(currentYear, monthNum, 0).getDate();
         const holidays = holidaysByMonth.get(monthNum) ?? new Set();
         for (let d = 1; d <= totalDays; d++) {
-          if (!holidays.has(d)) workingSlots.push({ month: monthNum, day: d });
+          const dateCheck = new Date(currentYear, monthNum - 1, d);
+          const isSunday = dateCheck.getDay() === 0;
+          if (!holidays.has(d) && !isSunday) {
+            workingSlots.push({ month: monthNum, day: d });
+          }
         }
       }
       // Công thức: N máy / D ngày làm việc theo quý = a dư b
@@ -13192,7 +13196,9 @@ async function autoRedistributeOverdueMaintenanceInMonth() {
     const holidays = holidaysByMonth.get(currentMonth) ?? new Set();
     const availableDays = [];
     for (let d = today; d <= totalDays; d++) {
-      if (!holidays.has(d)) availableDays.push(d);
+      const dateCheck = new Date(currentYear, currentMonth - 1, d);
+      const isSunday = dateCheck.getDay() === 0;
+      if (!holidays.has(d) && !isSunday) availableDays.push(d);
     }
 
     if (availableDays.length === 0) {
