@@ -2554,6 +2554,22 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
       }
     }
 
+    // Check if RFID_machine already exists (if provided)
+    if (RFID_machine && String(RFID_machine).trim() !== "") {
+      const rfidTrimmed = String(RFID_machine).trim();
+      const [existingRfid] = await tpmConnection.query(
+        "SELECT RFID_machine FROM tb_machine WHERE RFID_machine = ?",
+        [rfidTrimmed]
+      );
+
+      if (existingRfid.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: "RFID đã tồn tại",
+        });
+      }
+    }
+
     // Format date to YYYY-MM-DD with timezone handling
     let formattedDate = date_of_use;
     if (date_of_use) {
@@ -2782,17 +2798,48 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
       ? String(existing[0].RFID_machine).trim()
       : null;
 
-    // Check if serial_machine and code_machine already exists for another machine (if provided)
+    // Check if code_machine already exists for another machine (if provided)
+    if (code_machine) {
+      const [existingCode] = await tpmConnection.query(
+        "SELECT code_machine FROM tb_machine WHERE code_machine = ? AND uuid_machine != ?",
+        [code_machine, uuid]
+      );
+
+      if (existingCode.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Mã máy đã tồn tại",
+        });
+      }
+    }
+
+    // Check if serial_machine already exists for another machine (if provided)
     if (serial_machine) {
       const [existingSerial] = await tpmConnection.query(
-        "SELECT code_machine, serial_machine, uuid_machine FROM tb_machine WHERE code_machine = ? AND serial_machine = ? AND uuid_machine != ?",
-        [code_machine, serial_machine, uuid]
+        "SELECT serial_machine FROM tb_machine WHERE serial_machine = ? AND uuid_machine != ?",
+        [serial_machine, uuid]
       );
 
       if (existingSerial.length > 0) {
         return res.status(400).json({
           success: false,
           message: "Serial đã tồn tại",
+        });
+      }
+    }
+
+    // Check if RFID_machine already exists for another machine (if provided)
+    if (RFID_machine && String(RFID_machine).trim() !== "") {
+      const rfidTrimmed = String(RFID_machine).trim();
+      const [existingRfid] = await tpmConnection.query(
+        "SELECT RFID_machine FROM tb_machine WHERE RFID_machine = ? AND uuid_machine != ?",
+        [rfidTrimmed, uuid]
+      );
+
+      if (existingRfid.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: "RFID đã tồn tại",
         });
       }
     }
