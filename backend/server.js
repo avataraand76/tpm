@@ -10726,9 +10726,9 @@ app.get("/api/inventory-checks/stats", authenticateToken, async (req, res) => {
   }
 });
 
-// Helper: Gom UUID máy đã quét trong toàn phiếu (mọi đơn vị)
-function buildInventoryGlobalScannedSet(allDetails) {
-  const scanned = new Set();
+// Helper: Gom thông tin máy đã quét trong toàn phiếu (mọi đơn vị)
+function buildInventoryGlobalScannedMap(allDetails) {
+  const scanned = new Map();
   (allDetails || []).forEach((detail) => {
     try {
       const parsed =
@@ -10742,7 +10742,18 @@ function buildInventoryGlobalScannedSet(allDetails) {
         (loc.scanned_machine || []).forEach((m) => {
           const mUuid = m.uuid || m.uuid_machine;
           if (mUuid && !String(mUuid).startsWith("NOT_FOUND")) {
-            scanned.add(mUuid);
+            scanned.set(mUuid, {
+              uuid_machine: mUuid,
+              code_machine: m.code || m.code_machine || null,
+              serial_machine: m.serial || m.serial_machine || null,
+              type_machine: m.type || m.type_machine || m.name || null,
+              model_machine: m.model || m.model_machine || null,
+              attribute_machine: m.attribute || m.attribute_machine || null,
+              RFID_machine: m.rfid || m.RFID_machine || m.rfid_machine || null,
+              NFC_machine: m.nfc || m.NFC_machine || m.nfc_machine || null,
+              current_location_name: loc.location_name || "",
+              current_location_uuid: loc.location_uuid || null,
+            });
           }
         });
       });
@@ -10755,7 +10766,7 @@ function buildInventoryGlobalScannedSet(allDetails) {
 
 // Helper: Trạng thái máy theo ngày kiểm kê (sót / đã quét) từ list_before_scan + scanned_result
 function getInventoryTicketDayMachineStatus(allDetails) {
-  const globalScanned = buildInventoryGlobalScannedSet(allDetails);
+  const globalScannedMap = buildInventoryGlobalScannedMap(allDetails);
   const machinesInSnapshot = new Map();
 
   (allDetails || []).forEach((detail) => {
@@ -10785,10 +10796,22 @@ function getInventoryTicketDayMachineStatus(allDetails) {
           NFC_machine: m.NFC_machine,
           previous_location_name: loc.location_name || "",
           previous_location_uuid: loc.location_uuid || null,
-          is_missed: !globalScanned.has(uuid),
+          is_missed: !globalScannedMap.has(uuid),
         });
       });
     });
+  });
+
+  // Thêm các máy đã quét nhưng không nằm trong danh sách snapshot trước quét của phiếu kiểm kê
+  globalScannedMap.forEach((mInfo, uuid) => {
+    if (!machinesInSnapshot.has(uuid)) {
+      machinesInSnapshot.set(uuid, {
+        ...mInfo,
+        previous_location_name: mInfo.current_location_name,
+        previous_location_uuid: mInfo.current_location_uuid,
+        is_missed: false,
+      });
+    }
   });
 
   return machinesInSnapshot;
