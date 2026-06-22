@@ -2823,6 +2823,88 @@ const MaintenanceSchedulePage = () => {
   const [machineCodeInput, setMachineCodeInput] = useState("");
   const [machineCodeLoading, setMachineCodeLoading] = useState(false);
   const [machineCodeError, setMachineCodeError] = useState(null);
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const searchTimeoutRef = useRef(null);
+  const searchContainerRef = useRef(null);
+
+  // Search matching machines for suggestions
+  const searchMachines = async (searchTerm) => {
+    if (!searchTerm || searchTerm.trim().length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    setSearchLoading(true);
+    try {
+      const response = await api.machines.search(searchTerm.trim(), {
+        page: 1,
+        limit: 10,
+      });
+      setSearchResults(response.data || []);
+    } catch (error) {
+      console.error("Error searching machines:", error);
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const handleSearchChange = (value) => {
+    setMachineCodeInput(value);
+    if (machineCodeError) setMachineCodeError(null);
+
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    searchTimeoutRef.current = setTimeout(() => {
+      searchMachines(value);
+    }, 500);
+  };
+
+  // Click outside to close suggestions list
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        searchContainerRef.current &&
+        !searchContainerRef.current.contains(event.target)
+      ) {
+        setSearchResults([]);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  const handleSelectSuggestedMachine = async (machine) => {
+    const code = machine.serial_machine;
+    if (!code) return;
+    setMachineCodeInput(code);
+    setSearchResults([]);
+    setMachineCodeLoading(true);
+    setMachineCodeError(null);
+    try {
+      const res = await api.maintenance.getMachineBySerial(code);
+      if (res.success && res.data) {
+        setHistoryDialogMachine(res.data);
+        setHistoryDialogOpen(true);
+        setMachineCodeInput("");
+        setMachineCodeError(null);
+      } else {
+        setMachineCodeError(res.message || "Không tìm thấy máy");
+      }
+    } catch (err) {
+      const data = err?.response?.data;
+      setMachineCodeError(
+        data?.message || `Không tìm thấy máy với serial "${code}"`
+      );
+    } finally {
+      setMachineCodeLoading(false);
+    }
+  };
+
   const [filterDepartments, setFilterDepartments] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem("user") || "null");
@@ -2858,8 +2940,18 @@ const MaintenanceSchedulePage = () => {
 
   // ── Tìm kiếm theo số serial máy (manual) ──
   const handleMachineCodeSearch = async () => {
-    const code = machineCodeInput.trim();
+    let code = machineCodeInput.trim();
     if (!code || machineCodeLoading) return;
+
+    // Fallback to the first search result's serial if the query has prefixes (contains ':')
+    if (code.includes(":") && searchResults.length > 0) {
+      const firstMatch =
+        searchResults.find((m) => m.serial_machine) || searchResults[0];
+      if (firstMatch && firstMatch.serial_machine) {
+        code = firstMatch.serial_machine;
+      }
+    }
+
     setMachineCodeLoading(true);
     setMachineCodeError(null);
     try {
@@ -2869,6 +2961,7 @@ const MaintenanceSchedulePage = () => {
         setHistoryDialogOpen(true);
         setMachineCodeInput("");
         setMachineCodeError(null);
+        setSearchResults([]);
       } else {
         setMachineCodeError(res.message || "Không tìm thấy máy");
       }
@@ -3461,57 +3554,187 @@ const MaintenanceSchedulePage = () => {
                     </Typography>
                   </Stack>
                   <Stack direction="row" spacing={0.75} alignItems="flex-start">
-                    <TextField
-                      fullWidth
-                      placeholder="Nhập mã máy..."
-                      size="small"
-                      value={machineCodeInput}
-                      onChange={(e) => {
-                        setMachineCodeInput(e.target.value);
-                        if (machineCodeError) setMachineCodeError(null);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") handleMachineCodeSearch();
-                      }}
-                      error={!!machineCodeError}
-                      helperText={machineCodeError || ""}
-                      sx={{
-                        "& .MuiOutlinedInput-root": {
-                          borderRadius: "10px",
-                          fontSize: "0.82rem",
-                        },
-                        "& .MuiFormHelperText-root": {
-                          fontSize: "0.68rem",
-                          mx: 0.5,
-                        },
-                      }}
-                      InputProps={{
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <Search sx={{ fontSize: 16 }} />
-                          </InputAdornment>
-                        ),
-                        endAdornment: machineCodeInput ? (
-                          <InputAdornment position="end">
-                            <IconButton
-                              size="small"
-                              onClick={() => {
-                                setMachineCodeInput("");
-                                setMachineCodeError(null);
-                              }}
-                              edge="end"
+                    <Box
+                      ref={searchContainerRef}
+                      sx={{ position: "relative", flexGrow: 1 }}
+                    >
+                      <Tooltip
+                        arrow
+                        placement="top-start"
+                        title={
+                          <Box sx={{ p: 1 }}>
+                            <Typography
+                              variant="subtitle2"
+                              fontWeight="bold"
+                              sx={{ mb: 1 }}
                             >
-                              <Close sx={{ fontSize: 14 }} />
-                            </IconButton>
-                          </InputAdornment>
-                        ) : null,
-                      }}
-                    />
+                              Mẹo tìm kiếm nâng cao:
+                            </Typography>
+                            <ul
+                              style={{
+                                margin: 0,
+                                paddingLeft: "1.2rem",
+                                fontSize: "0.85rem",
+                                lineHeight: "1.5",
+                              }}
+                            >
+                              <li>Nhập thường: Tìm tất cả thông tin</li>
+                              <li>
+                                <b>loai:</b>... (Tìm theo Loại)
+                              </li>
+                              <li>
+                                <b>model:</b>... (Tìm theo Model)
+                              </li>
+                              <li>
+                                <b>rfid:</b>... (Tìm theo RFID)
+                              </li>
+                              <li>
+                                <b>nfc:</b>... (Tìm theo NFC)
+                              </li>
+                              <li>
+                                <b>seri:</b>... (Tìm theo Serial)
+                              </li>
+                              <li>
+                                <b>hsx:</b>... (Tìm theo Hãng SX)
+                              </li>
+                              <li>
+                                <b>ncc:</b>... (Tìm theo Nhà cung cấp)
+                              </li>
+                              <li>
+                                <b>ma:</b>... (Tìm theo Mã máy)
+                              </li>
+                            </ul>
+                          </Box>
+                        }
+                      >
+                        <TextField
+                          fullWidth
+                          placeholder="Nhập tìm kiếm..."
+                          size="small"
+                          value={machineCodeInput}
+                          onChange={(e) => handleSearchChange(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleMachineCodeSearch();
+                          }}
+                          error={!!machineCodeError}
+                          helperText={machineCodeError || ""}
+                          sx={{
+                            "& .MuiOutlinedInput-root": {
+                              borderRadius: "10px",
+                              fontSize: "0.82rem",
+                            },
+                            "& .MuiFormHelperText-root": {
+                              fontSize: "0.68rem",
+                              mx: 0.5,
+                            },
+                          }}
+                          InputProps={{
+                            startAdornment: (
+                              <InputAdornment position="start">
+                                <Search sx={{ fontSize: 16 }} />
+                              </InputAdornment>
+                            ),
+                            endAdornment: (
+                              <InputAdornment position="end">
+                                {searchLoading && (
+                                  <CircularProgress
+                                    size={14}
+                                    sx={{ mr: 0.5, color: "#667eea" }}
+                                  />
+                                )}
+                                {machineCodeInput ? (
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => {
+                                      setMachineCodeInput("");
+                                      setMachineCodeError(null);
+                                      setSearchResults([]);
+                                    }}
+                                    edge="end"
+                                  >
+                                    <Close sx={{ fontSize: 14 }} />
+                                  </IconButton>
+                                ) : null}
+                              </InputAdornment>
+                            ),
+                          }}
+                        />
+                      </Tooltip>
+
+                      {/* Dropdown gợi ý máy móc */}
+                      {searchResults.length > 0 && (
+                        <Paper
+                          elevation={3}
+                          sx={{
+                            position: "absolute",
+                            top: "100%",
+                            left: 0,
+                            right: 0,
+                            zIndex: 100,
+                            maxHeight: 250,
+                            overflow: "auto",
+                            mt: 0.5,
+                            borderRadius: "10px",
+                            border: "1px solid rgba(0, 0, 0, 0.08)",
+                            backgroundColor: "#fff",
+                          }}
+                        >
+                          <Table size="small">
+                            <TableBody>
+                              {searchResults.map((machine) => (
+                                <TableRow
+                                  key={machine.uuid_machine}
+                                  hover
+                                  onClick={() =>
+                                    handleSelectSuggestedMachine(machine)
+                                  }
+                                  sx={{ cursor: "pointer" }}
+                                >
+                                  <TableCell
+                                    sx={{
+                                      py: 1,
+                                      px: 1.5,
+                                      borderBottom:
+                                        "1px solid rgba(0, 0, 0, 0.04)",
+                                    }}
+                                  >
+                                    <Stack spacing={0.25}>
+                                      <Typography
+                                        variant="body2"
+                                        fontWeight={600}
+                                        sx={{
+                                          fontSize: "0.78rem",
+                                          color: "#333",
+                                        }}
+                                      >
+                                        {machine.code_machine} -{" "}
+                                        {machine.type_machine}{" "}
+                                        {machine.attribute_machine
+                                          ? `(${machine.attribute_machine})`
+                                          : ""}{" "}
+                                        - {machine.model_machine}
+                                      </Typography>
+                                      <Typography
+                                        variant="caption"
+                                        color="text.secondary"
+                                        sx={{ fontSize: "0.68rem" }}
+                                      >
+                                        Serial: {machine.serial_machine || "-"}
+                                      </Typography>
+                                    </Stack>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </Paper>
+                      )}
+                    </Box>
                     <IconButton
                       onClick={handleMachineCodeSearch}
                       disabled={!machineCodeInput.trim() || machineCodeLoading}
                       sx={{
-                        width: 100,
+                        width: 50,
                         height: 36,
                         borderRadius: "10px",
                         bgcolor:
