@@ -6953,6 +6953,44 @@ const handleInternalTransferApproval = async (
     const idFromLocation =
       currentLocResult.length > 0 ? currentLocResult[0].id_location : null;
 
+    // Guard: kiểm tra xem máy hiện tại có đang ở đơn vị bên ngoài hoặc không hợp lệ không
+    const [machineStatusAndDept] = await connection.query(
+      `SELECT m.current_status, m.is_borrowed_or_rented_or_borrowed_out, tl.id_department
+       FROM tb_machine m
+       LEFT JOIN tb_machine_location tml ON tml.id_machine = m.id_machine
+       LEFT JOIN tb_location tl ON tl.id_location = tml.id_location
+       WHERE m.id_machine = ?`,
+      [idMachine]
+    );
+
+    if (machineStatusAndDept.length > 0) {
+      const {
+        current_status,
+        is_borrowed_or_rented_or_borrowed_out,
+        id_department,
+      } = machineStatusAndDept[0];
+
+      // Nếu máy hiện tại ở trạng thái test (temporary) thì bỏ qua
+      if (current_status === "temporary") {
+        continue;
+      }
+
+      const isExternalDept = String(id_department) === "10";
+      const isStatusValid = [
+        "available",
+        "in_use",
+        "broken",
+        "pending_liquidation",
+      ].includes(current_status);
+      const isBorrowValid =
+        is_borrowed_or_rented_or_borrowed_out === null ||
+        ["borrowed", "rented"].includes(is_borrowed_or_rented_or_borrowed_out);
+
+      if (isExternalDept || !isStatusValid || !isBorrowValid) {
+        continue;
+      }
+    }
+
     // b. Ghi lịch sử (created_by, updated_by = người tạo phiếu)
     if (idFromLocation !== idToLocation) {
       await connection.query(
@@ -10447,17 +10485,31 @@ app.post("/api/test-proposals/callback", async (req, res) => {
 
                       // Guard: nếu máy hiện tại đang nằm ở department = 10
                       // thì bỏ qua việc cập nhật theo phiếu kiểm kê (tránh ghi đè trạng thái khi máy đã xuất/đi nơi khác).
-                      const [currentDeptRes] = await connection.query(
-                        `SELECT tl.id_department
+                      const [currentLocInfo] = await connection.query(
+                        `SELECT tl.id_department, tl.name_location
                          FROM tb_machine_location tml
                          LEFT JOIN tb_location tl ON tl.id_location = tml.id_location
                          WHERE tml.id_machine = ?`,
                         [idMachine]
                       );
-                      const isInDept10 = currentDeptRes.some(
+                      const isInDept10 = currentLocInfo.some(
                         (r) => String(r.id_department) === "10"
                       );
                       if (isInDept10) {
+                        continue;
+                      }
+
+                      // Guard: Nếu vị trí hiện tại của máy khác với vị trí ghi nhận lúc quét (current_location) thì bỏ qua
+                      const currentDbLocName = (
+                        currentLocInfo[0]?.name_location || ""
+                      ).trim();
+                      const scannedLocName = (m.current_location || "").trim();
+                      const normalizedDbLoc =
+                        currentDbLocName === "" ? "-" : currentDbLocName;
+                      const normalizedScannedLoc =
+                        scannedLocName === "" ? "-" : scannedLocName;
+
+                      if (normalizedDbLoc !== normalizedScannedLoc) {
                         continue;
                       }
 
