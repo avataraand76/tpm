@@ -13620,9 +13620,9 @@ app.put(
         }
       }
 
-      // Lấy JSON + attached_file hiện tại
+      // Lấy JSON + attached_file hiện tại cùng các cột cần cho việc swap
       const [[row]] = await tpmConnection.query(
-        `SELECT maintenance_content_detail, attached_file
+        `SELECT id_machine, month, year, day, status, maintenance_content_detail, attached_file
          FROM tb_maintenance_schedule_detail
          WHERE uuid_maintenance_schedule_detail = ?`,
         [uuid]
@@ -13631,6 +13631,66 @@ app.put(
         return res
           .status(404)
           .json({ success: false, message: "Không tìm thấy bản ghi" });
+      }
+
+      // Swap logic: bù trừ nếu hoàn thành máy của tháng khác trong cùng quý
+      const isCompleting =
+        status === "completed" || status === "confirm_completed";
+      const wasPending = !row.status || row.status === "pending";
+
+      if (isCompleting && wasPending) {
+        const now = new Date();
+        const vnNow = new Date(
+          now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" })
+        );
+        const M_now = vnNow.getMonth() + 1; // 1-12
+        const Y_now = vnNow.getFullYear();
+        const D_now = vnNow.getDate();
+
+        if (
+          row.year === Y_now &&
+          Math.ceil(row.month / 3) === Math.ceil(M_now / 3) &&
+          row.month !== M_now
+        ) {
+          // 1. Thử tìm máy chưa thực hiện trong NGÀY HÔM NAY của tháng hiện tại
+          let [[candidate]] = await tpmConnection.query(
+            `SELECT id_maintenance_schedule_detail, month, day
+             FROM tb_maintenance_schedule_detail
+             WHERE year = ? AND month = ? AND day = ? AND (status IS NULL OR status = 'pending')
+             LIMIT 1`,
+            [Y_now, M_now, D_now]
+          );
+
+          // 2. Nếu không có máy nào hôm nay, tìm máy chưa thực hiện ở bất kỳ ngày nào trong tháng hiện tại
+          if (!candidate) {
+            [[candidate]] = await tpmConnection.query(
+              `SELECT id_maintenance_schedule_detail, month, day
+               FROM tb_maintenance_schedule_detail
+               WHERE year = ? AND month = ? AND (status IS NULL OR status = 'pending')
+               LIMIT 1`,
+              [Y_now, M_now]
+            );
+          }
+
+          if (candidate) {
+            // Thực hiện đổi tháng và ngày của 2 máy trong database
+            // - Máy A (uuid) chuyển sang tháng hiện tại (M_now) và ngày hôm nay (D_now)
+            // - Máy candidate chuyển sang tháng/ngày cũ của Máy A (row.month, row.day)
+            await tpmConnection.query(
+              `UPDATE tb_maintenance_schedule_detail
+               SET month = ?, day = ?
+               WHERE uuid_maintenance_schedule_detail = ?`,
+              [M_now, D_now, uuid]
+            );
+
+            await tpmConnection.query(
+              `UPDATE tb_maintenance_schedule_detail
+               SET month = ?, day = ?
+               WHERE id_maintenance_schedule_detail = ?`,
+              [row.month, row.day, candidate.id_maintenance_schedule_detail]
+            );
+          }
+        }
       }
 
       // Xử lý attached_file theo status

@@ -2862,22 +2862,6 @@ const MaintenanceSchedulePage = () => {
     }, 500);
   };
 
-  // Click outside to close suggestions list
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (
-        searchContainerRef.current &&
-        !searchContainerRef.current.contains(event.target)
-      ) {
-        setSearchResults([]);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
-
   const handleSelectSuggestedMachine = async (machine) => {
     const code = machine.serial_machine;
     if (!code) return;
@@ -3007,6 +2991,8 @@ const MaintenanceSchedulePage = () => {
         ? { ...prev, ...patch }
         : prev
     );
+    // Reload monthly schedules to reflect any swaps in the database
+    fetchData();
   };
 
   // ── Scroll-to-top FAB ──
