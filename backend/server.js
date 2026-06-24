@@ -3732,9 +3732,12 @@ app.post(
         for (const machine of machines) {
           if (!machine.uuid_machine) continue; // Bỏ qua nếu không có uuid
 
-          // 1. Tra cứu id_machine và kiểm tra trạng thái
+          // 1. Tra cứu id_machine, trạng thái và vị trí hiện tại
           const [machineResult] = await connection.query(
-            "SELECT id_machine, current_status, is_borrowed_or_rented_or_borrowed_out FROM tb_machine WHERE uuid_machine = ?",
+            `SELECT m.id_machine, m.current_status, m.is_borrowed_or_rented_or_borrowed_out, ml.id_location 
+             FROM tb_machine m 
+             LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine 
+             WHERE m.uuid_machine = ?`,
             [machine.uuid_machine]
           );
 
@@ -3750,6 +3753,7 @@ app.post(
             id_machine,
             current_status,
             is_borrowed_or_rented_or_borrowed_out,
+            id_location,
           } = machineResult[0];
 
           // 2. Kiểm tra trạng thái máy (chỉ cho phép nhập máy không phải 'liquidation' hoặc 'disabled')
@@ -3821,14 +3825,22 @@ app.post(
             });
           }
 
-          // 3. Chèn chi tiết phiếu nhập (sử dụng idMachine đã tra cứu)
+          // 3. Chèn chi tiết phiếu nhập (sử dụng idMachine đã tra cứu, ghi nhận vị trí)
           await connection.query(
             `
           INSERT INTO tb_machine_import_detail 
-            (id_machine_import, id_machine, note, created_by, updated_by)
-          VALUES (?, ?, ?, ?, ?)
+            (id_machine_import, id_machine, note, created_by, updated_by, from_location_id, to_location_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
           `,
-            [importId, id_machine, machine.note || null, userId, userId]
+            [
+              importId,
+              id_machine,
+              machine.note || null,
+              userId,
+              userId,
+              id_location,
+              to_location_id,
+            ]
           );
         }
       }
@@ -4557,19 +4569,25 @@ app.put(
           if (!machine.uuid_machine) continue;
 
           const [machineResult] = await connection.query(
-            "SELECT id_machine FROM tb_machine WHERE uuid_machine = ?",
+            `SELECT m.id_machine, ml.id_location 
+             FROM tb_machine m 
+             LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine 
+             WHERE m.uuid_machine = ?`,
             [machine.uuid_machine]
           );
 
           if (machineResult.length > 0) {
+            const { id_machine, id_location } = machineResult[0];
             await connection.query(
-              `INSERT INTO tb_machine_import_detail (id_machine_import, id_machine, note, created_by, updated_by) VALUES (?, ?, ?, ?, ?)`,
+              `INSERT INTO tb_machine_import_detail (id_machine_import, id_machine, note, created_by, updated_by, from_location_id, to_location_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
               [
                 id_machine_import,
-                machineResult[0].id_machine,
+                id_machine,
                 machine.note || null,
                 userId,
                 userId,
+                id_location,
+                to_location_id,
               ]
             );
           }
@@ -4838,7 +4856,7 @@ app.put("/api/imports/:uuid/complete", authenticateToken, async (req, res) => {
       id_department: id_department_str,
       uid_reference_success:
         // "https://sveffmachine.vietlonghung.com.vn/api/tpm/api/test-proposals/callback",
-        "http://192.168.1.61:8081/api/test-proposals/callback",
+        "http://192.168.1.149:8081/api/test-proposals/callback",
       id_reference_outside: uuid,
       group_people_flow: approvalFlowForExternal,
       attacted_file:
@@ -4868,7 +4886,7 @@ app.put("/api/imports/:uuid/complete", authenticateToken, async (req, res) => {
       );
       const externalResponse = await axios.post(
         // "https://servertienich.vietlonghung.com.vn/api/fw/create-proposal-reality-outdoor",
-        "http://192.168.0.94:16002/api/fw/create-proposal-reality-outdoor",
+        "http://192.168.1.80:16002/api/fw/create-proposal-reality-outdoor",
         externalPayload
       );
       console.log("External API Response:", externalResponse.data);
@@ -5026,9 +5044,12 @@ app.post(
         for (const machine of machines) {
           if (!machine.uuid_machine) continue; // Bỏ qua nếu không có uuid
 
-          // 1. Tra cứu id_machine và kiểm tra trạng thái
+          // 1. Tra cứu id_machine, trạng thái và vị trí hiện tại
           const [machineResult] = await connection.query(
-            "SELECT id_machine, current_status, is_borrowed_or_rented_or_borrowed_out FROM tb_machine WHERE uuid_machine = ?",
+            `SELECT m.id_machine, m.current_status, m.is_borrowed_or_rented_or_borrowed_out, ml.id_location 
+             FROM tb_machine m 
+             LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine 
+             WHERE m.uuid_machine = ?`,
             [machine.uuid_machine]
           );
 
@@ -5044,6 +5065,7 @@ app.post(
             id_machine,
             current_status,
             is_borrowed_or_rented_or_borrowed_out,
+            id_location,
           } = machineResult[0];
 
           // 2. Kiểm tra trạng thái máy: chỉ cho phép xuất máy đang 'available' hoặc 'maintenance' (nếu xuất bảo trì)
@@ -5118,19 +5140,21 @@ app.post(
             });
           }
 
-          // 3. Chèn chi tiết phiếu xuất (sử dụng idMachine đã tra cứu)
+          // 3. Chèn chi tiết phiếu xuất (sử dụng idMachine đã tra cứu, ghi nhận vị trí)
           await connection.query(
             `
           INSERT INTO tb_machine_export_detail 
-            (id_machine_export, id_machine, note, created_by, updated_by)
-          VALUES (?, ?, ?, ?, ?)
+            (id_machine_export, id_machine, note, created_by, updated_by, from_location_id, to_location_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
           `,
             [
               exportId,
-              id_machine, // SỬ DỤNG ID NỘI BỘ ĐÃ TRA CỨU
+              id_machine,
               machine.note || null,
               userId,
               userId,
+              id_location,
+              to_location_id,
             ]
           );
         }
@@ -5835,7 +5859,7 @@ const updateMachineLocationAndStatus = async (
     ticketType === "import" ? "id_machine_import" : "id_machine_export";
 
   const [details] = await connection.query(
-    `SELECT id_machine FROM ${detailTable} WHERE ${ticketIdField} = ?`,
+    `SELECT id_machine, from_location_id FROM ${detailTable} WHERE ${ticketIdField} = ?`,
     [ticketId]
   );
   if (details.length === 0) {
@@ -5939,14 +5963,37 @@ const updateMachineLocationAndStatus = async (
   // 2. Loop through each machine for updates
   for (const detail of details) {
     const idMachine = detail.id_machine;
-
-    // a. Get current location (id_from_location)
-    const [currentLocResult] = await connection.query(
-      "SELECT id_location FROM tb_machine_location WHERE id_machine = ?",
+    const expectedFromLocationId = detail.from_location_id;
+    // a. Get current status and location (id_from_location)
+    const [machineLocAndStatus] = await connection.query(
+      `SELECT m.current_status, ml.id_location, ml.id_machine AS location_machine_id 
+       FROM tb_machine m 
+       LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine 
+       WHERE m.id_machine = ?`,
       [idMachine]
     );
-    const idFromLocation =
-      currentLocResult.length > 0 ? currentLocResult[0].id_location : null;
+
+    if (machineLocAndStatus.length === 0) continue;
+    const {
+      current_status,
+      id_location: idFromLocation,
+      location_machine_id,
+    } = machineLocAndStatus[0];
+
+    // Bỏ qua nếu máy ở trạng thái test (temporary)
+    if (current_status === "temporary") {
+      continue;
+    }
+
+    // Guard: nếu vị trí hiện tại của máy khác với vị trí khi tạo phiếu (from_location_id) thì bỏ qua.
+    const normalizedExpectedFrom =
+      expectedFromLocationId === null ? null : Number(expectedFromLocationId);
+    const normalizedCurrentFrom =
+      idFromLocation === null ? null : Number(idFromLocation);
+
+    if (normalizedExpectedFrom !== normalizedCurrentFrom) {
+      continue;
+    }
 
     // b. Insert into tb_machine_location_history (created_by, updated_by = người tạo phiếu)
     if (idFromLocation !== toLocationId) {
@@ -5962,7 +6009,7 @@ const updateMachineLocationAndStatus = async (
     }
 
     // c. Update/Insert into tb_machine_location (created_by, updated_by = người tạo phiếu)
-    if (currentLocResult.length === 0) {
+    if (location_machine_id === null) {
       // Insert
       await connection.query(
         `
@@ -6531,7 +6578,10 @@ app.post(
       if (machines && Array.isArray(machines) && machines.length > 0) {
         for (const machine of machines) {
           const [machineResult] = await connection.query(
-            "SELECT id_machine, current_status, is_borrowed_or_rented_or_borrowed_out FROM tb_machine WHERE uuid_machine = ?",
+            `SELECT m.id_machine, m.current_status, m.is_borrowed_or_rented_or_borrowed_out, ml.id_location 
+             FROM tb_machine m 
+             LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine 
+             WHERE m.uuid_machine = ?`,
             [machine.uuid_machine]
           );
           if (machineResult.length === 0) {
@@ -6546,6 +6596,7 @@ app.post(
             id_machine,
             current_status,
             is_borrowed_or_rented_or_borrowed_out,
+            id_location,
           } = machineResult[0];
 
           const isStatusValid = ["available", "in_use", "broken"].includes(
@@ -6572,10 +6623,18 @@ app.post(
           await connection.query(
             `
           INSERT INTO tb_machine_internal_transfer_detail 
-            (id_machine_internal_transfer, id_machine, note, created_by, updated_by)
-          VALUES (?, ?, ?, ?, ?)
+            (id_machine_internal_transfer, id_machine, note, created_by, updated_by, from_location_id, to_location_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
           `,
-            [transferId, id_machine, machine.note || null, userId, userId]
+            [
+              transferId,
+              id_machine,
+              machine.note || null,
+              userId,
+              userId,
+              id_location,
+              to_location_id,
+            ]
           );
         }
       }
@@ -6906,7 +6965,7 @@ const handleInternalTransferApproval = async (
 
   // 2. Lấy tất cả máy móc trong phiếu
   const [details] = await connection.query(
-    `SELECT id_machine FROM tb_machine_internal_transfer_detail WHERE id_machine_internal_transfer = ?`,
+    `SELECT id_machine, from_location_id FROM tb_machine_internal_transfer_detail WHERE id_machine_internal_transfer = ?`,
     [ticketId]
   );
 
@@ -6944,51 +7003,37 @@ const handleInternalTransferApproval = async (
   for (const detail of details) {
     const idMachine = detail.id_machine;
     const idToLocation = toLocationId;
+    const expectedFromLocationId = detail.from_location_id;
 
-    // a. Lấy vị trí hiện tại (id_from_location) của MÁY NÀY
-    const [currentLocResult] = await connection.query(
-      "SELECT id_location FROM tb_machine_location WHERE id_machine = ?",
-      [idMachine]
-    );
-    const idFromLocation =
-      currentLocResult.length > 0 ? currentLocResult[0].id_location : null;
-
-    // Guard: kiểm tra xem máy hiện tại có đang ở đơn vị bên ngoài hoặc không hợp lệ không
-    const [machineStatusAndDept] = await connection.query(
-      `SELECT m.current_status, m.is_borrowed_or_rented_or_borrowed_out, tl.id_department
-       FROM tb_machine m
-       LEFT JOIN tb_machine_location tml ON tml.id_machine = m.id_machine
-       LEFT JOIN tb_location tl ON tl.id_location = tml.id_location
+    // a. Lấy vị trí và trạng thái hiện tại của MÁY NÀY
+    const [machineStatusAndLoc] = await connection.query(
+      `SELECT m.current_status, ml.id_location, ml.id_machine AS location_machine_id
+       FROM tb_machine m 
+       LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine 
        WHERE m.id_machine = ?`,
       [idMachine]
     );
 
-    if (machineStatusAndDept.length > 0) {
-      const {
-        current_status,
-        is_borrowed_or_rented_or_borrowed_out,
-        id_department,
-      } = machineStatusAndDept[0];
+    if (machineStatusAndLoc.length === 0) continue;
+    const {
+      current_status,
+      id_location: idFromLocation,
+      location_machine_id,
+    } = machineStatusAndLoc[0];
 
-      // Nếu máy hiện tại ở trạng thái test (temporary) thì bỏ qua
-      if (current_status === "temporary") {
-        continue;
-      }
+    // Bỏ qua nếu máy ở trạng thái test (temporary)
+    if (current_status === "temporary") {
+      continue;
+    }
 
-      const isExternalDept = String(id_department) === "10";
-      const isStatusValid = [
-        "available",
-        "in_use",
-        "broken",
-        "pending_liquidation",
-      ].includes(current_status);
-      const isBorrowValid =
-        is_borrowed_or_rented_or_borrowed_out === null ||
-        ["borrowed", "rented"].includes(is_borrowed_or_rented_or_borrowed_out);
+    // Guard: nếu vị trí hiện tại của máy khác với vị trí khi tạo phiếu (from_location_id) thì bỏ qua.
+    const normalizedExpectedFrom =
+      expectedFromLocationId === null ? null : Number(expectedFromLocationId);
+    const normalizedCurrentFrom =
+      idFromLocation === null ? null : Number(idFromLocation);
 
-      if (isExternalDept || !isStatusValid || !isBorrowValid) {
-        continue;
-      }
+    if (normalizedExpectedFrom !== normalizedCurrentFrom) {
+      continue;
     }
 
     // b. Ghi lịch sử (created_by, updated_by = người tạo phiếu)
@@ -7004,7 +7049,7 @@ const handleInternalTransferApproval = async (
     }
 
     // c. Cập nhật/Thêm vào tb_machine_location (created_by, updated_by = người tạo phiếu)
-    if (currentLocResult.length === 0) {
+    if (location_machine_id === null) {
       // INSERT nếu máy chưa có vị trí
       await connection.query(
         `
@@ -9886,14 +9931,27 @@ app.post(
         newTicketUuid = uuidRes[0].uuid_machine_import;
         for (const m of machines) {
           const [mId] = await connection.query(
-            "SELECT id_machine FROM tb_machine WHERE uuid_machine = ?",
+            `SELECT m.id_machine, ml.id_location 
+             FROM tb_machine m 
+             LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine 
+             WHERE m.uuid_machine = ?`,
             [m.uuid_machine]
           );
-          if (mId.length > 0)
+          if (mId.length > 0) {
+            const { id_machine, id_location } = mId[0];
             await connection.query(
-              `INSERT INTO tb_machine_import_detail (id_machine_import, id_machine, note, created_by, updated_by) VALUES (?, ?, ?, ?, ?)`,
-              [ticketId, mId[0].id_machine, m.note, userId, userId]
+              `INSERT INTO tb_machine_import_detail (id_machine_import, id_machine, note, created_by, updated_by, from_location_id, to_location_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+              [
+                ticketId,
+                id_machine,
+                m.note,
+                userId,
+                userId,
+                id_location,
+                to_location_id,
+              ]
             );
+          }
         }
       } else if (category === "export") {
         const [resExport] = await connection.query(
@@ -9921,14 +9979,27 @@ app.post(
         newTicketUuid = uuidRes[0].uuid_machine_export;
         for (const m of machines) {
           const [mId] = await connection.query(
-            "SELECT id_machine FROM tb_machine WHERE uuid_machine = ?",
+            `SELECT m.id_machine, ml.id_location 
+             FROM tb_machine m 
+             LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine 
+             WHERE m.uuid_machine = ?`,
             [m.uuid_machine]
           );
-          if (mId.length > 0)
+          if (mId.length > 0) {
+            const { id_machine, id_location } = mId[0];
             await connection.query(
-              `INSERT INTO tb_machine_export_detail (id_machine_export, id_machine, note, created_by, updated_by) VALUES (?, ?, ?, ?, ?)`,
-              [ticketId, mId[0].id_machine, m.note, userId, userId]
+              `INSERT INTO tb_machine_export_detail (id_machine_export, id_machine, note, created_by, updated_by, from_location_id, to_location_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+              [
+                ticketId,
+                id_machine,
+                m.note,
+                userId,
+                userId,
+                id_location,
+                to_location_id,
+              ]
             );
+          }
         }
       } else if (category === "internal") {
         // Xác định status dựa trên luồng duyệt
@@ -9963,14 +10034,27 @@ app.post(
         newTicketUuid = uuidRes[0].uuid_machine_internal_transfer;
         for (const m of machines) {
           const [mId] = await connection.query(
-            "SELECT id_machine FROM tb_machine WHERE uuid_machine = ?",
+            `SELECT m.id_machine, ml.id_location 
+             FROM tb_machine m 
+             LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine 
+             WHERE m.uuid_machine = ?`,
             [m.uuid_machine]
           );
-          if (mId.length > 0)
+          if (mId.length > 0) {
+            const { id_machine, id_location } = mId[0];
             await connection.query(
-              `INSERT INTO tb_machine_internal_transfer_detail (id_machine_internal_transfer, id_machine, note, created_by, updated_by) VALUES (?, ?, ?, ?, ?)`,
-              [ticketId, mId[0].id_machine, m.note, userId, userId]
+              `INSERT INTO tb_machine_internal_transfer_detail (id_machine_internal_transfer, id_machine, note, created_by, updated_by, from_location_id, to_location_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+              [
+                ticketId,
+                id_machine,
+                m.note,
+                userId,
+                userId,
+                id_location,
+                to_location_id,
+              ]
             );
+          }
         }
       }
 
@@ -10148,7 +10232,7 @@ app.post(
         id_department: id_department_str,
         uid_reference_success:
           // "https://sveffmachine.vietlonghung.com.vn/api/tpm/api/test-proposals/callback",
-          "http://192.168.1.61:8081/api/test-proposals/callback",
+          "http://192.168.1.149:8081/api/test-proposals/callback",
         id_reference_outside: newTicketUuid,
         group_people_flow: approvalFlowForExternal,
         attacted_file:
@@ -10180,7 +10264,7 @@ app.post(
         );
         const externalResponse = await axios.post(
           // "https://servertienich.vietlonghung.com.vn/api/fw/create-proposal-reality-outdoor",
-          "http://192.168.0.94:16002/api/fw/create-proposal-reality-outdoor",
+          "http://192.168.1.80:16002/api/fw/create-proposal-reality-outdoor",
           externalPayload
         );
         console.log("External API Response:", externalResponse.data);
@@ -10534,7 +10618,7 @@ app.post("/api/test-proposals/callback", async (req, res) => {
                       );
 
                       // 3. Update Location
-                      if (idFrom === null) {
+                      if (oldLoc.length === 0) {
                         await connection.query(
                           `INSERT INTO tb_machine_location (id_machine, id_location, created_by, updated_by) VALUES (?, ?, ?, ?)`,
                           [idMachine, correctLocationId, updaterId, updaterId]
@@ -12581,7 +12665,7 @@ app.put(
         id_department: "1-14",
         uid_reference_success:
           // "https://sveffmachine.vietlonghung.com.vn/api/tpm/api/test-proposals/callback",
-          "http://192.168.1.61:8081/api/test-proposals/callback",
+          "http://192.168.1.149:8081/api/test-proposals/callback",
         id_reference_outside: uuid,
         group_people_flow: approvalFlowForDB.map(
           ({ status_text, ...rest }) => rest
@@ -12610,7 +12694,7 @@ app.put(
         );
         const externalResponse = await axios.post(
           // "https://servertienich.vietlonghung.com.vn/api/fw/create-proposal-reality-outdoor",
-          "http://192.168.0.94:16002/api/fw/create-proposal-reality-outdoor",
+          "http://192.168.1.80:16002/api/fw/create-proposal-reality-outdoor",
           externalPayload
         );
         console.log("External API Response:", externalResponse.data);

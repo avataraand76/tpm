@@ -336,6 +336,8 @@ create table if not exists tb_machine_import_detail
     -- foreign
     id_machine_import bigint,
     id_machine bigint,
+    from_location_id bigint,
+    to_location_id bigint,
 
     -- properties
     note text,
@@ -392,6 +394,8 @@ create table if not exists tb_machine_export_detail
     -- foreign
     id_machine_export bigint,
     id_machine bigint,
+    from_location_id bigint,
+    to_location_id bigint,
 
     -- properties
     note text,
@@ -443,6 +447,8 @@ create table if not exists tb_machine_internal_transfer_detail
     -- foreign
     id_machine_internal_transfer bigint,
     id_machine bigint,
+    from_location_id bigint,
+    to_location_id bigint,
 
     -- properties
     note text,
