@@ -5833,6 +5833,236 @@ const deactivateMachineRfidRegistry = async (connection, rfidValue, userId) => {
   );
 };
 
+// Helper to check if a parallel/out-of-order slip is valid for location transition
+const checkParallelSlipValid = async (
+  connection,
+  idMachine,
+  ticketCreatedAt,
+  expectedFromLocationId,
+  currentTicketType,
+  currentTicketId
+) => {
+  // 1. Check if there exists any completed import/export/transfer/inventory check created_at > ticketCreatedAt
+  let isOutdated = false;
+
+  // Check import
+  const [importRows] = await connection.query(
+    `SELECT i.created_at FROM tb_machine_import i
+     JOIN tb_machine_import_detail d ON i.id_machine_import = d.id_machine_import
+     WHERE d.id_machine = ? AND i.status = 'completed' AND i.created_at > ? AND NOT (i.id_machine_import = ? AND ? = 'import')
+     LIMIT 1`,
+    [idMachine, ticketCreatedAt, currentTicketId, currentTicketType]
+  );
+  if (importRows.length > 0) isOutdated = true;
+
+  // Check export
+  if (!isOutdated) {
+    const [exportRows] = await connection.query(
+      `SELECT e.created_at FROM tb_machine_export e
+       JOIN tb_machine_export_detail d ON e.id_machine_export = d.id_machine_export
+       WHERE d.id_machine = ? AND e.status = 'completed' AND e.created_at > ? AND NOT (e.id_machine_export = ? AND ? = 'export')
+       LIMIT 1`,
+      [idMachine, ticketCreatedAt, currentTicketId, currentTicketType]
+    );
+    if (exportRows.length > 0) isOutdated = true;
+  }
+
+  // Check internal transfer
+  if (!isOutdated) {
+    const [transferRows] = await connection.query(
+      `SELECT t.created_at FROM tb_machine_internal_transfer t
+       JOIN tb_machine_internal_transfer_detail d ON t.id_machine_internal_transfer = d.id_machine_internal_transfer
+       WHERE d.id_machine = ? AND t.status = 'completed' AND t.created_at > ? AND NOT (t.id_machine_internal_transfer = ? AND ? = 'transfer')
+       LIMIT 1`,
+      [idMachine, ticketCreatedAt, currentTicketId, currentTicketType]
+    );
+    if (transferRows.length > 0) isOutdated = true;
+  }
+
+  // Check inventory check
+  if (!isOutdated) {
+    const [inventoryRows] = await connection.query(
+      `SELECT i.created_at, d.scanned_result FROM tb_inventory_check i
+       JOIN tb_inventory_check_detail d ON i.id_inventory_check = d.id_inventory_check
+       WHERE i.status = 'completed' AND i.created_at > ? AND NOT (i.id_inventory_check = ? AND ? = 'inventory')`,
+      [ticketCreatedAt, currentTicketId, currentTicketType]
+    );
+    const [machineUuidRes] = await connection.query(
+      `SELECT uuid_machine FROM tb_machine WHERE id_machine = ?`,
+      [idMachine]
+    );
+    if (machineUuidRes.length > 0) {
+      const uuidMachine = machineUuidRes[0].uuid_machine;
+      for (const row of inventoryRows) {
+        if (!row.scanned_result) continue;
+        let locationsArr = [];
+        try {
+          locationsArr =
+            typeof row.scanned_result === "string"
+              ? JSON.parse(row.scanned_result)
+              : row.scanned_result;
+          if (
+            !Array.isArray(locationsArr) &&
+            locationsArr &&
+            locationsArr.locations
+          ) {
+            locationsArr = locationsArr.locations;
+          }
+        } catch (e) {}
+        if (Array.isArray(locationsArr)) {
+          for (const loc of locationsArr) {
+            if (loc.scanned_machine && Array.isArray(loc.scanned_machine)) {
+              for (const m of loc.scanned_machine) {
+                const mUuid = m.uuid || m.uuid_machine;
+                if (mUuid === uuidMachine && m.mislocation === "1") {
+                  isOutdated = true;
+                  break;
+                }
+              }
+            }
+            if (isOutdated) break;
+          }
+        }
+        if (isOutdated) break;
+      }
+    }
+  }
+
+  if (isOutdated) {
+    return false;
+  }
+
+  // 2. Not outdated. Find the most recently completed slip for this machine to check its starting location.
+  const normalizedExpectedFrom =
+    expectedFromLocationId === null ? null : Number(expectedFromLocationId);
+  let latestSlip = null;
+
+  // Check import
+  const [latestImport] = await connection.query(
+    `SELECT i.created_at, d.from_location_id FROM tb_machine_import i
+     JOIN tb_machine_import_detail d ON i.id_machine_import = d.id_machine_import
+     WHERE d.id_machine = ? AND i.status = 'completed' AND NOT (i.id_machine_import = ? AND ? = 'import')
+     ORDER BY i.created_at DESC LIMIT 1`,
+    [idMachine, currentTicketId, currentTicketType]
+  );
+  if (latestImport.length > 0) latestSlip = latestImport[0];
+
+  // Check export
+  const [latestExport] = await connection.query(
+    `SELECT e.created_at, d.from_location_id FROM tb_machine_export e
+     JOIN tb_machine_export_detail d ON e.id_machine_export = d.id_machine_export
+     WHERE d.id_machine = ? AND e.status = 'completed' AND NOT (e.id_machine_export = ? AND ? = 'export')
+     ORDER BY e.created_at DESC LIMIT 1`,
+    [idMachine, currentTicketId, currentTicketType]
+  );
+  if (latestExport.length > 0) {
+    if (
+      !latestSlip ||
+      new Date(latestExport[0].created_at) > new Date(latestSlip.created_at)
+    ) {
+      latestSlip = latestExport[0];
+    }
+  }
+
+  // Check internal transfer
+  const [latestTransfer] = await connection.query(
+    `SELECT t.created_at, d.from_location_id FROM tb_machine_internal_transfer t
+     JOIN tb_machine_internal_transfer_detail d ON t.id_machine_internal_transfer = d.id_machine_internal_transfer
+     WHERE d.id_machine = ? AND t.status = 'completed' AND NOT (t.id_machine_internal_transfer = ? AND ? = 'transfer')
+     ORDER BY t.created_at DESC LIMIT 1`,
+    [idMachine, currentTicketId, currentTicketType]
+  );
+  if (latestTransfer.length > 0) {
+    if (
+      !latestSlip ||
+      new Date(latestTransfer[0].created_at) > new Date(latestSlip.created_at)
+    ) {
+      latestSlip = latestTransfer[0];
+    }
+  }
+
+  // Check inventory check
+  const [latestInventoryList] = await connection.query(
+    `SELECT i.created_at, d.scanned_result FROM tb_inventory_check i
+     JOIN tb_inventory_check_detail d ON i.id_inventory_check = d.id_inventory_check
+     WHERE i.status = 'completed' AND NOT (i.id_inventory_check = ? AND ? = 'inventory')
+     ORDER BY i.created_at DESC`,
+    [currentTicketId, currentTicketType]
+  );
+  const [mUuidRes2] = await connection.query(
+    `SELECT uuid_machine FROM tb_machine WHERE id_machine = ?`,
+    [idMachine]
+  );
+  if (mUuidRes2.length > 0) {
+    const uuidMachine = mUuidRes2[0].uuid_machine;
+    for (const row of latestInventoryList) {
+      if (!row.scanned_result) continue;
+      let locationsArr = [];
+      try {
+        locationsArr =
+          typeof row.scanned_result === "string"
+            ? JSON.parse(row.scanned_result)
+            : row.scanned_result;
+        if (
+          !Array.isArray(locationsArr) &&
+          locationsArr &&
+          locationsArr.locations
+        ) {
+          locationsArr = locationsArr.locations;
+        }
+      } catch (e) {}
+      if (Array.isArray(locationsArr)) {
+        let found = false;
+        let from_loc_id = null;
+        for (const loc of locationsArr) {
+          if (loc.scanned_machine && Array.isArray(loc.scanned_machine)) {
+            for (const m of loc.scanned_machine) {
+              const mUuid = m.uuid || m.uuid_machine;
+              if (mUuid === uuidMachine && m.mislocation === "1") {
+                found = true;
+                const scannedLocName = (m.current_location || "").trim();
+                if (scannedLocName !== "" && scannedLocName !== "-") {
+                  const [fromLocResult] = await connection.query(
+                    "SELECT id_location FROM tb_location WHERE name_location = ?",
+                    [scannedLocName]
+                  );
+                  if (fromLocResult.length > 0) {
+                    from_loc_id = fromLocResult[0].id_location;
+                  }
+                }
+                break;
+              }
+            }
+          }
+          if (found) break;
+        }
+        if (found) {
+          if (
+            !latestSlip ||
+            new Date(row.created_at) > new Date(latestSlip.created_at)
+          ) {
+            latestSlip = {
+              created_at: row.created_at,
+              from_location_id: from_loc_id,
+            };
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  if (latestSlip) {
+    const normalizedLatestFrom =
+      latestSlip.from_location_id === null
+        ? null
+        : Number(latestSlip.from_location_id);
+    return normalizedLatestFrom === normalizedExpectedFrom;
+  }
+
+  return false;
+};
+
 // Function to handle location and status updates in a transaction
 // Requires an active connection from a pool
 const updateMachineLocationAndStatus = async (
@@ -5992,7 +6222,32 @@ const updateMachineLocationAndStatus = async (
       idFromLocation === null ? null : Number(idFromLocation);
 
     if (normalizedExpectedFrom !== normalizedCurrentFrom) {
-      continue;
+      let ticketCreatedAt = new Date();
+      if (ticketType === "import") {
+        const [tRow] = await connection.query(
+          "SELECT created_at FROM tb_machine_import WHERE id_machine_import = ?",
+          [ticketId]
+        );
+        if (tRow.length > 0) ticketCreatedAt = tRow[0].created_at;
+      } else {
+        const [tRow] = await connection.query(
+          "SELECT created_at FROM tb_machine_export WHERE id_machine_export = ?",
+          [ticketId]
+        );
+        if (tRow.length > 0) ticketCreatedAt = tRow[0].created_at;
+      }
+
+      const isValid = await checkParallelSlipValid(
+        connection,
+        idMachine,
+        ticketCreatedAt,
+        expectedFromLocationId,
+        ticketType,
+        ticketId
+      );
+      if (!isValid) {
+        continue;
+      }
     }
 
     // b. Insert into tb_machine_location_history (created_by, updated_by = người tạo phiếu)
@@ -7033,7 +7288,24 @@ const handleInternalTransferApproval = async (
       idFromLocation === null ? null : Number(idFromLocation);
 
     if (normalizedExpectedFrom !== normalizedCurrentFrom) {
-      continue;
+      let ticketCreatedAt = new Date();
+      const [tRow] = await connection.query(
+        "SELECT created_at FROM tb_machine_internal_transfer WHERE id_machine_internal_transfer = ?",
+        [ticketId]
+      );
+      if (tRow.length > 0) ticketCreatedAt = tRow[0].created_at;
+
+      const isValid = await checkParallelSlipValid(
+        connection,
+        idMachine,
+        ticketCreatedAt,
+        expectedFromLocationId,
+        "transfer",
+        ticketId
+      );
+      if (!isValid) {
+        continue;
+      }
     }
 
     // b. Ghi lịch sử (created_by, updated_by = người tạo phiếu)
@@ -10594,7 +10866,36 @@ app.post("/api/test-proposals/callback", async (req, res) => {
                         scannedLocName === "" ? "-" : scannedLocName;
 
                       if (normalizedDbLoc !== normalizedScannedLoc) {
-                        continue;
+                        let scannedLocId = null;
+                        if (scannedLocName !== "" && scannedLocName !== "-") {
+                          const [fromLocResult] = await connection.query(
+                            "SELECT id_location FROM tb_location WHERE name_location = ?",
+                            [scannedLocName]
+                          );
+                          if (fromLocResult.length > 0) {
+                            scannedLocId = fromLocResult[0].id_location;
+                          }
+                        }
+
+                        let ticketCreatedAt = new Date();
+                        const [tRow] = await connection.query(
+                          "SELECT created_at FROM tb_inventory_check WHERE id_inventory_check = ?",
+                          [ticketId]
+                        );
+                        if (tRow.length > 0)
+                          ticketCreatedAt = tRow[0].created_at;
+
+                        const isValid = await checkParallelSlipValid(
+                          connection,
+                          idMachine,
+                          ticketCreatedAt,
+                          scannedLocId,
+                          "inventory",
+                          ticketId
+                        );
+                        if (!isValid) {
+                          continue;
+                        }
                       }
 
                       // 1. Lấy vị trí cũ để ghi log
