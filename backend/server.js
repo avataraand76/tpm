@@ -1996,6 +1996,7 @@ app.get(
       // Truy vấn máy móc, loại máy, và vị trí hiện tại của nó
       const dataQuery = `
       SELECT 
+        m.id_machine,
         m.uuid_machine,
         m.code_machine,
         m.type_machine,
@@ -2011,7 +2012,8 @@ app.get(
         m.is_borrowed_or_rented_or_borrowed_out_return_date,
         c.name_category,
         tl.uuid_location,
-        tl.name_location
+        tl.name_location,
+        tl.id_department as current_department_id
       FROM tb_machine m
       ${joinClause}
       ${whereClause}
@@ -2025,6 +2027,85 @@ app.get(
           success: false,
           message: notFoundMessage,
         });
+      }
+
+      // If ticket_type is inventory and inventory_uuid is provided, resolve snapshot locations
+      const { inventory_uuid } = req.query;
+      if (ticket_type === "inventory" && inventory_uuid) {
+        // 1. Get id_inventory_check and created_at
+        const [invCheck] = await tpmConnection.query(
+          "SELECT id_inventory_check, created_at FROM tb_inventory_check WHERE uuid_inventory_check = ?",
+          [inventory_uuid]
+        );
+        if (invCheck.length > 0) {
+          const idInventory = invCheck[0].id_inventory_check;
+          const ticketCreatedAt = invCheck[0].created_at;
+
+          // 2. Fetch snapshot details
+          const [allDetails] = await tpmConnection.query(
+            "SELECT id_department, list_before_scan FROM tb_inventory_check_detail WHERE id_inventory_check = ?",
+            [idInventory]
+          );
+
+          const snapshotMachineMap = new Map();
+          const inventoriedDeptIds = new Set();
+          for (const row of allDetails) {
+            inventoriedDeptIds.add(row.id_department);
+            let listBeforeScan = [];
+            try {
+              listBeforeScan =
+                typeof row.list_before_scan === "string"
+                  ? JSON.parse(row.list_before_scan)
+                  : row.list_before_scan || [];
+            } catch (e) {
+              listBeforeScan = [];
+            }
+            if (Array.isArray(listBeforeScan)) {
+              for (const loc of listBeforeScan) {
+                const locUuid = loc.location_uuid;
+                const locName = loc.location_name;
+                if (loc.machines && Array.isArray(loc.machines)) {
+                  for (const m of loc.machines) {
+                    if (m.uuid_machine) {
+                      snapshotMachineMap.set(m.uuid_machine, {
+                        location_uuid: locUuid,
+                        location_name: locName,
+                        id_department: row.id_department,
+                      });
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          // 3. Map machine with snapshot/history overrides
+          const machine = machines[0];
+          if (snapshotMachineMap.has(machine.uuid_machine)) {
+            const snap = snapshotMachineMap.get(machine.uuid_machine);
+            machine.uuid_location = snap.location_uuid;
+            machine.name_location = snap.location_name;
+          } else if (
+            machine.id_machine &&
+            machine.current_department_id &&
+            inventoriedDeptIds.has(machine.current_department_id)
+          ) {
+            // Machine was transferred from an uninventoried department after 16:30.
+            // Get its location at 16:30 from location history.
+            const [historyRows] = await tpmConnection.query(
+              `SELECT h.id_from_location, tl.name_location, tl.uuid_location
+               FROM tb_machine_location_history h
+               LEFT JOIN tb_location tl ON tl.id_location = h.id_from_location
+               WHERE h.id_machine = ? AND h.created_at > ?
+               ORDER BY h.created_at ASC LIMIT 1`,
+              [machine.id_machine, ticketCreatedAt]
+            );
+            if (historyRows.length > 0) {
+              machine.uuid_location = historyRows[0].uuid_location;
+              machine.name_location = historyRows[0].name_location || "-";
+            }
+          }
+        }
       }
 
       res.json({
@@ -2315,6 +2396,7 @@ app.post("/api/machines/by-rfid-list", authenticateToken, async (req, res) => {
     // 5. Truy vấn máy móc
     const dataQuery = `
       SELECT 
+        m.id_machine,
         m.uuid_machine,
         m.code_machine,
         m.type_machine,
@@ -2330,13 +2412,94 @@ app.post("/api/machines/by-rfid-list", authenticateToken, async (req, res) => {
         m.is_borrowed_or_rented_or_borrowed_out_return_date,
         c.name_category,
         tl.uuid_location,
-        tl.name_location
+        tl.name_location,
+        tl.id_department as current_department_id
       FROM tb_machine m
       ${joinClause}
       ${whereClause}
     `;
 
     const [machines] = await tpmConnection.query(dataQuery, queryParams);
+
+    // If ticket_type is inventory and inventory_uuid is provided, resolve snapshot locations
+    const { inventory_uuid } = req.body;
+    if (ticket_type === "inventory" && inventory_uuid) {
+      // 1. Get id_inventory_check and created_at
+      const [invCheck] = await tpmConnection.query(
+        "SELECT id_inventory_check, created_at FROM tb_inventory_check WHERE uuid_inventory_check = ?",
+        [inventory_uuid]
+      );
+      if (invCheck.length > 0) {
+        const idInventory = invCheck[0].id_inventory_check;
+        const ticketCreatedAt = invCheck[0].created_at;
+
+        // 2. Fetch snapshot details
+        const [allDetails] = await tpmConnection.query(
+          "SELECT id_department, list_before_scan FROM tb_inventory_check_detail WHERE id_inventory_check = ?",
+          [idInventory]
+        );
+
+        const snapshotMachineMap = new Map();
+        const inventoriedDeptIds = new Set();
+        for (const row of allDetails) {
+          inventoriedDeptIds.add(row.id_department);
+          let listBeforeScan = [];
+          try {
+            listBeforeScan =
+              typeof row.list_before_scan === "string"
+                ? JSON.parse(row.list_before_scan)
+                : row.list_before_scan || [];
+          } catch (e) {
+            listBeforeScan = [];
+          }
+          if (Array.isArray(listBeforeScan)) {
+            for (const loc of listBeforeScan) {
+              const locUuid = loc.location_uuid;
+              const locName = loc.location_name;
+              if (loc.machines && Array.isArray(loc.machines)) {
+                for (const m of loc.machines) {
+                  if (m.uuid_machine) {
+                    snapshotMachineMap.set(m.uuid_machine, {
+                      location_uuid: locUuid,
+                      location_name: locName,
+                      id_department: row.id_department,
+                    });
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // 3. Map machines with snapshot/history overrides
+        for (const machine of machines) {
+          if (snapshotMachineMap.has(machine.uuid_machine)) {
+            const snap = snapshotMachineMap.get(machine.uuid_machine);
+            machine.uuid_location = snap.location_uuid;
+            machine.name_location = snap.location_name;
+          } else if (
+            machine.id_machine &&
+            machine.current_department_id &&
+            inventoriedDeptIds.has(machine.current_department_id)
+          ) {
+            // Machine was transferred from an uninventoried department after 16:30.
+            // Get its location at 16:30 from location history.
+            const [historyRows] = await tpmConnection.query(
+              `SELECT h.id_from_location, tl.name_location, tl.uuid_location
+               FROM tb_machine_location_history h
+               LEFT JOIN tb_location tl ON tl.id_location = h.id_from_location
+               WHERE h.id_machine = ? AND h.created_at > ?
+               ORDER BY h.created_at ASC LIMIT 1`,
+              [machine.id_machine, ticketCreatedAt]
+            );
+            if (historyRows.length > 0) {
+              machine.uuid_location = historyRows[0].uuid_location;
+              machine.name_location = historyRows[0].name_location || "-";
+            }
+          }
+        }
+      }
+    }
 
     // 6. Xác định các Mã không tìm thấy
     // Logic: Duyệt qua các máy tìm thấy, xem mã nào trong danh sách Input khớp với RFID hoặc NFC của máy đó
@@ -11616,6 +11779,7 @@ app.get(
           .status(404)
           .json({ success: false, message: "Phiếu không tồn tại" });
       const idInventory = invRes[0].id_inventory_check;
+      const ticketCreatedAt = invRes[0].created_at;
 
       // 2. Lấy dữ liệu QUÉT CỦA TẤT CẢ CÁC ĐƠN VỊ trong phiếu này để đối chiếu chéo
       const [allDetails] = await tpmConnection.query(
@@ -11795,6 +11959,7 @@ app.put(
         });
       }
       const idInventory = invRes[0].id_inventory_check;
+      const ticketCreatedAt = invRes[0].created_at;
 
       // 2. Resolve Department ID
       const [depRes] = await connection.query(
@@ -12057,7 +12222,7 @@ app.post(
 
       // 1. Get IDs
       const [invRes] = await connection.query(
-        "SELECT id_inventory_check, status FROM tb_inventory_check WHERE uuid_inventory_check = ?",
+        "SELECT id_inventory_check, status, created_at FROM tb_inventory_check WHERE uuid_inventory_check = ?",
         [uuid]
       );
       if (invRes.length === 0) {
@@ -12075,6 +12240,7 @@ app.post(
       }
 
       const idInventory = invRes[0].id_inventory_check;
+      const ticketCreatedAt = invRes[0].created_at;
 
       // 2. Resolve Department
       const [depRes] = await connection.query(
@@ -12113,10 +12279,12 @@ app.post(
         [dbMachines] = await connection.query(
           `
             SELECT 
+                m.id_machine,
                 m.uuid_machine, 
                 ml.id_location as current_location_id, 
                 tl.name_location as current_location_name,
-                tl.id_department as current_department_id
+                tl.id_department as current_department_id,
+                tl.uuid_location as current_location_uuid
             FROM tb_machine m
             LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
             LEFT JOIN tb_location tl ON tl.id_location = ml.id_location
@@ -12130,45 +12298,123 @@ app.post(
         dbMachines.map((m) => [
           m.uuid_machine,
           {
+            id_machine: m.id_machine,
             id: m.current_location_id,
             name: m.current_location_name,
             depId: m.current_department_id,
+            uuid_location: m.current_location_uuid,
           },
         ])
       );
+
+      // Fetch snapshot data from list_before_scan for the current inventory check
+      const [allDetails] = await connection.query(
+        "SELECT id_department, list_before_scan FROM tb_inventory_check_detail WHERE id_inventory_check = ?",
+        [idInventory]
+      );
+
+      const snapshotMachineMap = new Map();
+      const inventoriedDeptIds = new Set();
+      for (const row of allDetails) {
+        inventoriedDeptIds.add(row.id_department);
+        let listBeforeScan = [];
+        try {
+          listBeforeScan =
+            typeof row.list_before_scan === "string"
+              ? JSON.parse(row.list_before_scan)
+              : row.list_before_scan || [];
+        } catch (e) {
+          listBeforeScan = [];
+        }
+        if (Array.isArray(listBeforeScan)) {
+          for (const loc of listBeforeScan) {
+            const locUuid = loc.location_uuid;
+            const locName = loc.location_name;
+            if (loc.machines && Array.isArray(loc.machines)) {
+              for (const m of loc.machines) {
+                if (m.uuid_machine) {
+                  snapshotMachineMap.set(m.uuid_machine, {
+                    location_uuid: locUuid,
+                    location_name: locName,
+                    id_department: row.id_department,
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
 
       // 5. Build Object cho Vị trí này
       const newLocationResult = {
         location_name: locationName,
         location_uuid: location_uuid,
-        scanned_machine: scanned_machines.map((m) => {
-          const currentData = dbMachineMap.get(m.uuid_machine);
-          const currentLocationId = currentData?.id;
-          const currentLocationName = currentData?.name || "-";
-          const currentDepartmentId = currentData?.depId;
-          // Chỉ khi vị trí hiện tại BẰNG CHÍNH XÁC với vị trí đang kiểm kê thì mới là "Đúng vị trí"
-          // Nếu không có vị trí hoặc khác vị trí → Sai vị trí
-          const isMislocation = currentLocationId === idLocation ? "0" : "1";
-          let isMisdepartment = "0";
-          if (currentDepartmentId != idDepartment) {
-            isMisdepartment = "1";
-          }
+        scanned_machine: Promise.all(
+          scanned_machines.map(async (m) => {
+            const currentData = dbMachineMap.get(m.uuid_machine);
+            const currentLocationName = currentData?.name || "-";
+            const currentDepartmentId = currentData?.depId;
 
-          return {
-            uuid: m.uuid_machine,
-            name: `${m.type_machine || ""} ${m.attribute_machine || ""} - ${
-              m.model_machine || ""
-            }`,
-            serial: m.serial_machine,
-            code: m.code_machine,
-            RFID: m.RFID_machine,
-            NFC: m.NFC_machine,
-            current_location: currentLocationName,
-            mislocation: isMislocation,
-            misdepartment: isMisdepartment,
-          };
-        }),
+            // Xác định vị trí và đơn vị mong đợi dựa trên snapshot kiểm kê lúc 16h30 (list_before_scan)
+            let expectedLocUuid = currentData?.uuid_location || null;
+            let expectedLocationName = currentLocationName;
+            let expectedDepartmentId = currentDepartmentId;
+
+            if (snapshotMachineMap.has(m.uuid_machine)) {
+              const snap = snapshotMachineMap.get(m.uuid_machine);
+              expectedLocUuid = snap.location_uuid;
+              expectedLocationName = snap.location_name;
+              expectedDepartmentId = snap.id_department;
+            } else if (
+              currentData?.id_machine &&
+              currentDepartmentId &&
+              inventoriedDeptIds.has(currentDepartmentId)
+            ) {
+              // Máy hiện tại đang ở đơn vị được kiểm kê, nhưng không có trong snapshot 16:30.
+              // Điều này có nghĩa máy đã được duyệt điều chuyển vào đơn vị này SAU 16:30.
+              // Tìm vị trí của máy lúc 16:30 bằng cách lấy vị trí từ bản ghi lịch sử dịch chuyển đầu tiên phát sinh sau 16:30.
+              const [historyRows] = await connection.query(
+                `SELECT h.id_from_location, tl.name_location, tl.uuid_location, tl.id_department
+               FROM tb_machine_location_history h
+               LEFT JOIN tb_location tl ON tl.id_location = h.id_from_location
+               WHERE h.id_machine = ? AND h.created_at > ?
+               ORDER BY h.created_at ASC LIMIT 1`,
+                [currentData.id_machine, ticketCreatedAt]
+              );
+              if (historyRows.length > 0) {
+                expectedLocUuid = historyRows[0].uuid_location;
+                expectedLocationName = historyRows[0].name_location || "-";
+                expectedDepartmentId = historyRows[0].id_department;
+              }
+            }
+
+            // So sánh vị trí mong đợi từ snapshot với vị trí thực tế đang quét (location_uuid)
+            const isMislocation = expectedLocUuid === location_uuid ? "0" : "1";
+            let isMisdepartment = "0";
+            if (expectedDepartmentId != idDepartment) {
+              isMisdepartment = "1";
+            }
+
+            return {
+              uuid: m.uuid_machine,
+              name: `${m.type_machine || ""} ${m.attribute_machine || ""} - ${
+                m.model_machine || ""
+              }`,
+              serial: m.serial_machine,
+              code: m.code_machine,
+              RFID: m.RFID_machine,
+              NFC: m.NFC_machine,
+              current_location: expectedLocationName, // Trả về vị trí trong sổ sách lúc 16:30 để hiển thị chính xác
+              mislocation: isMislocation,
+              misdepartment: isMisdepartment,
+            };
+          })
+        ),
       };
+
+      // Chờ toàn bộ các Promise giải quyết xong
+      newLocationResult.scanned_machine =
+        await newLocationResult.scanned_machine;
 
       // 6. Update JSON Array trong DB với row-level lock
       // Lấy scanned_result cũ với FOR UPDATE để lock row này
@@ -12419,6 +12665,7 @@ app.post(
       }
 
       const idInventory = invRes[0].id_inventory_check;
+      const ticketCreatedAt = invRes[0].created_at;
 
       // 3. Resolve Department IDs
       const [depRes] = await connection.query(
@@ -13182,78 +13429,78 @@ async function autoCreateInventoryCheck() {
   }
 }
 
-async function autoCancelInternalTransfers() {
-  const connection = await tpmConnection.getConnection();
-  try {
-    await connection.beginTransaction();
+// async function autoCancelInternalTransfers() {
+//   const connection = await tpmConnection.getConnection();
+//   try {
+//     await connection.beginTransaction();
 
-    const [pendingTransfers] = await connection.query(
-      `
-      SELECT id_machine_internal_transfer, approval_flow
-      FROM tb_machine_internal_transfer
-      WHERE status IN ('pending_confirmation', 'pending_approval')
-        AND transfer_date <= CURDATE()
-      `
-    );
+//     const [pendingTransfers] = await connection.query(
+//       `
+//       SELECT id_machine_internal_transfer, approval_flow
+//       FROM tb_machine_internal_transfer
+//       WHERE status IN ('pending_confirmation', 'pending_approval')
+//         AND transfer_date <= CURDATE()
+//       `
+//     );
 
-    if (!pendingTransfers || pendingTransfers.length === 0) {
-      await connection.commit();
-      console.log(
-        "[AutoCancelInternalTransfer] Không có phiếu điều chuyển nội bộ nào cần hủy."
-      );
-      return;
-    }
+//     if (!pendingTransfers || pendingTransfers.length === 0) {
+//       await connection.commit();
+//       console.log(
+//         "[AutoCancelInternalTransfer] Không có phiếu điều chuyển nội bộ nào cần hủy."
+//       );
+//       return;
+//     }
 
-    const systemCancelStep = {
-      ma_nv: "SYSTEM",
-      ten_nv: "Hệ thống",
-      step_flow: 999,
-      isFinalFlow: true,
-      status_text: "Hệ thống tự động hủy",
-      is_forward: 0,
-    };
+//     const systemCancelStep = {
+//       ma_nv: "SYSTEM",
+//       ten_nv: "Hệ thống",
+//       step_flow: 999,
+//       isFinalFlow: true,
+//       status_text: "Hệ thống tự động hủy",
+//       is_forward: 0,
+//     };
 
-    for (const transfer of pendingTransfers) {
-      let currentFlow = [];
-      try {
-        currentFlow =
-          typeof transfer.approval_flow === "string"
-            ? JSON.parse(transfer.approval_flow)
-            : transfer.approval_flow || [];
-        if (!Array.isArray(currentFlow)) currentFlow = [];
-      } catch {
-        currentFlow = [];
-      }
+//     for (const transfer of pendingTransfers) {
+//       let currentFlow = [];
+//       try {
+//         currentFlow =
+//           typeof transfer.approval_flow === "string"
+//             ? JSON.parse(transfer.approval_flow)
+//             : transfer.approval_flow || [];
+//         if (!Array.isArray(currentFlow)) currentFlow = [];
+//       } catch {
+//         currentFlow = [];
+//       }
 
-      const newFlow = [...currentFlow, systemCancelStep];
+//       const newFlow = [...currentFlow, systemCancelStep];
 
-      await connection.query(
-        `
-        UPDATE tb_machine_internal_transfer
-        SET status = 'cancelled',
-            approval_flow = ?,
-            updated_by = 795009,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id_machine_internal_transfer = ?
-        `,
-        [JSON.stringify(newFlow), transfer.id_machine_internal_transfer]
-      );
-    }
+//       await connection.query(
+//         `
+//         UPDATE tb_machine_internal_transfer
+//         SET status = 'cancelled',
+//             approval_flow = ?,
+//             updated_by = 795009,
+//             updated_at = CURRENT_TIMESTAMP
+//         WHERE id_machine_internal_transfer = ?
+//         `,
+//         [JSON.stringify(newFlow), transfer.id_machine_internal_transfer]
+//       );
+//     }
 
-    await connection.commit();
-    console.log(
-      `[AutoCancelInternalTransfer] Đã tự động hủy ${pendingTransfers.length} phiếu điều chuyển nội bộ hết hạn.`
-    );
-  } catch (error) {
-    await connection.rollback();
-    console.error(
-      "[AutoCancelInternalTransfer] Lỗi khi tự động hủy phiếu điều chuyển nội bộ:",
-      error
-    );
-  } finally {
-    connection.release();
-  }
-}
+//     await connection.commit();
+//     console.log(
+//       `[AutoCancelInternalTransfer] Đã tự động hủy ${pendingTransfers.length} phiếu điều chuyển nội bộ hết hạn.`
+//     );
+//   } catch (error) {
+//     await connection.rollback();
+//     console.error(
+//       "[AutoCancelInternalTransfer] Lỗi khi tự động hủy phiếu điều chuyển nội bộ:",
+//       error
+//     );
+//   } finally {
+//     connection.release();
+//   }
+// }
 
 // // 16:30 thứ 2-6 tạo phiếu kiểm kê tự động
 // cron.schedule("30 16 * * 1-5", autoCreateInventoryCheck, {

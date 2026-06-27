@@ -1321,10 +1321,13 @@ const TestProposalPage = () => {
 
   // Set scanner params for inventory dialog
   useEffect(() => {
-    if (openInventoryScanDialog) {
-      setScannerApiParams({ ticket_type: "inventory" });
+    if (openInventoryScanDialog && selectedTicket?.uuid_inventory_check) {
+      setScannerApiParams({
+        ticket_type: "inventory",
+        inventory_uuid: selectedTicket.uuid_inventory_check,
+      });
     }
-  }, [openInventoryScanDialog]);
+  }, [openInventoryScanDialog, selectedTicket]);
 
   // --- Handlers ---
   const handleTabChange = (event, newValue) => {
