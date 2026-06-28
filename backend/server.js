@@ -13429,6 +13429,302 @@ async function autoCreateInventoryCheck() {
   }
 }
 
+async function autoRefreshInventorySnapshot() {
+  const connection = await tpmConnection.getConnection();
+  try {
+    const now = new Date();
+    const vnNow = new Date(
+      now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" })
+    );
+    const yyyy = vnNow.getFullYear();
+    const mm = String(vnNow.getMonth() + 1).padStart(2, "0");
+    const dd = String(vnNow.getDate()).padStart(2, "0");
+    const checkDate = `${yyyy}-${mm}-${dd}`;
+    // Tìm tất cả phiếu kiểm kê hôm nay đang ở trạng thái draft (cả tự động lẫn thủ công)
+    const [invRows] = await connection.query(
+      `SELECT id_inventory_check
+       FROM tb_inventory_check
+       WHERE DATE(check_date) = ?
+         AND status = 'draft'`,
+      [checkDate]
+    );
+    if (invRows.length === 0) {
+      console.log(
+        `[AutoRefreshSnapshot] Không có phiếu kiểm kê hôm nay (${checkDate}) cần cập nhật.`
+      );
+      return;
+    }
+    console.log(
+      `[AutoRefreshSnapshot] Tìm thấy ${invRows.length} phiếu kiểm kê ngày ${checkDate}, bắt đầu cập nhật...`
+    );
+    await connection.beginTransaction();
+    let totalUpdatedDepts = 0;
+    let totalUpdatedTickets = 0;
+    for (const inv of invRows) {
+      const idInventory = inv.id_inventory_check;
+      // Lấy tất cả detail của phiếu (theo từng department)
+      const [details] = await connection.query(
+        `SELECT id_department, list_before_scan, scanned_result
+         FROM tb_inventory_check_detail
+         WHERE id_inventory_check = ?`,
+        [idInventory]
+      );
+      if (details.length === 0) {
+        console.log(
+          `[AutoRefreshSnapshot] Phiếu #${idInventory} không có detail nào, bỏ qua.`
+        );
+        continue;
+      }
+      let updatedCount = 0;
+      // Lấy vị trí hiện tại của TẤT CẢ máy (dùng để cập nhật current_location cho máy đã chuyển đơn vị)
+      const [allMachineRows] = await connection.query(
+        `SELECT m.uuid_machine, tl.name_location
+         FROM tb_machine_location ml
+         JOIN tb_location tl ON ml.id_location = tl.id_location
+         JOIN tb_machine m ON ml.id_machine = m.id_machine
+         WHERE m.current_status != 'liquidation'
+           AND m.current_status != 'temporary'
+           AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))`
+      );
+      const globalMachineLocMap = new Map();
+      allMachineRows.forEach((r) => {
+        if (r.uuid_machine) globalMachineLocMap.set(r.uuid_machine, r.name_location);
+      });
+
+      for (const detail of details) {
+        const deptId = detail.id_department;
+        // === 1. Lấy snapshot mới từ liveDB ===
+        // Snapshot tổng số máy
+        const [countRes] = await connection.query(
+          `SELECT COUNT(m.id_machine) as total
+         FROM tb_machine_location ml
+         JOIN tb_location tl ON ml.id_location = tl.id_location
+         JOIN tb_machine m ON ml.id_machine = m.id_machine
+         WHERE tl.id_department = ?
+           AND m.current_status != 'liquidation'
+           AND m.current_status != 'temporary'
+           AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))`,
+          [deptId]
+        );
+        const newSnapshotCount = countRes[0]?.total || 0;
+        // Snapshot theo từng vị trí
+        const [locSnapshots] = await connection.query(
+          `SELECT tl.uuid_location, COUNT(m.id_machine) as count
+         FROM tb_location tl
+         LEFT JOIN tb_machine_location ml ON tl.id_location = ml.id_location
+         LEFT JOIN tb_machine m ON ml.id_machine = m.id_machine
+              AND m.current_status != 'liquidation'
+              AND m.current_status != 'temporary'
+              AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))
+         WHERE tl.id_department = ?
+         GROUP BY tl.id_location`,
+          [deptId]
+        );
+        const newLocationSnapshotsMap = {};
+        locSnapshots.forEach((l) => {
+          newLocationSnapshotsMap[l.uuid_location] = l.count;
+        });
+        // Snapshot danh sách máy theo vị trí (list_before_scan mới)
+        const [machinesByLocation] = await connection.query(
+          `SELECT
+          tl.uuid_location,
+          tl.name_location,
+          m.uuid_machine,
+          m.code_machine,
+          m.serial_machine,
+          m.type_machine,
+          m.model_machine,
+          m.attribute_machine,
+          m.RFID_machine,
+          m.NFC_machine
+         FROM tb_location tl
+         LEFT JOIN tb_machine_location ml ON tl.id_location = ml.id_location
+         LEFT JOIN tb_machine m ON ml.id_machine = m.id_machine
+         WHERE tl.id_department = ?
+           AND m.current_status != 'liquidation'
+           AND m.current_status != 'temporary'
+           AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))
+         ORDER BY tl.uuid_location, m.code_machine`,
+          [deptId]
+        );
+        const machinesByLocationMap = {};
+        machinesByLocation.forEach((row) => {
+          if (!machinesByLocationMap[row.uuid_location]) {
+            machinesByLocationMap[row.uuid_location] = {
+              location_uuid: row.uuid_location,
+              location_name: row.name_location,
+              machines: [],
+            };
+          }
+          if (row.uuid_machine) {
+            machinesByLocationMap[row.uuid_location].machines.push({
+              uuid_machine: row.uuid_machine,
+              code_machine: row.code_machine,
+              serial_machine: row.serial_machine,
+              type_machine: row.type_machine,
+              model_machine: row.model_machine,
+              attribute_machine: row.attribute_machine,
+              RFID_machine: row.RFID_machine,
+              NFC_machine: row.NFC_machine,
+            });
+          }
+        });
+        const newListBeforeScan = Object.values(machinesByLocationMap);
+        // Tập uuid_machine có mặt trong list_before_scan mới (đúng đơn vị)
+        const newSnapshotUuids = new Set();
+        for (const loc of newListBeforeScan) {
+          for (const m of loc.machines || []) {
+            if (m.uuid_machine) newSnapshotUuids.add(m.uuid_machine);
+          }
+        }
+        // Map: uuid_machine -> { location_uuid, location_name } từ snapshot mới
+        const newSnapshotLocMap = new Map();
+        for (const loc of newListBeforeScan) {
+          for (const m of loc.machines || []) {
+            if (m.uuid_machine) {
+              newSnapshotLocMap.set(m.uuid_machine, {
+                location_uuid: loc.location_uuid,
+                location_name: loc.location_name,
+              });
+            }
+          }
+        }
+        // === 2. Cập nhật scanned_result nếu có ===
+        // Với mỗi máy đã quét trong scanned_result:
+        //   - Nếu máy B từ x5 vào x2 đã bị đánh mislocation=1:
+        //     + Nếu bây giờ máy B có trong snapshot mới (thuộc đúng đơn vị) và vị trí trong snapshot mới = vị trí đã quét -> reset mislocation=0
+        //     + Nếu máy B không còn trong snapshot (đã chuyển ra khỏi đơn vị) -> bỏ khỏi scanned_result (không đếm nữa)
+        //   - Cập nhật current_location theo snapshot mới
+        let parsedScannedResult = null;
+        try {
+          parsedScannedResult =
+            detail.scanned_result != null
+              ? typeof detail.scanned_result === "string"
+                ? JSON.parse(detail.scanned_result)
+                : detail.scanned_result
+              : null;
+        } catch {
+          parsedScannedResult = null;
+        }
+        if (
+          parsedScannedResult &&
+          typeof parsedScannedResult === "object" &&
+          !Array.isArray(parsedScannedResult)
+        ) {
+          const locations = parsedScannedResult.locations || [];
+          const updatedLocations = locations.map((loc) => {
+            const updatedMachines = (loc.scanned_machine || [])
+              .map((m) => {
+                const uuid = m.uuid || m.uuid_machine;
+                if (!uuid) return m;
+
+                // Máy không xác định (NOT_FOUND_) -> giữ nguyên hoàn toàn
+                if (typeof uuid === "string" && uuid.startsWith("NOT_FOUND_")) {
+                  return m;
+                }
+
+                const inNewSnapshot = newSnapshotUuids.has(uuid);
+                const newLocInfo = newSnapshotLocMap.get(uuid);
+
+                if (!inNewSnapshot) {
+                  // Máy KHÔNG có trong snapshot mới của đơn vị này
+                  if (m.misdepartment === "0" || m.misdepartment === 0) {
+                    // Trước đây thuộc đơn vị này, nay đã chuyển sang đơn vị khác
+                    // -> cập nhật misdepartment=1 + mislocation=1
+                    // -> tra globalMachineLocMap để lấy current_location thực tế mới
+                    const actualLocation = globalMachineLocMap.get(uuid) || m.current_location;
+                    return {
+                      ...m,
+                      mislocation: "1",
+                      misdepartment: "1",
+                      current_location: actualLocation,
+                    };
+                  }
+
+                  // Trước đây đã là máy khách (misdepartment=1), vẫn không thuộc đơn vị -> giữ nguyên
+                  return m;
+                }
+
+                // Máy CÓ trong snapshot mới của đơn vị này -> misdepartment=0
+                const newCurrentLocation =
+                  newLocInfo?.location_name || m.current_location;
+                const newLocUuid = newLocInfo?.location_uuid;
+                // Recalculate mislocation: vị trí liveDB mới vs vị trí đang quét (loc.location_uuid)
+                const newMislocation =
+                  newLocUuid && loc.location_uuid
+                    ? newLocUuid === loc.location_uuid
+                      ? "0"
+                      : "1"
+                    : m.mislocation;
+                return {
+                  ...m,
+                  current_location: newCurrentLocation,
+                  mislocation: newMislocation,
+                  misdepartment: "0",
+                };
+              })
+              .filter(Boolean);
+
+            return {
+              ...loc,
+              scanned_machine: updatedMachines,
+            };
+          });
+          // Cập nhật snapshot_count và location_snapshots trong scanned_result
+          parsedScannedResult = {
+            ...parsedScannedResult,
+            snapshot_count: newSnapshotCount,
+            location_snapshots: newLocationSnapshotsMap,
+            locations: updatedLocations,
+          };
+        } else if (parsedScannedResult === null) {
+          // Chưa có scanned_result - chỉ tạo cấu trúc rỗng với snapshot mới
+          parsedScannedResult = {
+            snapshot_count: newSnapshotCount,
+            location_snapshots: newLocationSnapshotsMap,
+            locations: [],
+          };
+        }
+        // === 3. Lưu vào DB ===
+        await connection.query(
+          `UPDATE tb_inventory_check_detail
+         SET list_before_scan = ?,
+             scanned_result = ?,
+             updated_by = 795009,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id_inventory_check = ? AND id_department = ?`,
+          [
+            JSON.stringify(newListBeforeScan),
+            JSON.stringify(parsedScannedResult),
+            idInventory,
+            deptId,
+          ]
+        );
+        updatedCount++;
+        totalUpdatedDepts++;
+      } // end for detail
+      totalUpdatedTickets++;
+      console.log(
+        `[AutoRefreshSnapshot] Phiếu #${idInventory}: đã cập nhật ${updatedCount} đơn vị.`
+      );
+    }
+    await connection.commit();
+    console.log(
+      `[AutoRefreshSnapshot] Hoàn tất ngày ${checkDate}: cập nhật ${totalUpdatedTickets} phiếu, ${totalUpdatedDepts} đơn vị.`
+    );
+  } catch (error) {
+    try {
+      await connection.rollback();
+    } catch {}
+    console.error(
+      "[AutoRefreshSnapshot] Lỗi khi làm mới snapshot kiểm kê:",
+      error
+    );
+  } finally {
+    connection.release();
+  }
+}
+
 // async function autoCancelInternalTransfers() {
 //   const connection = await tpmConnection.getConnection();
 //   try {
@@ -13521,6 +13817,20 @@ async function autoCreateInventoryCheck() {
 // cron.schedule("59 14 * * 6", autoCancelInternalTransfers, {
 //   timezone: "Asia/Ho_Chi_Minh",
 // });
+
+// 17:00-17:30 thứ 2-6 làm mới snapshot kiểm kê
+cron.schedule("0,5,10,15,20,25,30 17 * * 1-5", autoRefreshInventorySnapshot, {
+  timezone: "Asia/Ho_Chi_Minh",
+});
+
+// 16:00-16:30 thứ 7 làm mới snapshot kiểm kê
+cron.schedule("0,5,10,15,20,25,30 16 * * 6", autoRefreshInventorySnapshot, {
+  timezone: "Asia/Ho_Chi_Minh",
+});
+
+cron.schedule("45 48 21 * * 1-7", autoRefreshInventorySnapshot, {
+  timezone: "Asia/Ho_Chi_Minh",
+});
 
 // MARK: MAINTENANCE SCHEDULE DETAIL
 
