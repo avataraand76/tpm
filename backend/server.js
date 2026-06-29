@@ -7425,9 +7425,10 @@ const handleInternalTransferApproval = async (
 
     // a. Lấy vị trí và trạng thái hiện tại của MÁY NÀY
     const [machineStatusAndLoc] = await connection.query(
-      `SELECT m.current_status, ml.id_location, ml.id_machine AS location_machine_id
+      `SELECT m.current_status, ml.id_location, ml.id_machine AS location_machine_id, tl.id_department
        FROM tb_machine m 
        LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine 
+       LEFT JOIN tb_location tl ON tl.id_location = ml.id_location
        WHERE m.id_machine = ?`,
       [idMachine]
     );
@@ -7437,10 +7438,17 @@ const handleInternalTransferApproval = async (
       current_status,
       id_location: idFromLocation,
       location_machine_id,
+      id_department,
     } = machineStatusAndLoc[0];
 
     // Bỏ qua nếu máy ở trạng thái test (temporary)
     if (current_status === "temporary") {
+      continue;
+    }
+
+    // Guard: nếu máy hiện tại đang nằm ở department = 10 (Đơn vị bên ngoài)
+    // thì bỏ qua việc cập nhật điều chuyển
+    if (String(id_department) === "10") {
       continue;
     }
 
@@ -11003,18 +11011,22 @@ app.post("/api/test-proposals/callback", async (req, res) => {
                       const idMachine = mIdRes[0].id_machine;
 
                       // Guard: nếu máy hiện tại đang nằm ở department = 10
-                      // thì bỏ qua việc cập nhật theo phiếu kiểm kê (tránh ghi đè trạng thái khi máy đã xuất/đi nơi khác).
+                      // hoặc trạng thái máy là temporary thì bỏ qua việc cập nhật theo phiếu kiểm kê.
                       const [currentLocInfo] = await connection.query(
-                        `SELECT tl.id_department, tl.name_location
-                         FROM tb_machine_location tml
-                         LEFT JOIN tb_location tl ON tl.id_location = tml.id_location
-                         WHERE tml.id_machine = ?`,
+                        `SELECT tl.id_department, tl.name_location, m.current_status
+                          FROM tb_machine m
+                          LEFT JOIN tb_machine_location tml ON tml.id_machine = m.id_machine
+                          LEFT JOIN tb_location tl ON tl.id_location = tml.id_location
+                          WHERE m.id_machine = ?`,
                         [idMachine]
                       );
                       const isInDept10 = currentLocInfo.some(
                         (r) => String(r.id_department) === "10"
                       );
-                      if (isInDept10) {
+                      const isTemporary = currentLocInfo.some(
+                        (r) => r.current_status === "temporary"
+                      );
+                      if (isInDept10 || isTemporary) {
                         continue;
                       }
 
@@ -13483,12 +13495,12 @@ async function autoRefreshInventorySnapshot() {
          JOIN tb_location tl ON ml.id_location = tl.id_location
          JOIN tb_machine m ON ml.id_machine = m.id_machine
          WHERE m.current_status != 'liquidation'
-           AND m.current_status != 'temporary'
-           AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))`
+           AND m.current_status != 'temporary'`
       );
       const globalMachineLocMap = new Map();
       allMachineRows.forEach((r) => {
-        if (r.uuid_machine) globalMachineLocMap.set(r.uuid_machine, r.name_location);
+        if (r.uuid_machine)
+          globalMachineLocMap.set(r.uuid_machine, r.name_location);
       });
 
       for (const detail of details) {
@@ -13593,7 +13605,6 @@ async function autoRefreshInventorySnapshot() {
         // Với mỗi máy đã quét trong scanned_result:
         //   - Nếu máy B từ x5 vào x2 đã bị đánh mislocation=1:
         //     + Nếu bây giờ máy B có trong snapshot mới (thuộc đúng đơn vị) và vị trí trong snapshot mới = vị trí đã quét -> reset mislocation=0
-        //     + Nếu máy B không còn trong snapshot (đã chuyển ra khỏi đơn vị) -> bỏ khỏi scanned_result (không đếm nữa)
         //   - Cập nhật current_location theo snapshot mới
         let parsedScannedResult = null;
         try {
@@ -13632,7 +13643,8 @@ async function autoRefreshInventorySnapshot() {
                     // Trước đây thuộc đơn vị này, nay đã chuyển sang đơn vị khác
                     // -> cập nhật misdepartment=1 + mislocation=1
                     // -> tra globalMachineLocMap để lấy current_location thực tế mới
-                    const actualLocation = globalMachineLocMap.get(uuid) || m.current_location;
+                    const actualLocation =
+                      globalMachineLocMap.get(uuid) || m.current_location;
                     return {
                       ...m,
                       mislocation: "1",
@@ -13688,11 +13700,11 @@ async function autoRefreshInventorySnapshot() {
         // === 3. Lưu vào DB ===
         await connection.query(
           `UPDATE tb_inventory_check_detail
-         SET list_before_scan = ?,
+           SET list_before_scan = ?,
              scanned_result = ?,
              updated_by = 795009,
              updated_at = CURRENT_TIMESTAMP
-         WHERE id_inventory_check = ? AND id_department = ?`,
+           WHERE id_inventory_check = ? AND id_department = ?`,
           [
             JSON.stringify(newListBeforeScan),
             JSON.stringify(parsedScannedResult),
@@ -13798,15 +13810,15 @@ async function autoRefreshInventorySnapshot() {
 //   }
 // }
 
-// // 16:30 thứ 2-6 tạo phiếu kiểm kê tự động
-// cron.schedule("30 16 * * 1-5", autoCreateInventoryCheck, {
-//   timezone: "Asia/Ho_Chi_Minh",
-// });
+// 16:30 thứ 2-6 tạo phiếu kiểm kê tự động
+cron.schedule("30 16 * * 1-5", autoCreateInventoryCheck, {
+  timezone: "Asia/Ho_Chi_Minh",
+});
 
-// // 15:00 thứ 7 tạo phiếu kiểm kê tự động
-// cron.schedule("00 15 * * 6", autoCreateInventoryCheck, {
-//   timezone: "Asia/Ho_Chi_Minh",
-// });
+// 15:00 thứ 7 tạo phiếu kiểm kê tự động
+cron.schedule("00 15 * * 6", autoCreateInventoryCheck, {
+  timezone: "Asia/Ho_Chi_Minh",
+});
 
 // // 16:29 thứ 2-6 huỷ phiếu điều chuyển
 // cron.schedule("29 16 * * 1-5", autoCancelInternalTransfers, {
@@ -13819,16 +13831,12 @@ async function autoRefreshInventorySnapshot() {
 // });
 
 // 17:00-17:30 thứ 2-6 làm mới snapshot kiểm kê
-cron.schedule("0,5,10,15,20,25,30 17 * * 1-5", autoRefreshInventorySnapshot, {
+cron.schedule("00,10,20,30 17 * * 1-5", autoRefreshInventorySnapshot, {
   timezone: "Asia/Ho_Chi_Minh",
 });
 
 // 16:00-16:30 thứ 7 làm mới snapshot kiểm kê
-cron.schedule("0,5,10,15,20,25,30 16 * * 6", autoRefreshInventorySnapshot, {
-  timezone: "Asia/Ho_Chi_Minh",
-});
-
-cron.schedule("45 48 21 * * 1-7", autoRefreshInventorySnapshot, {
+cron.schedule("00,10,20,30 16 * * 6", autoRefreshInventorySnapshot, {
   timezone: "Asia/Ho_Chi_Minh",
 });
 
