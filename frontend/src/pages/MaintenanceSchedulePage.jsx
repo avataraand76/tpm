@@ -81,6 +81,7 @@ import {
 import { alpha } from "@mui/material/styles";
 import NavigationBar from "../components/NavigationBar";
 import RfidDialog from "../components/rfidScanner/RfidDialog";
+import { RfidClearableMultiline } from "../components/rfidScanner/rfidUiPrimitives";
 import { api } from "../api/api";
 import { useAuth } from "../hooks/useAuth";
 
@@ -509,6 +510,656 @@ const EvidenceImageFrame = ({ src, title, onRemove }) => {
         </Box>
       </Modal>
     </Box>
+  );
+};
+
+// ==================== BulkRfidDialog Component ====================
+const BulkRfidDialog = ({ open, onClose, year, month, onOpenHistory }) => {
+  const [inputValue, setInputValue] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState([]);
+  const [error, setError] = useState(null);
+  const inputRef = useRef(null);
+
+  // Auto focus the input field when dialog opens
+  useEffect(() => {
+    if (open) {
+      const timer = setTimeout(() => {
+        inputRef.current?.focus();
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [open]);
+
+  // Reset dialog state when opening/closing
+  useEffect(() => {
+    if (!open) {
+      setInputValue("");
+      setResults([]);
+      setError(null);
+      setLoading(false);
+    }
+  }, [open]);
+
+  // Extract non-empty unique RFIDs from input
+  const getParsedRfids = () => {
+    return inputValue
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+  };
+
+  const parsedRfids = getParsedRfids();
+  const uniqueCount = new Set(parsedRfids).size;
+
+  const handleCheck = async () => {
+    if (parsedRfids.length === 0) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await api.maintenance.getBulkMaintenanceByRfid({
+        rfid_list: parsedRfids,
+        year,
+        month,
+      });
+      if (res.success) {
+        setResults(res.data || []);
+      } else {
+        setError(res.message || "Đã xảy ra lỗi khi kiểm tra mã.");
+      }
+    } catch (err) {
+      setError(err?.response?.data?.message || "Không thể kết nối đến server.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClear = () => {
+    setInputValue("");
+    setResults([]);
+    setError(null);
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="max-content"
+      fullWidth
+      PaperProps={{
+        sx: { borderRadius: "16px", minHeight: "75vh", maxHeight: "90vh" },
+      }}
+    >
+      <DialogTitle
+        sx={{
+          background: "linear-gradient(135deg, #00897b 0%, #26a69a 100%)",
+          color: "#fff",
+          py: 2,
+          px: 3,
+        }}
+      >
+        <Stack
+          direction="row"
+          alignItems="center"
+          justifyContent="space-between"
+        >
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <WifiTethering />
+            <Typography variant="h6" fontWeight={700}>
+              Kiểm tra bảo dưỡng hàng loạt RFID
+            </Typography>
+          </Stack>
+          <IconButton onClick={onClose} sx={{ color: "#fff" }}>
+            <Close />
+          </IconButton>
+        </Stack>
+      </DialogTitle>
+
+      <DialogContent sx={{ p: 3, bgcolor: "#f8f9fc" }}>
+        <Grid container spacing={3} sx={{ height: "100%", mt: 1 }}>
+          {/* Input side */}
+          <Grid size={{ xs: 12, md: 4 }}>
+            <Paper
+              variant="outlined"
+              sx={{ p: 2.5, borderRadius: "12px", height: "100%" }}
+            >
+              <Typography
+                variant="subtitle2"
+                fontWeight={700}
+                sx={{ mb: 1, color: "text.primary" }}
+              >
+                Nhập danh sách mã RFID
+              </Typography>
+
+              <RfidClearableMultiline
+                label="Danh sách mã RFID"
+                placeholder="Quét hoặc nhập mã RFID ở đây..."
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onClear={handleClear}
+                disabled={loading}
+                rows={16}
+                inputRef={inputRef}
+              />
+
+              <Stack
+                direction="row"
+                justifyContent="space-between"
+                alignItems="center"
+                sx={{ mt: 1.5 }}
+              >
+                <Typography
+                  variant="caption"
+                  fontWeight={600}
+                  color="text.secondary"
+                >
+                  Đã phát hiện: <b>{uniqueCount}</b> mã duy nhất (Tổng:{" "}
+                  {parsedRfids.length})
+                </Typography>
+              </Stack>
+            </Paper>
+          </Grid>
+
+          {/* Results side */}
+          <Grid size={{ xs: 12, md: 8 }}>
+            <Paper
+              variant="outlined"
+              sx={{
+                p: 2.5,
+                borderRadius: "12px",
+                height: "100%",
+                display: "flex",
+                flexDirection: "column",
+                minHeight: "450px",
+              }}
+            >
+              <Typography
+                variant="subtitle2"
+                fontWeight={700}
+                sx={{ mb: 1.5, color: "text.primary" }}
+              >
+                Kết quả kiểm tra (Tháng {month}/{year})
+              </Typography>
+
+              {loading ? (
+                <Box
+                  sx={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flex: 1,
+                    py: 4,
+                  }}
+                >
+                  <CircularProgress
+                    size={36}
+                    sx={{ color: "#00897b", mb: 1.5 }}
+                  />
+                  <Typography variant="body2" color="text.secondary">
+                    Đang đối chiếu dữ liệu thiết bị...
+                  </Typography>
+                </Box>
+              ) : error ? (
+                <Box
+                  sx={{
+                    color: "error.main",
+                    py: 2,
+                    textAlign: "center",
+                    flex: 1,
+                  }}
+                >
+                  <Typography variant="body2">{error}</Typography>
+                </Box>
+              ) : results.length === 0 ? (
+                <Box
+                  sx={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flex: 1,
+                    py: 4,
+                    opacity: 0.5,
+                  }}
+                >
+                  <PrecisionManufacturing sx={{ fontSize: 48, mb: 1 }} />
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    textAlign="center"
+                  >
+                    Chưa có dữ liệu kiểm tra.
+                    <br />
+                    Quét RFID và nhấn "Kiểm tra bảo dưỡng".
+                  </Typography>
+                </Box>
+              ) : (
+                <Box
+                  sx={{
+                    flex: 1,
+                    overflowY: "auto",
+                    maxHeight: "520px",
+                    pr: 0.5,
+                  }}
+                >
+                  <Grid container spacing={2}>
+                    {results.map((item, idx) => {
+                      if (!item.found) {
+                        return (
+                          <Grid size={{ xs: 12, sm: 3 }} key={idx}>
+                            <Card
+                              elevation={1}
+                              sx={{
+                                borderRadius: "16px",
+                                border: "1px solid #ffe0b2",
+                                borderLeft: "4px solid #ff9800",
+                                bgcolor: "#fff3e0",
+                                height: "100%",
+                              }}
+                            >
+                              <CardContent
+                                sx={{ p: 2, "&:last-child": { pb: 2 } }}
+                              >
+                                {/* Header */}
+                                <Stack
+                                  direction="row"
+                                  alignItems="flex-start"
+                                  justifyContent="space-between"
+                                  spacing={1}
+                                  sx={{ mb: 1 }}
+                                >
+                                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                                    <Typography
+                                      variant="subtitle2"
+                                      fontWeight={700}
+                                      sx={{
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap",
+                                        fontSize: "0.85rem",
+                                        color: "warning.dark",
+                                      }}
+                                    >
+                                      Mã RFID chưa đăng ký
+                                    </Typography>
+                                    <Typography
+                                      variant="caption"
+                                      color="text.secondary"
+                                      sx={{
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap",
+                                        display: "block",
+                                        fontFamily: "monospace",
+                                      }}
+                                    >
+                                      {item.rfid}
+                                    </Typography>
+                                  </Box>
+                                  <Chip
+                                    label="Lỗi mã"
+                                    size="small"
+                                    color="warning"
+                                    sx={{
+                                      fontSize: "0.65rem",
+                                      height: 20,
+                                      fontWeight: 600,
+                                    }}
+                                  />
+                                </Stack>
+
+                                <Divider sx={{ mb: 1 }} />
+
+                                {/* Info rows */}
+                                <Stack spacing={0.5}>
+                                  <Stack
+                                    direction="row"
+                                    spacing={0.5}
+                                    alignItems="center"
+                                  >
+                                    <Close
+                                      color="warning"
+                                      sx={{ fontSize: 14, flexShrink: 0 }}
+                                    />
+                                    <Typography
+                                      variant="caption"
+                                      color="warning.dark"
+                                      fontWeight={600}
+                                    >
+                                      Thiết bị chưa được đăng ký trong hệ thống
+                                    </Typography>
+                                  </Stack>
+                                </Stack>
+
+                                <Box
+                                  sx={{
+                                    mt: 3,
+                                    pt: 0.75,
+                                    borderTop: "1px dashed #ffe0b2",
+                                  }}
+                                >
+                                  <Stack
+                                    direction="row"
+                                    alignItems="center"
+                                    justifyContent="space-between"
+                                  >
+                                    <Typography
+                                      variant="caption"
+                                      sx={{
+                                        color: "warning.dark",
+                                        fontWeight: 700,
+                                        fontSize: "0.75rem",
+                                      }}
+                                    >
+                                      Vui lòng kiểm tra lại
+                                    </Typography>
+                                    <Chip
+                                      label="Không tìm thấy"
+                                      size="small"
+                                      color="warning"
+                                      sx={{
+                                        height: 18,
+                                        fontSize: "0.62rem",
+                                        fontWeight: 700,
+                                      }}
+                                    />
+                                  </Stack>
+                                </Box>
+                              </CardContent>
+                            </Card>
+                          </Grid>
+                        );
+                      }
+
+                      const m = item.machine;
+                      const hasSched = item.has_schedule;
+
+                      if (!hasSched) {
+                        const statusCfg = STATUS_CONFIG[m.current_status] || {
+                          label: m.current_status || "N/A",
+                          color: "#757575",
+                          bg: "#f5f5f5",
+                        };
+
+                        return (
+                          <Grid size={{ xs: 12, sm: 3 }} key={idx}>
+                            <Card
+                              elevation={1}
+                              sx={{
+                                borderRadius: "16px",
+                                border: "1px solid rgba(0,0,0,0.08)",
+                                borderLeft: "4px solid #9e9e9e",
+                                bgcolor: "#fafafa",
+                                opacity: 0.85,
+                                height: "100%",
+                              }}
+                            >
+                              <CardContent
+                                sx={{ p: 2, "&:last-child": { pb: 2 } }}
+                              >
+                                {/* Header */}
+                                <Stack
+                                  direction="row"
+                                  alignItems="flex-start"
+                                  justifyContent="space-between"
+                                  spacing={1}
+                                  sx={{ mb: 1 }}
+                                >
+                                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                                    <Typography
+                                      variant="subtitle2"
+                                      fontWeight={700}
+                                      sx={{
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap",
+                                        fontSize: "0.85rem",
+                                        color: "text.secondary",
+                                      }}
+                                    >
+                                      {m.type_machine}
+                                    </Typography>
+                                    <Typography
+                                      variant="subtitle2"
+                                      fontWeight={700}
+                                      sx={{
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap",
+                                        fontSize: "0.85rem",
+                                        color: "text.secondary",
+                                      }}
+                                    >
+                                      {m.attribute_machine}
+                                    </Typography>
+                                    {m.model_machine && (
+                                      <Typography
+                                        variant="caption"
+                                        color="text.secondary"
+                                        sx={{
+                                          overflow: "hidden",
+                                          textOverflow: "ellipsis",
+                                          whiteSpace: "nowrap",
+                                          display: "block",
+                                        }}
+                                      >
+                                        {m.model_machine}
+                                      </Typography>
+                                    )}
+                                  </Box>
+                                  <Chip
+                                    label={statusCfg.label}
+                                    size="small"
+                                    sx={{
+                                      fontSize: "0.65rem",
+                                      height: 20,
+                                      bgcolor: statusCfg.bg,
+                                      color: statusCfg.color,
+                                      fontWeight: 600,
+                                    }}
+                                  />
+                                </Stack>
+
+                                <Divider sx={{ mb: 1 }} />
+
+                                {/* Info rows */}
+                                <Stack spacing={0.5}>
+                                  {m.serial_machine && (
+                                    <Stack
+                                      direction="row"
+                                      spacing={0.5}
+                                      alignItems="center"
+                                    >
+                                      <Typography
+                                        variant="caption"
+                                        color="text.secondary"
+                                        sx={{ minWidth: 45, flexShrink: 0 }}
+                                      >
+                                        Serial:
+                                      </Typography>
+                                      <Typography
+                                        variant="caption"
+                                        fontWeight={600}
+                                        sx={{
+                                          overflow: "hidden",
+                                          textOverflow: "ellipsis",
+                                          whiteSpace: "nowrap",
+                                          color: "text.secondary",
+                                        }}
+                                      >
+                                        {m.serial_machine}
+                                      </Typography>
+                                    </Stack>
+                                  )}
+                                  {m.name_location && (
+                                    <Stack
+                                      direction="row"
+                                      spacing={0.5}
+                                      alignItems="center"
+                                    >
+                                      <LocationOn
+                                        sx={{
+                                          fontSize: 12,
+                                          color: "text.secondary",
+                                          flexShrink: 0,
+                                        }}
+                                      />
+                                      <Typography
+                                        variant="caption"
+                                        color="text.secondary"
+                                        sx={{
+                                          overflow: "hidden",
+                                          textOverflow: "ellipsis",
+                                          whiteSpace: "nowrap",
+                                        }}
+                                      >
+                                        {m.name_location}{" "}
+                                        {m.name_department
+                                          ? ` · ${m.name_department}`
+                                          : ""}
+                                      </Typography>
+                                    </Stack>
+                                  )}
+                                  {m.manufacturer && (
+                                    <Stack
+                                      direction="row"
+                                      spacing={0.5}
+                                      alignItems="center"
+                                    >
+                                      <Typography
+                                        variant="caption"
+                                        color="text.secondary"
+                                        sx={{ minWidth: 45, flexShrink: 0 }}
+                                      >
+                                        Hãng:
+                                      </Typography>
+                                      <Typography
+                                        variant="caption"
+                                        fontWeight={600}
+                                        sx={{
+                                          overflow: "hidden",
+                                          textOverflow: "ellipsis",
+                                          whiteSpace: "nowrap",
+                                          color: "text.secondary",
+                                        }}
+                                      >
+                                        {m.manufacturer}
+                                      </Typography>
+                                    </Stack>
+                                  )}
+                                </Stack>
+
+                                <Divider sx={{ my: 1 }} />
+                                <Typography
+                                  variant="caption"
+                                  fontWeight={600}
+                                  color="text.secondary"
+                                  sx={{ display: "block", fontStyle: "italic" }}
+                                >
+                                  Không có lịch bảo dưỡng trong tháng này
+                                </Typography>
+
+                                <Box
+                                  sx={{
+                                    mt: 1,
+                                    pt: 0.75,
+                                    borderTop: "1px dashed #e0e0e0",
+                                  }}
+                                >
+                                  <Stack
+                                    direction="row"
+                                    alignItems="center"
+                                    justifyContent="space-between"
+                                  >
+                                    <Typography
+                                      variant="caption"
+                                      sx={{
+                                        color: "text.disabled",
+                                        fontWeight: 700,
+                                        fontSize: "0.75rem",
+                                      }}
+                                    >
+                                      Tháng {month}/{year}
+                                    </Typography>
+                                    <Chip
+                                      label="Không có lịch bảo dưỡng"
+                                      size="small"
+                                      sx={{
+                                        height: 18,
+                                        fontSize: "0.62rem",
+                                        fontWeight: 700,
+                                        bgcolor: "#e0e0e0",
+                                        color: "#757575",
+                                      }}
+                                    />
+                                  </Stack>
+                                </Box>
+                              </CardContent>
+                            </Card>
+                          </Grid>
+                        );
+                      }
+
+                      const s = item.schedule;
+
+                      return (
+                        <Grid size={{ xs: 12, sm: 3 }} key={idx}>
+                          <MachineCard
+                            machine={{ ...m, ...s }}
+                            onClick={() => {
+                              onOpenHistory({
+                                ...m,
+                                ...s,
+                                uuid_maintenance_schedule_detail:
+                                  s.uuid_maintenance_schedule_detail,
+                              });
+                            }}
+                          />
+                        </Grid>
+                      );
+                    })}
+                  </Grid>
+                </Box>
+              )}
+            </Paper>
+          </Grid>
+        </Grid>
+      </DialogContent>
+
+      <DialogActions sx={{ p: 2, px: 3, borderTop: "1px solid #e0e0e0" }}>
+        <Button
+          onClick={handleCheck}
+          variant="contained"
+          disabled={loading || parsedRfids.length === 0}
+          sx={{
+            borderRadius: "10px",
+            background: "linear-gradient(135deg, #00897b 0%, #26a69a 100%)",
+            px: 3,
+            fontWeight: 600,
+            textTransform: "none",
+            "&:hover": {
+              background: "linear-gradient(135deg, #00796b 0%, #00897b 100%)",
+            },
+          }}
+        >
+          {loading ? "Đang kiểm tra..." : "Kiểm tra bảo dưỡng"}
+        </Button>
+        <Button
+          onClick={onClose}
+          variant="outlined"
+          sx={{
+            borderRadius: "10px",
+            borderColor: "rgba(0,0,0,0.2)",
+            color: "text.secondary",
+            textTransform: "none",
+            fontWeight: 600,
+          }}
+        >
+          Đóng
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 };
 
@@ -2839,6 +3490,8 @@ const MaintenanceSchedulePage = () => {
       const response = await api.machines.search(searchTerm.trim(), {
         page: 1,
         limit: 10,
+        maintenance_year: currentYear,
+        maintenance_month: currentMonth,
       });
       setSearchResults(response.data || []);
     } catch (error) {
@@ -2917,6 +3570,7 @@ const MaintenanceSchedulePage = () => {
 
   // ── RFID lookup ──
   const [rfidDialogOpen, setRfidDialogOpen] = useState(false);
+  const [bulkRfidDialogOpen, setBulkRfidDialogOpen] = useState(false);
 
   const handleOpenRfidDialog = () => {
     setRfidDialogOpen(true);
@@ -3782,6 +4436,32 @@ const MaintenanceSchedulePage = () => {
                   </Button>
                 </Box>
 
+                {/* ── Bulk RFID Verification Button ── */}
+                <Box sx={{ mt: 1.5 }}>
+                  <Button
+                    fullWidth
+                    variant="outlined"
+                    size="small"
+                    onClick={() => setBulkRfidDialogOpen(true)}
+                    startIcon={<PrecisionManufacturing sx={{ fontSize: 18 }} />}
+                    sx={{
+                      borderRadius: "10px",
+                      textTransform: "none",
+                      fontWeight: 600,
+                      fontSize: "0.78rem",
+                      py: 1,
+                      borderColor: "#00897b",
+                      color: "#00897b",
+                      "&:hover": {
+                        borderColor: "#00796b",
+                        bgcolor: "rgba(0, 137, 123, 0.04)",
+                      },
+                    }}
+                  >
+                    Kiểm tra bảo dưỡng
+                  </Button>
+                </Box>
+
                 {/* ── Filters ── */}
                 <Box sx={{ mt: 2, pt: 1.5, borderTop: "1px dashed #e0e0e0" }}>
                   {/* Header */}
@@ -4465,6 +5145,17 @@ const MaintenanceSchedulePage = () => {
         open={rfidDialogOpen}
         onClose={() => setRfidDialogOpen(false)}
         onMachineFound={(machine) => {
+          setHistoryDialogMachine(machine);
+          setHistoryDialogOpen(true);
+        }}
+      />
+
+      <BulkRfidDialog
+        open={bulkRfidDialogOpen}
+        onClose={() => setBulkRfidDialogOpen(false)}
+        year={currentYear}
+        month={currentMonth}
+        onOpenHistory={(machine) => {
           setHistoryDialogMachine(machine);
           setHistoryDialogOpen(true);
         }}

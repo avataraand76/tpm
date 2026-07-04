@@ -1503,7 +1503,12 @@ app.get("/api/machines/search", authenticateToken, async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
-    const { ticket_type, filter_by_phongban_id } = req.query;
+    const {
+      ticket_type,
+      filter_by_phongban_id,
+      maintenance_year,
+      maintenance_month,
+    } = req.query;
 
     if (!search || search.trim().length === 0) {
       return res.json({
@@ -1625,6 +1630,16 @@ app.get("/api/machines/search", authenticateToken, async (req, res) => {
       `LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine`,
       `LEFT JOIN tb_location tl ON tl.id_location = ml.id_location`,
     ];
+
+    if (maintenance_year && maintenance_month) {
+      joins.push(
+        `JOIN tb_maintenance_schedule_detail msd ON msd.id_machine = m.id_machine`
+      );
+      whereConditions.push(`msd.year = ?`);
+      whereConditions.push(`msd.month = ?`);
+      searchParams.push(parseInt(maintenance_year));
+      searchParams.push(parseInt(maintenance_month));
+    }
 
     // Lọc theo phòng ban (nếu có - cho điều chuyển nội bộ)
     if (filter_by_phongban_id) {
@@ -13736,6 +13751,7 @@ async function autoRefreshInventorySnapshot() {
     connection.release();
   }
 }
+autoRefreshInventorySnapshot();
 
 // async function autoCancelInternalTransfers() {
 //   const connection = await tpmConnection.getConnection();
@@ -14570,9 +14586,9 @@ app.put(
         }
       }
 
-      // Lấy JSON + attached_file hiện tại cùng các cột cần cho việc swap
+      // Lấy JSON + attached_file hiện tại
       const [[row]] = await tpmConnection.query(
-        `SELECT id_machine, month, year, day, status, maintenance_content_detail, attached_file
+        `SELECT maintenance_content_detail, attached_file
          FROM tb_maintenance_schedule_detail
          WHERE uuid_maintenance_schedule_detail = ?`,
         [uuid]
@@ -14581,66 +14597,6 @@ app.put(
         return res
           .status(404)
           .json({ success: false, message: "Không tìm thấy bản ghi" });
-      }
-
-      // Swap logic: bù trừ nếu hoàn thành máy của tháng khác trong cùng quý
-      const isCompleting =
-        status === "completed" || status === "confirm_completed";
-      const wasPending = !row.status || row.status === "pending";
-
-      if (isCompleting && wasPending) {
-        const now = new Date();
-        const vnNow = new Date(
-          now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" })
-        );
-        const M_now = vnNow.getMonth() + 1; // 1-12
-        const Y_now = vnNow.getFullYear();
-        const D_now = vnNow.getDate();
-
-        if (
-          row.year === Y_now &&
-          Math.ceil(row.month / 3) === Math.ceil(M_now / 3) &&
-          row.month !== M_now
-        ) {
-          // 1. Thử tìm máy chưa thực hiện trong NGÀY HÔM NAY của tháng hiện tại
-          let [[candidate]] = await tpmConnection.query(
-            `SELECT id_maintenance_schedule_detail, month, day
-             FROM tb_maintenance_schedule_detail
-             WHERE year = ? AND month = ? AND day = ? AND (status IS NULL OR status = 'pending')
-             LIMIT 1`,
-            [Y_now, M_now, D_now]
-          );
-
-          // 2. Nếu không có máy nào hôm nay, tìm máy chưa thực hiện ở bất kỳ ngày nào trong tháng hiện tại
-          if (!candidate) {
-            [[candidate]] = await tpmConnection.query(
-              `SELECT id_maintenance_schedule_detail, month, day
-               FROM tb_maintenance_schedule_detail
-               WHERE year = ? AND month = ? AND (status IS NULL OR status = 'pending')
-               LIMIT 1`,
-              [Y_now, M_now]
-            );
-          }
-
-          if (candidate) {
-            // Thực hiện đổi tháng và ngày của 2 máy trong database
-            // - Máy A (uuid) chuyển sang tháng hiện tại (M_now) và ngày hôm nay (D_now)
-            // - Máy candidate chuyển sang tháng/ngày cũ của Máy A (row.month, row.day)
-            await tpmConnection.query(
-              `UPDATE tb_maintenance_schedule_detail
-               SET month = ?, day = ?
-               WHERE uuid_maintenance_schedule_detail = ?`,
-              [M_now, D_now, uuid]
-            );
-
-            await tpmConnection.query(
-              `UPDATE tb_maintenance_schedule_detail
-               SET month = ?, day = ?
-               WHERE id_maintenance_schedule_detail = ?`,
-              [row.month, row.day, candidate.id_maintenance_schedule_detail]
-            );
-          }
-        }
       }
 
       // Xử lý attached_file theo status
@@ -14872,14 +14828,13 @@ app.get(
 
       const machine = mrows[0];
 
-      // Lấy bản ghi lịch bảo dưỡng phù hợp với QUÝ hiện tại của VN
+      // Lấy bản ghi lịch bảo dưỡng phù hợp với THÁNG hiện tại của VN
       const now = new Date();
       const vnNow = new Date(
         now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" })
       );
       const curY = vnNow.getFullYear();
       const curM = vnNow.getMonth() + 1;
-      const curQ = Math.ceil(curM / 3);
 
       const [srows] = await tpmConnection.query(
         `SELECT
@@ -14892,16 +14847,9 @@ app.get(
            maintenance_content_detail,
            attached_file
          FROM tb_maintenance_schedule_detail
-         WHERE id_machine = ?
-         ORDER BY
-           (year = ? AND CEILING(month / 3) = ?) DESC,
-           (year = ? AND month >= ? AND status = 'pending') DESC,
-           (year = ? AND month >= ?) DESC,
-           year DESC,
-           month DESC,
-           day DESC
+         WHERE id_machine = ? AND year = ? AND month = ?
          LIMIT 1`,
-        [machine.id_machine, curY, curQ, curY, curM, curY, curM]
+        [machine.id_machine, curY, curM]
       );
 
       if (!srows.length) {
@@ -14910,7 +14858,7 @@ app.get(
           code: "NO_SCHEDULE",
           message: `Máy "${
             machine.type_machine || machine.serial_machine || code
-          }" chưa có lịch bảo dưỡng được thiết lập`,
+          }" không có lịch bảo dưỡng trong tháng hiện tại`,
           machine: {
             type_machine: machine.type_machine,
             attribute_machine: machine.attribute_machine,
@@ -15014,20 +14962,13 @@ app.get(
 
       const machine = mrows[0];
 
-      // Lấy bản ghi lịch bảo dưỡng phù hợp với QUÝ hiện tại của VN
-      // (1 máy / quý → ưu tiên bản ghi cùng quý đang chạy, không phải cùng tháng).
-      // Thứ tự ưu tiên:
-      //   1) Cùng năm + cùng quý hiện tại (kể cả status nào)
-      //   2) Trong năm hiện tại: bản ghi pending có tháng nhỏ nhất ≥ tháng hiện tại
-      //      (lịch sắp tới trong cùng năm)
-      //   3) Bản ghi mới nhất theo year/month/day
+      // Lấy bản ghi lịch bảo dưỡng phù hợp với THÁNG hiện tại của VN
       const now = new Date();
       const vnNow = new Date(
         now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" })
       );
       const curY = vnNow.getFullYear();
       const curM = vnNow.getMonth() + 1;
-      const curQ = Math.ceil(curM / 3);
 
       const [srows] = await tpmConnection.query(
         `SELECT
@@ -15040,16 +14981,9 @@ app.get(
            maintenance_content_detail,
            attached_file
          FROM tb_maintenance_schedule_detail
-         WHERE id_machine = ?
-         ORDER BY
-           (year = ? AND CEILING(month / 3) = ?) DESC,
-           (year = ? AND month >= ? AND status = 'pending') DESC,
-           (year = ? AND month >= ?) DESC,
-           year DESC,
-           month DESC,
-           day DESC
+         WHERE id_machine = ? AND year = ? AND month = ?
          LIMIT 1`,
-        [machine.id_machine, curY, curQ, curY, curM, curY, curM]
+        [machine.id_machine, curY, curM]
       );
 
       // Kiểm tra có lịch bảo dưỡng hay không
@@ -15059,7 +14993,7 @@ app.get(
           code: "NO_SCHEDULE",
           message: `Máy "${
             machine.type_machine || machine.serial_machine || code
-          }" chưa có lịch bảo dưỡng được thiết lập`,
+          }" không có lịch bảo dưỡng trong tháng hiện tại`,
           machine: {
             type_machine: machine.type_machine,
             attribute_machine: machine.attribute_machine,
@@ -15104,6 +15038,139 @@ app.get(
       });
     } catch (error) {
       console.error("Error looking up machine by RFID:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+);
+
+// POST /api/maintenance-schedule-detail/by-rfid-list — Tra cứu và kiểm tra bảo dưỡng hàng loạt RFID
+app.post(
+  "/api/maintenance-schedule-detail/by-rfid-list",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { rfid_list, year, month } = req.body;
+      const targetYear = year ? parseInt(year) : new Date().getFullYear();
+      const targetMonth = month ? parseInt(month) : new Date().getMonth() + 1;
+
+      if (!rfid_list || !Array.isArray(rfid_list) || rfid_list.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Danh sách mã RFID là bắt buộc",
+        });
+      }
+
+      // Lọc ra các mã độc nhất và không rỗng
+      const uniqueRfids = [
+        ...new Set(
+          rfid_list.map((r) => String(r || "").trim()).filter(Boolean)
+        ),
+      ];
+
+      if (uniqueRfids.length === 0) {
+        return res.json({ success: true, data: [] });
+      }
+
+      // 1. Tìm thông tin máy từ các RFID này
+      const [machines] = await tpmConnection.query(
+        `SELECT
+           m.id_machine,
+           m.uuid_machine,
+           m.code_machine,
+           m.type_machine,
+           m.attribute_machine,
+           m.model_machine,
+           m.serial_machine,
+           m.RFID_machine,
+           m.NFC_machine,
+           m.current_status,
+           l.name_location,
+           d.name_department,
+           m.manufacturer,
+           m.supplier,
+           m.serial_machine,
+           m.RFID_machine,
+           m.NFC_machine,
+           m.current_status,
+           m.power,
+           m.pressure,
+           m.voltage,
+           m.price,
+           m.note,
+           DATE_FORMAT(m.date_of_use, '%d/%m/%Y') AS date_of_use
+         FROM tb_machine m
+         LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
+         LEFT JOIN tb_location l ON l.id_location = ml.id_location
+         LEFT JOIN tb_department d ON d.id_department = l.id_department
+         WHERE m.RFID_machine IN (?) OR m.NFC_machine IN (?)`,
+        [uniqueRfids, uniqueRfids]
+      );
+
+      // Map để tra cứu thông tin máy theo RFID/NFC nhanh chóng
+      const machineMap = new Map();
+      const machineIds = [];
+      machines.forEach((m) => {
+        if (m.RFID_machine)
+          machineMap.set(m.RFID_machine.trim().toLowerCase(), m);
+        if (m.NFC_machine)
+          machineMap.set(m.NFC_machine.trim().toLowerCase(), m);
+        machineIds.push(m.id_machine);
+      });
+
+      // 2. Tìm lịch bảo dưỡng cho các máy này trong tháng/năm chỉ định
+      let scheduleMap = new Map();
+      if (machineIds.length > 0) {
+        const [schedules] = await tpmConnection.query(
+          `SELECT
+             id_maintenance_schedule_detail,
+             uuid_maintenance_schedule_detail,
+             id_machine,
+             year,
+             month,
+             day,
+             status,
+             maintenance_content_detail,
+             attached_file
+           FROM tb_maintenance_schedule_detail
+           WHERE id_machine IN (?) AND year = ? AND month = ?`,
+          [machineIds, targetYear, targetMonth]
+        );
+        schedules.forEach((s) => {
+          scheduleMap.set(s.id_machine, s);
+        });
+      }
+
+      // 3. Kết hợp kết quả theo thứ tự của danh sách rfid_list đầu vào
+      const result = rfid_list.map((rfidRaw) => {
+        const rfid = String(rfidRaw || "").trim();
+        const rfidKey = rfid.toLowerCase();
+        const machine = machineMap.get(rfidKey);
+
+        if (!machine) {
+          return {
+            rfid,
+            found: false,
+            has_schedule: false,
+          };
+        }
+
+        const schedule = scheduleMap.get(machine.id_machine);
+
+        return {
+          rfid,
+          found: true,
+          has_schedule: !!schedule,
+          machine,
+          schedule: schedule || null,
+        };
+      });
+
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      console.error("Error bulk checking RFID maintenance schedule:", error);
       res.status(500).json({ success: false, message: error.message });
     }
   }

@@ -821,6 +821,14 @@ export const api = {
       );
       return response.data;
     },
+    getBulkMaintenanceByRfid: async (data) => {
+      // data: { rfid_list: [...], year, month }
+      const response = await httpConnect.post(
+        "/api/maintenance-schedule-detail/by-rfid-list",
+        data
+      );
+      return response.data;
+    },
   },
 };
 
