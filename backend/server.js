@@ -13930,6 +13930,7 @@ async function autoCreateMaintenanceScheduleDetail() {
     const [machines] = await connection.query(`
       SELECT
         m.id_machine,
+        m.created_at,
         mt.id_machine_type,
         mt.name_machine_type,
         ma.id_machine_attribute,
@@ -13972,7 +13973,7 @@ async function autoCreateMaintenanceScheduleDetail() {
     // Helper: phân chia danh sách máy vào các ngày làm việc của MỘT QUÝ
     // (chỉ tính các tháng được chọn trong quý đó)
     const distributeToQuarterWorkingDays = (
-      machineIds,
+      machinesInQuarter,
       selectedMonthsInQuarter,
       maintenanceContent
     ) => {
@@ -13986,32 +13987,103 @@ async function autoCreateMaintenanceScheduleDetail() {
           const dateCheck = new Date(currentYear, monthNum - 1, d);
           const isSunday = dateCheck.getDay() === 0;
           if (!holidays.has(d) && !isSunday) {
-            workingSlots.push({ month: monthNum, day: d });
+            workingSlots.push({ month: monthNum, day: d, assignedCount: 0 });
           }
         }
       }
-      // Công thức: N máy / D ngày làm việc theo quý = a dư b
-      //   → b ngày đầu: a+1 máy/ngày
-      //   → D-b ngày còn lại: a máy/ngày
       const D = workingSlots.length;
       if (D === 0) return [];
-      const N = machineIds.length;
-      const a = Math.floor(N / D);
-      const b = N % D;
+
+      // Map each machine to its creation date value YYYYMMDD and preferred month in this quarter
+      const machinesWithMeta = machinesInQuarter.map((m) => {
+        let createdDateVal = 0; // 0 means no constraint (created in past year or null)
+        let prefMonth = null;
+
+        let createdYear = null;
+        let createdMonth = null;
+        let createdDay = null;
+
+        if (m.created_at) {
+          const createdDate = new Date(m.created_at);
+          const vnCreated = new Date(
+            createdDate.toLocaleString("en-US", {
+              timeZone: "Asia/Ho_Chi_Minh",
+            })
+          );
+          createdYear = vnCreated.getFullYear();
+          createdMonth = vnCreated.getMonth() + 1;
+          createdDay = vnCreated.getDate();
+
+          if (createdYear === currentYear) {
+            createdDateVal =
+              createdYear * 10000 + createdMonth * 100 + createdDay;
+          } else if (createdYear > currentYear) {
+            createdDateVal = 99999999;
+          }
+        }
+
+        if (selectedMonthsInQuarter.length > 0) {
+          const firstMonth = selectedMonthsInQuarter[0];
+          const q = Math.ceil(firstMonth / 3);
+
+          let offset;
+          if (createdYear === currentYear) {
+            // New machines created in current year: align offset with creation month
+            offset = (createdMonth - 1) % 3;
+          } else {
+            // Old machines or null created_at: use machine ID to distribute offset evenly
+            offset = m.id_machine % 3;
+          }
+          prefMonth = (q - 1) * 3 + 1 + offset;
+        }
+
+        return { machine: m, createdDateVal, prefMonth };
+      });
+
+      // Sort machines by createdDateVal descending (most constrained/latest created comes first)
+      machinesWithMeta.sort((a, b) => b.createdDateVal - a.createdDateVal);
+
       const result = [];
-      let idx = 0;
-      for (let wi = 0; wi < D; wi++) {
-        const slot = workingSlots[wi];
-        const count = wi < b ? a + 1 : a;
-        for (let i = 0; i < count; i++) {
+      for (const { machine, createdDateVal, prefMonth } of machinesWithMeta) {
+        // Find all working slots where slot's dateVal >= machine's createdDateVal
+        // AND if prefMonth is in selectedMonthsInQuarter, slot.month === prefMonth
+        const hasPrefMonth =
+          prefMonth && selectedMonthsInQuarter.includes(prefMonth);
+
+        let bestSlot = null;
+        for (const slot of workingSlots) {
+          const slotDateVal = currentYear * 10000 + slot.month * 100 + slot.day;
+          if (slotDateVal >= createdDateVal) {
+            if (!hasPrefMonth || slot.month === prefMonth) {
+              if (!bestSlot || slot.assignedCount < bestSlot.assignedCount) {
+                bestSlot = slot;
+              }
+            }
+          }
+        }
+
+        // Fallback: if no slot in preferred month (e.g. all slots full), relax constraint
+        if (!bestSlot && hasPrefMonth) {
+          for (const slot of workingSlots) {
+            const slotDateVal =
+              currentYear * 10000 + slot.month * 100 + slot.day;
+            if (slotDateVal >= createdDateVal) {
+              if (!bestSlot || slot.assignedCount < bestSlot.assignedCount) {
+                bestSlot = slot;
+              }
+            }
+          }
+        }
+
+        if (bestSlot) {
+          bestSlot.assignedCount++;
           result.push([
-            machineIds[idx],
+            machine.id_machine,
             currentYear,
-            slot.month,
-            slot.day,
+            bestSlot.month,
+            bestSlot.day,
             maintenanceContent,
           ]);
-          idx++;
         }
       }
       return result;
@@ -14060,10 +14132,10 @@ async function autoCreateMaintenanceScheduleDetail() {
             monthFlags,
             maintenanceContent,
             groupLabel,
-            machineIds: [],
+            machinesInGroup: [],
           });
         }
-        groups.get(key).machineIds.push(machine.id_machine);
+        groups.get(key).machinesInGroup.push(machine);
       }
       return groups;
     };
@@ -14088,17 +14160,36 @@ async function autoCreateMaintenanceScheduleDetail() {
       }
       const newGroups = buildGroups(newMachines);
       for (const group of newGroups.values()) {
-        const { monthFlags, maintenanceContent, groupLabel, machineIds } =
+        const { monthFlags, maintenanceContent, groupLabel, machinesInGroup } =
           group;
-        if (machineIds.length === 0) continue;
+        if (machinesInGroup.length === 0) continue;
         const rowsBefore = rows.length;
         const quarterDescs = [];
         for (const { q, months } of QUARTERS) {
           const selected = months.filter((m) => monthFlags[m]);
           if (selected.length === 0) continue;
+
+          // Filter machines in this group that were created in or before this quarter
+          const machinesForQuarter = machinesInGroup.filter((m) => {
+            if (!m.created_at) return true;
+            const createdDate = new Date(m.created_at);
+            const vnCreated = new Date(
+              createdDate.toLocaleString("en-US", {
+                timeZone: "Asia/Ho_Chi_Minh",
+              })
+            );
+            const createdYear = vnCreated.getFullYear();
+            if (createdYear < currentYear) return true;
+            if (createdYear > currentYear) return false;
+            const createdMonth = vnCreated.getMonth() + 1;
+            return createdMonth <= q * 3;
+          });
+
+          if (machinesForQuarter.length === 0) continue;
+
           rows.push(
             ...distributeToQuarterWorkingDays(
-              machineIds,
+              machinesForQuarter,
               selected,
               maintenanceContent
             )
@@ -14108,7 +14199,7 @@ async function autoCreateMaintenanceScheduleDetail() {
         if (rows.length > rowsBefore) {
           pass1ActiveGroups.push({
             groupLabel,
-            machineCount: machineIds.length,
+            machineCount: machinesInGroup.length,
             activeQuarters: quarterDescs.join(" + "),
           });
         }
@@ -14122,17 +14213,40 @@ async function autoCreateMaintenanceScheduleDetail() {
     if (existingMachines.length > 0) {
       const existingGroups = buildGroups(existingMachines);
       for (const group of existingGroups.values()) {
-        const { monthFlags, maintenanceContent, groupLabel, machineIds } =
+        const { monthFlags, maintenanceContent, groupLabel, machinesInGroup } =
           group;
-        if (machineIds.length === 0) continue;
+        if (machinesInGroup.length === 0) continue;
         const newQuarterDescs = [];
         for (const { q, months } of QUARTERS) {
           const selected = months.filter((m) => monthFlags[m]);
           if (selected.length === 0) continue;
+
+          // Filter machines in this group that were created in or before this quarter
+          const machinesForQuarter = machinesInGroup.filter((m) => {
+            if (!m.created_at) return true;
+            const createdDate = new Date(m.created_at);
+            const vnCreated = new Date(
+              createdDate.toLocaleString("en-US", {
+                timeZone: "Asia/Ho_Chi_Minh",
+              })
+            );
+            const createdYear = vnCreated.getFullYear();
+            if (createdYear < currentYear) return true;
+            if (createdYear > currentYear) return false;
+            const createdMonth = vnCreated.getMonth() + 1;
+            return createdMonth <= q * 3;
+          });
+
+          if (machinesForQuarter.length === 0) continue;
+
+          const machineIdsForQuarter = machinesForQuarter.map(
+            (m) => m.id_machine
+          );
+
           // Quý này là mới nếu KHÔNG CÓ máy nào trong nhóm đã có record
           // ở BẤT KỲ tháng nào của quý (idempotent ở mức quý — tránh phân bổ
           // lại khi đã có một phần dữ liệu của quý đó)
-          const noneHaveQuarter = machineIds.every((id) => {
+          const noneHaveQuarter = machineIdsForQuarter.every((id) => {
             const set = existingMonthsByMachine.get(id);
             if (!set) return true;
             return months.every((m) => !set.has(m));
@@ -14140,7 +14254,7 @@ async function autoCreateMaintenanceScheduleDetail() {
           if (!noneHaveQuarter) continue;
           rows.push(
             ...distributeToQuarterWorkingDays(
-              machineIds,
+              machinesForQuarter,
               selected,
               maintenanceContent
             )
@@ -14150,7 +14264,7 @@ async function autoCreateMaintenanceScheduleDetail() {
         if (newQuarterDescs.length > 0) {
           pass2ActiveGroups.push({
             groupLabel,
-            machineCount: machineIds.length,
+            machineCount: machinesInGroup.length,
             newQuarters: newQuarterDescs.join(" + "),
           });
         }
@@ -14238,11 +14352,6 @@ app.post(
     }
   }
 );
-
-// mỗi 30 phút tạo lịch bảo dưỡng cho các máy mới hoặc có tháng mới được cấu hình trong năm hiện tại
-cron.schedule("*/30 * * * 1-6", autoCreateMaintenanceScheduleDetail, {
-  timezone: "Asia/Ho_Chi_Minh",
-});
 
 // Phân bổ lại máy chưa bảo dưỡng (pending) từ các ngày đã qua trong tháng vào các ngày làm việc còn lại
 async function autoRedistributeOverdueMaintenanceInMonth() {
@@ -14479,6 +14588,11 @@ app.post(
     }
   }
 );
+
+// mỗi 30 phút tạo lịch bảo dưỡng cho các máy mới hoặc có tháng mới được cấu hình trong năm hiện tại
+cron.schedule("*/30 * * * 1-6", autoCreateMaintenanceScheduleDetail, {
+  timezone: "Asia/Ho_Chi_Minh",
+});
 
 // 0h thứ 2-7 sắp xếp lại các máy chưa bảo dưỡng trong tháng vào các ngày làm việc còn lại của tháng đó
 cron.schedule("00 00 * * 1-6", autoRedistributeOverdueMaintenanceInMonth, {
