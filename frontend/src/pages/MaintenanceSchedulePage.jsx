@@ -67,7 +67,9 @@ import {
   HourglassEmpty,
   WifiTethering,
   PictureAsPdf,
+  Add,
   AddPhotoAlternate,
+  PhotoCamera,
   DeleteOutline,
   ZoomOutMap,
   OpenInNew,
@@ -1177,8 +1179,9 @@ const MaintenanceHistoryDialog = ({
   onClose,
   machine,
   onStatusChange,
+  onBreakdownDetailChange,
 }) => {
-  const { permissions = [] } = useAuth() || {};
+  const { user, permissions = [] } = useAuth() || {};
   const isAdmin = permissions.includes("admin");
   const canEdit = permissions.includes("edit");
   const canToggleStatus = isAdmin || canEdit;
@@ -1194,6 +1197,90 @@ const MaintenanceHistoryDialog = ({
   // Confirm dialog cho admin khi bấm "Duyệt hoàn thành" / "Duyệt chưa hoàn thành"
   // null | { targetStatus, title, message, confirmLabel, confirmColor }
   const [confirmAction, setConfirmAction] = useState(null);
+
+  // States and refs for Section E (Breakdowns)
+  const [breakdownDetailList, setBreakdownDetailList] = useState([]);
+  const [predefinedBreakdowns, setPredefinedBreakdowns] = useState([]);
+  const [selectedBreakdown, setSelectedBreakdown] = useState(null);
+  const [savingBreakdown, setSavingBreakdown] = useState(false);
+  const [breakdownSuccess, setBreakdownSuccess] = useState(false);
+  const [breakdownError, setBreakdownError] = useState(null);
+  const originalBreakdownListRef = useRef([]);
+
+  // Camera capture states and refs
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraStream, setCameraStream] = useState(null);
+  const videoRef = useRef(null);
+
+  const handleStopCamera = useCallback(() => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach((track) => track.stop());
+      setCameraStream(null);
+    }
+    setCameraOpen(false);
+  }, [cameraStream]);
+
+  const handleStartCamera = async () => {
+    setCameraOpen(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+      });
+      setCameraStream(stream);
+    } catch (err) {
+      console.error("Không thể truy cập camera:", err);
+      alert("Không thể truy cập camera. Vui lòng kiểm tra quyền thiết bị.");
+      setCameraOpen(false);
+    }
+  };
+
+  const handleCapturePhoto = () => {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(
+      (blob) => {
+        if (blob) {
+          const file = new File([blob], `camera_capture_${Date.now()}.jpg`, {
+            type: "image/jpeg",
+          });
+          setEvidenceFiles((prev) => [...prev, file]);
+        }
+      },
+      "image/jpeg",
+      0.9
+    );
+    handleStopCamera();
+  };
+
+  useEffect(() => {
+    if (cameraOpen && cameraStream && videoRef.current) {
+      videoRef.current.srcObject = cameraStream;
+    }
+  }, [cameraOpen, cameraStream]);
+
+  useEffect(() => {
+    return () => {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, [cameraStream]);
+
+  const fetchPredefinedBreakdowns = useCallback(async () => {
+    try {
+      const res = await api.maintenance.getBreakdowns();
+      if (res.success) {
+        setPredefinedBreakdowns(res.data || []);
+      }
+    } catch (err) {
+      console.error("Error fetching predefined breakdowns:", err);
+    }
+  }, []);
 
   const fetchHistory = useCallback(async (id_machine) => {
     if (!id_machine) return;
@@ -1214,8 +1301,28 @@ const MaintenanceHistoryDialog = ({
       setEvidenceFiles([]);
       setCurrentAttached(parseAttachedFile(machine.attached_file));
       fetchHistory(machine.id_machine);
+
+      // Initialize breakdown detail list from machine details
+      let bdList = [];
+      try {
+        if (machine.maintenance_breakdown_detail) {
+          const parsed =
+            typeof machine.maintenance_breakdown_detail === "string"
+              ? JSON.parse(machine.maintenance_breakdown_detail)
+              : machine.maintenance_breakdown_detail;
+          bdList = Array.isArray(parsed) ? parsed : [];
+        }
+      } catch {
+        bdList = [];
+      }
+      setBreakdownDetailList(bdList);
+      originalBreakdownListRef.current = JSON.parse(JSON.stringify(bdList));
+      setSelectedBreakdown(null);
+      setBreakdownSuccess(false);
+      setBreakdownError(null);
+      fetchPredefinedBreakdowns();
     }
-  }, [open, machine, fetchHistory]);
+  }, [open, machine, fetchHistory, fetchPredefinedBreakdowns]);
 
   // Tạo Object URL cho file local để preview, revoke khi unmount
   const evidencePreviews = useMemo(
@@ -1294,6 +1401,49 @@ const MaintenanceHistoryDialog = ({
 
     setStatusUpdating(true);
     try {
+      if (newStatus === "completed") {
+        const now = new Date();
+        const vnNow = new Date(
+          now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" })
+        );
+        const pad = (n) => String(n).padStart(2, "0");
+        const formattedDate = `${vnNow.getFullYear()}-${pad(vnNow.getMonth() + 1)}-${pad(vnNow.getDate())} ${pad(vnNow.getHours())}:${pad(vnNow.getMinutes())}:${pad(vnNow.getSeconds())}`;
+        const userId = user?.id || null;
+        const userFormatted =
+          user?.ma_nv && user?.name
+            ? `${user.ma_nv}: ${user.name}`
+            : user?.name || user?.ma_nv || "N/A";
+
+        const updatedList = breakdownDetailList.map((item, idx) => {
+          const orig = originalBreakdownListRef.current[idx];
+          if (!orig || orig.note !== item.note || orig.name !== item.name) {
+            return {
+              ...item,
+              noted_at: formattedDate,
+              noted_by: userId,
+              noted_by_name: userFormatted,
+            };
+          }
+          return item;
+        });
+
+        await api.maintenance.updateBreakdownDetail(
+          machine.uuid_maintenance_schedule_detail,
+          updatedList
+        );
+
+        setBreakdownDetailList(updatedList);
+        originalBreakdownListRef.current = JSON.parse(
+          JSON.stringify(updatedList)
+        );
+        if (onBreakdownDetailChange) {
+          onBreakdownDetailChange(
+            machine.uuid_maintenance_schedule_detail,
+            updatedList
+          );
+        }
+      }
+
       const result = await api.maintenance.updateScheduleStatus(
         machine.uuid_maintenance_schedule_detail,
         newStatus,
@@ -1319,6 +1469,103 @@ const MaintenanceHistoryDialog = ({
       void e;
     } finally {
       setStatusUpdating(false);
+    }
+  };
+
+  const handleAddBreakdown = () => {
+    if (!selectedBreakdown) return;
+
+    const exists = breakdownDetailList.some(
+      (item) => item.name === selectedBreakdown.name_maintenance_breakdown
+    );
+    if (exists) {
+      setBreakdownError("Lỗi này đã được thêm vào danh sách.");
+      return;
+    }
+
+    const newItem = {
+      name: selectedBreakdown.name_maintenance_breakdown,
+      note: "",
+      noted_at: "",
+      noted_by: "",
+    };
+
+    setBreakdownDetailList((prev) => [...prev, newItem]);
+    setSelectedBreakdown(null);
+    setBreakdownError(null);
+    setBreakdownSuccess(false);
+  };
+
+  const handleRemoveBreakdown = (idx) => {
+    setBreakdownDetailList((prev) => prev.filter((_, i) => i !== idx));
+    setBreakdownSuccess(false);
+  };
+
+  const handleNoteChange = (idx, value) => {
+    setBreakdownDetailList((prev) =>
+      prev.map((item, i) => (i === idx ? { ...item, note: value } : item))
+    );
+    setBreakdownSuccess(false);
+  };
+
+  const handleSaveBreakdownDetails = async () => {
+    if (!machine) return;
+    setSavingBreakdown(true);
+    setBreakdownError(null);
+    setBreakdownSuccess(false);
+    try {
+      const now = new Date();
+      const vnNow = new Date(
+        now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" })
+      );
+      const pad = (n) => String(n).padStart(2, "0");
+      const formattedDate = `${vnNow.getFullYear()}-${pad(vnNow.getMonth() + 1)}-${pad(vnNow.getDate())} ${pad(vnNow.getHours())}:${pad(vnNow.getMinutes())}:${pad(vnNow.getSeconds())}`;
+      const userId = user?.id || null;
+      const userFormatted =
+        user?.ma_nv && user?.name
+          ? `${user.ma_nv}: ${user.name}`
+          : user?.name || user?.ma_nv || "N/A";
+
+      const updatedList = breakdownDetailList.map((item, idx) => {
+        const orig = originalBreakdownListRef.current[idx];
+        if (!orig || orig.note !== item.note || orig.name !== item.name) {
+          return {
+            ...item,
+            noted_at: formattedDate,
+            noted_by: userId,
+            noted_by_name: userFormatted,
+          };
+        }
+        return item;
+      });
+
+      const res = await api.maintenance.updateBreakdownDetail(
+        machine.uuid_maintenance_schedule_detail,
+        updatedList
+      );
+
+      if (res.success) {
+        setBreakdownDetailList(updatedList);
+        originalBreakdownListRef.current = JSON.parse(
+          JSON.stringify(updatedList)
+        );
+        setBreakdownSuccess(true);
+        if (onBreakdownDetailChange) {
+          onBreakdownDetailChange(
+            machine.uuid_maintenance_schedule_detail,
+            updatedList
+          );
+        }
+      } else {
+        setBreakdownError(res.message || "Lỗi không xác định khi lưu.");
+      }
+    } catch (err) {
+      console.error(err);
+      setBreakdownError(
+        err?.response?.data?.message || "Lỗi kết nối đến server."
+      );
+    } finally {
+      setSavingBreakdown(false);
     }
   };
 
@@ -1464,6 +1711,22 @@ const MaintenanceHistoryDialog = ({
         .join("");
     }
 
+    const sectionE_html =
+      breakdownDetailList.length > 0
+        ? breakdownDetailList
+            .map(
+              (item, i) => `
+            <tr>
+              <td style="text-align:center;width:38px">${i + 1}</td>
+              <td style="font-weight:700;color:#7b1fa2">${esc(item.name)}</td>
+              <td>${esc(item.note)}</td>
+              <td>${esc(item.noted_at || "—")}</td>
+              <td>${esc(item.noted_by_name || item.noted_by || "—")}</td>
+            </tr>`
+            )
+            .join("")
+        : `<tr><td colspan="5" style="text-align:center;font-style:italic;color:#888;padding:12px">Chưa ghi nhận lịch sử sửa chữa</td></tr>`;
+
     const html = `<!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -1515,6 +1778,7 @@ const MaintenanceHistoryDialog = ({
   .section-title.a { background: linear-gradient(90deg,#667eea,#764ba2); }
   .section-title.b { background: linear-gradient(90deg,#546e7a,#78909c); }
   .section-title.c { background: linear-gradient(90deg,#00897b,#26a69a); }
+  .section-title.e { background: linear-gradient(90deg,#7b1fa2,#9c27b0); }
   .section-body { padding: 10px 12px; }
   .sub-title {
     display:inline-block;
@@ -1726,6 +1990,25 @@ const MaintenanceHistoryDialog = ({
           </tr>
         </thead>
         <tbody>${sectionC_html}</tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SECTION E -->
+  <div class="section">
+    <div class="section-title e">D. LỊCH SỬ SỬA CHỮA MÁY MÓC THIẾT BỊ</div>
+    <div class="section-body">
+      <table class="grid">
+        <thead>
+          <tr>
+            <th style="width:38px">STT</th>
+            <th>Tên lỗi</th>
+            <th>Chi tiết sửa chữa</th>
+            <th style="width:140px">Ngày ghi nhận</th>
+            <th>Người ghi nhận</th>
+          </tr>
+        </thead>
+        <tbody>${sectionE_html}</tbody>
       </table>
     </div>
   </div>
@@ -2521,30 +2804,53 @@ const MaintenanceHistoryDialog = ({
                   </Box>
                 )}
 
-                <Button
-                  component="label"
-                  variant="outlined"
-                  startIcon={<AddPhotoAlternate />}
-                  sx={{
-                    borderRadius: "10px",
-                    borderColor: "#ef6c00",
-                    color: "#ef6c00",
-                    "&:hover": {
-                      borderColor: "#bf360c",
-                      bgcolor: "#fff3e0",
-                    },
-                    fontWeight: 600,
-                  }}
+                <Stack
+                  direction="row"
+                  spacing={1.5}
+                  sx={{ flexWrap: "wrap", gap: 1 }}
                 >
-                  Chọn ảnh minh chứng
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    hidden
-                    onChange={handlePickFiles}
-                  />
-                </Button>
+                  <Button
+                    component="label"
+                    variant="outlined"
+                    startIcon={<AddPhotoAlternate />}
+                    sx={{
+                      borderRadius: "10px",
+                      borderColor: "#ef6c00",
+                      color: "#ef6c00",
+                      "&:hover": {
+                        borderColor: "#bf360c",
+                        bgcolor: "#fff3e0",
+                      },
+                      fontWeight: 600,
+                    }}
+                  >
+                    Chọn ảnh minh chứng
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      hidden
+                      onChange={handlePickFiles}
+                    />
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    startIcon={<PhotoCamera />}
+                    onClick={handleStartCamera}
+                    sx={{
+                      borderRadius: "10px",
+                      borderColor: "#ef6c00",
+                      color: "#ef6c00",
+                      "&:hover": {
+                        borderColor: "#bf360c",
+                        bgcolor: "#fff3e0",
+                      },
+                      fontWeight: 600,
+                    }}
+                  >
+                    Chụp ảnh minh chứng
+                  </Button>
+                </Stack>
               </>
             )}
 
@@ -2556,6 +2862,202 @@ const MaintenanceHistoryDialog = ({
               >
                 Chưa có ảnh minh chứng
               </Typography>
+            )}
+          </Box>
+        </Paper>
+
+        {/* ── Section E: Lịch sử sửa chữa máy móc thiết bị ── */}
+        <Paper
+          elevation={0}
+          sx={{
+            border: "1px solid #e0e0e0",
+            borderRadius: "12px",
+            overflow: "hidden",
+            mt: 2,
+          }}
+        >
+          <Box
+            sx={{
+              background: "linear-gradient(90deg,#7b1fa2,#9c27b0)",
+              px: 2,
+              py: 1,
+            }}
+          >
+            <Typography
+              variant="subtitle1"
+              fontWeight={700}
+              sx={{ color: "#fff", letterSpacing: "0.03em" }}
+            >
+              E. LỊCH SỬ SỬA CHỮA MÁY MÓC THIẾT BỊ
+            </Typography>
+          </Box>
+
+          <Box sx={{ p: 2 }}>
+            {/* Autocomplete & Add Button */}
+            {canToggleStatus && (
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{ mb: 2 }}
+                alignItems="center"
+              >
+                <Autocomplete
+                  size="small"
+                  options={predefinedBreakdowns}
+                  getOptionLabel={(option) =>
+                    option.name_maintenance_breakdown || ""
+                  }
+                  value={selectedBreakdown}
+                  onChange={(event, newValue) => {
+                    setSelectedBreakdown(newValue);
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Chọn lỗi"
+                      variant="outlined"
+                    />
+                  )}
+                  sx={{ flexGrow: 1, maxWidth: 400 }}
+                />
+                <Button
+                  variant="contained"
+                  onClick={handleAddBreakdown}
+                  sx={{
+                    bgcolor: "#7b1fa2",
+                    "&:hover": { bgcolor: "#9c27b0" },
+                    borderRadius: "8px",
+                    textTransform: "none",
+                    fontWeight: 600,
+                    height: 40,
+                  }}
+                >
+                  <Add />
+                </Button>
+              </Stack>
+            )}
+
+            {/* Error and Success alerts */}
+            {breakdownSuccess && (
+              <Alert
+                severity="success"
+                sx={{ mb: 2, borderRadius: "8px" }}
+                onClose={() => setBreakdownSuccess(false)}
+              >
+                Lưu lịch sử sửa chữa thành công!
+              </Alert>
+            )}
+            {breakdownError && (
+              <Alert
+                severity="error"
+                sx={{ mb: 2, borderRadius: "8px" }}
+                onClose={() => setBreakdownError(null)}
+              >
+                {breakdownError}
+              </Alert>
+            )}
+
+            {/* Breakdown List */}
+            {breakdownDetailList.length > 0 ? (
+              <Stack spacing={2} sx={{ mt: 1 }}>
+                {breakdownDetailList.map((item, idx) => (
+                  <Box
+                    key={idx}
+                    sx={{
+                      p: 2,
+                      border: "1px solid #e0e0e0",
+                      borderRadius: "8px",
+                      bgcolor: "#fafafa",
+                      position: "relative",
+                    }}
+                  >
+                    {/* Delete button */}
+                    {canToggleStatus && (
+                      <IconButton
+                        onClick={() => handleRemoveBreakdown(idx)}
+                        size="small"
+                        sx={{
+                          position: "absolute",
+                          top: 8,
+                          right: 8,
+                          color: "text.secondary",
+                          "&:hover": { color: "#d32f2f" },
+                        }}
+                      >
+                        <DeleteOutline fontSize="small" />
+                      </IconButton>
+                    )}
+
+                    <Typography
+                      variant="subtitle2"
+                      fontWeight={700}
+                      color="#7b1fa2"
+                      sx={{ mb: 1, pr: 4 }}
+                    >
+                      {item.name}
+                    </Typography>
+
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={2}
+                      size="small"
+                      placeholder="Nhập chi tiết sửa chữa..."
+                      value={item.note || ""}
+                      onChange={(e) => handleNoteChange(idx, e.target.value)}
+                      disabled={!canToggleStatus}
+                      sx={{ bgcolor: "#fff", mb: 1 }}
+                    />
+
+                    {(item.noted_at || item.noted_by) && (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ display: "block", fontStyle: "italic" }}
+                      >
+                        Cập nhật lúc: {item.noted_at || "—"} bởi{" "}
+                        {item.noted_by_name || item.noted_by || "—"}
+                      </Typography>
+                    )}
+                  </Box>
+                ))}
+              </Stack>
+            ) : (
+              <Typography
+                variant="caption"
+                color="text.disabled"
+                fontStyle="italic"
+                sx={{ display: "block", textAlign: "center", py: 2 }}
+              >
+                Chưa ghi nhận lịch sử sửa chữa thiết bị
+              </Typography>
+            )}
+
+            {/* Save button for Section E */}
+            {canToggleStatus && breakdownDetailList.length > 0 && (
+              <Box sx={{ mt: 2, display: "flex", justifyContent: "flex-end" }}>
+                <Button
+                  variant="contained"
+                  onClick={handleSaveBreakdownDetails}
+                  disabled={savingBreakdown}
+                  startIcon={
+                    savingBreakdown ? (
+                      <CircularProgress size={16} color="inherit" />
+                    ) : (
+                      <TaskAlt />
+                    )
+                  }
+                  sx={{
+                    bgcolor: "#7b1fa2",
+                    "&:hover": { bgcolor: "#9c27b0" },
+                    borderRadius: "8px",
+                    textTransform: "none",
+                    fontWeight: 600,
+                  }}
+                >
+                  {savingBreakdown ? "Đang lưu..." : "Lưu lịch sử sửa chữa"}
+                </Button>
+              </Box>
             )}
           </Box>
         </Paper>
@@ -2768,6 +3270,70 @@ const MaintenanceHistoryDialog = ({
             }}
           >
             {confirmAction?.confirmLabel}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ── Camera Capture Dialog ── */}
+      <Dialog
+        open={cameraOpen}
+        onClose={handleStopCamera}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: "16px" } }}
+      >
+        <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>
+          Chụp ảnh minh chứng
+        </DialogTitle>
+        <DialogContent
+          sx={{
+            pb: 1,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+          }}
+        >
+          <Box
+            sx={{
+              width: "100%",
+              aspectRatio: "4/3",
+              bgcolor: "#000",
+              borderRadius: "12px",
+              overflow: "hidden",
+              position: "relative",
+            }}
+          >
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+              }}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, justifyContent: "space-between" }}>
+          <Button
+            onClick={handleStopCamera}
+            sx={{ borderRadius: "10px", color: "text.secondary" }}
+          >
+            Hủy
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleCapturePhoto}
+            startIcon={<PhotoCamera />}
+            sx={{
+              borderRadius: "10px",
+              bgcolor: "#ef6c00",
+              "&:hover": { bgcolor: "#e65100" },
+              fontWeight: 600,
+            }}
+          >
+            Chụp ảnh
           </Button>
         </DialogActions>
       </Dialog>
@@ -3647,6 +4213,24 @@ const MaintenanceSchedulePage = () => {
     );
     // Reload monthly schedules to reflect any swaps in the database
     fetchData();
+  };
+
+  const handleBreakdownDetailChange = (uuid, breakdownDetail) => {
+    const patch = {
+      maintenance_breakdown_detail: breakdownDetail,
+    };
+    setScheduleData((prev) =>
+      prev.map((item) =>
+        item.uuid_maintenance_schedule_detail === uuid
+          ? { ...item, ...patch }
+          : item
+      )
+    );
+    setHistoryDialogMachine((prev) =>
+      prev && prev.uuid_maintenance_schedule_detail === uuid
+        ? { ...prev, ...patch }
+        : prev
+    );
   };
 
   // ── Scroll-to-top FAB ──
@@ -5138,6 +5722,7 @@ const MaintenanceSchedulePage = () => {
         onClose={handleCloseHistoryDialog}
         machine={historyDialogMachine}
         onStatusChange={handleStatusChange}
+        onBreakdownDetailChange={handleBreakdownDetailChange}
       />
 
       <RfidDialog

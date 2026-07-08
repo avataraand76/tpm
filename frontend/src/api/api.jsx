@@ -702,6 +702,30 @@ export const api = {
       );
       return response.data;
     },
+    addBreakdown: async (name_maintenance_breakdown) => {
+      const response = await httpConnect.post(
+        "/api/admin/maintenance-breakdowns",
+        {
+          name_maintenance_breakdown,
+        }
+      );
+      return response.data;
+    },
+    updateBreakdown: async (uuid, name_maintenance_breakdown) => {
+      const response = await httpConnect.put(
+        `/api/admin/maintenance-breakdowns/${uuid}`,
+        {
+          name_maintenance_breakdown,
+        }
+      );
+      return response.data;
+    },
+    deleteBreakdown: async (uuid) => {
+      const response = await httpConnect.delete(
+        `/api/admin/maintenance-breakdowns/${uuid}`
+      );
+      return response.data;
+    },
   },
 
   // MARK: TEST PROPOSALS
@@ -826,6 +850,17 @@ export const api = {
       const response = await httpConnect.post(
         "/api/maintenance-schedule-detail/by-rfid-list",
         data
+      );
+      return response.data;
+    },
+    getBreakdowns: async () => {
+      const response = await httpConnect.get("/api/maintenance-breakdowns");
+      return response.data;
+    },
+    updateBreakdownDetail: async (uuid, breakdown_detail) => {
+      const response = await httpConnect.put(
+        `/api/maintenance-schedule-detail/${uuid}/breakdown-detail`,
+        { breakdown_detail }
       );
       return response.data;
     },

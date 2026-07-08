@@ -14182,7 +14182,7 @@ async function autoCreateMaintenanceScheduleDetail() {
             if (createdYear < currentYear) return true;
             if (createdYear > currentYear) return false;
             const createdMonth = vnCreated.getMonth() + 1;
-            return createdMonth <= q * 3;
+            return createdMonth <= Math.max(...selected);
           });
 
           if (machinesForQuarter.length === 0) continue;
@@ -14234,7 +14234,7 @@ async function autoCreateMaintenanceScheduleDetail() {
             if (createdYear < currentYear) return true;
             if (createdYear > currentYear) return false;
             const createdMonth = vnCreated.getMonth() + 1;
-            return createdMonth <= q * 3;
+            return createdMonth <= Math.max(...selected);
           });
 
           if (machinesForQuarter.length === 0) continue;
@@ -14628,6 +14628,7 @@ app.get("/api/maintenance-schedule-detail", async (req, res) => {
         msd.month,
         msd.day,
         msd.maintenance_content_detail,
+        msd.maintenance_breakdown_detail,
         msd.attached_file,
         msd.status,
         m.uuid_machine,
@@ -14657,6 +14658,8 @@ app.get("/api/maintenance-schedule-detail", async (req, res) => {
       ORDER BY msd.month, msd.day, m.type_machine, m.attribute_machine`,
       params
     );
+
+    await resolveBreakdownUsers(rows);
 
     res.json({ success: true, data: rows });
   } catch (error) {
@@ -14848,6 +14851,7 @@ app.get(
           msd.month,
           msd.day,
           msd.status,
+          msd.maintenance_breakdown_detail,
           DATE_FORMAT(msd.updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at,
           msd.updated_by,
           CASE
@@ -14879,6 +14883,7 @@ app.get(
         ORDER BY msd.year ASC, msd.month ASC`,
         [id_machine]
       );
+      await resolveBreakdownUsers(rows);
       res.json({ success: true, data: rows });
     } catch (error) {
       console.error("Error fetching machine maintenance history:", error);
@@ -14959,6 +14964,7 @@ app.get(
            day,
            status,
            maintenance_content_detail,
+           maintenance_breakdown_detail,
            attached_file
          FROM tb_maintenance_schedule_detail
          WHERE id_machine = ? AND year = ? AND month = ?
@@ -14981,6 +14987,8 @@ app.get(
           },
         });
       }
+
+      await resolveBreakdownUsers(srows);
 
       const current = srows[0];
 
@@ -15093,6 +15101,7 @@ app.get(
            day,
            status,
            maintenance_content_detail,
+           maintenance_breakdown_detail,
            attached_file
          FROM tb_maintenance_schedule_detail
          WHERE id_machine = ? AND year = ? AND month = ?
@@ -15116,6 +15125,8 @@ app.get(
           },
         });
       }
+
+      await resolveBreakdownUsers(srows);
 
       const current = srows[0];
 
@@ -15244,11 +15255,13 @@ app.post(
              day,
              status,
              maintenance_content_detail,
+             maintenance_breakdown_detail,
              attached_file
            FROM tb_maintenance_schedule_detail
            WHERE id_machine IN (?) AND year = ? AND month = ?`,
           [machineIds, targetYear, targetMonth]
         );
+        await resolveBreakdownUsers(schedules);
         schedules.forEach((s) => {
           scheduleMap.set(s.id_machine, s);
         });
@@ -15285,6 +15298,201 @@ app.post(
       });
     } catch (error) {
       console.error("Error bulk checking RFID maintenance schedule:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+);
+
+// Helper function to resolve employee names for breakdown details
+const resolveBreakdownUsers = async (rows) => {
+  if (!rows || rows.length === 0) return;
+
+  const userIds = new Set();
+  rows.forEach((row) => {
+    try {
+      const details =
+        typeof row.maintenance_breakdown_detail === "string"
+          ? JSON.parse(row.maintenance_breakdown_detail)
+          : row.maintenance_breakdown_detail;
+      if (Array.isArray(details)) {
+        details.forEach((item) => {
+          if (item && item.noted_by) {
+            userIds.add(Number(item.noted_by));
+          }
+        });
+      }
+    } catch (_) {}
+  });
+
+  const idsArray = Array.from(userIds).filter(Boolean);
+  const userMap = new Map();
+
+  const virtualUsers = {
+    99999: { ma_nv: "99999", ten_nv: "Quản Trị Viên (Test)" },
+    99990: { ma_nv: "99990", ten_nv: "Phòng Cơ Điện (Test)" },
+    99900: { ma_nv: "99900", ten_nv: "Phòng Cơ Điện (Test)" },
+    99991: { ma_nv: "99991", ten_nv: "Cơ Điện Xưởng 1 (Test)" },
+    99992: { ma_nv: "99992", ten_nv: "Cơ Điện Xưởng 2 (Test)" },
+    99993: { ma_nv: "99993", ten_nv: "Cơ Điện Xưởng 3 (Test)" },
+    99994: { ma_nv: "99994", ten_nv: "Cơ Điện Xưởng 4 (Test)" },
+    99995: { ma_nv: "99995", ten_nv: "Viewer (Test)" },
+  };
+  Object.entries(virtualUsers).forEach(([id, u]) => {
+    userMap.set(Number(id), `${u.ma_nv}: ${u.ten_nv}`);
+  });
+
+  const realUserIds = idsArray.filter((id) => !virtualUsers[id]);
+  if (realUserIds.length > 0) {
+    try {
+      const [users] = await dataHiTimesheetConnection.query(
+        `SELECT id, ma_nv, ten_nv FROM sync_nhan_vien WHERE id IN (?)`,
+        [realUserIds]
+      );
+      users.forEach((u) => {
+        userMap.set(Number(u.id), `${u.ma_nv}: ${u.ten_nv}`);
+      });
+    } catch (err) {
+      console.error("Error resolving breakdown user names:", err);
+    }
+  }
+
+  rows.forEach((row) => {
+    try {
+      const details =
+        typeof row.maintenance_breakdown_detail === "string"
+          ? JSON.parse(row.maintenance_breakdown_detail)
+          : row.maintenance_breakdown_detail;
+      if (Array.isArray(details)) {
+        const resolved = details.map((item) => {
+          if (item && item.noted_by) {
+            const userId = Number(item.noted_by);
+            return {
+              ...item,
+              noted_by_name: userMap.get(userId) || `ID: ${userId}`,
+            };
+          }
+          return item;
+        });
+        row.maintenance_breakdown_detail = resolved;
+      } else {
+        row.maintenance_breakdown_detail = [];
+      }
+    } catch (_) {
+      row.maintenance_breakdown_detail = [];
+    }
+  });
+};
+
+// GET /api/maintenance-breakdowns — Lấy danh sách lỗi bảo dưỡng đã khai báo
+app.get("/api/maintenance-breakdowns", authenticateToken, async (req, res) => {
+  try {
+    const [rows] = await tpmConnection.query(
+      `SELECT id_maintenance_breakdown, uuid_maintenance_breakdown, name_maintenance_breakdown 
+       FROM tb_maintenance_breakdown
+       ORDER BY id_maintenance_breakdown ASC`
+    );
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error("Error fetching maintenance breakdowns:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/admin/maintenance-breakdowns — Thêm lỗi bảo dưỡng mới
+app.post("/api/admin/maintenance-breakdowns", async (req, res) => {
+  try {
+    const { name_maintenance_breakdown } = req.body;
+    const userId = req.user?.id || 0;
+    if (!name_maintenance_breakdown) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Tên lỗi không được trống" });
+    }
+    await tpmConnection.query(
+      `INSERT INTO tb_maintenance_breakdown (name_maintenance_breakdown, created_by, updated_by)
+       VALUES (?, ?, ?)`,
+      [name_maintenance_breakdown, userId, userId]
+    );
+    res.json({ success: true, message: "Thêm lỗi bảo dưỡng thành công" });
+  } catch (error) {
+    console.error("Error creating maintenance breakdown:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// PUT /api/admin/maintenance-breakdowns/:uuid — Cập nhật lỗi bảo dưỡng
+app.put("/api/admin/maintenance-breakdowns/:uuid", async (req, res) => {
+  try {
+    const { uuid } = req.params;
+    const { name_maintenance_breakdown } = req.body;
+    const userId = req.user?.id || 0;
+    if (!name_maintenance_breakdown) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Tên lỗi không được trống" });
+    }
+    await tpmConnection.query(
+      `UPDATE tb_maintenance_breakdown
+       SET name_maintenance_breakdown = ?, updated_by = ?
+       WHERE uuid_maintenance_breakdown = ?`,
+      [name_maintenance_breakdown, userId, uuid]
+    );
+    res.json({ success: true, message: "Cập nhật lỗi bảo dưỡng thành công" });
+  } catch (error) {
+    console.error("Error updating maintenance breakdown:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// DELETE /api/admin/maintenance-breakdowns/:uuid — Xóa lỗi bảo dưỡng
+app.delete("/api/admin/maintenance-breakdowns/:uuid", async (req, res) => {
+  try {
+    const { uuid } = req.params;
+    await tpmConnection.query(
+      `DELETE FROM tb_maintenance_breakdown
+       WHERE uuid_maintenance_breakdown = ?`,
+      [uuid]
+    );
+    res.json({ success: true, message: "Xóa lỗi bảo dưỡng thành công" });
+  } catch (error) {
+    console.error("Error deleting maintenance breakdown:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// PUT /api/maintenance-schedule-detail/:uuid/breakdown-detail — Cập nhật chi tiết lỗi hư hỏng
+app.put(
+  "/api/maintenance-schedule-detail/:uuid/breakdown-detail",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { uuid } = req.params;
+      const { breakdown_detail } = req.body;
+
+      if (!Array.isArray(breakdown_detail)) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Dữ liệu không đúng định dạng" });
+      }
+
+      // Strip noted_by_name so we only store DB audit fields
+      const cleanDetails = breakdown_detail.map(
+        ({ noted_by_name, ...rest }) => rest
+      );
+
+      await tpmConnection.query(
+        `UPDATE tb_maintenance_schedule_detail
+         SET maintenance_breakdown_detail = ?, updated_at = updated_at
+         WHERE uuid_maintenance_schedule_detail = ?`,
+        [JSON.stringify(cleanDetails), uuid]
+      );
+
+      res.json({
+        success: true,
+        message: "Cập nhật lịch sử sửa chữa thành công",
+      });
+    } catch (error) {
+      console.error("Error updating maintenance breakdown detail:", error);
       res.status(500).json({ success: false, message: error.message });
     }
   }

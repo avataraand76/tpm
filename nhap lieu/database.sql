@@ -701,6 +701,26 @@ create table if not exists tb_maintenance_content
     updated_by bigint default '0'
 );
 
+-- MARK: tb_maintenance_breakdown nội dung lỗi bảo dưỡng
+create table if not exists tb_maintenance_breakdown
+(
+    -- primary
+    id_maintenance_breakdown bigint not null auto_increment,
+    uuid_maintenance_breakdown varchar(36) not null unique default (UUID()),
+
+    -- properties
+    name_maintenance_breakdown text,
+
+    -- key
+    primary key (id_maintenance_breakdown),
+
+    -- timestamp
+    created_at timestamp default current_timestamp,
+    created_by bigint default '0',
+    updated_at timestamp default current_timestamp on update current_timestamp,
+    updated_by bigint default '0'
+);
+
 -- MARK: tb_maintenance_content_machine_type_attribute nội dung bảo dưỡng định kỳ cho từng loại, thuộc tính
 create table if not exists tb_maintenance_content_machine_type_attribute
 (
@@ -767,6 +787,7 @@ create table if not exists tb_maintenance_schedule_detail
     month int,
     day int,
     maintenance_content_detail json,
+    maintenance_breakdown_detail json,
     status enum('pending', 'completed', 'confirm_completed') default 'pending',
     attached_file text,
 

@@ -595,6 +595,7 @@ const RFID_ROW_SX = {
 const AdminPage = () => {
   const [currentTab, setCurrentTab] = useState(0);
   const [machineCatalogSubTab, setMachineCatalogSubTab] = useState(0);
+  const [maintConfigSubTab, setMaintConfigSubTab] = useState(0);
   const [loading, setLoading] = useState(true);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -701,6 +702,118 @@ const AdminPage = () => {
       return;
     }
     setNotification({ ...notification, open: false });
+  };
+
+  // States for Maintenance Breakdowns Config (Tab 5)
+  const [breakdowns, setBreakdowns] = useState([]);
+  const [loadingBreakdowns, setLoadingBreakdowns] = useState(false);
+  const [breakdownDialogOpen, setBreakdownDialogOpen] = useState(false);
+  const [editingBreakdown, setEditingBreakdown] = useState(null); // null = adding
+  const [breakdownNameInput, setBreakdownNameInput] = useState("");
+  const [savingBreakdown, setSavingBreakdown] = useState(false);
+  const [deletingBreakdown, setDeletingBreakdown] = useState(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+
+  const fetchBreakdowns = useCallback(async () => {
+    setLoadingBreakdowns(true);
+    try {
+      const res = await api.maintenance.getBreakdowns();
+      if (res.success) {
+        setBreakdowns(res.data || []);
+      } else {
+        showNotification(
+          "error",
+          "Lỗi",
+          res.message || "Không thể tải danh sách lỗi"
+        );
+      }
+    } catch (error) {
+      showNotification("error", "Lỗi hệ thống", error.message);
+    } finally {
+      setLoadingBreakdowns(false);
+    }
+  }, []);
+
+  const handleOpenBreakdownDialog = (breakdown = null) => {
+    setEditingBreakdown(breakdown);
+    setBreakdownNameInput(
+      breakdown ? breakdown.name_maintenance_breakdown : ""
+    );
+    setBreakdownDialogOpen(true);
+  };
+
+  const handleCloseBreakdownDialog = () => {
+    setBreakdownDialogOpen(false);
+    setEditingBreakdown(null);
+    setBreakdownNameInput("");
+  };
+
+  const handleSaveBreakdown = async () => {
+    if (!breakdownNameInput.trim()) {
+      showNotification("warning", "Chú ý", "Tên lỗi không được bỏ trống");
+      return;
+    }
+    setSavingBreakdown(true);
+    try {
+      let res;
+      if (editingBreakdown) {
+        // Edit mode
+        res = await api.admin.updateBreakdown(
+          editingBreakdown.uuid_maintenance_breakdown,
+          breakdownNameInput.trim()
+        );
+      } else {
+        // Add mode
+        res = await api.admin.addBreakdown(breakdownNameInput.trim());
+      }
+
+      if (res.success) {
+        showNotification(
+          "success",
+          "Thành công",
+          editingBreakdown ? "Cập nhật lỗi thành công" : "Thêm lỗi thành công"
+        );
+        handleCloseBreakdownDialog();
+        fetchBreakdowns();
+      } else {
+        showNotification("error", "Lỗi", res.message || "Không thể lưu lỗi");
+      }
+    } catch (error) {
+      showNotification("error", "Lỗi hệ thống", error.message);
+    } finally {
+      setSavingBreakdown(false);
+    }
+  };
+
+  const handleOpenDeleteBreakdown = (breakdown) => {
+    setDeletingBreakdown(breakdown);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleCloseDeleteBreakdown = () => {
+    setDeletingBreakdown(null);
+    setDeleteConfirmOpen(false);
+  };
+
+  const handleConfirmDeleteBreakdown = async () => {
+    if (!deletingBreakdown) return;
+    setSavingBreakdown(true);
+    try {
+      const res = await api.admin.deleteBreakdown(
+        deletingBreakdown.uuid_maintenance_breakdown
+      );
+      if (res.success) {
+        showNotification("success", "Thành công", "Xóa lỗi thành công");
+        handleCloseDeleteBreakdown();
+        fetchBreakdowns();
+      } else {
+        showNotification("error", "Lỗi", res.message || "Không thể xóa lỗi");
+      }
+    } catch (error) {
+      showNotification("error", "Lỗi hệ thống", error.message);
+    } finally {
+      setSavingBreakdown(false);
+    }
   };
 
   // --- Data Fetching ---
@@ -907,6 +1020,12 @@ const AdminPage = () => {
       fetchMaintenanceMatrix();
     }
   }, [currentTab, fetchMaintenanceMatrix]);
+
+  useEffect(() => {
+    if (currentTab === 4 && maintConfigSubTab === 1) {
+      fetchBreakdowns();
+    }
+  }, [currentTab, maintConfigSubTab, fetchBreakdowns]);
 
   // --- Handlers ---
   const handleTabChange = (event, newValue) => {
@@ -3190,568 +3309,768 @@ const AdminPage = () => {
                 </Grid>
               </TabPanel>
 
-              {/* === TAB CẤU HÌNH NỘI DUNG BẢO DƯỠNG === */}
+              {/* === TAB CẤU HÌNH BẢO DƯỠNG === */}
               <TabPanel value={currentTab} index={4}>
-                {loadingMatrix ? (
-                  <Box
-                    sx={{
-                      display: "flex",
-                      justifyContent: "center",
-                      alignItems: "center",
-                      minHeight: 300,
-                    }}
-                  >
-                    <CircularProgress />
-                  </Box>
-                ) : (
+                <Tabs
+                  value={maintConfigSubTab}
+                  onChange={(e, val) => setMaintConfigSubTab(val)}
+                  sx={{
+                    mb: 3,
+                    borderBottom: 1,
+                    borderColor: "divider",
+                    "& .MuiTab-root": {
+                      textTransform: "none",
+                      fontWeight: 600,
+                      fontSize: "0.95rem",
+                    },
+                    "& .Mui-selected": {
+                      color: "#764ba2",
+                    },
+                    "& .MuiTabs-indicator": {
+                      backgroundColor: "#764ba2",
+                    },
+                  }}
+                >
+                  <Tab label="Cấu hình nội dung bảo dưỡng định kỳ" />
+                  <Tab label="Cấu hình danh mục lỗi sửa chữa" />
+                </Tabs>
+
+                {maintConfigSubTab === 0 &&
+                  (loadingMatrix ? (
+                    <Box
+                      sx={{
+                        display: "flex",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        minHeight: 300,
+                      }}
+                    >
+                      <CircularProgress />
+                    </Box>
+                  ) : (
+                    <>
+                      <Box
+                        sx={{
+                          mb: 3,
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "flex-start",
+                          flexWrap: "wrap",
+                          gap: 2,
+                        }}
+                      >
+                        <Box>
+                          <Typography
+                            variant="h6"
+                            fontWeight={600}
+                            gutterBottom
+                          >
+                            Nội dung bảo dưỡng theo loại máy
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            Tick vào ô tương ứng để gán nội dung bảo dưỡng, sau
+                            đó nhấn <strong>Lưu thay đổi</strong> để lưu vào hệ
+                            thống.
+                          </Typography>
+                        </Box>
+
+                        <Stack
+                          direction="row"
+                          spacing={1.5}
+                          alignItems="center"
+                        >
+                          {dirtyColKeys.size > 0 && (
+                            <Chip
+                              label={`${dirtyColKeys.size} cột chưa lưu`}
+                              color="warning"
+                              size="small"
+                              variant="outlined"
+                              sx={{ fontWeight: 600 }}
+                            />
+                          )}
+                          <Button
+                            variant="contained"
+                            startIcon={
+                              savingMatrix ? (
+                                <CircularProgress size={18} color="inherit" />
+                              ) : (
+                                <Save />
+                              )
+                            }
+                            onClick={handleSaveMatrix}
+                            disabled={savingMatrix || dirtyColKeys.size === 0}
+                            sx={{ ...btnGradientStyle, px: 3, py: 1 }}
+                          >
+                            {savingMatrix ? "Đang lưu..." : "Lưu thay đổi"}
+                          </Button>
+                        </Stack>
+                      </Box>
+
+                      {/* --- Bộ lọc Matrix --- */}
+                      <Grid container spacing={2} sx={{ mb: 2 }}>
+                        <Grid item xs={12} md={6}>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            label="Lọc theo nội dung bảo dưỡng"
+                            value={searchContent}
+                            onChange={(e) => setSearchContent(e.target.value)}
+                            InputProps={{
+                              startAdornment: (
+                                <Search
+                                  sx={{
+                                    color: "action.active",
+                                    mr: 1,
+                                    fontSize: 20,
+                                  }}
+                                />
+                              ),
+                            }}
+                            sx={inputStyle}
+                          />
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            label="Lọc theo loại máy (cột)"
+                            value={searchMachineType}
+                            onChange={(e) =>
+                              setSearchMachineType(e.target.value)
+                            }
+                            InputProps={{
+                              startAdornment: (
+                                <Search
+                                  sx={{
+                                    color: "action.active",
+                                    mr: 1,
+                                    fontSize: 20,
+                                  }}
+                                />
+                              ),
+                            }}
+                            sx={inputStyle}
+                          />
+                        </Grid>
+                      </Grid>
+
+                      {maintenanceContents.length === 0 ||
+                      machineTypesForMatrix.length === 0 ? (
+                        <Alert severity="info" sx={{ borderRadius: "12px" }}>
+                          {maintenanceContents.length === 0
+                            ? "Chưa có nội dung bảo dưỡng nào trong hệ thống."
+                            : "Chưa có loại máy nào trong hệ thống."}
+                        </Alert>
+                      ) : (
+                        <TableContainer
+                          component={Paper}
+                          variant="outlined"
+                          sx={{
+                            maxHeight: 600,
+                            borderRadius: "16px",
+                            overflow: "auto",
+                            position: "relative",
+                          }}
+                        >
+                          <Table
+                            stickyHeader
+                            size="small"
+                            sx={{
+                              borderCollapse: "separate",
+                              borderSpacing: 0,
+                            }}
+                          >
+                            <TableHead>
+                              <TableRow>
+                                {/* Corner cell — sticky theo cả top lẫn left */}
+                                <TableCell
+                                  sx={{
+                                    position: "sticky",
+                                    left: 0,
+                                    top: 0,
+                                    zIndex: 5,
+                                    backgroundColor: "#eef0fb",
+                                    borderRight: "2px solid #d0d4f0",
+                                    borderBottom: "2px solid #d0d4f0",
+                                    fontWeight: 700,
+                                    minWidth: 250,
+                                    width: 250,
+                                    fontSize: "0.875rem",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  Nội dung bảo dưỡng
+                                </TableCell>
+                                {filteredMachineTypes.map((col) => {
+                                  const colKey = getColKey(col);
+                                  const isDirty = dirtyColKeys.has(colKey);
+                                  return (
+                                    <TableCell
+                                      key={colKey}
+                                      ref={(el) => {
+                                        if (el)
+                                          headerCellRefs.current[colKey] = el;
+                                      }}
+                                      align="center"
+                                      sx={{
+                                        position: "sticky",
+                                        top: 0,
+                                        zIndex: 2,
+                                        fontWeight: 700,
+                                        minWidth: 100,
+                                        width: 100,
+                                        whiteSpace: "normal",
+                                        lineHeight: 1.3,
+                                        fontSize: "0.75rem",
+                                        // Màu do React quản lý (dirty/normal)
+                                        // Hover do DOM ref quản lý (không re-render)
+                                        backgroundColor: isDirty
+                                          ? "#fff8dc"
+                                          : "#eef0fb",
+                                        borderBottom: isDirty
+                                          ? "2px solid #f59e0b"
+                                          : "2px solid #d0d4f0",
+                                        padding: "8px 4px",
+                                        verticalAlign: "bottom",
+                                      }}
+                                    >
+                                      {col.machine_name}
+                                      {isDirty && (
+                                        <Box
+                                          component="span"
+                                          sx={{
+                                            display: "block",
+                                            fontSize: "0.6rem",
+                                            color: "#b45309",
+                                            fontWeight: 700,
+                                            mt: 0.3,
+                                          }}
+                                        >
+                                          ● chưa lưu
+                                        </Box>
+                                      )}
+                                    </TableCell>
+                                  );
+                                })}
+                              </TableRow>
+                            </TableHead>
+                            <TableBody
+                              onMouseLeave={handleMatrixBodyMouseLeave}
+                            >
+                              {filteredContents.map((content, idx) => (
+                                <MatrixRow
+                                  key={content.id_maintenance_content}
+                                  content={content}
+                                  machineTypesForMatrix={filteredMachineTypes}
+                                  rowChecked={
+                                    matrixChecked[
+                                      content.name_maintenance_content
+                                    ]
+                                  }
+                                  rowBg={idx % 2 === 0 ? "#ffffff" : "#f8f8fc"}
+                                  onCheckboxChange={handleMatrixCheckboxChange}
+                                  onLabelMouseEnter={
+                                    handleMatrixLabelMouseEnter
+                                  }
+                                  onCellMouseEnter={handleMatrixColMouseEnter}
+                                  isEditing={
+                                    editingContentId ===
+                                    content.id_maintenance_content
+                                  }
+                                  onSaveEdit={handleSaveEditContent}
+                                  onCancelEdit={handleCancelEditContent}
+                                  onEdit={handleStartEditContent}
+                                  onDelete={handleConfirmDeleteContent}
+                                  isSaving={savingEditContent}
+                                  isDeleting={
+                                    deletingContentId ===
+                                    content.id_maintenance_content
+                                  }
+                                />
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                      )}
+
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ display: "block", mt: 2 }}
+                      >
+                        Tổng: {filteredContents.length} nội dung bảo dưỡng ×{" "}
+                        {filteredMachineTypes.length} loại máy
+                      </Typography>
+
+                      {/* --- Thêm nội dung bảo dưỡng mới --- */}
+                      <Divider sx={{ my: 3 }} />
+                      <Box>
+                        <Typography
+                          variant="subtitle1"
+                          fontWeight={600}
+                          gutterBottom
+                        >
+                          Thêm nội dung bảo dưỡng mới
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{ mb: 2 }}
+                        >
+                          Sau khi thêm, nội dung mới sẽ xuất hiện ngay trong ma
+                          trận bên trên.
+                        </Typography>
+                        <Stack
+                          direction="row"
+                          spacing={1.5}
+                          alignItems="center"
+                        >
+                          <TextField
+                            size="small"
+                            label="Tên nội dung bảo dưỡng"
+                            value={newContentName}
+                            onChange={(e) => setNewContentName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter")
+                                handleAddMaintenanceContent();
+                            }}
+                            disabled={addingContent}
+                            sx={{ flex: 1, maxWidth: 480 }}
+                            placeholder="VD: Kiểm tra, vệ sinh, bơm dầu"
+                          />
+                          <Button
+                            variant="contained"
+                            startIcon={
+                              addingContent ? (
+                                <CircularProgress size={18} color="inherit" />
+                              ) : (
+                                <Add />
+                              )
+                            }
+                            onClick={handleAddMaintenanceContent}
+                            disabled={addingContent || !newContentName.trim()}
+                            sx={{
+                              ...btnGradientStyle,
+                              px: 3,
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {addingContent ? "Đang thêm..." : "Thêm"}
+                          </Button>
+                        </Stack>
+                      </Box>
+
+                      {/* --- Lịch bảo dưỡng định kỳ theo tháng --- */}
+                      <Divider sx={{ my: 3 }} />
+                      <Box
+                        sx={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "flex-start",
+                          flexWrap: "wrap",
+                          gap: 2,
+                          mb: 2,
+                        }}
+                      >
+                        <Box>
+                          <Typography
+                            variant="h6"
+                            fontWeight={600}
+                            gutterBottom
+                          >
+                            Lịch bảo dưỡng định kỳ theo tháng
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            Tick vào tháng tương ứng để lên lịch bảo dưỡng cho
+                            từng loại máy, sau đó nhấn <strong>Lưu lịch</strong>{" "}
+                            để lưu vào hệ thống.
+                          </Typography>
+                        </Box>
+                        <Stack
+                          direction="row"
+                          spacing={1.5}
+                          alignItems="center"
+                        >
+                          {dirtyScheduleKeys.size > 0 && (
+                            <Chip
+                              label={`${dirtyScheduleKeys.size} loại máy chưa lưu`}
+                              color="warning"
+                              size="small"
+                              variant="outlined"
+                              sx={{ fontWeight: 600 }}
+                            />
+                          )}
+                          <Button
+                            variant="outlined"
+                            onClick={() => setAutoCreateConfirmOpen(true)}
+                            disabled={autoCreating || savingSchedule}
+                            sx={{
+                              borderRadius: "10px",
+                              borderColor: "#9333ea",
+                              color: "#9333ea",
+                              fontWeight: 600,
+                              px: 2.5,
+                              py: 1,
+                              "&:hover": {
+                                borderColor: "#7e22ce",
+                                bgcolor: "rgba(147,51,234,0.06)",
+                              },
+                            }}
+                          >
+                            {autoCreating
+                              ? "Đang chạy..."
+                              : "Chạy tạo lịch tự động"}
+                          </Button>
+                          <Button
+                            variant="contained"
+                            startIcon={
+                              savingSchedule ? (
+                                <CircularProgress size={18} color="inherit" />
+                              ) : (
+                                <Save />
+                              )
+                            }
+                            onClick={handleSaveSchedule}
+                            disabled={
+                              savingSchedule || dirtyScheduleKeys.size === 0
+                            }
+                            sx={{ ...btnGradientStyle, px: 3, py: 1 }}
+                          >
+                            {savingSchedule ? "Đang lưu..." : "Lưu lịch"}
+                          </Button>
+                        </Stack>
+                      </Box>
+
+                      {/* --- Bộ lọc Lịch bảo dưỡng --- */}
+                      <Grid container spacing={2} sx={{ mb: 2 }}>
+                        <Grid item xs={12} md={6}>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            label="Lọc theo loại máy"
+                            value={searchScheduleMachineType}
+                            onChange={(e) =>
+                              setSearchScheduleMachineType(e.target.value)
+                            }
+                            InputProps={{
+                              startAdornment: (
+                                <Search
+                                  sx={{
+                                    color: "action.active",
+                                    mr: 1,
+                                    fontSize: 20,
+                                  }}
+                                />
+                              ),
+                            }}
+                            sx={inputStyle}
+                          />
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <FormControl fullWidth size="small" sx={inputStyle}>
+                            <InputLabel>Lọc theo tháng</InputLabel>
+                            <Select
+                              multiple
+                              value={searchScheduleMonth}
+                              onChange={(e) =>
+                                setSearchScheduleMonth(e.target.value)
+                              }
+                              label="Lọc theo tháng"
+                              renderValue={(selected) =>
+                                selected.length === 0
+                                  ? "Tất cả tháng"
+                                  : MONTHS_CONFIG.filter((m) =>
+                                      selected.includes(m.key)
+                                    )
+                                      .map((m) => m.fullLabel)
+                                      .join(", ")
+                              }
+                            >
+                              {MONTHS_CONFIG.map(({ key, fullLabel }) => (
+                                <MenuItem key={key} value={key}>
+                                  <Checkbox
+                                    checked={searchScheduleMonth.includes(key)}
+                                    size="small"
+                                  />
+                                  <ListItemText primary={fullLabel} />
+                                </MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
+                        </Grid>
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={isSyncEnabled}
+                              onChange={(e) =>
+                                setIsSyncEnabled(e.target.checked)
+                              }
+                            />
+                          }
+                          sx={{ mb: 1 }}
+                        />
+                      </Grid>
+
+                      {machineTypesForMatrix.length === 0 ? (
+                        <Alert severity="info" sx={{ borderRadius: "12px" }}>
+                          Chưa có loại máy nào trong hệ thống.
+                        </Alert>
+                      ) : filteredScheduleMachineTypes.length === 0 ? (
+                        <Alert severity="info" sx={{ borderRadius: "12px" }}>
+                          Không tìm thấy loại máy phù hợp.
+                        </Alert>
+                      ) : (
+                        <TableContainer
+                          component={Paper}
+                          variant="outlined"
+                          sx={{
+                            maxHeight: 500,
+                            borderRadius: "16px",
+                            overflow: "auto",
+                            position: "relative",
+                          }}
+                        >
+                          <Table
+                            stickyHeader
+                            size="small"
+                            sx={{
+                              borderCollapse: "separate",
+                              borderSpacing: 0,
+                            }}
+                          >
+                            <TableHead>
+                              <TableRow>
+                                <TableCell
+                                  sx={{
+                                    position: "sticky",
+                                    left: 0,
+                                    top: 0,
+                                    zIndex: 5,
+                                    backgroundColor: "#eef0fb",
+                                    borderRight: "2px solid #d0d4f0",
+                                    borderBottom: "2px solid #d0d4f0",
+                                    fontWeight: 700,
+                                    minWidth: 220,
+                                    width: 220,
+                                    fontSize: "0.875rem",
+                                  }}
+                                >
+                                  <Box
+                                    sx={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "space-between",
+                                      gap: 1,
+                                    }}
+                                  >
+                                    <span>Loại máy</span>
+                                    <span
+                                      style={{
+                                        fontSize: "0.7rem",
+                                        fontWeight: 500,
+                                        color: "#6b7280",
+                                      }}
+                                    >
+                                      SL
+                                    </span>
+                                  </Box>
+                                </TableCell>
+                                {filteredScheduleMonths.map(
+                                  ({ key, fullLabel }) => (
+                                    <TableCell
+                                      key={key}
+                                      align="center"
+                                      sx={{
+                                        top: 0,
+                                        zIndex: 2,
+                                        backgroundColor: "#eef0fb",
+                                        borderBottom: "2px solid #d0d4f0",
+                                        fontWeight: 700,
+                                        minWidth: 52,
+                                        width: 52,
+                                        fontSize: "0.8rem",
+                                        whiteSpace: "nowrap",
+                                      }}
+                                    >
+                                      {fullLabel}
+                                    </TableCell>
+                                  )
+                                )}
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {filteredScheduleMachineTypes.map((col, idx) => {
+                                const rowKey = getColKey(col);
+                                return (
+                                  <ScheduleRow
+                                    key={rowKey}
+                                    col={col}
+                                    rowKey={rowKey}
+                                    rowData={scheduleData[rowKey]}
+                                    rowBg={
+                                      idx % 2 === 0 ? "#ffffff" : "#f8f8fc"
+                                    }
+                                    isDirty={dirtyScheduleKeys.has(rowKey)}
+                                    onCheckboxChange={handleScheduleChange}
+                                    visibleMonths={filteredScheduleMonths}
+                                    contentCount={
+                                      contentCountByColKey[rowKey] ?? 0
+                                    }
+                                  />
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                      )}
+
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ display: "block", mt: 2 }}
+                      >
+                        Tổng: {filteredScheduleMachineTypes.length} loại máy ×{" "}
+                        {filteredScheduleMonths.length} tháng
+                      </Typography>
+                    </>
+                  ))}
+                {maintConfigSubTab === 1 && (
                   <>
                     <Box
                       sx={{
                         mb: 3,
                         display: "flex",
                         justifyContent: "space-between",
-                        alignItems: "flex-start",
+                        alignItems: "center",
                         flexWrap: "wrap",
                         gap: 2,
                       }}
                     >
                       <Box>
                         <Typography variant="h6" fontWeight={600} gutterBottom>
-                          Nội dung bảo dưỡng theo loại máy
+                          Danh sách lỗi bảo dưỡng thiết bị
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
-                          Tick vào ô tương ứng để gán nội dung bảo dưỡng, sau đó
-                          nhấn <strong>Lưu thay đổi</strong> để lưu vào hệ
-                          thống.
+                          Khai báo các lỗi thường gặp trong quá trình vận hành
+                          để phục vụ cho lịch sử sửa chữa ở Lý lịch bảo dưỡng.
                         </Typography>
                       </Box>
-
-                      <Stack direction="row" spacing={1.5} alignItems="center">
-                        {dirtyColKeys.size > 0 && (
-                          <Chip
-                            label={`${dirtyColKeys.size} cột chưa lưu`}
-                            color="warning"
-                            size="small"
-                            variant="outlined"
-                            sx={{ fontWeight: 600 }}
-                          />
-                        )}
-                        <Button
-                          variant="contained"
-                          startIcon={
-                            savingMatrix ? (
-                              <CircularProgress size={18} color="inherit" />
-                            ) : (
-                              <Save />
-                            )
-                          }
-                          onClick={handleSaveMatrix}
-                          disabled={savingMatrix || dirtyColKeys.size === 0}
-                          sx={{ ...btnGradientStyle, px: 3, py: 1 }}
-                        >
-                          {savingMatrix ? "Đang lưu..." : "Lưu thay đổi"}
-                        </Button>
-                      </Stack>
+                      <Button
+                        variant="contained"
+                        startIcon={<Add />}
+                        onClick={() => handleOpenBreakdownDialog()}
+                        sx={btnGradientStyle}
+                      >
+                        Khai báo lỗi mới
+                      </Button>
                     </Box>
 
-                    {/* --- Bộ lọc Matrix --- */}
-                    <Grid container spacing={2} sx={{ mb: 2 }}>
-                      <Grid item xs={12} md={6}>
-                        <TextField
-                          fullWidth
-                          size="small"
-                          label="Lọc theo nội dung bảo dưỡng"
-                          value={searchContent}
-                          onChange={(e) => setSearchContent(e.target.value)}
-                          InputProps={{
-                            startAdornment: (
-                              <Search
-                                sx={{
-                                  color: "action.active",
-                                  mr: 1,
-                                  fontSize: 20,
-                                }}
-                              />
-                            ),
-                          }}
-                          sx={inputStyle}
-                        />
-                      </Grid>
-                      <Grid item xs={12} md={6}>
-                        <TextField
-                          fullWidth
-                          size="small"
-                          label="Lọc theo loại máy (cột)"
-                          value={searchMachineType}
-                          onChange={(e) => setSearchMachineType(e.target.value)}
-                          InputProps={{
-                            startAdornment: (
-                              <Search
-                                sx={{
-                                  color: "action.active",
-                                  mr: 1,
-                                  fontSize: 20,
-                                }}
-                              />
-                            ),
-                          }}
-                          sx={inputStyle}
-                        />
-                      </Grid>
-                    </Grid>
-
-                    {maintenanceContents.length === 0 ||
-                    machineTypesForMatrix.length === 0 ? (
-                      <Alert severity="info" sx={{ borderRadius: "12px" }}>
-                        {maintenanceContents.length === 0
-                          ? "Chưa có nội dung bảo dưỡng nào trong hệ thống."
-                          : "Chưa có loại máy nào trong hệ thống."}
-                      </Alert>
+                    {loadingBreakdowns ? (
+                      <Box
+                        sx={{
+                          display: "flex",
+                          justifyContent: "center",
+                          py: 5,
+                        }}
+                      >
+                        <CircularProgress />
+                      </Box>
+                    ) : breakdowns.length === 0 ? (
+                      <Paper
+                        variant="outlined"
+                        sx={{
+                          p: 4,
+                          textAlign: "center",
+                          borderRadius: "16px",
+                          bgcolor: "background.default",
+                        }}
+                      >
+                        <Typography color="text.secondary">
+                          Chưa khai báo lỗi bảo dưỡng nào. Nhấn{" "}
+                          <strong>Khai báo lỗi mới</strong> để bắt đầu.
+                        </Typography>
+                      </Paper>
                     ) : (
                       <TableContainer
                         component={Paper}
                         variant="outlined"
-                        sx={{
-                          maxHeight: 600,
-                          borderRadius: "16px",
-                          overflow: "auto",
-                          position: "relative",
-                        }}
+                        sx={{ borderRadius: "16px", overflow: "hidden" }}
                       >
-                        <Table
-                          stickyHeader
-                          size="small"
-                          sx={{ borderCollapse: "separate", borderSpacing: 0 }}
-                        >
-                          <TableHead>
-                            <TableRow>
-                              {/* Corner cell — sticky theo cả top lẫn left */}
-                              <TableCell
-                                sx={{
-                                  position: "sticky",
-                                  left: 0,
-                                  top: 0,
-                                  zIndex: 5,
-                                  backgroundColor: "#eef0fb",
-                                  borderRight: "2px solid #d0d4f0",
-                                  borderBottom: "2px solid #d0d4f0",
-                                  fontWeight: 700,
-                                  minWidth: 250,
-                                  width: 250,
-                                  fontSize: "0.875rem",
-                                  whiteSpace: "nowrap",
-                                }}
-                              >
-                                Nội dung bảo dưỡng
-                              </TableCell>
-                              {filteredMachineTypes.map((col) => {
-                                const colKey = getColKey(col);
-                                const isDirty = dirtyColKeys.has(colKey);
-                                return (
-                                  <TableCell
-                                    key={colKey}
-                                    ref={(el) => {
-                                      if (el)
-                                        headerCellRefs.current[colKey] = el;
-                                    }}
-                                    align="center"
-                                    sx={{
-                                      position: "sticky",
-                                      top: 0,
-                                      zIndex: 2,
-                                      fontWeight: 700,
-                                      minWidth: 100,
-                                      width: 100,
-                                      whiteSpace: "normal",
-                                      lineHeight: 1.3,
-                                      fontSize: "0.75rem",
-                                      // Màu do React quản lý (dirty/normal)
-                                      // Hover do DOM ref quản lý (không re-render)
-                                      backgroundColor: isDirty
-                                        ? "#fff8dc"
-                                        : "#eef0fb",
-                                      borderBottom: isDirty
-                                        ? "2px solid #f59e0b"
-                                        : "2px solid #d0d4f0",
-                                      padding: "8px 4px",
-                                      verticalAlign: "bottom",
-                                    }}
-                                  >
-                                    {col.machine_name}
-                                    {isDirty && (
-                                      <Box
-                                        component="span"
-                                        sx={{
-                                          display: "block",
-                                          fontSize: "0.6rem",
-                                          color: "#b45309",
-                                          fontWeight: 700,
-                                          mt: 0.3,
-                                        }}
-                                      >
-                                        ● chưa lưu
-                                      </Box>
-                                    )}
-                                  </TableCell>
-                                );
-                              })}
-                            </TableRow>
-                          </TableHead>
-                          <TableBody onMouseLeave={handleMatrixBodyMouseLeave}>
-                            {filteredContents.map((content, idx) => (
-                              <MatrixRow
-                                key={content.id_maintenance_content}
-                                content={content}
-                                machineTypesForMatrix={filteredMachineTypes}
-                                rowChecked={
-                                  matrixChecked[
-                                    content.name_maintenance_content
-                                  ]
-                                }
-                                rowBg={idx % 2 === 0 ? "#ffffff" : "#f8f8fc"}
-                                onCheckboxChange={handleMatrixCheckboxChange}
-                                onLabelMouseEnter={handleMatrixLabelMouseEnter}
-                                onCellMouseEnter={handleMatrixColMouseEnter}
-                                isEditing={
-                                  editingContentId ===
-                                  content.id_maintenance_content
-                                }
-                                onSaveEdit={handleSaveEditContent}
-                                onCancelEdit={handleCancelEditContent}
-                                onEdit={handleStartEditContent}
-                                onDelete={handleConfirmDeleteContent}
-                                isSaving={savingEditContent}
-                                isDeleting={
-                                  deletingContentId ===
-                                  content.id_maintenance_content
-                                }
-                              />
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </TableContainer>
-                    )}
-
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{ display: "block", mt: 2 }}
-                    >
-                      Tổng: {filteredContents.length} nội dung bảo dưỡng ×{" "}
-                      {filteredMachineTypes.length} loại máy
-                    </Typography>
-
-                    {/* --- Thêm nội dung bảo dưỡng mới --- */}
-                    <Divider sx={{ my: 3 }} />
-                    <Box>
-                      <Typography
-                        variant="subtitle1"
-                        fontWeight={600}
-                        gutterBottom
-                      >
-                        Thêm nội dung bảo dưỡng mới
-                      </Typography>
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
-                        sx={{ mb: 2 }}
-                      >
-                        Sau khi thêm, nội dung mới sẽ xuất hiện ngay trong ma
-                        trận bên trên.
-                      </Typography>
-                      <Stack direction="row" spacing={1.5} alignItems="center">
-                        <TextField
-                          size="small"
-                          label="Tên nội dung bảo dưỡng"
-                          value={newContentName}
-                          onChange={(e) => setNewContentName(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter")
-                              handleAddMaintenanceContent();
-                          }}
-                          disabled={addingContent}
-                          sx={{ flex: 1, maxWidth: 480 }}
-                          placeholder="VD: Kiểm tra, vệ sinh, bơm dầu"
-                        />
-                        <Button
-                          variant="contained"
-                          startIcon={
-                            addingContent ? (
-                              <CircularProgress size={18} color="inherit" />
-                            ) : (
-                              <Add />
-                            )
-                          }
-                          onClick={handleAddMaintenanceContent}
-                          disabled={addingContent || !newContentName.trim()}
-                          sx={{
-                            ...btnGradientStyle,
-                            px: 3,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {addingContent ? "Đang thêm..." : "Thêm"}
-                        </Button>
-                      </Stack>
-                    </Box>
-
-                    {/* --- Lịch bảo dưỡng định kỳ theo tháng --- */}
-                    <Divider sx={{ my: 3 }} />
-                    <Box
-                      sx={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "flex-start",
-                        flexWrap: "wrap",
-                        gap: 2,
-                        mb: 2,
-                      }}
-                    >
-                      <Box>
-                        <Typography variant="h6" fontWeight={600} gutterBottom>
-                          Lịch bảo dưỡng định kỳ theo tháng
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Tick vào tháng tương ứng để lên lịch bảo dưỡng cho
-                          từng loại máy, sau đó nhấn <strong>Lưu lịch</strong>{" "}
-                          để lưu vào hệ thống.
-                        </Typography>
-                      </Box>
-                      <Stack direction="row" spacing={1.5} alignItems="center">
-                        {dirtyScheduleKeys.size > 0 && (
-                          <Chip
-                            label={`${dirtyScheduleKeys.size} loại máy chưa lưu`}
-                            color="warning"
-                            size="small"
-                            variant="outlined"
-                            sx={{ fontWeight: 600 }}
-                          />
-                        )}
-                        <Button
-                          variant="outlined"
-                          onClick={() => setAutoCreateConfirmOpen(true)}
-                          disabled={autoCreating || savingSchedule}
-                          sx={{
-                            borderRadius: "10px",
-                            borderColor: "#9333ea",
-                            color: "#9333ea",
-                            fontWeight: 600,
-                            px: 2.5,
-                            py: 1,
-                            "&:hover": {
-                              borderColor: "#7e22ce",
-                              bgcolor: "rgba(147,51,234,0.06)",
-                            },
-                          }}
-                        >
-                          {autoCreating
-                            ? "Đang chạy..."
-                            : "Chạy tạo lịch tự động"}
-                        </Button>
-                        <Button
-                          variant="contained"
-                          startIcon={
-                            savingSchedule ? (
-                              <CircularProgress size={18} color="inherit" />
-                            ) : (
-                              <Save />
-                            )
-                          }
-                          onClick={handleSaveSchedule}
-                          disabled={
-                            savingSchedule || dirtyScheduleKeys.size === 0
-                          }
-                          sx={{ ...btnGradientStyle, px: 3, py: 1 }}
-                        >
-                          {savingSchedule ? "Đang lưu..." : "Lưu lịch"}
-                        </Button>
-                      </Stack>
-                    </Box>
-
-                    {/* --- Bộ lọc Lịch bảo dưỡng --- */}
-                    <Grid container spacing={2} sx={{ mb: 2 }}>
-                      <Grid item xs={12} md={6}>
-                        <TextField
-                          fullWidth
-                          size="small"
-                          label="Lọc theo loại máy"
-                          value={searchScheduleMachineType}
-                          onChange={(e) =>
-                            setSearchScheduleMachineType(e.target.value)
-                          }
-                          InputProps={{
-                            startAdornment: (
-                              <Search
-                                sx={{
-                                  color: "action.active",
-                                  mr: 1,
-                                  fontSize: 20,
-                                }}
-                              />
-                            ),
-                          }}
-                          sx={inputStyle}
-                        />
-                      </Grid>
-                      <Grid item xs={12} md={6}>
-                        <FormControl fullWidth size="small" sx={inputStyle}>
-                          <InputLabel>Lọc theo tháng</InputLabel>
-                          <Select
-                            multiple
-                            value={searchScheduleMonth}
-                            onChange={(e) =>
-                              setSearchScheduleMonth(e.target.value)
-                            }
-                            label="Lọc theo tháng"
-                            renderValue={(selected) =>
-                              selected.length === 0
-                                ? "Tất cả tháng"
-                                : MONTHS_CONFIG.filter((m) =>
-                                    selected.includes(m.key)
-                                  )
-                                    .map((m) => m.fullLabel)
-                                    .join(", ")
-                            }
-                          >
-                            {MONTHS_CONFIG.map(({ key, fullLabel }) => (
-                              <MenuItem key={key} value={key}>
-                                <Checkbox
-                                  checked={searchScheduleMonth.includes(key)}
-                                  size="small"
-                                />
-                                <ListItemText primary={fullLabel} />
-                              </MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-                      </Grid>
-                      <FormControlLabel
-                        control={
-                          <Switch
-                            checked={isSyncEnabled}
-                            onChange={(e) => setIsSyncEnabled(e.target.checked)}
-                          />
-                        }
-                        sx={{ mb: 1 }}
-                      />
-                    </Grid>
-
-                    {machineTypesForMatrix.length === 0 ? (
-                      <Alert severity="info" sx={{ borderRadius: "12px" }}>
-                        Chưa có loại máy nào trong hệ thống.
-                      </Alert>
-                    ) : filteredScheduleMachineTypes.length === 0 ? (
-                      <Alert severity="info" sx={{ borderRadius: "12px" }}>
-                        Không tìm thấy loại máy phù hợp.
-                      </Alert>
-                    ) : (
-                      <TableContainer
-                        component={Paper}
-                        variant="outlined"
-                        sx={{
-                          maxHeight: 500,
-                          borderRadius: "16px",
-                          overflow: "auto",
-                          position: "relative",
-                        }}
-                      >
-                        <Table
-                          stickyHeader
-                          size="small"
-                          sx={{ borderCollapse: "separate", borderSpacing: 0 }}
-                        >
-                          <TableHead>
+                        <Table>
+                          <TableHead sx={{ bgcolor: "#fafafa" }}>
                             <TableRow>
                               <TableCell
                                 sx={{
-                                  position: "sticky",
-                                  left: 0,
-                                  top: 0,
-                                  zIndex: 5,
-                                  backgroundColor: "#eef0fb",
-                                  borderRight: "2px solid #d0d4f0",
-                                  borderBottom: "2px solid #d0d4f0",
                                   fontWeight: 700,
-                                  minWidth: 220,
-                                  width: 220,
-                                  fontSize: "0.875rem",
+                                  width: 80,
+                                  textAlign: "center",
                                 }}
                               >
-                                <Box
-                                  sx={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "space-between",
-                                    gap: 1,
-                                  }}
-                                >
-                                  <span>Loại máy</span>
-                                  <span
-                                    style={{
-                                      fontSize: "0.7rem",
-                                      fontWeight: 500,
-                                      color: "#6b7280",
-                                    }}
-                                  >
-                                    SL
-                                  </span>
-                                </Box>
+                                STT
                               </TableCell>
-                              {filteredScheduleMonths.map(
-                                ({ key, fullLabel }) => (
-                                  <TableCell
-                                    key={key}
-                                    align="center"
-                                    sx={{
-                                      top: 0,
-                                      zIndex: 2,
-                                      backgroundColor: "#eef0fb",
-                                      borderBottom: "2px solid #d0d4f0",
-                                      fontWeight: 700,
-                                      minWidth: 52,
-                                      width: 52,
-                                      fontSize: "0.8rem",
-                                      whiteSpace: "nowrap",
-                                    }}
-                                  >
-                                    {fullLabel}
-                                  </TableCell>
-                                )
-                              )}
+                              <TableCell sx={{ fontWeight: 700 }}>
+                                Tên lỗi bảo dưỡng
+                              </TableCell>
+                              <TableCell
+                                sx={{
+                                  fontWeight: 700,
+                                  width: 150,
+                                  textAlign: "center",
+                                }}
+                              >
+                                Thao tác
+                              </TableCell>
                             </TableRow>
                           </TableHead>
                           <TableBody>
-                            {filteredScheduleMachineTypes.map((col, idx) => {
-                              const rowKey = getColKey(col);
-                              return (
-                                <ScheduleRow
-                                  key={rowKey}
-                                  col={col}
-                                  rowKey={rowKey}
-                                  rowData={scheduleData[rowKey]}
-                                  rowBg={idx % 2 === 0 ? "#ffffff" : "#f8f8fc"}
-                                  isDirty={dirtyScheduleKeys.has(rowKey)}
-                                  onCheckboxChange={handleScheduleChange}
-                                  visibleMonths={filteredScheduleMonths}
-                                  contentCount={
-                                    contentCountByColKey[rowKey] ?? 0
-                                  }
-                                />
-                              );
-                            })}
+                            {breakdowns.map((item, idx) => (
+                              <TableRow
+                                key={item.uuid_maintenance_breakdown}
+                                hover
+                              >
+                                <TableCell sx={{ textAlign: "center" }}>
+                                  {idx + 1}
+                                </TableCell>
+                                <TableCell
+                                  sx={{ fontWeight: 600, color: "#1a1a2e" }}
+                                >
+                                  {item.name_maintenance_breakdown}
+                                </TableCell>
+                                <TableCell sx={{ textAlign: "center" }}>
+                                  <IconButton
+                                    color="primary"
+                                    size="small"
+                                    onClick={() =>
+                                      handleOpenBreakdownDialog(item)
+                                    }
+                                    sx={{
+                                      mr: 1,
+                                      bgcolor: "#f5f6ff",
+                                      "&:hover": { bgcolor: "#e6e8ff" },
+                                    }}
+                                  >
+                                    <Edit fontSize="small" />
+                                  </IconButton>
+                                  <IconButton
+                                    color="error"
+                                    size="small"
+                                    onClick={() =>
+                                      handleOpenDeleteBreakdown(item)
+                                    }
+                                    sx={{
+                                      bgcolor: "#fff5f5",
+                                      "&:hover": { bgcolor: "#ffebeb" },
+                                    }}
+                                  >
+                                    <Delete fontSize="small" />
+                                  </IconButton>
+                                </TableCell>
+                              </TableRow>
+                            ))}
                           </TableBody>
                         </Table>
                       </TableContainer>
                     )}
-
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{ display: "block", mt: 2 }}
-                    >
-                      Tổng: {filteredScheduleMachineTypes.length} loại máy ×{" "}
-                      {filteredScheduleMonths.length} tháng
-                    </Typography>
                   </>
                 )}
               </TabPanel>
@@ -4105,6 +4424,103 @@ const AdminPage = () => {
               sx={{ ...btnGradientStyle, borderRadius: "10px", px: 3 }}
             >
               Đóng
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* --- Dialog Tạo/Sửa Lỗi Bảo Dưỡng --- */}
+        <Dialog
+          open={breakdownDialogOpen}
+          onClose={handleCloseBreakdownDialog}
+          maxWidth="xs"
+          fullWidth
+          PaperProps={{
+            sx: { borderRadius: "20px" },
+          }}
+        >
+          <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>
+            {editingBreakdown
+              ? "Cập nhật lỗi bảo dưỡng"
+              : "Khai báo lỗi bảo dưỡng"}
+          </DialogTitle>
+          <DialogContent sx={{ pb: 1 }}>
+            <TextField
+              autoFocus
+              margin="dense"
+              label="Tên lỗi bảo dưỡng"
+              type="text"
+              fullWidth
+              variant="outlined"
+              value={breakdownNameInput}
+              onChange={(e) => setBreakdownNameInput(e.target.value)}
+              sx={{ mt: 1 }}
+            />
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2 }}>
+            <Button
+              onClick={handleCloseBreakdownDialog}
+              sx={{ borderRadius: "10px", color: "text.secondary" }}
+            >
+              Hủy
+            </Button>
+            <Button
+              variant="contained"
+              onClick={handleSaveBreakdown}
+              disabled={savingBreakdown}
+              startIcon={
+                savingBreakdown ? (
+                  <CircularProgress size={16} color="inherit" />
+                ) : null
+              }
+              sx={{ ...btnGradientStyle, px: 3 }}
+            >
+              {savingBreakdown ? "Đang lưu..." : "Lưu lại"}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* --- Dialog Xác nhận xóa Lỗi Bảo Dưỡng --- */}
+        <Dialog
+          open={deleteConfirmOpen}
+          onClose={handleCloseDeleteBreakdown}
+          maxWidth="xs"
+          fullWidth
+          PaperProps={{
+            sx: { borderRadius: "16px" },
+          }}
+        >
+          <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>
+            Xác nhận xóa lỗi bảo dưỡng
+          </DialogTitle>
+          <DialogContent>
+            <Typography variant="body2" color="text.secondary">
+              Bạn có chắc muốn xóa lỗi{" "}
+              <strong style={{ color: "#d32f2f" }}>
+                "{deletingBreakdown?.name_maintenance_breakdown}"
+              </strong>{" "}
+              này không? Hành động này không thể hoàn tác.
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2 }}>
+            <Button
+              onClick={handleCloseDeleteBreakdown}
+              sx={{ borderRadius: "10px", color: "text.secondary" }}
+            >
+              Hủy
+            </Button>
+            <Button
+              variant="contained"
+              color="error"
+              onClick={handleConfirmDeleteBreakdown}
+              disabled={savingBreakdown}
+              startIcon={
+                savingBreakdown ? (
+                  <CircularProgress size={16} color="inherit" />
+                ) : null
+              }
+              sx={{ borderRadius: "10px", px: 3, fontWeight: 600 }}
+            >
+              {savingBreakdown ? "Đang xóa..." : "Xác nhận xóa"}
             </Button>
           </DialogActions>
         </Dialog>

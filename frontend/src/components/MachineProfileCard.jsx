@@ -197,6 +197,33 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
     return [];
   }, [machine]);
 
+  // Gather and sort all breakdown history records across all periods
+  const allBreakdowns = useMemo(() => {
+    const list = [];
+    historyRows.forEach((row) => {
+      if (row.maintenance_breakdown_detail) {
+        const parsed =
+          typeof row.maintenance_breakdown_detail === "string"
+            ? JSON.parse(row.maintenance_breakdown_detail)
+            : row.maintenance_breakdown_detail;
+        if (Array.isArray(parsed)) {
+          parsed.forEach((item) => {
+            list.push({
+              ...item,
+              year: row.year,
+              month: row.month,
+            });
+          });
+        }
+      }
+    });
+    return list.sort((a, b) => {
+      const ad = a.noted_at ? new Date(a.noted_at).getTime() : 0;
+      const bd = b.noted_at ? new Date(b.noted_at).getTime() : 0;
+      return ad - bd;
+    });
+  }, [historyRows]);
+
   // ───────────────────────────────────────────────────────────────────────────
   // Xuất PDF (in qua iframe ẩn)
   // ───────────────────────────────────────────────────────────────────────────
@@ -295,6 +322,22 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
         .join("");
     }
 
+    const sectionE_html =
+      allBreakdowns.length > 0
+        ? allBreakdowns
+            .map(
+              (item, i) => `
+            <tr>
+              <td style="text-align:center;width:38px">${i + 1}</td>
+              <td style="font-weight:700;color:#7b1fa2">${esc(item.name)}</td>
+              <td>${esc(item.note)}</td>
+              <td>${esc(item.noted_at || "—")}</td>
+              <td>${esc(item.noted_by_name || item.noted_by || "—")}</td>
+            </tr>`
+            )
+            .join("")
+        : `<tr><td colspan="5" style="text-align:center;font-style:italic;color:#888;padding:12px">Chưa ghi nhận lịch sử sửa chữa</td></tr>`;
+
     const html = `<!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -342,6 +385,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
   .section-title.a { background: linear-gradient(90deg,#667eea,#764ba2); }
   .section-title.b { background: linear-gradient(90deg,#546e7a,#78909c); }
   .section-title.c { background: linear-gradient(90deg,#00897b,#26a69a); }
+  .section-title.e { background: linear-gradient(90deg,#7b1fa2,#9c27b0); }
   .section-body { padding: 10px 12px; }
   .sub-title {
     display:inline-block;
@@ -544,6 +588,25 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
           </tr>
         </thead>
         <tbody>${sectionC_html}</tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SECTION E -->
+  <div class="section">
+    <div class="section-title e">D. LỊCH SỬ SỬA CHỮA MÁY MÓC THIẾT BỊ</div>
+    <div class="section-body">
+      <table class="grid">
+        <thead>
+          <tr>
+            <th style="width:38px">STT</th>
+            <th>Tên lỗi</th>
+            <th>Chi tiết sửa chữa</th>
+            <th style="width:140px">Ngày ghi nhận</th>
+            <th>Người ghi nhận</th>
+          </tr>
+        </thead>
+        <tbody>${sectionE_html}</tbody>
       </table>
     </div>
   </div>
@@ -1121,6 +1184,136 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                     );
                   });
                 })()}
+              </TableBody>
+            </Table>
+          </Box>
+        )}
+      </Paper>
+
+      {/* ── Section E: Lịch sử sửa chữa máy móc thiết bị ── */}
+      <Paper
+        elevation={0}
+        sx={{
+          border: "1px solid #e0e0e0",
+          borderRadius: "12px",
+          overflow: "hidden",
+          mt: 2,
+        }}
+      >
+        <Box
+          sx={{
+            background: "linear-gradient(90deg,#7b1fa2,#9c27b0)",
+            px: 2,
+            py: 1,
+          }}
+        >
+          <Typography
+            variant="subtitle1"
+            fontWeight={700}
+            sx={{ color: "#fff", letterSpacing: "0.03em" }}
+          >
+            D. LỊCH SỬ SỬA CHỮA MÁY MÓC THIẾT BỊ
+          </Typography>
+        </Box>
+
+        {historyLoading ? (
+          <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
+            <CircularProgress size={28} sx={{ color: "#7b1fa2" }} />
+          </Box>
+        ) : allBreakdowns.length === 0 ? (
+          <Box sx={{ py: 3, textAlign: "center" }}>
+            <Typography
+              variant="caption"
+              color="text.disabled"
+              fontStyle="italic"
+            >
+              Chưa ghi nhận lịch sử sửa chữa
+            </Typography>
+          </Box>
+        ) : (
+          <Box sx={{ overflowX: "auto" }}>
+            <Table size="small">
+              <TableBody>
+                <TableRow sx={{ bgcolor: "#f5f5f5" }}>
+                  {[
+                    "STT",
+                    "Tên lỗi",
+                    "Chi tiết sửa chữa",
+                    "Ngày ghi nhận",
+                    "Người ghi nhận",
+                  ].map((col) => (
+                    <TableCell
+                      key={col}
+                      sx={{
+                        fontWeight: 700,
+                        fontSize: "0.78rem",
+                        color: "#555",
+                        borderBottom: "2px solid #e0e0e0",
+                        py: 0.75,
+                        px: 1.5,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {col}
+                    </TableCell>
+                  ))}
+                </TableRow>
+
+                {allBreakdowns.map((item, idx) => (
+                  <TableRow
+                    key={idx}
+                    sx={{
+                      bgcolor: idx % 2 === 0 ? "#fff" : alpha("#000", 0.015),
+                    }}
+                  >
+                    <TableCell
+                      sx={{
+                        px: 1.5,
+                        py: 0.75,
+                        fontSize: "0.8rem",
+                        width: 50,
+                        textAlign: "center",
+                      }}
+                    >
+                      {idx + 1}
+                    </TableCell>
+                    <TableCell
+                      sx={{
+                        px: 1.5,
+                        py: 0.75,
+                        fontSize: "0.8rem",
+                        fontWeight: 700,
+                        color: "#7b1fa2",
+                      }}
+                    >
+                      {item.name}
+                    </TableCell>
+                    <TableCell sx={{ px: 1.5, py: 0.75, fontSize: "0.8rem" }}>
+                      {item.note || "—"}
+                    </TableCell>
+                    <TableCell
+                      sx={{
+                        px: 1.5,
+                        py: 0.75,
+                        fontSize: "0.78rem",
+                        color: "text.secondary",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {item.noted_at || "—"}
+                    </TableCell>
+                    <TableCell
+                      sx={{
+                        px: 1.5,
+                        py: 0.75,
+                        fontSize: "0.78rem",
+                        color: "text.secondary",
+                      }}
+                    >
+                      {item.noted_by_name || item.noted_by || "—"}
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </Box>
