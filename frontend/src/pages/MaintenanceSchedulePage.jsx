@@ -4125,7 +4125,7 @@ const MaintenanceSchedulePage = () => {
   const [filterModel, setFilterModel] = useState(null);
   const [filterManufacturer, setFilterManufacturer] = useState(null);
   const [filterSupplier, setFilterSupplier] = useState(null);
-  const [filterStatus, setFilterStatus] = useState(null); // null | 'pending' | 'completed'
+  const [filterStatus, setFilterStatus] = useState("pending"); // null | 'pending' | 'completed'
 
   // ── Maintenance history dialog ──
   const [historyDialogMachine, setHistoryDialogMachine] = useState(null);
@@ -4306,7 +4306,7 @@ const MaintenanceSchedulePage = () => {
     setFilterModel(null);
     setFilterManufacturer(null);
     setFilterSupplier(null);
-    setFilterStatus(null);
+    setFilterStatus("pending");
   };
 
   // Reset filters + day when month changes
@@ -4418,7 +4418,7 @@ const MaintenanceSchedulePage = () => {
     filterModel ||
     filterManufacturer ||
     filterSupplier ||
-    filterStatus;
+    filterStatus !== "pending";
 
   const clearFilters = () => {
     resetAllFilters();
@@ -4463,7 +4463,10 @@ const MaintenanceSchedulePage = () => {
   const filteredMachines = useMemo(() => {
     return deptLocationFiltered.filter((item) => {
       if (selectedDay && item.day !== selectedDay) return false;
-      if (filterStatus && item.status !== filterStatus) return false;
+      if (filterStatus) {
+        const itemStatus = item.status || "pending";
+        if (itemStatus !== filterStatus) return false;
+      }
       if (!searchTerm) return true;
       const q = searchTerm.toLowerCase();
       return (
@@ -5609,7 +5612,7 @@ const MaintenanceSchedulePage = () => {
                           : `${MONTH_NAMES[currentMonth - 1]} ${currentYear}`}
                       </Typography>
                       <Chip
-                        label={`${displayedMachines.length} máy`}
+                        label={`${filteredMachines.length} máy`}
                         size="small"
                         sx={{
                           bgcolor: "rgba(102,126,234,0.1)",
@@ -5652,7 +5655,7 @@ const MaintenanceSchedulePage = () => {
                   >
                     <CircularProgress />
                   </Box>
-                ) : displayedMachines.length === 0 ? (
+                ) : filteredMachines.length === 0 ? (
                   <Box
                     sx={{
                       display: "flex",
