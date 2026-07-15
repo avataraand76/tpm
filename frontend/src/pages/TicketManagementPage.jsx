@@ -3707,6 +3707,9 @@ const TicketManagementPage = () => {
               justifyContent: "space-between",
               flexDirection: { xs: "column-reverse", sm: "row" },
               gap: 2,
+              "& > :not(style) + :not(style)": {
+                marginLeft: { xs: "0px !important", sm: "8px !important" },
+              },
             }}
           >
             <Box
@@ -4347,6 +4350,9 @@ const TicketManagementPage = () => {
               flexDirection: { xs: "column-reverse", sm: "row" },
               gap: 1,
               justifyContent: "flex-end",
+              "& > :not(style) + :not(style)": {
+                marginLeft: { xs: "0px !important", sm: "8px !important" },
+              },
             }}
           >
             <Button
@@ -4596,6 +4602,9 @@ const TicketManagementPage = () => {
               p: 3,
               flexDirection: { xs: "column-reverse", sm: "row" },
               gap: 1,
+              "& > :not(style) + :not(style)": {
+                marginLeft: { xs: "0px !important", sm: "8px !important" },
+              },
             }}
           >
             <Button

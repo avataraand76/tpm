@@ -22,17 +22,20 @@ import {
   PrecisionManufacturing,
   Receipt,
   LocationOn,
+  CalendarMonth,
+  Assessment,
+  AdminPanelSettings,
 } from "@mui/icons-material";
 import NavigationBar from "../components/NavigationBar";
-// import { useAuth } from "../hooks/useAuth";
+import { useAuth } from "../hooks/useAuth";
 
 const HomePage = () => {
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  // const { permissions } = useAuth();
+  const { permissions = [] } = useAuth() || {};
   // const canEdit = permissions.includes("edit");
-  // const isAdmin = permissions.includes("admin");
+  const isAdmin = permissions.includes("admin");
   const handleNavigate = (path) => {
     navigate(path);
   };
@@ -397,7 +400,7 @@ const HomePage = () => {
                       mb: 3,
                     }}
                   >
-                    <Dashboard sx={{ fontSize: 35 }} />
+                    <CalendarMonth sx={{ fontSize: 35 }} />
                   </Avatar>
 
                   <Typography variant="h5" fontWeight="bold" gutterBottom>
@@ -436,6 +439,142 @@ const HomePage = () => {
                 </CardContent>
               </Card>
             </Grid>
+
+            {/* Báo cáo thống kê */}
+            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+              <Card
+                elevation={0}
+                sx={{
+                  height: "100%",
+                  borderRadius: "20px",
+                  border: "1px solid rgba(0, 0, 0, 0.05)",
+                  background:
+                    "linear-gradient(135deg, #9c27b022 0%, #e91e6322 100%)",
+                  transition: "all 0.3s ease",
+                  "&:hover": {
+                    transform: "translateY(-8px)",
+                    boxShadow: "0 20px 40px rgba(156, 39, 176, 0.2)",
+                  },
+                }}
+              >
+                <CardContent sx={{ p: 4, textAlign: "center" }}>
+                  <Avatar
+                    sx={{
+                      width: 70,
+                      height: 70,
+                      background: "linear-gradient(45deg, #9c27b0, #e91e63)",
+                      mx: "auto",
+                      mb: 3,
+                    }}
+                  >
+                    <Assessment sx={{ fontSize: 35 }} />
+                  </Avatar>
+
+                  <Typography variant="h5" fontWeight="bold" gutterBottom>
+                    📊 Báo cáo thống kê
+                  </Typography>
+
+                  <Typography
+                    variant="body1"
+                    color="text.secondary"
+                    sx={{ mb: 3 }}
+                  >
+                    Xem báo cáo tổng hợp, thống kê
+                    <br />
+                    kiểm kê và lịch sử bảo trì bảo dưỡng
+                  </Typography>
+
+                  <Button
+                    variant="contained"
+                    size="large"
+                    endIcon={<ArrowForward />}
+                    onClick={() => handleNavigate("/reports")}
+                    sx={{
+                      borderRadius: "12px",
+                      background: "linear-gradient(45deg, #9c27b0, #e91e63)",
+                      px: 4,
+                      py: 1.5,
+                      "&:hover": {
+                        transform: "translateY(-2px)",
+                        boxShadow: "0 8px 25px rgba(156, 39, 176, 0.3)",
+                      },
+                      transition: "all 0.3s ease",
+                    }}
+                  >
+                    Xem báo cáo
+                  </Button>
+                </CardContent>
+              </Card>
+            </Grid>
+
+            {/* Quản trị hệ thống */}
+            {isAdmin && (
+              <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                <Card
+                  elevation={0}
+                  sx={{
+                    height: "100%",
+                    borderRadius: "20px",
+                    border: "1px solid rgba(0, 0, 0, 0.05)",
+                    background:
+                      "linear-gradient(135deg, #607d8b22 0%, #455a6422 100%)",
+                    transition: "all 0.3s ease",
+                    "&:hover": {
+                      transform: "translateY(-8px)",
+                      boxShadow: "0 20px 40px rgba(96, 125, 139, 0.2)",
+                    },
+                  }}
+                >
+                  <CardContent sx={{ p: 4, textAlign: "center" }}>
+                    <Avatar
+                      sx={{
+                        width: 70,
+                        height: 70,
+                        background: "linear-gradient(45deg, #607d8b, #455a64)",
+                        mx: "auto",
+                        mb: 3,
+                      }}
+                    >
+                      <AdminPanelSettings sx={{ fontSize: 35 }} />
+                    </Avatar>
+
+                    <Typography variant="h5" fontWeight="bold" gutterBottom>
+                      🛡️ ADMIN
+                    </Typography>
+
+                    <Typography
+                      variant="body1"
+                      color="text.secondary"
+                      sx={{ mb: 3 }}
+                    >
+                      Quản lý tài khoản, phân quyền
+                      <br />
+                      và cấu hình dữ liệu hệ thống
+                    </Typography>
+
+                    <Button
+                      variant="contained"
+                      size="large"
+                      endIcon={<ArrowForward />}
+                      onClick={() => handleNavigate("/admin")}
+                      sx={{
+                        borderRadius: "12px",
+                        background: "linear-gradient(45deg, #607d8b, #455a64)",
+                        px: 4,
+                        py: 1.5,
+                        "&:hover": {
+                          transform: "translateY(-2px)",
+                          boxShadow: "0 8px 25px rgba(96, 125, 139, 0.3)",
+                        },
+                        transition: "all 0.3s ease",
+                      }}
+                    >
+                      Truy cập
+                    </Button>
+                  </CardContent>
+                </Card>
+              </Grid>
+            )}
           </Grid>
 
           {/* <div style={{ marginTop: "50px" }}>

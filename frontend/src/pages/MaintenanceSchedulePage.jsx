@@ -79,6 +79,7 @@ import {
   RotateRight,
   Flip,
   CenterFocusStrong,
+  Radar,
 } from "@mui/icons-material";
 import { alpha } from "@mui/material/styles";
 import NavigationBar from "../components/NavigationBar";
@@ -1129,7 +1130,12 @@ const BulkRfidDialog = ({ open, onClose, year, month, onOpenHistory }) => {
         </Grid>
       </DialogContent>
 
-      <DialogActions sx={{ p: 2, px: 3, borderTop: "1px solid #e0e0e0" }}>
+      <DialogActions
+        sx={{
+          p: 2,
+          px: 3,
+        }}
+      >
         <Button
           onClick={handleCheck}
           variant="contained"
@@ -1197,6 +1203,7 @@ const MaintenanceHistoryDialog = ({
   // Confirm dialog cho admin khi bấm "Duyệt hoàn thành" / "Duyệt chưa hoàn thành"
   // null | { targetStatus, title, message, confirmLabel, confirmColor }
   const [confirmAction, setConfirmAction] = useState(null);
+  const [rfidRadarOpen, setRfidRadarOpen] = useState(false);
 
   // States and refs for Section E (Breakdowns)
   const [breakdownDetailList, setBreakdownDetailList] = useState([]);
@@ -3069,6 +3076,12 @@ const MaintenanceHistoryDialog = ({
           py: 2,
           borderTop: "1px solid #e0e0e0",
           justifyContent: "space-between",
+          flexDirection: { xs: "column", sm: "row" },
+          gap: { xs: 1.5, sm: 0 },
+          alignItems: { xs: "stretch", sm: "center" },
+          "& > :not(style) + :not(style)": {
+            marginLeft: { xs: "0px !important", sm: "8px !important" },
+          },
         }}
       >
         {/* Status toggle — hiển thị nút theo role + trạng thái */}
@@ -3093,6 +3106,7 @@ const MaintenanceHistoryDialog = ({
                     color: "#1565c0",
                     "&:hover": { borderColor: "#0d47a1", bgcolor: "#e3f2fd" },
                     fontWeight: 600,
+                    width: { xs: "100%", sm: "auto" },
                   }}
                 >
                   Đánh dấu thực hiện
@@ -3104,7 +3118,11 @@ const MaintenanceHistoryDialog = ({
             if (st === "completed") {
               if (isAdmin) {
                 return (
-                  <Stack direction="row" spacing={1}>
+                  <Stack
+                    direction={{ xs: "column", sm: "row" }}
+                    spacing={1}
+                    sx={{ width: { xs: "100%", sm: "auto" } }}
+                  >
                     <Button
                       variant="contained"
                       startIcon={statusUpdating ? spinner : <CheckCircle />}
@@ -3116,6 +3134,7 @@ const MaintenanceHistoryDialog = ({
                         color: "#fff",
                         "&:hover": { bgcolor: "#1b5e20" },
                         fontWeight: 600,
+                        width: { xs: "100%", sm: "auto" },
                       }}
                     >
                       Duyệt hoàn thành
@@ -3134,6 +3153,7 @@ const MaintenanceHistoryDialog = ({
                           bgcolor: "#fff3e0",
                         },
                         fontWeight: 600,
+                        width: { xs: "100%", sm: "auto" },
                       }}
                     >
                       Chưa hoàn thành
@@ -3157,6 +3177,7 @@ const MaintenanceHistoryDialog = ({
                       bgcolor: "#fff3e0",
                     },
                     fontWeight: 600,
+                    width: { xs: "100%", sm: "auto" },
                   }}
                 >
                   Đánh dấu chưa thực hiện
@@ -3181,6 +3202,7 @@ const MaintenanceHistoryDialog = ({
                       bgcolor: "#fff3e0",
                     },
                     fontWeight: 600,
+                    width: { xs: "100%", sm: "auto" },
                   }}
                 >
                   Chưa hoàn thành
@@ -3189,12 +3211,34 @@ const MaintenanceHistoryDialog = ({
             }
 
             // confirm_completed cho user thường → không hiện nút
-            return <Box />;
+            return <Box sx={{ display: { xs: "none", sm: "block" } }} />;
           })()
         ) : (
-          <Box />
+          <Box sx={{ display: { xs: "none", sm: "block" } }} />
         )}
-        <Stack direction="row" spacing={1}>
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          spacing={1}
+          sx={{ width: { xs: "100%", sm: "auto" } }}
+        >
+          <Button
+            variant="outlined"
+            startIcon={<Radar />}
+            onClick={() => setRfidRadarOpen(true)}
+            sx={{
+              borderRadius: "10px",
+              borderColor: "#667eea",
+              color: "#667eea",
+              "&:hover": {
+                borderColor: "#764ba2",
+                bgcolor: "rgba(102, 126, 234, 0.04)",
+              },
+              fontWeight: 600,
+              width: { xs: "100%", sm: "auto" },
+            }}
+          >
+            Dò tìm
+          </Button>
           <Button
             variant="outlined"
             startIcon={<PictureAsPdf />}
@@ -3208,6 +3252,7 @@ const MaintenanceHistoryDialog = ({
                 bgcolor: "#ffebee",
               },
               fontWeight: 600,
+              width: { xs: "100%", sm: "auto" },
             }}
           >
             Xuất PDF
@@ -3219,6 +3264,7 @@ const MaintenanceHistoryDialog = ({
               borderRadius: "10px",
               background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
               px: 3,
+              width: { xs: "100%", sm: "auto" },
             }}
           >
             Đóng
@@ -3242,7 +3288,15 @@ const MaintenanceHistoryDialog = ({
             {confirmAction?.message}
           </Typography>
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
+        <DialogActions
+          sx={{
+            px: 3,
+            pb: 2,
+            "& > :not(style) + :not(style)": {
+              marginLeft: { xs: "0px !important", sm: "8px !important" },
+            },
+          }}
+        >
           <Button
             onClick={() => setConfirmAction(null)}
             disabled={statusUpdating}
@@ -3315,7 +3369,16 @@ const MaintenanceHistoryDialog = ({
             />
           </Box>
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2, justifyContent: "space-between" }}>
+        <DialogActions
+          sx={{
+            px: 3,
+            pb: 2,
+            justifyContent: "space-between",
+            "& > :not(style) + :not(style)": {
+              marginLeft: { xs: "0px !important", sm: "8px !important" },
+            },
+          }}
+        >
           <Button
             onClick={handleStopCamera}
             sx={{ borderRadius: "10px", color: "text.secondary" }}
@@ -3337,6 +3400,17 @@ const MaintenanceHistoryDialog = ({
           </Button>
         </DialogActions>
       </Dialog>
+
+      <RfidDialog
+        mode="radar"
+        open={rfidRadarOpen}
+        onClose={() => setRfidRadarOpen(false)}
+        title="Dò tìm thiết bị (RFID)"
+        selectedMachines={[machine]}
+        onClearSelection={() => {
+          setRfidRadarOpen(false);
+        }}
+      />
     </Dialog>
   );
 };

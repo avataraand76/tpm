@@ -2483,7 +2483,14 @@ const LocationTrackPage = () => {
               </Stack>
             )}
           </DialogContent>
-          <DialogActions sx={{ p: 3 }}>
+          <DialogActions
+            sx={{
+              p: 3,
+              "& > :not(style) + :not(style)": {
+                marginLeft: { xs: "0px !important", sm: "8px !important" },
+              },
+            }}
+          >
             <Button
               variant="outlined"
               onClick={handleCloseHistoryDialog}

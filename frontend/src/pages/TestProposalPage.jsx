@@ -5839,6 +5839,12 @@ const TestProposalPage = () => {
                       gap: 1,
                       bgcolor: "#f8f9fc",
                       borderTop: "1px solid rgba(0,0,0,0.06)",
+                      "& > :not(style) + :not(style)": {
+                        marginLeft: {
+                          xs: "0px !important",
+                          sm: "8px !important",
+                        },
+                      },
                     }}
                   >
                     <Button
@@ -9148,6 +9154,9 @@ const TestProposalPage = () => {
               justifyContent: "space-between",
               flexDirection: { xs: "column-reverse", sm: "row" },
               gap: 2,
+              "& > :not(style) + :not(style)": {
+                marginLeft: { xs: "0px !important", sm: "8px !important" },
+              },
             }}
           >
             <Box sx={{ width: "1px" }} />{" "}
@@ -9690,6 +9699,9 @@ const TestProposalPage = () => {
               flexDirection: { xs: "column-reverse", sm: "row" },
               gap: 1,
               justifyContent: "flex-end",
+              "& > :not(style) + :not(style)": {
+                marginLeft: { xs: "0px !important", sm: "8px !important" },
+              },
             }}
           >
             <Button
@@ -9939,6 +9951,9 @@ const TestProposalPage = () => {
               p: 3,
               flexDirection: { xs: "column-reverse", sm: "row" },
               gap: 1,
+              "& > :not(style) + :not(style)": {
+                marginLeft: { xs: "0px !important", sm: "8px !important" },
+              },
             }}
           >
             <Button
@@ -10198,6 +10213,9 @@ const TestProposalPage = () => {
                     flexWrap: "wrap",
                     alignItems: "center",
                   }),
+              "& > :not(style) + :not(style)": {
+                marginLeft: { xs: "0px !important", sm: "8px !important" },
+              },
             }}
           >
             {(() => {
@@ -10568,7 +10586,15 @@ const TestProposalPage = () => {
             )}
           </DialogContent>
 
-          <DialogActions sx={{ p: 2, gap: 1 }}>
+          <DialogActions
+            sx={{
+              p: 2,
+              gap: 1,
+              "& > :not(style) + :not(style)": {
+                marginLeft: { xs: "0px !important", sm: "8px !important" },
+              },
+            }}
+          >
             {batchPickerStep === 2 && (
               <Button
                 onClick={() => {
@@ -11709,7 +11735,14 @@ const TestProposalPage = () => {
               })()}
             </Stack>
           </DialogContent>
-          <DialogActions sx={{ p: 3 }}>
+          <DialogActions
+            sx={{
+              p: 3,
+              "& > :not(style) + :not(style)": {
+                marginLeft: { xs: "0px !important", sm: "8px !important" },
+              },
+            }}
+          >
             {/* <Button
               onClick={handleCloseInventoryScan}
               variant="outlined"
@@ -11858,7 +11891,15 @@ const TestProposalPage = () => {
               />
             </Stack>
           </DialogContent>
-          <DialogActions sx={{ p: 3, gap: 2 }}>
+          <DialogActions
+            sx={{
+              p: 3,
+              gap: 2,
+              "& > :not(style) + :not(style)": {
+                marginLeft: { xs: "0px !important", sm: "8px !important" },
+              },
+            }}
+          >
             <Button
               variant="outlined"
               onClick={() =>

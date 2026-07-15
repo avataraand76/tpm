@@ -19,6 +19,7 @@ import UpdateRfidPage from "./pages/UpdateRfidPage";
 import TestProposalPage from "./pages/TestProposalPage";
 import AdminPage from "./pages/AdminPage";
 import MaintenanceSchedulePage from "./pages/MaintenanceSchedulePage";
+import ReportPage from "./pages/ReportPage";
 import { useAuth } from "./hooks/useAuth";
 import { Box, CircularProgress } from "@mui/material";
 
@@ -225,6 +226,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <MaintenanceSchedulePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/reports"
+              element={
+                <ProtectedRoute>
+                  <ReportPage />
                 </ProtectedRoute>
               }
             />

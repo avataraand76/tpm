@@ -69,7 +69,12 @@ const RfidDialogShell = ({
           alignItems="center"
           spacing={1.5}
         >
-          <Stack direction="row" alignItems="center" spacing={1.5} sx={{ minWidth: 0 }}>
+          <Stack
+            direction="row"
+            alignItems="center"
+            spacing={1.5}
+            sx={{ minWidth: 0 }}
+          >
             <Avatar
               sx={{
                 width: 40,
@@ -129,6 +134,9 @@ const RfidDialogShell = ({
             borderTop: "1px solid rgba(0,0,0,0.06)",
             flexDirection: { xs: "column-reverse", sm: "row" },
             gap: 1,
+            "& > :not(style) + :not(style)": {
+              marginLeft: { xs: "0px !important", sm: "8px !important" },
+            },
           }}
         >
           {actions}

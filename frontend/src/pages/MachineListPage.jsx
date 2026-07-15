@@ -5250,6 +5250,9 @@ const MachineListPage = () => {
               flexDirection: { xs: "column-reverse", sm: "row" },
               gap: 1,
               justifyContent: "flex-end", // Căn phải
+              "& > :not(style) + :not(style)": {
+                marginLeft: { xs: "0px !important", sm: "8px !important" },
+              },
             }}
           >
             <Button
@@ -5513,6 +5516,9 @@ const MachineListPage = () => {
               p: 3,
               flexDirection: { xs: "column-reverse", sm: "row" },
               gap: 1,
+              "& > :not(style) + :not(style)": {
+                marginLeft: { xs: "0px !important", sm: "8px !important" },
+              },
             }}
           >
             <Button

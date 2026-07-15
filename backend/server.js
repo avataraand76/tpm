@@ -15497,3 +15497,266 @@ app.put(
     }
   }
 );
+
+// MARK: REPORTS
+
+// GET /api/reports/monthly-summary — Báo cáo tổng hợp tháng
+app.get("/api/reports/monthly-summary", authenticateToken, async (req, res) => {
+  try {
+    const { year, month } = req.query;
+    const now = new Date();
+    const vnNow = new Date(
+      now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" })
+    );
+    const targetYear = year ? parseInt(year) : vnNow.getFullYear();
+    const targetMonth = month ? parseInt(month) : vnNow.getMonth() + 1;
+
+    // 1. Fetch all inventory checks for the month
+    const [tickets] = await tpmConnection.query(
+      `SELECT 
+        i.id_inventory_check,
+        i.uuid_inventory_check,
+        i.check_date,
+        i.status,
+        i.note,
+        i.created_at
+      FROM tb_inventory_check i
+      WHERE YEAR(i.check_date) = ? AND MONTH(i.check_date) = ?
+      ORDER BY i.check_date DESC, i.created_at DESC`,
+      [targetYear, targetMonth]
+    );
+
+    let inventorySummary = [];
+
+    if (tickets.length > 0) {
+      const ticketIds = tickets.map((t) => t.id_inventory_check);
+      // Fetch details for all these tickets
+      const [details] = await tpmConnection.query(
+        `SELECT 
+          d.id_inventory_check,
+          d.id_department,
+          d.is_completed,
+          d.scanned_result,
+          d.list_before_scan,
+          dep.name_department,
+          dep.uuid_department
+        FROM tb_inventory_check_detail d
+        JOIN tb_department dep ON dep.id_department = d.id_department
+        WHERE d.id_inventory_check IN (?)`,
+        [ticketIds]
+      );
+
+      // Group details by ticket ID
+      const detailsByTicket = {};
+      details.forEach((d) => {
+        if (!detailsByTicket[d.id_inventory_check]) {
+          detailsByTicket[d.id_inventory_check] = [];
+        }
+        detailsByTicket[d.id_inventory_check].push(d);
+      });
+
+      inventorySummary = tickets.map((ticket) => {
+        const ticketDetails = detailsByTicket[ticket.id_inventory_check] || [];
+
+        // Build global scanned uuid set for this ticket (from all departments)
+        const globalScannedUuids = new Set();
+        ticketDetails.forEach((dept) => {
+          try {
+            const parsed =
+              typeof dept.scanned_result === "string"
+                ? JSON.parse(dept.scanned_result)
+                : dept.scanned_result;
+            const locations = Array.isArray(parsed)
+              ? parsed
+              : parsed?.locations || [];
+            locations.forEach((loc) => {
+              (loc.scanned_machine || []).forEach((m) => {
+                const u = m.uuid || m.uuid_machine;
+                if (u && !String(u).startsWith("NOT_FOUND")) {
+                  globalScannedUuids.add(u);
+                }
+              });
+            });
+          } catch (e) {
+            // ignore
+          }
+        });
+
+        // Compute department breakdown
+        const departmentSummary = ticketDetails.map((dept) => {
+          let scannedArr = [];
+          let systemSnapshot = 0;
+          let listBeforeScan = [];
+          let scannedResultData = null;
+
+          try {
+            scannedResultData =
+              typeof dept.scanned_result === "string"
+                ? JSON.parse(dept.scanned_result)
+                : dept.scanned_result;
+
+            if (Array.isArray(scannedResultData)) {
+              scannedArr = scannedResultData;
+              systemSnapshot = 0;
+            } else if (scannedResultData && scannedResultData.locations) {
+              scannedArr = scannedResultData.locations;
+              systemSnapshot = scannedResultData.snapshot_count || 0;
+            } else {
+              scannedArr = [];
+              systemSnapshot = 0;
+            }
+          } catch {
+            scannedArr = [];
+            systemSnapshot = 0;
+          }
+
+          try {
+            listBeforeScan =
+              typeof dept.list_before_scan === "string"
+                ? JSON.parse(dept.list_before_scan)
+                : dept.list_before_scan || [];
+          } catch {
+            listBeforeScan = [];
+          }
+
+          const checkedCount = scannedArr.length;
+          // Helper count function
+          let totalLocs = 0;
+          if (scannedResultData && !Array.isArray(scannedResultData)) {
+            const snapshots = scannedResultData.location_snapshots;
+            if (snapshots && typeof snapshots === "object") {
+              totalLocs = Object.values(snapshots).filter(
+                (count) => Number(count) > 0
+              ).length;
+            }
+          }
+
+          let totalScanned = 0;
+          let correctDeptCount = 0;
+          let misDeptCount = 0;
+
+          scannedArr.forEach((loc) => {
+            if (loc.scanned_machine && Array.isArray(loc.scanned_machine)) {
+              loc.scanned_machine.forEach((m) => {
+                const u = m.uuid || m.uuid_machine;
+                if (u && String(u).startsWith("NOT_FOUND")) {
+                  return; // Skip unregistered machines (NOT_FOUND) from count
+                }
+                totalScanned++;
+                if (m.misdepartment === "1") {
+                  misDeptCount++;
+                } else {
+                  correctDeptCount++;
+                }
+              });
+            }
+          });
+
+          const allDeptUuids = listBeforeScan.flatMap((loc) =>
+            (loc.machines || []).map((m) => m.uuid_machine)
+          );
+          const missingCount =
+            allDeptUuids.length > 0
+              ? allDeptUuids.filter((uuid) => !globalScannedUuids.has(uuid))
+                  .length
+              : Math.max(0, systemSnapshot - correctDeptCount);
+
+          return {
+            id_department: dept.id_department,
+            uuid_department: dept.uuid_department,
+            name_department: dept.name_department,
+            is_completed: dept.is_completed,
+            checked_locations: checkedCount,
+            total_locations: totalLocs,
+            system_count: systemSnapshot,
+            scanned_count: totalScanned,
+            correct_dept_count: correctDeptCount,
+            mis_dept_count: misDeptCount,
+            missing_count: missingCount,
+          };
+        });
+
+        return {
+          uuid_inventory_check: ticket.uuid_inventory_check,
+          check_date: ticket.check_date,
+          status: ticket.status,
+          note: ticket.note,
+          created_at: ticket.created_at,
+          departments: departmentSummary,
+        };
+      });
+    }
+
+    // 2. Fetch maintenance schedule stats for the month
+    const [maintenanceRows] = await tpmConnection.query(
+      `SELECT
+        d.id_department,
+        d.name_department,
+        msd.status
+      FROM tb_maintenance_schedule_detail msd
+      LEFT JOIN tb_machine m ON m.id_machine = msd.id_machine
+      LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
+      LEFT JOIN tb_location l ON l.id_location = ml.id_location
+      LEFT JOIN tb_department d ON d.id_department = l.id_department
+      WHERE msd.year = ? AND msd.month = ?
+      ORDER BY d.id_department ASC`,
+      [targetYear, targetMonth]
+    );
+
+    // Aggregate maintenance stats by department
+    const maintDeptMap = {};
+    let maintTotal = 0;
+    let maintPending = 0;
+    let maintCompleted = 0;
+    let maintConfirmed = 0;
+
+    maintenanceRows.forEach((r) => {
+      const deptName = r.name_department || "Không xác định";
+      if (!maintDeptMap[deptName]) {
+        maintDeptMap[deptName] = {
+          name_department: deptName,
+          total: 0,
+          pending: 0,
+          completed: 0,
+          confirmed: 0,
+        };
+      }
+
+      maintTotal++;
+      maintDeptMap[deptName].total++;
+
+      const status = r.status || "pending";
+      if (status === "confirm_completed") {
+        maintConfirmed++;
+        maintDeptMap[deptName].confirmed++;
+      } else if (status === "completed") {
+        maintCompleted++;
+        maintDeptMap[deptName].completed++;
+      } else {
+        maintPending++;
+        maintDeptMap[deptName].pending++;
+      }
+    });
+
+    res.json({
+      success: true,
+      data: {
+        year: targetYear,
+        month: targetMonth,
+        inventory: inventorySummary,
+        maintenance: {
+          summary: {
+            total: maintTotal,
+            pending: maintPending,
+            completed: maintCompleted,
+            confirmed: maintConfirmed,
+          },
+          departments: Object.values(maintDeptMap),
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Error generating monthly report summary:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});

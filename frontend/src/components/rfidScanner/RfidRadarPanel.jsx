@@ -933,6 +933,9 @@ const RfidRadarPanel = ({
             gap: 1,
             bgcolor: "#f8f9fc",
             borderTop: "1px solid rgba(0,0,0,0.06)",
+            "& > :not(style) + :not(style)": {
+              marginLeft: { xs: "0px !important", sm: "8px !important" },
+            },
           }}
         >
           <RfidSecondaryButton
@@ -1073,6 +1076,9 @@ const RfidRadarPanel = ({
             gap: 1,
             bgcolor: "#f8f9fc",
             borderTop: "1px solid rgba(0,0,0,0.06)",
+            "& > :not(style) + :not(style)": {
+              marginLeft: { xs: "0px !important", sm: "8px !important" },
+            },
           }}
         >
           <RfidSecondaryButton
@@ -1520,6 +1526,12 @@ const RfidRadarPanel = ({
                     gap: 1,
                     bgcolor: "#f8f9fc",
                     borderTop: "1px solid rgba(0,0,0,0.06)",
+                    "& > :not(style) + :not(style)": {
+                      marginLeft: {
+                        xs: "0px !important",
+                        sm: "8px !important",
+                      },
+                    },
                   }}
                 >
                   <RfidSecondaryButton
@@ -1549,7 +1561,16 @@ const RfidRadarPanel = ({
             </>
           )}
 
-          <Stack direction="row" spacing={1.5} sx={{ flexWrap: "wrap" }}>
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            spacing={1.5}
+            sx={{
+              flexWrap: "wrap",
+              "& > :not(style) + :not(style)": {
+                marginLeft: { xs: "0px !important", sm: "8px !important" },
+              },
+            }}
+          >
             <RfidSecondaryButton
               startIcon={<Replay />}
               onClick={handleReset}

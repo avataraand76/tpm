@@ -3408,7 +3408,7 @@ const AdminPage = () => {
 
                       {/* --- Bộ lọc Matrix --- */}
                       <Grid container spacing={2} sx={{ mb: 2 }}>
-                        <Grid item xs={12} md={6}>
+                        <Grid size={{ xs: 12, md: 6 }}>
                           <TextField
                             fullWidth
                             size="small"
@@ -3429,7 +3429,7 @@ const AdminPage = () => {
                             sx={inputStyle}
                           />
                         </Grid>
-                        <Grid item xs={12} md={6}>
+                        <Grid size={{ xs: 12, md: 6 }}>
                           <TextField
                             fullWidth
                             size="small"
@@ -3743,7 +3743,7 @@ const AdminPage = () => {
 
                       {/* --- Bộ lọc Lịch bảo dưỡng --- */}
                       <Grid container spacing={2} sx={{ mb: 2 }}>
-                        <Grid item xs={12} md={6}>
+                        <Grid size={{ xs: 12, md: 6 }}>
                           <TextField
                             fullWidth
                             size="small"
@@ -3766,7 +3766,7 @@ const AdminPage = () => {
                             sx={inputStyle}
                           />
                         </Grid>
-                        <Grid item xs={12} md={6}>
+                        <Grid size={{ xs: 6, md: 3 }}>
                           <FormControl fullWidth size="small" sx={inputStyle}>
                             <InputLabel>Lọc theo tháng</InputLabel>
                             <Select
@@ -4136,7 +4136,14 @@ const AdminPage = () => {
               renderDialogContent()
             )}
           </DialogContent>
-          <DialogActions sx={{ p: 3 }}>
+          <DialogActions
+            sx={{
+              p: 3,
+              "& > :not(style) + :not(style)": {
+                marginLeft: { xs: "0px !important", sm: "8px !important" },
+              },
+            }}
+          >
             <Button
               onClick={handleCloseDialog}
               disabled={dialogLoading}
@@ -4245,7 +4252,15 @@ const AdminPage = () => {
               </TableContainer>
             )}
           </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2 }}>
+          <DialogActions
+            sx={{
+              px: 3,
+              pb: 2,
+              "& > :not(style) + :not(style)": {
+                marginLeft: { xs: "0px !important", sm: "8px !important" },
+              },
+            }}
+          >
             <Button onClick={handleCloseRfidDetail} variant="outlined">
               Đóng
             </Button>
@@ -4285,7 +4300,16 @@ const AdminPage = () => {
               Thao tác này không thể hoàn tác.
             </Typography>
           </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+          <DialogActions
+            sx={{
+              px: 3,
+              pb: 2,
+              gap: 1,
+              "& > :not(style) + :not(style)": {
+                marginLeft: { xs: "0px !important", sm: "8px !important" },
+              },
+            }}
+          >
             <Button
               variant="outlined"
               onClick={() => setConfirmDeleteContent(null)}
@@ -4334,7 +4358,15 @@ const AdminPage = () => {
               hãy đảm bảo đã nhấn <strong>Lưu lịch</strong> trước khi chạy.
             </Typography>
           </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2 }}>
+          <DialogActions
+            sx={{
+              px: 3,
+              pb: 2,
+              "& > :not(style) + :not(style)": {
+                marginLeft: { xs: "0px !important", sm: "8px !important" },
+              },
+            }}
+          >
             <Button
               onClick={() => setAutoCreateConfirmOpen(false)}
               disabled={autoCreating}
@@ -4417,7 +4449,15 @@ const AdminPage = () => {
                     .join("\n\n")}
             </Box>
           </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2 }}>
+          <DialogActions
+            sx={{
+              px: 3,
+              pb: 2,
+              "& > :not(style) + :not(style)": {
+                marginLeft: { xs: "0px !important", sm: "8px !important" },
+              },
+            }}
+          >
             <Button
               variant="contained"
               onClick={() => setAutoCreateResult(null)}
@@ -4456,7 +4496,15 @@ const AdminPage = () => {
               sx={{ mt: 1 }}
             />
           </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2 }}>
+          <DialogActions
+            sx={{
+              px: 3,
+              pb: 2,
+              "& > :not(style) + :not(style)": {
+                marginLeft: { xs: "0px !important", sm: "8px !important" },
+              },
+            }}
+          >
             <Button
               onClick={handleCloseBreakdownDialog}
               sx={{ borderRadius: "10px", color: "text.secondary" }}
@@ -4501,7 +4549,15 @@ const AdminPage = () => {
               này không? Hành động này không thể hoàn tác.
             </Typography>
           </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2 }}>
+          <DialogActions
+            sx={{
+              px: 3,
+              pb: 2,
+              "& > :not(style) + :not(style)": {
+                marginLeft: { xs: "0px !important", sm: "8px !important" },
+              },
+            }}
+          >
             <Button
               onClick={handleCloseDeleteBreakdown}
               sx={{ borderRadius: "10px", color: "text.secondary" }}

@@ -29,6 +29,7 @@ import {
   AdminPanelSettings,
   QuestionMark,
   CalendarMonth,
+  Assessment,
 } from "@mui/icons-material";
 import { useAuth } from "../hooks/useAuth";
 
@@ -41,8 +42,8 @@ const NavigationBar = () => {
 
   // NEW: Sử dụng hook để kiểm tra kích thước màn hình
   const theme = useTheme();
-  // "md" (medium) là breakpoint, bạn có thể đổi thành "sm" (small) nếu muốn
-  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+  // Thay đổi breakpoint từ "md" lên "lg" để tránh tràn nội dung trên màn hình vừa
+  const isMobile = useMediaQuery(theme.breakpoints.down("lg"));
 
   const isAdmin = permissions.includes("admin");
   const canEdit = permissions.includes("edit");
@@ -57,22 +58,24 @@ const NavigationBar = () => {
     if (pathname === "/machines") return 2;
     if (pathname === "/location-track") return 3;
     if (pathname === "/maintenance-schedule") return 4;
-    // if (pathname === "/up-rfid") return 5;
-    // if (pathname === "/admin") return 6;
+    if (pathname === "/reports") return 5;
+    if (pathname === "/admin" && isAdmin) return 6;
     return 0;
   };
 
   const handleTabChange = (event, newValue) => {
-    const baseRoutes = ["/", "/tickets2", "/machines", "/location-track", "/maintenance-schedule"];
+    const baseRoutes = [
+      "/",
+      "/tickets2",
+      "/machines",
+      "/location-track",
+      "/maintenance-schedule",
+      "/reports",
+    ];
 
-    // if (isAdmin || isPhongCoDien) {
-    //   baseRoutes.push("/up-rfid");
-    // }
-
-    // // Thêm các route có điều kiện
-    // if (isAdmin) {
-    //   baseRoutes.push("/admin");
-    // }
+    if (isAdmin) {
+      baseRoutes.push("/admin");
+    }
 
     // Xử lý an toàn
     if (newValue < baseRoutes.length) {
@@ -134,25 +137,21 @@ const NavigationBar = () => {
     { label: "Quản lý phiếu", icon: <Receipt />, route: "/tickets2" },
     { label: "Máy móc", icon: <PrecisionManufacturing />, route: "/machines" },
     { label: "Vị trí", icon: <LocationOn />, route: "/location-track" },
-    { label: "Lịch Bảo Dưỡng", icon: <CalendarMonth />, route: "/maintenance-schedule" },
-    // ...(isAdmin || isPhongCoDien
-    //   ? [
-    //       {
-    //         label: "Cập nhật RFID",
-    //         icon: <Update />,
-    //         route: "/up-rfid",
-    //       },
-    //     ]
-    //   : []),
-    // ...(isAdmin
-    //   ? [
-    //       {
-    //         label: "Trang Admin",
-    //         icon: <AdminPanelSettings />,
-    //         route: "/admin",
-    //       },
-    //     ]
-    //   : []),
+    {
+      label: "Lịch Bảo Dưỡng",
+      icon: <CalendarMonth />,
+      route: "/maintenance-schedule",
+    },
+    { label: "Báo cáo", icon: <Assessment />, route: "/reports" },
+    ...(isAdmin
+      ? [
+          {
+            label: "Trang Admin",
+            icon: <AdminPanelSettings />,
+            route: "/admin",
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -196,7 +195,13 @@ const NavigationBar = () => {
         ) : (
           <>
             {/* === GIAO DIỆN DESKTOP === */}
-            <Box sx={{ display: "flex", alignItems: "center", mr: 4 }}>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                mr: { lg: 2, xl: 4 },
+              }}
+            >
               <Avatar
                 sx={{
                   width: 40,
@@ -230,10 +235,11 @@ const NavigationBar = () => {
                   "& .MuiTab-root": {
                     color: "rgba(255, 255, 255, 0.8)",
                     fontWeight: 600,
-                    fontSize: "1rem",
-                    minWidth: 140,
+                    fontSize: { lg: "0.9rem", xl: "1rem" },
+                    minWidth: { lg: 120, xl: 140 },
                     borderRadius: "12px",
-                    margin: "0 4px",
+                    margin: "0 2px",
+                    px: { lg: 1, xl: 2 },
                     transition: "all 0.3s ease",
                     "&.Mui-selected": {
                       color: "white",
@@ -272,26 +278,25 @@ const NavigationBar = () => {
                   label="Lịch Bảo Dưỡng"
                   iconPosition="start"
                 />
-                {/* {(isAdmin || isPhongCoDien) && (
-                  <Tab
-                    icon={<Update />}
-                    label="Cập nhật RFID"
-                    iconPosition="start"
-                  />
-                )}
+                <Tab
+                  icon={<Assessment />}
+                  label="Báo cáo"
+                  iconPosition="start"
+                />
                 {isAdmin && (
                   <Tab
                     icon={<AdminPanelSettings />}
                     label="Trang Admin"
                     iconPosition="start"
                   />
-                )} */}
+                )}
               </Tabs>
             </Box>
 
-            {/* Welcome Message (Chỉ hiển thị trên desktop) */}
+            {/* Welcome Message (Chỉ hiển thị trên desktop màn hình lớn) */}
             <Box
               sx={{
+                display: { lg: "none", xl: "block" },
                 mr: 3,
                 px: 2,
                 py: 1,
@@ -378,7 +383,7 @@ const NavigationBar = () => {
               <AccountCircle sx={{ mr: 1 }} />
               {user?.name}
             </MenuItem>
-            {isAdmin && (
+            {/* {isAdmin && (
               <MenuItem
                 onClick={() => navigate("/admin")}
                 sx={{ minWidth: 200 }}
@@ -386,7 +391,7 @@ const NavigationBar = () => {
                 <AdminPanelSettings sx={{ mr: 1 }} />
                 Trang Admin
               </MenuItem>
-            )}
+            )} */}
             {(isAdmin || isPhongCoDien) && (
               <MenuItem
                 onClick={() => navigate("/up-rfid")}
