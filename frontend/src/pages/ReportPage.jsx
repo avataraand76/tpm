@@ -5,6 +5,7 @@ import {
   Container,
   Typography,
   Box,
+  Button,
   Grid,
   Card,
   CardContent,
@@ -42,7 +43,9 @@ import {
   HourglassEmpty,
   CheckCircle,
   Business,
+  FileDownload,
 } from "@mui/icons-material";
+import ExcelJS from "exceljs";
 import NavigationBar from "../components/NavigationBar";
 import httpConnect from "../api/api"; // Default export is httpConnect axios instance
 
@@ -158,17 +161,302 @@ const ReportPage = () => {
     }
   };
 
+  const handleExportExcel = async () => {
+    try {
+      if (!reportData.inventory || reportData.inventory.length === 0) {
+        setError("Không có dữ liệu kiểm kê để xuất");
+        return;
+      }
+
+      const workbook = new ExcelJS.Workbook();
+
+      reportData.inventory.forEach((ticket) => {
+        // Parse date for sheet name: KK_D_M_YYYY
+        const ticketDate = new Date(ticket.check_date);
+        const day = ticketDate.getDate();
+        const month = ticketDate.getMonth() + 1;
+        const year = ticketDate.getFullYear();
+        const sheetName = `KK_${day}_${month}_${year}`;
+
+        // Ensure unique sheet name in workbook
+        let uniqueSheetName = sheetName;
+        let counter = 1;
+        while (workbook.getWorksheet(uniqueSheetName)) {
+          uniqueSheetName = `${sheetName}_${counter}`;
+          counter++;
+        }
+
+        const sheet = workbook.addWorksheet(uniqueSheetName, {
+          views: [{ showGridLines: true }],
+        });
+
+        // Set column widths
+        sheet.columns = [
+          { key: "department", width: 30 },
+          { key: "locations", width: 20 },
+          { key: "system", width: 25 },
+          { key: "scanned", width: 25 },
+          { key: "misDept", width: 25 },
+          { key: "missing", width: 25 },
+        ];
+
+        // 1. Add Title Rows
+        sheet.addRow([]); // empty row 1
+
+        const titleRow = sheet.addRow(["BÁO CÁO THỐNG KÊ CHI TIẾT KIỂM KÊ"]);
+        titleRow.height = 30;
+        sheet.mergeCells(`A2:F2`);
+        titleRow.getCell(1).font = {
+          name: "Segoe UI",
+          size: 16,
+          bold: true,
+          color: { argb: "FF1E293B" },
+        };
+        titleRow.getCell(1).alignment = {
+          horizontal: "center",
+          vertical: "middle",
+        };
+
+        const checkDateStr = ticketDate.toLocaleDateString("vi-VN", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        });
+        const subtitleRow = sheet.addRow([`Ngày kiểm kê: ${checkDateStr}`]);
+        subtitleRow.height = 20;
+        sheet.mergeCells(`A3:F3`);
+        subtitleRow.getCell(1).font = {
+          name: "Segoe UI",
+          size: 11,
+          italic: true,
+          color: { argb: "FF1E293B" },
+        };
+        subtitleRow.getCell(1).alignment = {
+          horizontal: "center",
+          vertical: "middle",
+        };
+
+        if (ticket.note) {
+          const noteRow = sheet.addRow([`Ghi chú: ${ticket.note}`]);
+          noteRow.height = 20;
+          sheet.mergeCells(`A4:F4`);
+          noteRow.getCell(1).font = {
+            name: "Segoe UI",
+            size: 11,
+            italic: true,
+            color: { argb: "FF1E293B" },
+          };
+          noteRow.getCell(1).alignment = {
+            horizontal: "center",
+            vertical: "middle",
+          };
+        } else {
+          sheet.addRow([]); // empty row 4
+        }
+
+        sheet.addRow([]); // empty row 5
+
+        // 2. Add Table Headers
+        const headerRow = sheet.addRow([
+          "Đơn vị",
+          "Vị trí đã kiểm",
+          "Sổ sách (Trước kiểm kê)",
+          "Số máy hiện diện",
+          "Số máy khác đơn vị",
+          "Số máy chưa xác định",
+        ]);
+        headerRow.height = 30;
+
+        headerRow.eachCell((cell, colNumber) => {
+          let cellColor = "FF1E293B";
+          if (colNumber === 3) cellColor = "ff1565c0";
+          else if (colNumber === 4) cellColor = "ff2e7d32";
+          else if (colNumber === 5) cellColor = "ffed6c02";
+          else if (colNumber === 6) cellColor = "ffd32f2f";
+
+          cell.font = {
+            name: "Segoe UI",
+            size: 11,
+            bold: true,
+            color: { argb: cellColor },
+          };
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFF1F5F9" },
+          };
+          cell.alignment = {
+            horizontal: "center",
+            vertical: "middle",
+            wrapText: true,
+          };
+          cell.border = {
+            top: { style: "thin", color: { argb: "FFCBD5E1" } },
+            left: { style: "thin", color: { argb: "FFCBD5E1" } },
+            bottom: { style: "medium", color: { argb: "FF475569" } },
+            right: { style: "thin", color: { argb: "FFCBD5E1" } },
+          };
+        });
+
+        // 3. Add Data Rows
+        let totalSystem = 0;
+        let totalScanned = 0;
+        let totalMisDept = 0;
+        let totalMissing = 0;
+        let totalLocsChecked = 0;
+        let totalLocsSnapshot = 0;
+
+        ticket.departments.forEach((dept, index) => {
+          totalSystem += dept.system_count;
+          totalScanned += dept.scanned_count;
+          totalMisDept += dept.mis_dept_count;
+          totalMissing += dept.missing_count;
+          totalLocsChecked += dept.checked_locations;
+          totalLocsSnapshot += dept.total_locations;
+
+          const dataRow = sheet.addRow([
+            dept.name_department,
+            `${dept.checked_locations}/${dept.total_locations}`,
+            dept.system_count,
+            dept.scanned_count,
+            dept.mis_dept_count,
+            dept.missing_count,
+          ]);
+          dataRow.height = 24;
+
+          // Striped rows (alternating colors)
+          const bgColor = index % 2 === 0 ? "FFFFFFFF" : "FFF8FAFC";
+
+          dataRow.eachCell((cell, colNumber) => {
+            let cellColor = "FF000000";
+            if (colNumber === 3) cellColor = "ff1565c0";
+            else if (colNumber === 4) cellColor = "ff2e7d32";
+            else if (colNumber === 5) cellColor = "ffed6c02";
+            else if (colNumber === 6) cellColor = "ffd32f2f";
+
+            cell.font = {
+              name: "Segoe UI",
+              size: 11,
+              color: { argb: cellColor },
+            };
+            cell.fill = {
+              type: "pattern",
+              pattern: "solid",
+              fgColor: { argb: bgColor },
+            };
+            cell.border = {
+              top: { style: "thin", color: { argb: "FFE2E8F0" } },
+              left: { style: "thin", color: { argb: "FFE2E8F0" } },
+              bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+              right: { style: "thin", color: { argb: "FFE2E8F0" } },
+            };
+
+            if (colNumber === 1) {
+              cell.alignment = {
+                horizontal: "left",
+                vertical: "middle",
+                indent: 1,
+              };
+            } else {
+              cell.alignment = { horizontal: "center", vertical: "middle" };
+            }
+
+            // Number formatting for numeric columns
+            if (colNumber >= 3) {
+              cell.numFmt = "#,##0";
+            }
+          });
+        });
+
+        // 4. Add Total Row
+        const totalRow = sheet.addRow([
+          "TỔNG CỘNG",
+          `${totalLocsChecked}/${totalLocsSnapshot}`,
+          totalSystem,
+          totalScanned,
+          totalMisDept,
+          totalMissing,
+        ]);
+        totalRow.height = 26;
+
+        totalRow.eachCell((cell, colNumber) => {
+          let cellColor = "FF1E293B";
+          if (colNumber === 3) cellColor = "ff1565c0";
+          else if (colNumber === 4) cellColor = "ff2e7d32";
+          else if (colNumber === 5) cellColor = "ffed6c02";
+          else if (colNumber === 6) cellColor = "ffd32f2f";
+
+          cell.font = {
+            name: "Segoe UI",
+            size: 11,
+            bold: true,
+            color: { argb: cellColor },
+          };
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFF1F5F9" }, // Slate 100
+          };
+          cell.border = {
+            top: { style: "medium", color: { argb: "FF94A3B8" } },
+            left: { style: "thin", color: { argb: "FFE2E8F0" } },
+            bottom: { style: "double", color: { argb: "FF94A3B8" } },
+            right: { style: "thin", color: { argb: "FFE2E8F0" } },
+          };
+
+          if (colNumber === 1) {
+            cell.alignment = {
+              horizontal: "left",
+              vertical: "middle",
+              indent: 1,
+            };
+          } else {
+            cell.alignment = { horizontal: "center", vertical: "middle" };
+          }
+
+          if (colNumber >= 3) {
+            cell.numFmt = "#,##0";
+          }
+        });
+      });
+
+      // Write to buffer and download
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      // Pad single digit months
+      const formattedMonth = String(currentMonth).padStart(2, "0");
+      link.download = `Bao_cao_kiem_ke_thang_${formattedMonth}_${currentYear}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Export Excel error:", err);
+      setError("Có lỗi xảy ra khi xuất file Excel");
+    }
+  };
+
   // Aggregated maintenance progress metrics
   const maintTotal = reportData.maintenance?.summary?.total || 0;
   const maintPending = reportData.maintenance?.summary?.pending || 0;
   const maintCompleted = reportData.maintenance?.summary?.completed || 0;
   const maintConfirmed = reportData.maintenance?.summary?.confirmed || 0;
   const maintDoneTotal = maintCompleted + maintConfirmed;
+  const maintTotalToday = reportData.maintenance?.summary?.totalToday || 0;
+  const maintDoneToday = reportData.maintenance?.summary?.doneToday || 0;
 
   const pctDone =
     maintTotal > 0 ? Math.round((maintDoneTotal / maintTotal) * 100) : 0;
-  // const pctConfirmed =
-  //   maintTotal > 0 ? Math.round((maintConfirmed / maintTotal) * 100) : 0;
+  const pctDoneToday =
+    maintTotalToday > 0
+      ? Math.round((maintDoneToday / maintTotalToday) * 100)
+      : 0;
 
   return (
     <>
@@ -329,6 +617,29 @@ const ReportPage = () => {
                   </Paper>
                 ) : (
                   <Stack spacing={2.5}>
+                    <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+                      <Button
+                        variant="contained"
+                        startIcon={<FileDownload />}
+                        onClick={handleExportExcel}
+                        sx={{
+                          background:
+                            "linear-gradient(45deg, #2e7d32, #4caf50)",
+                          boxShadow: "0 4px 12px rgba(46,125,50,0.2)",
+                          borderRadius: "10px",
+                          textTransform: "none",
+                          fontWeight: 600,
+                          px: 3,
+                          py: 1,
+                          "&:hover": {
+                            background:
+                              "linear-gradient(45deg, #1b5e20, #388e3c)",
+                          },
+                        }}
+                      >
+                        Xuất Excel báo cáo tháng
+                      </Button>
+                    </Box>
                     {reportData.inventory.map((ticket) => {
                       // Total sum statistics for this ticket
                       let totalSystem = 0;
@@ -732,13 +1043,41 @@ const ReportPage = () => {
                           Tổng quan bảo dưỡng
                         </Typography>
                         <Grid container spacing={2.5}>
+                          {/* Hàng 1: Tổng số máy */}
+                          <Grid size={{ xs: 12 }}>
+                            <Box
+                              sx={{
+                                p: 2.5,
+                                borderRadius: "12px",
+                                bgcolor: "rgba(102,126,234,0.08)",
+                                textAlign: "center",
+                                boxShadow: "0 2px 6px rgba(0,0,0,0.02)",
+                                maxWidth: "100%",
+                                mx: "auto",
+                              }}
+                            >
+                              <Typography
+                                variant="h4"
+                                fontWeight={800}
+                                sx={{ color: "#667eea", mb: 0.5 }}
+                              >
+                                {new Intl.NumberFormat("en-US").format(
+                                  maintTotal
+                                )}
+                              </Typography>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                fontWeight={700}
+                                sx={{ fontSize: "0.8rem" }}
+                              >
+                                Tổng số máy
+                              </Typography>
+                            </Box>
+                          </Grid>
+
+                          {/* Hàng 2: Chưa thực hiện, Đã thực hiện, Đã thực hiện hôm nay */}
                           {[
-                            {
-                              label: "Tổng số máy",
-                              value: maintTotal,
-                              bg: "rgba(102,126,234,0.08)",
-                              color: "#667eea",
-                            },
                             {
                               label: "Chưa thực hiện",
                               value: maintPending,
@@ -751,15 +1090,15 @@ const ReportPage = () => {
                               bg: MAINT_STATUS_CONFIG.completed.bg,
                               color: MAINT_STATUS_CONFIG.completed.color,
                             },
-                            // {
-                            //   label: "Đã hoàn thành",
-                            //   value: maintConfirmed,
-                            //   bg: MAINT_STATUS_CONFIG.confirm_completed.bg,
-                            //   color:
-                            //     MAINT_STATUS_CONFIG.confirm_completed.color,
-                            // },
+                            {
+                              label: "Đã thực hiện hôm nay",
+                              value: maintDoneToday,
+                              bg: "rgba(237, 108, 2, 0.08)",
+                              color: "#ed6c02",
+                              total: maintTotalToday,
+                            },
                           ].map((card, idx) => (
-                            <Grid size={{ xs: 6, sm: 4 }} key={idx}>
+                            <Grid size={{ xs: 12, sm: 4 }} key={idx}>
                               <Box
                                 sx={{
                                   p: 2.5,
@@ -767,6 +1106,7 @@ const ReportPage = () => {
                                   bgcolor: card.bg,
                                   textAlign: "center",
                                   boxShadow: "0 2px 6px rgba(0,0,0,0.02)",
+                                  height: "100%",
                                 }}
                               >
                                 <Typography
@@ -777,6 +1117,22 @@ const ReportPage = () => {
                                   {new Intl.NumberFormat("en-US").format(
                                     card.value
                                   )}
+                                  {card.total !== undefined &&
+                                    card.total > 0 && (
+                                      <span
+                                        style={{
+                                          fontSize: "1.2rem",
+                                          color: "#666",
+                                          fontWeight: "normal",
+                                        }}
+                                      >
+                                        {" "}
+                                        /{" "}
+                                        {new Intl.NumberFormat("en-US").format(
+                                          card.total
+                                        )}
+                                      </span>
+                                    )}
                                 </Typography>
                                 <Typography
                                   variant="caption"
@@ -795,7 +1151,7 @@ const ReportPage = () => {
 
                         {/* Progress bars side-by-side */}
                         <Grid container spacing={4}>
-                          <Grid size={{ xs: 12, md: 12 }}>
+                          <Grid size={{ xs: 12, md: 6 }}>
                             <Stack spacing={1} sx={{ width: "100%" }}>
                               <Stack
                                 direction="row"
@@ -808,7 +1164,7 @@ const ReportPage = () => {
                                   fontWeight={600}
                                   color="text.secondary"
                                 >
-                                  Tiến độ thực hiện
+                                  Tiến độ thực hiện tổng
                                 </Typography>
                                 <Typography
                                   variant="caption"
@@ -848,7 +1204,7 @@ const ReportPage = () => {
                             </Stack>
                           </Grid>
 
-                          {/* <Grid size={{ xs: 12, md: 6 }}>
+                          <Grid size={{ xs: 12, md: 6 }}>
                             <Stack spacing={1} sx={{ width: "100%" }}>
                               <Stack
                                 direction="row"
@@ -861,20 +1217,20 @@ const ReportPage = () => {
                                   fontWeight={600}
                                   color="text.secondary"
                                 >
-                                  Tiến độ hoàn thành
+                                  Tiến độ đến ngày hiện tại
                                 </Typography>
                                 <Typography
                                   variant="caption"
                                   fontWeight={700}
-                                  sx={{ color: "#2e7d32" }}
+                                  sx={{ color: "#ed6c02" }}
                                 >
-                                  {pctConfirmed}% (
+                                  {pctDoneToday}% (
                                   {new Intl.NumberFormat("en-US").format(
-                                    maintConfirmed
+                                    maintDoneToday
                                   )}
                                   /
                                   {new Intl.NumberFormat("en-US").format(
-                                    maintTotal
+                                    maintTotalToday
                                   )}
                                   )
                                 </Typography>
@@ -890,16 +1246,16 @@ const ReportPage = () => {
                               >
                                 <Box
                                   sx={{
-                                    width: `${pctConfirmed}%`,
+                                    width: `${pctDoneToday}%`,
                                     height: "100%",
                                     background:
-                                      "linear-gradient(90deg, #66bb6a 0%, #2e7d32 100%)",
+                                      "linear-gradient(90deg, #ffb74d 0%, #ed6c02 100%)",
                                     borderRadius: 5,
                                   }}
                                 />
                               </Box>
                             </Stack>
-                          </Grid> */}
+                          </Grid>
                         </Grid>
                       </CardContent>
                     </Card>
@@ -917,13 +1273,14 @@ const ReportPage = () => {
                       <Table size="medium">
                         <TableHead>
                           <TableRow sx={{ bgcolor: "#f5f6f8" }}>
-                            <TableCell sx={{ fontWeight: 700, pl: 3 }}>
+                            <TableCell
+                              sx={{ fontWeight: 700, pl: 3, width: "22%" }}
+                            >
                               <Stack
                                 direction="row"
                                 spacing={1}
                                 alignItems="center"
                               >
-                                <Business fontSize="small" color="action" />
                                 <Typography
                                   variant="subtitle2"
                                   fontWeight={700}
@@ -932,13 +1289,17 @@ const ReportPage = () => {
                                 </Typography>
                               </Stack>
                             </TableCell>
-                            <TableCell sx={{ fontWeight: 700 }} align="center">
+                            <TableCell
+                              sx={{ fontWeight: 700, width: "11%" }}
+                              align="center"
+                            >
                               Tổng số máy
                             </TableCell>
                             <TableCell
                               sx={{
                                 fontWeight: 700,
                                 color: MAINT_STATUS_CONFIG.pending.color,
+                                width: "11%",
                               }}
                               align="center"
                             >
@@ -948,27 +1309,38 @@ const ReportPage = () => {
                               sx={{
                                 fontWeight: 700,
                                 color: MAINT_STATUS_CONFIG.completed.color,
+                                width: "11%",
                               }}
                               align="center"
                             >
                               Đã thực hiện
                             </TableCell>
-                            {/* <TableCell
+                            <TableCell
+                              sx={{ fontWeight: 700, width: "15%" }}
+                              align="center"
+                            >
+                              Tiến độ thực hiện tổng
+                            </TableCell>
+                            <TableCell
                               sx={{
                                 fontWeight: 700,
-                                color:
-                                  MAINT_STATUS_CONFIG.confirm_completed.color,
+                                color: "#ed6c02",
+                                width: "15%",
                               }}
                               align="center"
                             >
-                              Đã hoàn thành
-                            </TableCell> */}
-                            <TableCell sx={{ fontWeight: 700 }} align="center">
-                              Tiến độ thực hiện
+                              Đã thực hiện hôm nay
                             </TableCell>
-                            {/* <TableCell sx={{ fontWeight: 700 }} align="center">
-                              Tiến độ hoàn thành
-                            </TableCell> */}
+                            <TableCell
+                              sx={{
+                                fontWeight: 700,
+                                color: "#ed6c02",
+                                width: "15%",
+                              }}
+                              align="center"
+                            >
+                              Tiến độ đến ngày hiện tại
+                            </TableCell>
                           </TableRow>
                         </TableHead>
                         <TableBody>
@@ -979,12 +1351,14 @@ const ReportPage = () => {
                                 dept.total > 0
                                   ? Math.round((deptDone / dept.total) * 100)
                                   : 0;
-                              // const deptConfirmedPct =
-                              //   dept.total > 0
-                              //     ? Math.round(
-                              //         (dept.confirmed / dept.total) * 100
-                              //       )
-                              //     : 0;
+                              const deptDoneToday = dept.doneToday || 0;
+                              const deptTotalToday = dept.totalToday || 0;
+                              const deptPctToday =
+                                deptTotalToday > 0
+                                  ? Math.round(
+                                      (deptDoneToday / deptTotalToday) * 100
+                                    )
+                                  : 0;
                               return (
                                 <TableRow key={idx} hover>
                                   <TableCell sx={{ fontWeight: 600, pl: 3 }}>
@@ -1021,19 +1395,6 @@ const ReportPage = () => {
                                       dept.completed + dept.confirmed
                                     )}
                                   </TableCell>
-                                  {/* <TableCell
-                                    align="center"
-                                    sx={{
-                                      color:
-                                        MAINT_STATUS_CONFIG.confirm_completed
-                                          .color,
-                                      fontWeight: 600,
-                                    }}
-                                  >
-                                    {new Intl.NumberFormat("en-US").format(
-                                      dept.confirmed
-                                    )}
-                                  </TableCell> */}
                                   <TableCell align="center">
                                     <Stack
                                       direction="row"
@@ -1065,12 +1426,241 @@ const ReportPage = () => {
                                       <Typography
                                         variant="body2"
                                         fontWeight={700}
+                                        sx={{
+                                          color:
+                                            deptPct === 100
+                                              ? "#2e7d32"
+                                              : "inherit",
+                                        }}
                                       >
                                         {deptPct}%
                                       </Typography>
                                     </Stack>
                                   </TableCell>
-                                  {/* <TableCell align="center">
+                                  <TableCell
+                                    align="center"
+                                    sx={{
+                                      color: "#ed6c02",
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    {deptTotalToday > 0 ? (
+                                      <>
+                                        {new Intl.NumberFormat("en-US").format(
+                                          deptDoneToday
+                                        )}
+                                        <span
+                                          style={{
+                                            fontSize: "0.8rem",
+                                            color: "#666",
+                                            fontWeight: "normal",
+                                          }}
+                                        >
+                                          {" "}
+                                          /{" "}
+                                          {new Intl.NumberFormat(
+                                            "en-US"
+                                          ).format(deptTotalToday)}
+                                        </span>
+                                      </>
+                                    ) : (
+                                      "-"
+                                    )}
+                                  </TableCell>
+                                  <TableCell align="center">
+                                    {deptTotalToday > 0 ? (
+                                      <Stack
+                                        direction="row"
+                                        spacing={1}
+                                        alignItems="center"
+                                        justifyContent="center"
+                                      >
+                                        <Box
+                                          sx={{
+                                            width: 60,
+                                            height: 6,
+                                            bgcolor: "#eee",
+                                            borderRadius: 3,
+                                            overflow: "hidden",
+                                          }}
+                                        >
+                                          <Box
+                                            sx={{
+                                              width: `${deptPctToday}%`,
+                                              height: "100%",
+                                              bgcolor:
+                                                deptPctToday === 100
+                                                  ? "#2e7d32"
+                                                  : "#ed6c02",
+                                              borderRadius: 3,
+                                            }}
+                                          />
+                                        </Box>
+                                        <Typography
+                                          variant="body2"
+                                          fontWeight={700}
+                                          sx={{
+                                            color:
+                                              deptPctToday === 100
+                                                ? "#2e7d32"
+                                                : "#ed6c02",
+                                          }}
+                                        >
+                                          {deptPctToday}%
+                                        </Typography>
+                                      </Stack>
+                                    ) : (
+                                      "-"
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            }
+                          )}
+
+                          {(() => {
+                            let totalMaintCount = 0;
+                            let totalMaintPending = 0;
+                            let totalMaintDone = 0;
+                            let totalMaintDoneToday = 0;
+                            let totalMaintTotalToday = 0;
+
+                            reportData.maintenance.departments.forEach(
+                              (dept) => {
+                                totalMaintCount += dept.total;
+                                totalMaintPending += dept.pending;
+                                totalMaintDone +=
+                                  dept.completed + dept.confirmed;
+                                totalMaintDoneToday += dept.doneToday || 0;
+                                totalMaintTotalToday += dept.totalToday || 0;
+                              }
+                            );
+
+                            const totalMaintPct =
+                              totalMaintCount > 0
+                                ? Math.round(
+                                    (totalMaintDone / totalMaintCount) * 100
+                                  )
+                                : 0;
+
+                            const totalMaintPctToday =
+                              totalMaintTotalToday > 0
+                                ? Math.round(
+                                    (totalMaintDoneToday /
+                                      totalMaintTotalToday) *
+                                      100
+                                  )
+                                : 0;
+
+                            return (
+                              <TableRow sx={{ bgcolor: "#f5f6f8" }}>
+                                <TableCell sx={{ fontWeight: "bold", pl: 3 }}>
+                                  TỔNG CỘNG
+                                </TableCell>
+                                <TableCell
+                                  align="center"
+                                  sx={{ fontWeight: "bold" }}
+                                >
+                                  {new Intl.NumberFormat("en-US").format(
+                                    totalMaintCount
+                                  )}
+                                </TableCell>
+                                <TableCell
+                                  align="center"
+                                  sx={{
+                                    fontWeight: "bold",
+                                    color: MAINT_STATUS_CONFIG.pending.color,
+                                  }}
+                                >
+                                  {new Intl.NumberFormat("en-US").format(
+                                    totalMaintPending
+                                  )}
+                                </TableCell>
+                                <TableCell
+                                  align="center"
+                                  sx={{
+                                    fontWeight: "bold",
+                                    color: MAINT_STATUS_CONFIG.completed.color,
+                                  }}
+                                >
+                                  {new Intl.NumberFormat("en-US").format(
+                                    totalMaintDone
+                                  )}
+                                </TableCell>
+                                <TableCell align="center">
+                                  <Stack
+                                    direction="row"
+                                    spacing={1}
+                                    alignItems="center"
+                                    justifyContent="center"
+                                  >
+                                    <Box
+                                      sx={{
+                                        width: 60,
+                                        height: 6,
+                                        bgcolor: "#eee",
+                                        borderRadius: 3,
+                                        overflow: "hidden",
+                                      }}
+                                    >
+                                      <Box
+                                        sx={{
+                                          width: `${totalMaintPct}%`,
+                                          height: "100%",
+                                          bgcolor:
+                                            totalMaintPct === 100
+                                              ? "#2e7d32"
+                                              : "#1976d2",
+                                          borderRadius: 3,
+                                        }}
+                                      />
+                                    </Box>
+                                    <Typography
+                                      variant="body2"
+                                      fontWeight="bold"
+                                      sx={{
+                                        color:
+                                          totalMaintPct === 100
+                                            ? "#2e7d32"
+                                            : "inherit",
+                                      }}
+                                    >
+                                      {totalMaintPct}%
+                                    </Typography>
+                                  </Stack>
+                                </TableCell>
+                                <TableCell
+                                  align="center"
+                                  sx={{
+                                    fontWeight: "bold",
+                                    color: "#ed6c02",
+                                  }}
+                                >
+                                  {totalMaintTotalToday > 0 ? (
+                                    <>
+                                      {new Intl.NumberFormat("en-US").format(
+                                        totalMaintDoneToday
+                                      )}
+                                      <span
+                                        style={{
+                                          fontSize: "0.8rem",
+                                          color: "#666",
+                                          fontWeight: "normal",
+                                        }}
+                                      >
+                                        {" "}
+                                        /{" "}
+                                        {new Intl.NumberFormat("en-US").format(
+                                          totalMaintTotalToday
+                                        )}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    "-"
+                                  )}
+                                </TableCell>
+                                <TableCell align="center">
+                                  {totalMaintTotalToday > 0 ? (
                                     <Stack
                                       direction="row"
                                       spacing={1}
@@ -1088,28 +1678,36 @@ const ReportPage = () => {
                                       >
                                         <Box
                                           sx={{
-                                            width: `${deptConfirmedPct}%`,
+                                            width: `${totalMaintPctToday}%`,
                                             height: "100%",
                                             bgcolor:
-                                              deptConfirmedPct === 100
+                                              totalMaintPctToday === 100
                                                 ? "#2e7d32"
-                                                : "#1976d2",
+                                                : "#ed6c02",
                                             borderRadius: 3,
                                           }}
                                         />
                                       </Box>
                                       <Typography
                                         variant="body2"
-                                        fontWeight={700}
+                                        fontWeight="bold"
+                                        sx={{
+                                          color:
+                                            totalMaintPctToday === 100
+                                              ? "#2e7d32"
+                                              : "#ed6c02",
+                                        }}
                                       >
-                                        {deptConfirmedPct}%
+                                        {totalMaintPctToday}%
                                       </Typography>
                                     </Stack>
-                                  </TableCell> */}
-                                </TableRow>
-                              );
-                            }
-                          )}
+                                  ) : (
+                                    "-"
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })()}
                         </TableBody>
                       </Table>
                     </TableContainer>

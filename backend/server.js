@@ -15692,7 +15692,8 @@ app.get("/api/reports/monthly-summary", authenticateToken, async (req, res) => {
       `SELECT
         d.id_department,
         d.name_department,
-        msd.status
+        msd.status,
+        msd.day
       FROM tb_maintenance_schedule_detail msd
       LEFT JOIN tb_machine m ON m.id_machine = msd.id_machine
       LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
@@ -15704,11 +15705,18 @@ app.get("/api/reports/monthly-summary", authenticateToken, async (req, res) => {
     );
 
     // Aggregate maintenance stats by department
+    const isCurrentMonth =
+      targetYear === vnNow.getFullYear() &&
+      targetMonth === vnNow.getMonth() + 1;
+    const todayDay = isCurrentMonth ? vnNow.getDate() : null;
+
     const maintDeptMap = {};
     let maintTotal = 0;
     let maintPending = 0;
     let maintCompleted = 0;
     let maintConfirmed = 0;
+    let maintTotalToday = 0;
+    let maintDoneToday = 0;
 
     maintenanceRows.forEach((r) => {
       const deptName = r.name_department || "Không xác định";
@@ -15719,6 +15727,8 @@ app.get("/api/reports/monthly-summary", authenticateToken, async (req, res) => {
           pending: 0,
           completed: 0,
           confirmed: 0,
+          totalToday: 0,
+          doneToday: 0,
         };
       }
 
@@ -15736,6 +15746,16 @@ app.get("/api/reports/monthly-summary", authenticateToken, async (req, res) => {
         maintPending++;
         maintDeptMap[deptName].pending++;
       }
+
+      // Check if this schedule is for today
+      if (todayDay !== null && r.day === todayDay) {
+        maintTotalToday++;
+        maintDeptMap[deptName].totalToday++;
+        if (status === "completed" || status === "confirm_completed") {
+          maintDoneToday++;
+          maintDeptMap[deptName].doneToday++;
+        }
+      }
     });
 
     res.json({
@@ -15750,6 +15770,8 @@ app.get("/api/reports/monthly-summary", authenticateToken, async (req, res) => {
             pending: maintPending,
             completed: maintCompleted,
             confirmed: maintConfirmed,
+            totalToday: maintTotalToday,
+            doneToday: maintDoneToday,
           },
           departments: Object.values(maintDeptMap),
         },
