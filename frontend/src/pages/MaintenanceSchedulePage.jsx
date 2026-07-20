@@ -1214,70 +1214,6 @@ const MaintenanceHistoryDialog = ({
   const [breakdownError, setBreakdownError] = useState(null);
   const originalBreakdownListRef = useRef([]);
 
-  // Camera capture states and refs
-  const [cameraOpen, setCameraOpen] = useState(false);
-  const [cameraStream, setCameraStream] = useState(null);
-  const videoRef = useRef(null);
-
-  const handleStopCamera = useCallback(() => {
-    if (cameraStream) {
-      cameraStream.getTracks().forEach((track) => track.stop());
-      setCameraStream(null);
-    }
-    setCameraOpen(false);
-  }, [cameraStream]);
-
-  const handleStartCamera = async () => {
-    setCameraOpen(true);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-      });
-      setCameraStream(stream);
-    } catch (err) {
-      console.error("Không thể truy cập camera:", err);
-      alert("Không thể truy cập camera. Vui lòng kiểm tra quyền thiết bị.");
-      setCameraOpen(false);
-    }
-  };
-
-  const handleCapturePhoto = () => {
-    if (!videoRef.current) return;
-    const video = videoRef.current;
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    canvas.toBlob(
-      (blob) => {
-        if (blob) {
-          const file = new File([blob], `camera_capture_${Date.now()}.jpg`, {
-            type: "image/jpeg",
-          });
-          setEvidenceFiles((prev) => [...prev, file]);
-        }
-      },
-      "image/jpeg",
-      0.9
-    );
-    handleStopCamera();
-  };
-
-  useEffect(() => {
-    if (cameraOpen && cameraStream && videoRef.current) {
-      videoRef.current.srcObject = cameraStream;
-    }
-  }, [cameraOpen, cameraStream]);
-
-  useEffect(() => {
-    return () => {
-      if (cameraStream) {
-        cameraStream.getTracks().forEach((track) => track.stop());
-      }
-    };
-  }, [cameraStream]);
-
   const fetchPredefinedBreakdowns = useCallback(async () => {
     try {
       const res = await api.maintenance.getBreakdowns();
@@ -2842,8 +2778,8 @@ const MaintenanceHistoryDialog = ({
                   </Button>
                   <Button
                     variant="outlined"
+                    component="label"
                     startIcon={<PhotoCamera />}
-                    onClick={handleStartCamera}
                     sx={{
                       borderRadius: "10px",
                       borderColor: "#ef6c00",
@@ -2856,6 +2792,13 @@ const MaintenanceHistoryDialog = ({
                     }}
                   >
                     Chụp ảnh minh chứng
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      hidden
+                      onChange={handlePickFiles}
+                    />
                   </Button>
                 </Stack>
               </>
@@ -3324,79 +3267,6 @@ const MaintenanceHistoryDialog = ({
             }}
           >
             {confirmAction?.confirmLabel}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* ── Camera Capture Dialog ── */}
-      <Dialog
-        open={cameraOpen}
-        onClose={handleStopCamera}
-        maxWidth="sm"
-        fullWidth
-        PaperProps={{ sx: { borderRadius: "16px" } }}
-      >
-        <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>
-          Chụp ảnh minh chứng
-        </DialogTitle>
-        <DialogContent
-          sx={{
-            pb: 1,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-          }}
-        >
-          <Box
-            sx={{
-              width: "100%",
-              aspectRatio: "4/3",
-              bgcolor: "#000",
-              borderRadius: "12px",
-              overflow: "hidden",
-              position: "relative",
-            }}
-          >
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-              }}
-            />
-          </Box>
-        </DialogContent>
-        <DialogActions
-          sx={{
-            px: 3,
-            pb: 2,
-            justifyContent: "space-between",
-            "& > :not(style) + :not(style)": {
-              marginLeft: { xs: "0px !important", sm: "8px !important" },
-            },
-          }}
-        >
-          <Button
-            onClick={handleStopCamera}
-            sx={{ borderRadius: "10px", color: "text.secondary" }}
-          >
-            Hủy
-          </Button>
-          <Button
-            variant="contained"
-            onClick={handleCapturePhoto}
-            startIcon={<PhotoCamera />}
-            sx={{
-              borderRadius: "10px",
-              bgcolor: "#ef6c00",
-              "&:hover": { bgcolor: "#e65100" },
-              fontWeight: 600,
-            }}
-          >
-            Chụp ảnh
           </Button>
         </DialogActions>
       </Dialog>
