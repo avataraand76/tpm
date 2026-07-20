@@ -524,6 +524,23 @@ const BulkRfidDialog = ({ open, onClose, year, month, onOpenHistory }) => {
   const [error, setError] = useState(null);
   const inputRef = useRef(null);
 
+  // Sắp xếp các máy có lịch bảo dưỡng (khả dụng) lên đầu danh sách
+  const sortedResults = useMemo(() => {
+    return [...results].sort((a, b) => {
+      const aSched = a.found && a.has_schedule;
+      const bSched = b.found && b.has_schedule;
+      if (aSched && !bSched) return -1;
+      if (!aSched && bSched) return 1;
+
+      const aFound = a.found;
+      const bFound = b.found;
+      if (aFound && !bFound) return -1;
+      if (!aFound && bFound) return 1;
+
+      return 0;
+    });
+  }, [results]);
+
   // Auto focus the input field when dialog opens
   useEffect(() => {
     if (open) {
@@ -747,7 +764,7 @@ const BulkRfidDialog = ({ open, onClose, year, month, onOpenHistory }) => {
                   }}
                 >
                   <Grid container spacing={2}>
-                    {results.map((item, idx) => {
+                    {sortedResults.map((item, idx) => {
                       if (!item.found) {
                         return (
                           <Grid size={{ xs: 12, sm: 3 }} key={idx}>

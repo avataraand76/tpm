@@ -422,6 +422,9 @@ const MachineQRScanner = ({
         >
           <video
             ref={videoRef}
+            autoPlay
+            muted
+            playsInline
             style={{
               // <<< SỬA LỖI ZOOM >>>
               width: "100%",
@@ -435,7 +438,6 @@ const MachineQRScanner = ({
                   ? "block"
                   : "none",
             }}
-            playsInline
           />
 
           {/* Lớp phủ trạng thái (Loading, Error, Idle) */}
