@@ -4415,6 +4415,36 @@ const MaintenanceSchedulePage = () => {
     filterSupplier,
   ]);
 
+  // ── Danh sách máy chưa bảo dưỡng trong tháng (tổng hợp theo bộ lọc/tháng) ──
+  const unmaintainedMachines = useMemo(() => {
+    const map = new Map();
+    (deptLocationFiltered || scheduleData || []).forEach((item) => {
+      if (item.status === "pending" || !item.status) {
+        const key =
+          item.uuid_machine ||
+          item.serial_machine ||
+          item.RFID_machine ||
+          item.uuid_maintenance_schedule_detail;
+        if (key && !map.has(key)) {
+          map.set(key, item);
+        }
+      }
+    });
+    return Array.from(map.values());
+  }, [deptLocationFiltered, scheduleData]);
+
+  const [bulkRadarOpen, setBulkRadarOpen] = useState(false);
+  const [bulkRadarMachines, setBulkRadarMachines] = useState([]);
+
+  const handleOpenBulkRadar = (machinesToRadar) => {
+    const targetList =
+      machinesToRadar && machinesToRadar.length > 0
+        ? machinesToRadar
+        : unmaintainedMachines;
+    setBulkRadarMachines(targetList);
+    setBulkRadarOpen(true);
+  };
+
   // ── Số máy hiển thị trên lịch = chỉ tính pending (còn phải làm) ──
   const calendarCountData = deptLocationFiltered.filter(
     (i) => i.status === "pending" || !i.status
@@ -5007,6 +5037,33 @@ const MaintenanceSchedulePage = () => {
                     }}
                   >
                     Kiểm tra bảo dưỡng
+                  </Button>
+                </Box>
+
+                {/* ── Bulk RFID Radar Button ── */}
+                <Box sx={{ mt: 1.5 }}>
+                  <Button
+                    fullWidth
+                    variant="outlined"
+                    size="small"
+                    onClick={() => handleOpenBulkRadar(unmaintainedMachines)}
+                    startIcon={<Radar sx={{ fontSize: 18 }} />}
+                    disabled={unmaintainedMachines.length === 0}
+                    sx={{
+                      borderRadius: "10px",
+                      textTransform: "none",
+                      fontWeight: 600,
+                      fontSize: "0.78rem",
+                      py: 1,
+                      borderColor: "#667eea",
+                      color: "#667eea",
+                      "&:hover": {
+                        borderColor: "#764ba2",
+                        bgcolor: "rgba(102, 126, 234, 0.04)",
+                      },
+                    }}
+                  >
+                    Dò tìm ({unmaintainedMachines.length})
                   </Button>
                 </Box>
 
@@ -5707,6 +5764,19 @@ const MaintenanceSchedulePage = () => {
         onOpenHistory={(machine) => {
           setHistoryDialogMachine(machine);
           setHistoryDialogOpen(true);
+        }}
+        onOpenRadar={(machines) => handleOpenBulkRadar(machines)}
+      />
+
+      <RfidDialog
+        mode="radar"
+        open={bulkRadarOpen}
+        onClose={() => setBulkRadarOpen(false)}
+        title={`Dò tìm máy chưa bảo dưỡng Tháng ${currentMonth}/${currentYear}`}
+        subtitle={`Danh sách ${bulkRadarMachines.length} máy chưa thực hiện bảo dưỡng`}
+        selectedMachines={bulkRadarMachines}
+        onClearSelection={() => {
+          setBulkRadarOpen(false);
         }}
       />
 

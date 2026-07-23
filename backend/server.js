@@ -14639,6 +14639,8 @@ app.get("/api/maintenance-schedule-detail", async (req, res) => {
         m.manufacturer,
         m.supplier,
         m.serial_machine,
+        m.RFID_machine,
+        m.NFC_machine,
         m.current_status,
         m.is_borrowed_or_rented_or_borrowed_out,
         m.power,
