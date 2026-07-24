@@ -71,6 +71,7 @@ import {
   Delete,
   QrCode2,
   WifiTethering,
+  Route,
   Refresh,
   Close,
   Save,
@@ -634,7 +635,6 @@ const TestProposalPage = () => {
   const [detailLoading, setDetailLoading] = useState(false);
   const [filesToUpload, setFilesToUpload] = useState([]);
   const [confirmingExportGate, setConfirmingExportGate] = useState(false);
-  const [hoveredRowUuid, setHoveredRowUuid] = useState(null);
 
   // Helper function to format date without timezone issues
   const formatDateTicket = (dateString) => {
@@ -4094,8 +4094,13 @@ const TestProposalPage = () => {
           variant="body2"
           sx={{ fontWeight: 700, mr: 1, whiteSpace: "nowrap" }}
         >
-          <WifiTethering
-            sx={{ fontSize: 16, verticalAlign: "text-top", mr: 0.5 }}
+          <Route
+            sx={{
+              fontSize: 16,
+              verticalAlign: "text-top",
+              mr: 0.5,
+              transform: "rotate(90deg)",
+            }}
           />
           Luồng duyệt
         </Typography>
@@ -4335,8 +4340,40 @@ const TestProposalPage = () => {
     );
   };
 
-  // Render Table Content for Tabs 0, 1, 2, 3
-  const renderTableContent = () => {
+  const getTypeChipColors = (type, tab) => {
+    if (tab === 0) {
+      switch (type) {
+        case "purchased":
+          return { bgcolor: "#1976d211", color: "#1976d2" };
+        case "maintenance_return":
+          return { bgcolor: "#ff980011", color: "#ff9800" };
+        case "rented":
+          return { bgcolor: "#673ab711", color: "#673ab7" };
+        case "borrowed":
+          return { bgcolor: "#03a9f411", color: "#03a9f4" };
+        case "borrowed_out_return":
+          return { bgcolor: "#00bcd411", color: "#00bcd4" };
+      }
+    }
+    if (tab === 1) {
+      switch (type) {
+        case "liquidation":
+          return { bgcolor: "#f4433611", color: "#f44336" };
+        case "maintenance":
+          return { bgcolor: "#ff980011", color: "#ff9800" };
+        case "borrowed_out":
+          return { bgcolor: "#00bcd411", color: "#00bcd4" };
+        case "rented_return":
+          return { bgcolor: "#673ab711", color: "#673ab7" };
+        case "borrowed_return":
+          return { bgcolor: "#03a9f411", color: "#03a9f4" };
+      }
+    }
+    return { bgcolor: "rgba(102, 126, 234, 0.1)", color: "#667eea" };
+  };
+
+  // Render Card Content for Tabs 0, 1, 2, 3
+  const renderCardContent = () => {
     const data =
       activeTab === 0
         ? imports
@@ -4347,218 +4384,353 @@ const TestProposalPage = () => {
             : inventories;
     if (loading)
       return (
-        <TableRow>
-          <TableCell colSpan={7} align="center" sx={{ py: 8 }}>
-            <CircularProgress />
-          </TableCell>
-        </TableRow>
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            py: 8,
+          }}
+        >
+          <CircularProgress />
+        </Box>
       );
     if (data.length === 0)
       return (
-        <TableRow>
-          <TableCell colSpan={7} align="center" sx={{ py: 8 }}>
-            <Typography variant="body1" color="text.secondary">
-              Không có dữ liệu
-            </Typography>
-          </TableCell>
-        </TableRow>
+        <Paper
+          elevation={0}
+          sx={{
+            p: 6,
+            textAlign: "center",
+            borderRadius: "16px",
+            bgcolor: "#f8f9fa",
+            border: "1px solid rgba(0, 0, 0, 0.06)",
+          }}
+        >
+          <Typography variant="body1" color="text.secondary">
+            Không có dữ liệu
+          </Typography>
+        </Paper>
       );
 
-    // Render Inventory Tab
+    // Render Inventory Tab Cards
     if (activeTab === 3) {
       return inventories.map((item) => {
-        const isHovered = hoveredRowUuid === item.uuid_inventory_check;
-        const hoverBackgroundColor = "rgba(0, 0, 0, 0.04)";
-
         return (
-          <React.Fragment key={item.uuid_inventory_check}>
-            {/* HÀNG 1: THÔNG TIN CHUNG */}
-            <TableRow
-              onMouseEnter={() => setHoveredRowUuid(item.uuid_inventory_check)}
-              onMouseLeave={() => setHoveredRowUuid(null)}
-              onClick={() => handleOpenDialog("view", "inventory", item)}
+          <Paper
+            key={item.uuid_inventory_check}
+            elevation={0}
+            onClick={() => handleOpenDialog("view", "inventory", item)}
+            sx={{
+              p: 2.5,
+              borderRadius: "16px",
+              border: "1px solid rgba(0, 0, 0, 0.08)",
+              bgcolor: "#ffffff",
+              transition: "all 0.2s ease-in-out",
+              cursor: "pointer",
+              "&:hover": {
+                transform: "translateY(-2px)",
+                boxShadow: "0 8px 24px rgba(102, 126, 234, 0.12)",
+                borderColor: "#667eea",
+              },
+            }}
+          >
+            {/* Header: Date + Title + Status */}
+            <Box
               sx={{
-                cursor: "pointer",
-                backgroundColor: isHovered ? hoverBackgroundColor : "inherit",
-                "& td": { borderBottom: "none", pb: 0.5 },
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                mb: 1.5,
+                flexWrap: "wrap",
+                gap: 1,
               }}
             >
-              <TableCell>{formatDate(item.check_date)}</TableCell>
-              <TableCell>Kiểm kê định kỳ</TableCell>
-              <TableCell colSpan={2}>
-                <Stack direction="column" spacing={0.5}>
-                  <Stack direction="row" alignItems="center" spacing={1}>
-                    <Typography variant="body2">
-                      {item.completed_department_count || 0} /{" "}
-                      {item.department_count || 0} đơn vị
-                    </Typography>
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1,
+                  flexWrap: "wrap",
+                }}
+              >
+                <Chip
+                  label="Kiểm kê định kỳ"
+                  size="small"
+                  sx={{
+                    bgcolor: "rgba(102, 126, 234, 0.1)",
+                    color: "#667eea",
+                    fontWeight: 700,
+                    borderRadius: "8px",
+                  }}
+                />
+                <Typography
+                  variant="body2"
+                  sx={{ color: "text.secondary", fontWeight: 500 }}
+                >
+                  • Ngày tạo: {formatDate(item.check_date)}
+                </Typography>
+              </Box>
+              <Chip
+                label={getStatusLabel(item.status)}
+                color={getStatusColor(item.status)}
+                size="small"
+                sx={{ fontWeight: 600 }}
+              />
+            </Box>
+
+            {/* Body: Details */}
+            <Grid container spacing={2} sx={{ mb: 1.5 }}>
+              <Grid size={{ xs: 12, md: 8 }}>
+                <Typography
+                  variant="caption"
+                  sx={{ color: "text.secondary", display: "block", mb: 0.5 }}
+                >
+                  Vị trí kiểm kê
+                </Typography>
+                <Stack
+                  direction="row"
+                  alignItems="center"
+                  spacing={1.5}
+                  flexWrap="wrap"
+                >
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    {item.completed_department_count || 0} /{" "}
+                    {item.department_count || 0} đơn vị
+                  </Typography>
+                  <Box
+                    sx={{
+                      width: 140,
+                      height: 8,
+                      bgcolor: "#e0e0e0",
+                      borderRadius: 2,
+                      overflow: "hidden",
+                    }}
+                  >
                     <Box
                       sx={{
-                        width: 100,
-                        height: 6,
-                        bgcolor: "#e0e0e0",
-                        borderRadius: 1,
-                        overflow: "hidden",
+                        width: `${
+                          item.department_count > 0
+                            ? ((item.completed_department_count || 0) /
+                                item.department_count) *
+                              100
+                            : 0
+                        }%`,
+                        height: "100%",
+                        bgcolor: "#2e7d32",
+                        transition: "width 0.3s ease",
                       }}
-                    >
-                      <Box
-                        sx={{
-                          width: `${
-                            item.department_count > 0
-                              ? ((item.completed_department_count || 0) /
-                                  item.department_count) *
-                                100
-                              : 0
-                          }%`,
-                          height: "100%",
-                          bgcolor: "#2e7d32",
-                          transition: "width 0.3s ease",
-                        }}
-                      />
-                    </Box>
-                  </Stack>
-                  {item.department_names && (
-                    <Typography variant="caption" color="text.secondary">
-                      {item.department_names}
-                    </Typography>
-                  )}
+                    />
+                  </Box>
                 </Stack>
-              </TableCell>
-              <TableCell>
-                <Chip
-                  label={getStatusLabel(item.status)}
-                  color={getStatusColor(item.status)}
-                  size="small"
-                />
-              </TableCell>
-              <TableCell>{item.note || "-"}</TableCell>
-            </TableRow>
+                {item.department_names && (
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ display: "block", mt: 0.5 }}
+                  >
+                    {item.department_names}
+                  </Typography>
+                )}
+              </Grid>
+              {item.note && (
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <Typography
+                    variant="caption"
+                    sx={{ color: "text.secondary", display: "block", mb: 0.5 }}
+                  >
+                    Ghi chú
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                    {item.note}
+                  </Typography>
+                </Grid>
+              )}
+            </Grid>
 
-            {/* HÀNG 2: LUỒNG DUYỆT CHI TIẾT */}
-            <TableRow
-              onMouseEnter={() => setHoveredRowUuid(item.uuid_inventory_check)}
-              onMouseLeave={() => setHoveredRowUuid(null)}
-              onClick={() => handleOpenDialog("view", "inventory", item)}
-              sx={{
-                cursor: "pointer",
-                backgroundColor: isHovered
-                  ? hoverBackgroundColor
-                  : "rgba(249, 250, 251, 0.4)",
-              }}
-            >
-              <TableCell colSpan={7} sx={{ pt: 0.5, pb: 2 }}>
-                {renderDetailedFlow(item.approval_flow)}
-              </TableCell>
-            </TableRow>
-          </React.Fragment>
+            {/* Footer: Approval Flow */}
+            <Divider sx={{ my: 1.5, borderColor: "rgba(0, 0, 0, 0.06)" }} />
+            <Box sx={{ pt: 0.5 }}>{renderDetailedFlow(item.approval_flow)}</Box>
+          </Paper>
         );
       });
     }
 
-    // Render Import/Export/Internal Tabs
+    // Render Import/Export/Internal Tab Cards
     return data.map((item) => {
       const uuid =
         item.uuid_machine_import ||
         item.uuid_machine_export ||
         item.uuid_machine_internal_transfer;
       const date = item.import_date || item.export_date || item.transfer_date;
-      const type = item.import_type || item.export_type || "internal";
+      const type =
+        activeTab === 0
+          ? item.import_type
+          : activeTab === 1
+            ? item.export_type
+            : "internal";
 
-      const isHovered = hoveredRowUuid === uuid;
-      const hoverBackgroundColor = "rgba(0, 0, 0, 0.04)";
       return (
-        <React.Fragment key={uuid}>
-          {/* HÀNG 1: THÔNG TIN CHUNG */}
-          <TableRow
-            onMouseEnter={() => setHoveredRowUuid(uuid)}
-            onMouseLeave={() => setHoveredRowUuid(null)}
-            onClick={() =>
-              handleOpenDialog(
-                "view",
-                activeTab === 0
-                  ? "import"
-                  : activeTab === 1
-                    ? "export"
-                    : "internal",
-                item
-              )
-            }
+        <Paper
+          key={uuid}
+          elevation={0}
+          onClick={() =>
+            handleOpenDialog(
+              "view",
+              activeTab === 0
+                ? "import"
+                : activeTab === 1
+                  ? "export"
+                  : "internal",
+              item
+            )
+          }
+          sx={{
+            p: 2.5,
+            borderRadius: "16px",
+            border: "1px solid rgba(0, 0, 0, 0.08)",
+            bgcolor: "#ffffff",
+            transition: "all 0.2s ease-in-out",
+            cursor: "pointer",
+            "&:hover": {
+              transform: "translateY(-2px)",
+              boxShadow: "0 8px 24px rgba(102, 126, 234, 0.12)",
+              borderColor: "#667eea",
+            },
+          }}
+        >
+          {/* Header */}
+          <Box
             sx={{
-              cursor: "pointer",
-              backgroundColor: isHovered ? hoverBackgroundColor : "inherit",
-              "& td": { borderBottom: "none", pb: 0.5 },
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              mb: 1.5,
+              flexWrap: "wrap",
+              gap: 1,
             }}
           >
-            <TableCell>{formatDate(date)}</TableCell>
-            <TableCell>{getTypeLabel(type)}</TableCell>
-            {activeTab === 2 ? (
-              <TableCell colSpan={2}>{item.to_location_name || "-"}</TableCell>
-            ) : (
-              <TableCell colSpan={2}>{item.to_location_name || "-"}</TableCell>
-            )}
-            <TableCell align="center">
-              {item.quantity_display ??
-                item.quantity ??
-                item.machine_count ??
-                0}
-            </TableCell>
-            <TableCell>
-              <Stack
-                direction="row"
-                spacing={1}
-                alignItems="center"
-                flexWrap="wrap"
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 1,
+                flexWrap: "wrap",
+              }}
+            >
+              <Chip
+                label={
+                  activeTab === 2
+                    ? "Điều chuyển"
+                    : type
+                      ? getTypeLabel(type)
+                      : "Nháp"
+                }
+                size="small"
+                sx={{
+                  ...getTypeChipColors(type, activeTab),
+                  fontWeight: 700,
+                  borderRadius: "8px",
+                }}
+              />
+              <Typography
+                variant="caption"
+                sx={{ color: "text.secondary", fontWeight: 500 }}
               >
-                <Chip
-                  label={getStatusLabel(item.status)}
-                  color={getStatusColor(item.status)}
-                  size="small"
-                />
-                {activeTab === 1 &&
-                  item.status === "completed" &&
-                  (() => {
-                    const gateChip = getExportGateConfirmChip(item);
-                    if (!gateChip) return null;
-                    return (
-                      <Chip
-                        label={gateChip.label}
-                        color={gateChip.color}
-                        size="small"
-                      />
-                    );
-                  })()}
-              </Stack>
-            </TableCell>
-            <TableCell>{item.note || "-"}</TableCell>
-          </TableRow>
+                • Ngày tạo: {formatDate(date)}
+              </Typography>
+            </Box>
+            <Stack
+              direction="row"
+              spacing={1}
+              alignItems="center"
+              flexWrap="wrap"
+            >
+              <Chip
+                label={getStatusLabel(item.status)}
+                color={getStatusColor(item.status)}
+                size="small"
+                sx={{ fontWeight: 600 }}
+              />
+              {activeTab === 1 &&
+                item.status === "completed" &&
+                (() => {
+                  const gateChip = getExportGateConfirmChip(item);
+                  if (!gateChip) return null;
+                  return (
+                    <Chip
+                      label={gateChip.label}
+                      color={gateChip.color}
+                      size="small"
+                      sx={{ fontWeight: 600 }}
+                    />
+                  );
+                })()}
+            </Stack>
+          </Box>
 
-          {/* HÀNG 2: LUỒNG DUYỆT CHI TIẾT */}
-          <TableRow
-            onMouseEnter={() => setHoveredRowUuid(uuid)}
-            onMouseLeave={() => setHoveredRowUuid(null)}
-            onClick={() =>
-              handleOpenDialog(
-                "view",
-                activeTab === 0
-                  ? "import"
+          {/* Body */}
+          <Grid container spacing={2} sx={{ mb: 1 }}>
+            <Grid size={{ xs: 12, sm: 6, md: 5 }}>
+              <Typography
+                variant="caption"
+                sx={{ color: "text.secondary", display: "block" }}
+              >
+                {activeTab === 0
+                  ? "Nhập vào"
                   : activeTab === 1
-                    ? "export"
-                    : "internal",
-                item
-              )
-            }
-            sx={{
-              cursor: "pointer",
-              backgroundColor: isHovered
-                ? hoverBackgroundColor
-                : "rgba(249, 250, 251, 0.4)",
-            }}
-          >
-            <TableCell colSpan={7} sx={{ pt: 0.5, pb: 2 }}>
-              {renderDetailedFlow(item.approval_flow)}
-            </TableCell>
-          </TableRow>
-        </React.Fragment>
+                    ? "Xuất đến"
+                    : "Đến vị trí"}
+              </Typography>
+              <Typography
+                variant="body1"
+                sx={{ fontWeight: 600, color: "#2c3e50" }}
+              >
+                {item.to_location_name || "-"}
+              </Typography>
+            </Grid>
+
+            <Grid size={{ xs: 6, sm: 3, md: 3 }}>
+              <Typography
+                variant="caption"
+                sx={{ color: "text.secondary", display: "block" }}
+              >
+                Số lượng máy
+              </Typography>
+              <Typography
+                variant="body1"
+                sx={{ fontWeight: 700, color: "#667eea" }}
+              >
+                {item.quantity_display ??
+                  item.quantity ??
+                  item.machine_count ??
+                  0}{" "}
+                máy
+              </Typography>
+            </Grid>
+
+            <Grid size={{ xs: 6, sm: 3, md: 4 }}>
+              <Typography
+                variant="caption"
+                sx={{ color: "text.secondary", display: "block" }}
+              >
+                Ghi chú
+              </Typography>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: item.note ? "text.primary" : "text.secondary",
+                }}
+              >
+                {item.note || "-"}
+              </Typography>
+            </Grid>
+          </Grid>
+
+          {/* Footer: Approval Flow */}
+          <Divider sx={{ my: 1.5, borderColor: "rgba(0, 0, 0, 0.06)" }} />
+          <Box sx={{ pt: 0.5 }}>{renderDetailedFlow(item.approval_flow)}</Box>
+        </Paper>
       );
     });
   };
@@ -6066,66 +6238,9 @@ const TestProposalPage = () => {
               </Grid>
             </Grid>
 
-            <TableContainer
-              component={Paper}
-              elevation={0}
-              sx={{
-                borderRadius: "20px",
-                border: "1px solid rgba(0, 0, 0, 0.05)",
-              }}
-            >
-              <Table>
-                <TableHead>
-                  <TableRow
-                    sx={{ backgroundColor: "rgba(102, 126, 234, 0.05)" }}
-                  >
-                    <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
-                      Ngày Tạo Phiếu
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
-                      Loại
-                    </TableCell>
-                    {activeTab === 2 ? (
-                      <TableCell
-                        sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
-                        colSpan={2}
-                      >
-                        Đến vị trí
-                      </TableCell>
-                    ) : activeTab === 3 ? (
-                      <TableCell
-                        sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
-                        colSpan={2}
-                      >
-                        Vị trí kiểm kê
-                      </TableCell>
-                    ) : (
-                      <TableCell
-                        sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
-                        colSpan={2}
-                      >
-                        {activeTab === 0 ? "Nhập vào" : "Xuất đến"}
-                      </TableCell>
-                    )}
-                    {activeTab !== 3 ? (
-                      <TableCell
-                        sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
-                        align="center"
-                      >
-                        Số lượng máy
-                      </TableCell>
-                    ) : null}
-                    <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
-                      Trạng thái
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
-                      Ghi chú
-                    </TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>{renderTableContent()}</TableBody>
-              </Table>
-            </TableContainer>
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              {renderCardContent()}
+            </Box>
             <Box sx={{ display: "flex", justifyContent: "center", mt: 3 }}>
               <Pagination
                 count={totalPages}
@@ -6405,7 +6520,6 @@ const TestProposalPage = () => {
                                           startIcon={<Add />}
                                           onClick={async () => {
                                             await fetchDepartments();
-                                            // Lọc ra các đơn vị chưa có trong phiếu (và không phải external)
                                             const existingDeptIds =
                                               formData.inventoryDetails.map(
                                                 (d) => d.id_department
@@ -6430,7 +6544,6 @@ const TestProposalPage = () => {
                                               return;
                                             }
 
-                                            // Mở dialog chọn đơn vị
                                             setFormData((prev) => ({
                                               ...prev,
                                               showAddDepartmentDialog: true,
@@ -6448,171 +6561,193 @@ const TestProposalPage = () => {
                                         </Button>
                                       )}
                                   </Stack>
-                                  <TableContainer sx={{ maxHeight: 400 }}>
-                                    <Table size="small" stickyHeader>
-                                      <TableHead>
-                                        <TableRow>
-                                          <TableCell sx={{ fontWeight: 600 }}>
-                                            Đơn vị
-                                          </TableCell>
-                                          <TableCell sx={{ fontWeight: 600 }}>
-                                            Trạng thái
-                                          </TableCell>
-                                          <TableCell sx={{ fontWeight: 600 }}>
-                                            Kết quả
-                                          </TableCell>
-                                          <TableCell
-                                            align="center"
-                                            sx={{ fontWeight: 600 }}
-                                          >
-                                            Hành động
-                                          </TableCell>
-                                        </TableRow>
-                                      </TableHead>
-                                      <TableBody>
-                                        {formData.inventoryDetails.map(
-                                          (dept) => {
-                                            // Calculate summary stats from dept.scanned_result array
-                                            let scannedArr = [];
-                                            let scannedResultData = null;
-                                            try {
-                                              scannedResultData =
-                                                typeof dept.scanned_result ===
-                                                "string"
-                                                  ? JSON.parse(
-                                                      dept.scanned_result
-                                                    )
-                                                  : dept.scanned_result;
-                                              scannedArr = Array.isArray(
-                                                scannedResultData
+                                  <Grid
+                                    container
+                                    spacing={2}
+                                    sx={{
+                                      pt: 1,
+                                      maxHeight: 420,
+                                      overflowY: "auto",
+                                      pr: 0.5,
+                                    }}
+                                  >
+                                    {formData.inventoryDetails.map((dept) => {
+                                      let scannedArr = [];
+                                      let scannedResultData = null;
+                                      try {
+                                        scannedResultData =
+                                          typeof dept.scanned_result ===
+                                          "string"
+                                            ? JSON.parse(dept.scanned_result)
+                                            : dept.scanned_result;
+                                        scannedArr = Array.isArray(
+                                          scannedResultData
+                                        )
+                                          ? scannedResultData
+                                          : scannedResultData?.locations || [];
+                                      } catch {
+                                        scannedArr = [];
+                                      }
+                                      const scannedLocationsCount =
+                                        scannedArr.length;
+                                      const totalLocationsCount =
+                                        getInventorySnapshotLocationCount(
+                                          scannedResultData
+                                        );
+                                      const progressPercent =
+                                        totalLocationsCount > 0
+                                          ? Math.min(
+                                              100,
+                                              Math.round(
+                                                (scannedLocationsCount /
+                                                  totalLocationsCount) *
+                                                  100
                                               )
-                                                ? scannedResultData
-                                                : scannedResultData?.locations ||
-                                                  [];
-                                            } catch {
-                                              scannedArr = [];
-                                            }
-                                            // const totalMachines =
-                                            //   scannedArr.reduce(
-                                            //     (acc, loc) =>
-                                            //       acc +
-                                            //       (loc.scanned_machine
-                                            //         ?.length || 0),
-                                            //     0
-                                            //   );
-                                            // const totalMis = scannedArr.reduce(
-                                            //   (acc, loc) =>
-                                            //     acc +
-                                            //     (loc.scanned_machine?.filter(
-                                            //       (m) => m.mislocation === "1"
-                                            //     ).length || 0),
-                                            //   0
-                                            // );
-                                            const scannedLocationsCount =
-                                              scannedArr.length;
-                                            const totalLocationsCount =
-                                              getInventorySnapshotLocationCount(
-                                                scannedResultData
-                                              );
+                                            )
+                                          : 0;
 
-                                            return (
-                                              <TableRow
-                                                key={dept.uuid_department}
+                                      return (
+                                        <Grid
+                                          size={{ xs: 12, sm: 6 }}
+                                          key={dept.uuid_department}
+                                        >
+                                          <Paper
+                                            elevation={0}
+                                            variant="outlined"
+                                            sx={{
+                                              p: 2,
+                                              borderRadius: "14px",
+                                              bgcolor: "#fff",
+                                              border:
+                                                "1px solid rgba(0, 0, 0, 0.08)",
+                                              transition:
+                                                "all 0.2s ease-in-out",
+                                              "&:hover": {
+                                                borderColor: "#1976d2",
+                                                boxShadow:
+                                                  "0 4px 16px rgba(25, 118, 210, 0.1)",
+                                              },
+                                            }}
+                                          >
+                                            <Box
+                                              sx={{
+                                                display: "flex",
+                                                justifyContent: "space-between",
+                                                alignItems: "center",
+                                                mb: 1.5,
+                                                gap: 1,
+                                              }}
+                                            >
+                                              <Typography
+                                                variant="subtitle1"
+                                                sx={{
+                                                  fontWeight: 700,
+                                                  color: "#2c3e50",
+                                                }}
                                               >
-                                                <TableCell
+                                                {dept.name_department}
+                                              </Typography>
+                                              {scannedArr.length > 0 ? (
+                                                <Chip
+                                                  label="Đã kiểm"
+                                                  color="success"
+                                                  size="small"
                                                   sx={{ fontWeight: 600 }}
-                                                >
-                                                  {dept.name_department}
-                                                </TableCell>
-                                                <TableCell>
-                                                  {scannedArr.length > 0 ? (
-                                                    <Chip
-                                                      label="Đã kiểm"
-                                                      color="success"
-                                                      size="small"
-                                                    />
-                                                  ) : (
-                                                    <Chip
-                                                      label="Chưa kiểm"
-                                                      color="default"
-                                                      size="small"
-                                                    />
-                                                  )}
-                                                </TableCell>
-                                                <TableCell>
-                                                  <Stack
-                                                    spacing={1}
-                                                    alignItems="flex-start"
-                                                  >
-                                                    {/* Dòng thông tin chính */}
-                                                    <Typography
-                                                      // variant="caption"
-                                                      sx={{
-                                                        whiteSpace: "nowrap",
-                                                      }}
-                                                    >
-                                                      Đã kiểm:{" "}
-                                                      <b>
-                                                        {scannedLocationsCount}/
-                                                        {totalLocationsCount}
-                                                      </b>
-                                                    </Typography>
+                                                />
+                                              ) : (
+                                                <Chip
+                                                  label="Chưa kiểm"
+                                                  color="default"
+                                                  size="small"
+                                                  sx={{ fontWeight: 600 }}
+                                                />
+                                              )}
+                                            </Box>
 
-                                                    {/* Các thẻ thông số */}
-                                                    {/* <Stack
-                                                      direction="row"
-                                                      spacing={0.5}
-                                                    >
-                                                      <Chip
-                                                        label={`Máy: ${totalMachines}`}
-                                                        // size="small"
-                                                        variant="outlined"
-                                                        sx={{
-                                                          fontSize: "12px",
-                                                          height: "20px",
-                                                        }}
-                                                      />
-                                                      <Chip
-                                                        label={`Sai vị trí: ${totalMis}`}
-                                                        // size="small"
-                                                        color={
-                                                          totalMis > 0
-                                                            ? "error"
-                                                            : "default"
-                                                        } // Đỏ nếu có lỗi
-                                                        sx={{
-                                                          fontSize: "12px",
-                                                          height: "20px",
-                                                        }}
-                                                      />
-                                                    </Stack> */}
-                                                  </Stack>
-                                                </TableCell>
-                                                <TableCell align="center">
-                                                  <Button
-                                                    size="small"
-                                                    variant="contained"
-                                                    color="info"
-                                                    onClick={() =>
-                                                      handleOpenDepartmentDetail(
-                                                        dept
-                                                      )
-                                                    }
-                                                    sx={{
-                                                      borderRadius: "20px",
-                                                      textTransform: "none",
-                                                    }}
-                                                  >
-                                                    <EditNote />
-                                                  </Button>
-                                                </TableCell>
-                                              </TableRow>
-                                            );
-                                          }
-                                        )}
-                                      </TableBody>
-                                    </Table>
-                                  </TableContainer>
+                                            <Box sx={{ mb: 2 }}>
+                                              <Box
+                                                sx={{
+                                                  display: "flex",
+                                                  justifyContent:
+                                                    "space-between",
+                                                  alignItems: "center",
+                                                  mb: 0.5,
+                                                }}
+                                              >
+                                                <Typography
+                                                  variant="caption"
+                                                  sx={{
+                                                    color: "text.secondary",
+                                                    fontWeight: 500,
+                                                  }}
+                                                >
+                                                  Tiến độ
+                                                </Typography>
+                                                <Typography
+                                                  variant="body2"
+                                                  sx={{
+                                                    fontWeight: 700,
+                                                  }}
+                                                >
+                                                  {scannedLocationsCount} /{" "}
+                                                  {totalLocationsCount}
+                                                </Typography>
+                                              </Box>
+                                              <Box
+                                                sx={{
+                                                  width: "100%",
+                                                  height: 6,
+                                                  bgcolor: "#e0e0e0",
+                                                  borderRadius: 3,
+                                                  overflow: "hidden",
+                                                }}
+                                              >
+                                                <Box
+                                                  sx={{
+                                                    width: `${progressPercent}%`,
+                                                    height: "100%",
+                                                    bgcolor:
+                                                      progressPercent === 100
+                                                        ? "#2e7d32"
+                                                        : "#1976d2",
+                                                    transition:
+                                                      "width 0.3s ease",
+                                                  }}
+                                                />
+                                              </Box>
+                                            </Box>
+
+                                            <Box
+                                              sx={{
+                                                display: "flex",
+                                                justifyContent: "flex-end",
+                                              }}
+                                            >
+                                              <Button
+                                                size="small"
+                                                variant="contained"
+                                                color="info"
+                                                startIcon={<EditNote />}
+                                                onClick={() =>
+                                                  handleOpenDepartmentDetail(
+                                                    dept
+                                                  )
+                                                }
+                                                sx={{
+                                                  borderRadius: "10px",
+                                                  textTransform: "none",
+                                                  fontWeight: 600,
+                                                  px: 2,
+                                                }}
+                                              >
+                                                Chi tiết
+                                              </Button>
+                                            </Box>
+                                          </Paper>
+                                        </Grid>
+                                      );
+                                    })}
+                                  </Grid>
                                 </CardContent>
                               </Card>
                             )}
@@ -8776,9 +8911,7 @@ const TestProposalPage = () => {
                                   gap: 1,
                                 }}
                               >
-                                <WifiTethering
-                                  sx={{ transform: "rotate(90deg)" }}
-                                />{" "}
+                                <Route sx={{ transform: "rotate(90deg)" }} />{" "}
                                 Quy trình duyệt
                               </Typography>
 
