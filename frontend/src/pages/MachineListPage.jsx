@@ -77,6 +77,8 @@ import {
   HourglassFull,
   Radar,
   PictureAsPdf,
+  Lock,
+  LockOpen,
 } from "@mui/icons-material";
 import { alpha } from "@mui/material/styles";
 import * as XLSX from "xlsx-js-style";
@@ -733,6 +735,71 @@ const MachineListPage = () => {
   // QR Code states
   const [showQRCode, setShowQRCode] = useState(false);
 
+  // Serial unlock state (nhấn giữ 2s để mở khóa ô serial trong dialog chi tiết)
+  const [isSerialUnlocked, setIsSerialUnlocked] = useState(false);
+  const [isHoldingSerial, setIsHoldingSerial] = useState(false);
+  const [serialHoldProgress, setSerialHoldProgress] = useState(0);
+  const serialHoldAnimationFrameRef = useRef(null);
+
+  const resetSerialLock = () => {
+    if (serialHoldAnimationFrameRef.current) {
+      cancelAnimationFrame(serialHoldAnimationFrameRef.current);
+      serialHoldAnimationFrameRef.current = null;
+    }
+    setIsSerialUnlocked(false);
+    setIsHoldingSerial(false);
+    setSerialHoldProgress(0);
+  };
+
+  useEffect(() => {
+    return () => {
+      resetSerialLock();
+    };
+  }, []);
+
+  const handleSerialHoldStart = (e) => {
+    if (isSerialUnlocked) {
+      setIsSerialUnlocked(false);
+      return;
+    }
+    if (e && e.preventDefault) e.preventDefault();
+
+    setIsHoldingSerial(true);
+    setSerialHoldProgress(0);
+    const startTime = Date.now();
+    const DURATION = 2000; // 2 giây chuẩn
+
+    if (serialHoldAnimationFrameRef.current) {
+      cancelAnimationFrame(serialHoldAnimationFrameRef.current);
+    }
+
+    const step = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(100, (elapsed / DURATION) * 100);
+      setSerialHoldProgress(progress);
+
+      if (elapsed >= DURATION) {
+        setIsSerialUnlocked(true);
+        setIsHoldingSerial(false);
+        setSerialHoldProgress(0);
+        serialHoldAnimationFrameRef.current = null;
+      } else {
+        serialHoldAnimationFrameRef.current = requestAnimationFrame(step);
+      }
+    };
+
+    serialHoldAnimationFrameRef.current = requestAnimationFrame(step);
+  };
+
+  const handleSerialHoldEnd = () => {
+    if (serialHoldAnimationFrameRef.current) {
+      cancelAnimationFrame(serialHoldAnimationFrameRef.current);
+      serialHoldAnimationFrameRef.current = null;
+    }
+    setIsHoldingSerial(false);
+    setSerialHoldProgress(0);
+  };
+
   // Notification states
   const [notification, setNotification] = useState({
     open: false,
@@ -1111,6 +1178,7 @@ const MachineListPage = () => {
       setMachineHistory([]); // Đặt lại lịch sử
       setHistoryLoading(true);
       setDetailTab(0); // Reset về tab "Chi tiết máy móc" mỗi khi mở dialog
+      resetSerialLock();
 
       const result = await api.machines.getById(uuid);
       if (result.success) {
@@ -1172,6 +1240,7 @@ const MachineListPage = () => {
     setIsCreateMode(true);
     setOpenDialog(true);
     setDetailTab(0);
+    resetSerialLock();
   };
 
   const handleCloseDialog = () => {
@@ -1183,6 +1252,7 @@ const MachineListPage = () => {
     setMachineHistory([]);
     setHistoryLoading(false);
     setDetailTab(0);
+    resetSerialLock();
   };
 
   const handlePrintQRCode = () => {
@@ -4623,12 +4693,79 @@ const MachineListPage = () => {
                       onChange={(e) =>
                         handleInputChange("serial_machine", e.target.value)
                       }
-                      disabled={!canCreateOrImport || !isCreateMode} // Bị khóa nếu là view-only và cơ điện xưởng HOẶC là chế độ xem chi tiết
+                      disabled={!canCreateOrImport || (!isCreateMode && !isSerialUnlocked)}
                       sx={
-                        !(isAdmin || canEdit) || !isCreateMode
+                        !canCreateOrImport || (!isCreateMode && !isSerialUnlocked)
                           ? DISABLED_VIEW_SX
                           : {}
                       }
+                      InputProps={{
+                        endAdornment: !isCreateMode && canCreateOrImport && (
+                          <InputAdornment position="end">
+                            <Tooltip
+                              title={
+                                isSerialUnlocked
+                                  ? "Nhấp để khóa lại ô Serial"
+                                  : isHoldingSerial
+                                  ? `Đang giữ để mở khóa... ${Math.round(serialHoldProgress)}%`
+                                  : "Nhấn và giữ 2s để mở khóa chỉnh sửa Serial"
+                              }
+                              arrow
+                            >
+                              <Box
+                                component="span"
+                                onMouseDown={handleSerialHoldStart}
+                                onMouseUp={handleSerialHoldEnd}
+                                onMouseLeave={handleSerialHoldEnd}
+                                onTouchStart={handleSerialHoldStart}
+                                onTouchEnd={handleSerialHoldEnd}
+                                onContextMenu={(e) => e.preventDefault()}
+                                sx={{
+                                  position: "relative",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  cursor: "pointer",
+                                  userSelect: "none",
+                                  p: 0.5,
+                                }}
+                              >
+                                {isHoldingSerial && (
+                                  <CircularProgress
+                                    variant="determinate"
+                                    value={serialHoldProgress}
+                                    size={32}
+                                    thickness={5}
+                                    sx={{
+                                      color: "#ed6c02",
+                                      position: "absolute",
+                                      zIndex: 1,
+                                      "& .MuiCircularProgress-circle": {
+                                        transition: "none",
+                                      },
+                                    }}
+                                  />
+                                )}
+                                <IconButton
+                                  size="small"
+                                  color={
+                                    isSerialUnlocked
+                                      ? "success"
+                                      : isHoldingSerial
+                                      ? "warning"
+                                      : "default"
+                                  }
+                                  sx={{
+                                    pointerEvents: "none",
+                                  }}
+                                >
+                                  {isSerialUnlocked ? <LockOpen /> : <Lock />}
+                                </IconButton>
+                              </Box>
+                            </Tooltip>
+                          </InputAdornment>
+                        ),
+                      }}
                     />
                   </Grid>
                   <Grid size={{ xs: 12, sm: 6 }}>
