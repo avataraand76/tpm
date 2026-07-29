@@ -13951,7 +13951,7 @@ async function autoCreateMaintenanceScheduleDetail() {
         AND m.current_status NOT IN ('liquidation', 'temporary')
         AND (
           m.is_borrowed_or_rented_or_borrowed_out IS NULL
-          OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return')
+          OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return','borrowed_out')
         )
         AND mcata.id_machine_type IS NOT NULL
         AND ms.id_machine_type IS NOT NULL
@@ -14411,10 +14411,16 @@ async function autoRedistributeOverdueMaintenanceInMonth() {
     }
 
     const [overdueRows] = await connection.query(
-      `SELECT id_maintenance_schedule_detail, id_machine, day
-       FROM tb_maintenance_schedule_detail
-       WHERE year = ? AND month = ? AND day < ? AND status = 'pending'
-       ORDER BY day ASC, id_machine ASC`,
+      `SELECT msd.id_maintenance_schedule_detail, msd.id_machine, msd.day
+       FROM tb_maintenance_schedule_detail msd
+       JOIN tb_machine m ON m.id_machine = msd.id_machine
+       WHERE msd.year = ? AND msd.month = ? AND msd.day < ? AND msd.status = 'pending'
+         AND m.current_status NOT IN ('liquidation', 'temporary')
+         AND (
+           m.is_borrowed_or_rented_or_borrowed_out IS NULL
+           OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return', 'borrowed_out')
+         )
+       ORDER BY msd.day ASC, msd.id_machine ASC`,
       [currentYear, currentMonth, today]
     );
 
@@ -14602,7 +14608,7 @@ cron.schedule("00 00 * * 1-6", autoRedistributeOverdueMaintenanceInMonth, {
 // GET /api/maintenance-schedule-detail — Lịch bảo dưỡng chi tiết theo năm/tháng
 app.get("/api/maintenance-schedule-detail", async (req, res) => {
   try {
-    const { year, month } = req.query;
+    const { year, month, include_inactive } = req.query;
 
     const now = new Date();
     const vnNow = new Date(
@@ -14617,6 +14623,11 @@ app.get("/api/maintenance-schedule-detail", async (req, res) => {
     if (targetMonth) {
       whereClause += ` AND msd.month = ?`;
       params.push(targetMonth);
+    }
+
+    if (include_inactive !== "true") {
+      whereClause += ` AND m.current_status NOT IN ('liquidation', 'temporary')`;
+      whereClause += ` AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return', 'borrowed_out'))`;
     }
 
     const [rows] = await tpmConnection.query(
@@ -15702,6 +15713,11 @@ app.get("/api/reports/monthly-summary", authenticateToken, async (req, res) => {
       LEFT JOIN tb_location l ON l.id_location = ml.id_location
       LEFT JOIN tb_department d ON d.id_department = l.id_department
       WHERE msd.year = ? AND msd.month = ?
+        AND m.current_status NOT IN ('liquidation', 'temporary')
+        AND (
+          m.is_borrowed_or_rented_or_borrowed_out IS NULL
+          OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return', 'borrowed_out')
+        )
       ORDER BY d.id_department ASC`,
       [targetYear, targetMonth]
     );

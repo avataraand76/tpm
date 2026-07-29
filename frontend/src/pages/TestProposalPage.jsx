@@ -8912,7 +8912,7 @@ const TestProposalPage = () => {
                                 }}
                               >
                                 <Route sx={{ transform: "rotate(90deg)" }} />{" "}
-                                Quy trình duyệt
+                                Luồng duyệt
                               </Typography>
 
                               {/* Container chính: Scroll ngang nếu quá dài */}
