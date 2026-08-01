@@ -3562,7 +3562,7 @@ app.post("/api/machines/batch-import", authenticateToken, async (req, res) => {
     console.error("Error during batch import:", error);
     res.status(500).json({
       success: false,
-      message: "Internal server error during import",
+      message: "Lỗi nhập file",
       error: error.message,
     });
   } finally {
@@ -11290,10 +11290,23 @@ app.get("/api/inventory-checks", authenticateToken, async (req, res) => {
       [...params, limit, offset]
     );
 
+    const enrichedInventories = await Promise.all(
+      inventories.map(async (item) => {
+        let enrichedFlow = item.approval_flow;
+        if (enrichedFlow) {
+          enrichedFlow = await enrichApprovalFlowWithNames(enrichedFlow);
+        }
+        return {
+          ...item,
+          approval_flow: enrichedFlow,
+        };
+      })
+    );
+
     res.json({
       success: true,
       message: "Inventory checks retrieved successfully",
-      data: inventories,
+      data: enrichedInventories,
       pagination: { page, limit, total, totalPages },
     });
   } catch (error) {
@@ -14960,13 +14973,16 @@ app.get(
 
       const machine = mrows[0];
 
-      // Lấy bản ghi lịch bảo dưỡng phù hợp với THÁNG hiện tại của VN
+      // Lấy bản ghi lịch bảo dưỡng phù hợp với THÁNG / NĂM yêu cầu (mặc định THÁNG hiện tại của VN)
+      const reqY = req.query.year ? parseInt(req.query.year, 10) : null;
+      const reqM = req.query.month ? parseInt(req.query.month, 10) : null;
+
       const now = new Date();
       const vnNow = new Date(
         now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" })
       );
-      const curY = vnNow.getFullYear();
-      const curM = vnNow.getMonth() + 1;
+      const curY = reqY || vnNow.getFullYear();
+      const curM = reqM || vnNow.getMonth() + 1;
 
       const [srows] = await tpmConnection.query(
         `SELECT
@@ -14991,7 +15007,7 @@ app.get(
           code: "NO_SCHEDULE",
           message: `Máy "${
             machine.type_machine || machine.serial_machine || code
-          }" không có lịch bảo dưỡng trong tháng hiện tại`,
+          }" không có lịch bảo dưỡng trong Tháng ${curM}/${curY}`,
           machine: {
             type_machine: machine.type_machine,
             attribute_machine: machine.attribute_machine,
@@ -15097,13 +15113,16 @@ app.get(
 
       const machine = mrows[0];
 
-      // Lấy bản ghi lịch bảo dưỡng phù hợp với THÁNG hiện tại của VN
+      // Lấy bản ghi lịch bảo dưỡng phù hợp với THÁNG / NĂM yêu cầu (mặc định THÁNG hiện tại của VN)
+      const reqY = req.query.year ? parseInt(req.query.year, 10) : null;
+      const reqM = req.query.month ? parseInt(req.query.month, 10) : null;
+
       const now = new Date();
       const vnNow = new Date(
         now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" })
       );
-      const curY = vnNow.getFullYear();
-      const curM = vnNow.getMonth() + 1;
+      const curY = reqY || vnNow.getFullYear();
+      const curM = reqM || vnNow.getMonth() + 1;
 
       const [srows] = await tpmConnection.query(
         `SELECT
@@ -15129,7 +15148,7 @@ app.get(
           code: "NO_SCHEDULE",
           message: `Máy "${
             machine.type_machine || machine.serial_machine || code
-          }" không có lịch bảo dưỡng trong tháng hiện tại`,
+          }" không có lịch bảo dưỡng trong Tháng ${curM}/${curY}`,
           machine: {
             type_machine: machine.type_machine,
             attribute_machine: machine.attribute_machine,

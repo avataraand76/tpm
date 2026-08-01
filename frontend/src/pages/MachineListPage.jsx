@@ -4693,9 +4693,13 @@ const MachineListPage = () => {
                       onChange={(e) =>
                         handleInputChange("serial_machine", e.target.value)
                       }
-                      disabled={!canCreateOrImport || (!isCreateMode && !isSerialUnlocked)}
+                      disabled={
+                        !canCreateOrImport ||
+                        (!isCreateMode && !isSerialUnlocked)
+                      }
                       sx={
-                        !canCreateOrImport || (!isCreateMode && !isSerialUnlocked)
+                        !canCreateOrImport ||
+                        (!isCreateMode && !isSerialUnlocked)
                           ? DISABLED_VIEW_SX
                           : {}
                       }
@@ -4707,8 +4711,8 @@ const MachineListPage = () => {
                                 isSerialUnlocked
                                   ? "Nhấp để khóa lại ô Serial"
                                   : isHoldingSerial
-                                  ? `Đang giữ để mở khóa... ${Math.round(serialHoldProgress)}%`
-                                  : "Nhấn và giữ 2s để mở khóa chỉnh sửa Serial"
+                                    ? `Đang giữ để mở khóa... ${Math.round(serialHoldProgress)}%`
+                                    : "Nhấn và giữ 2s để mở khóa chỉnh sửa Serial"
                               }
                               arrow
                             >
@@ -4752,8 +4756,8 @@ const MachineListPage = () => {
                                     isSerialUnlocked
                                       ? "success"
                                       : isHoldingSerial
-                                      ? "warning"
-                                      : "default"
+                                        ? "warning"
+                                        : "default"
                                   }
                                   sx={{
                                     pointerEvents: "none",
@@ -4957,10 +4961,14 @@ const MachineListPage = () => {
                     <TextField
                       fullWidth
                       label="Công suất"
-                      value={editedData.power || ""}
-                      onChange={(e) =>
-                        handleInputChange("power", e.target.value)
-                      }
+                      value={editedData.power?.toString() || ""}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, "");
+                        handleInputChange(
+                          "power",
+                          val !== "" ? parseInt(val, 10) : ""
+                        );
+                      }}
                       disabled={!canCreateOrImport}
                       sx={DISABLED_VIEW_SX}
                     />
@@ -4969,10 +4977,14 @@ const MachineListPage = () => {
                     <TextField
                       fullWidth
                       label="Áp suất"
-                      value={editedData.pressure || ""}
-                      onChange={(e) =>
-                        handleInputChange("pressure", e.target.value)
-                      }
+                      value={editedData.pressure?.toString() || ""}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, "");
+                        handleInputChange(
+                          "pressure",
+                          val !== "" ? parseInt(val, 10) : ""
+                        );
+                      }}
                       disabled={!canCreateOrImport}
                       sx={DISABLED_VIEW_SX}
                     />
@@ -4981,10 +4993,14 @@ const MachineListPage = () => {
                     <TextField
                       fullWidth
                       label="Điện áp"
-                      value={editedData.voltage || ""}
-                      onChange={(e) =>
-                        handleInputChange("voltage", e.target.value)
-                      }
+                      value={editedData.voltage?.toString() || ""}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, "");
+                        handleInputChange(
+                          "voltage",
+                          val !== "" ? parseInt(val, 10) : ""
+                        );
+                      }}
                       disabled={!canCreateOrImport}
                       sx={DISABLED_VIEW_SX}
                     />

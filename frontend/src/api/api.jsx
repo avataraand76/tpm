@@ -833,15 +833,23 @@ export const api = {
       );
       return response.data;
     },
-    getMachineByRfid: async (rfid) => {
+    getMachineByRfid: async (rfid, year, month) => {
+      const params = {};
+      if (year) params.year = year;
+      if (month) params.month = month;
       const response = await httpConnect.get(
-        `/api/maintenance-schedule-detail/by-rfid/${encodeURIComponent(rfid)}`
+        `/api/maintenance-schedule-detail/by-rfid/${encodeURIComponent(rfid)}`,
+        { params }
       );
       return response.data;
     },
-    getMachineBySerial: async (serial) => {
+    getMachineBySerial: async (serial, year, month) => {
+      const params = {};
+      if (year) params.year = year;
+      if (month) params.month = month;
       const response = await httpConnect.get(
-        `/api/maintenance-schedule-detail/by-serial/${encodeURIComponent(serial)}`
+        `/api/maintenance-schedule-detail/by-serial/${encodeURIComponent(serial)}`,
+        { params }
       );
       return response.data;
     },

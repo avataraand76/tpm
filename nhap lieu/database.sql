@@ -221,9 +221,11 @@ create table if not exists tb_machine
     model_machine text,
     manufacturer text, -- hãng sản xuất
     supplier text, -- nhà cung cấp
-    power text, -- công xuất
-    pressure text, -- áp suất
-    voltage text, -- điện áp
+    power int, -- công xuất điện
+    pressure int, -- áp suất
+    voltage int, -- điện áp
+    is_compressor_air tinyint, -- có sử dụng nén khí hay không
+    traffic_flow int, -- lưu lượng khí nén
     price decimal(15, 0), -- giá
     date_of_use date, -- ngày sử dụng
     lifespan int, -- tuổi thọ

@@ -4050,7 +4050,11 @@ const MaintenanceSchedulePage = () => {
     setMachineCodeLoading(true);
     setMachineCodeError(null);
     try {
-      const res = await api.maintenance.getMachineBySerial(code);
+      const res = await api.maintenance.getMachineBySerial(
+        code,
+        currentYear,
+        currentMonth
+      );
       if (res.success && res.data) {
         setHistoryDialogMachine(res.data);
         setHistoryDialogOpen(true);
@@ -4120,7 +4124,11 @@ const MaintenanceSchedulePage = () => {
     setMachineCodeLoading(true);
     setMachineCodeError(null);
     try {
-      const res = await api.maintenance.getMachineBySerial(code);
+      const res = await api.maintenance.getMachineBySerial(
+        code,
+        currentYear,
+        currentMonth
+      );
       if (res.success && res.data) {
         setHistoryDialogMachine(res.data);
         setHistoryDialogOpen(true);
@@ -5750,6 +5758,8 @@ const MaintenanceSchedulePage = () => {
         mode="lookup"
         open={rfidDialogOpen}
         onClose={() => setRfidDialogOpen(false)}
+        year={currentYear}
+        month={currentMonth}
         onMachineFound={(machine) => {
           setHistoryDialogMachine(machine);
           setHistoryDialogOpen(true);

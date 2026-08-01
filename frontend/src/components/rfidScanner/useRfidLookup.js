@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { api } from "../../api/api";
 
-export function useRfidLookup({ onMachineFound, onComplete }) {
+export function useRfidLookup({ onMachineFound, onComplete, year, month }) {
   const [rfidInput, setRfidInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -23,7 +23,7 @@ export function useRfidLookup({ onMachineFound, onComplete }) {
     setWarning(null);
 
     try {
-      const res = await api.maintenance.getMachineByRfid(code);
+      const res = await api.maintenance.getMachineByRfid(code, year, month);
       if (res.success && res.data) {
         onMachineFound?.(res.data);
         reset();

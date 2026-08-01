@@ -4226,10 +4226,14 @@ const TicketManagementPage = () => {
                 <TextField
                   fullWidth
                   label="Công suất"
-                  value={newMachineData.power || ""}
-                  onChange={(e) =>
-                    handleCreateMachineInputChange("power", e.target.value)
-                  }
+                  value={newMachineData.power?.toString() || ""}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, "");
+                    handleCreateMachineInputChange(
+                      "power",
+                      val !== "" ? parseInt(val, 10) : ""
+                    );
+                  }}
                   disabled={!canCreateOrImportMachines}
                 />
               </Grid>
@@ -4237,10 +4241,14 @@ const TicketManagementPage = () => {
                 <TextField
                   fullWidth
                   label="Áp suất"
-                  value={newMachineData.pressure || ""}
-                  onChange={(e) =>
-                    handleCreateMachineInputChange("pressure", e.target.value)
-                  }
+                  value={newMachineData.pressure?.toString() || ""}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, "");
+                    handleCreateMachineInputChange(
+                      "pressure",
+                      val !== "" ? parseInt(val, 10) : ""
+                    );
+                  }}
                   disabled={!canCreateOrImportMachines}
                 />
               </Grid>
@@ -4248,10 +4256,14 @@ const TicketManagementPage = () => {
                 <TextField
                   fullWidth
                   label="Điện áp"
-                  value={newMachineData.voltage || ""}
-                  onChange={(e) =>
-                    handleCreateMachineInputChange("voltage", e.target.value)
-                  }
+                  value={newMachineData.voltage?.toString() || ""}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, "");
+                    handleCreateMachineInputChange(
+                      "voltage",
+                      val !== "" ? parseInt(val, 10) : ""
+                    );
+                  }}
                   disabled={!canCreateOrImportMachines}
                 />
               </Grid>

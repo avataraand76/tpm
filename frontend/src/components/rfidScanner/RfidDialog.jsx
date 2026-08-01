@@ -143,10 +143,14 @@ const RfidDialogLookup = ({
   title,
   subtitle,
   onMachineFound,
+  year,
+  month,
 }) => {
   const lookup = useRfidLookup({
     onMachineFound,
     onComplete: onClose,
+    year,
+    month,
   });
 
   const handleClose = () => {
