@@ -139,12 +139,13 @@ const columnConfig = {
   is_borrowed_or_rented_or_borrowed_out_name: "Đơn vị (mượn/thuê)",
   is_borrowed_or_rented_or_borrowed_out_date: "Ngày (mượn/thuê)",
   is_borrowed_or_rented_or_borrowed_out_return_date: "Ngày trả (mượn/thuê)",
-  power: "Công suất",
-  pressure: "Áp suất",
-  voltage: "Điện áp",
-  price: "Giá",
+  power: "Công suất (W)",
+  pressure: "Áp suất (MPa)",
+  voltage: "Điện áp (V)",
+  traffic_flow: "Lưu lượng khí nén (lít/phút)",
+  price: "Giá (VNĐ)",
   lifespan: "Tuổi thọ (năm)",
-  repair_cost: "Chi phí sửa chữa",
+  repair_cost: "Chi phí sửa chữa (VNĐ)",
   date_of_use: "Ngày sử dụng",
 };
 
@@ -172,6 +173,7 @@ const initialColumnVisibility = {
   power: false,
   pressure: false,
   voltage: false,
+  traffic_flow: false,
   date_of_use: false,
 };
 
@@ -1231,6 +1233,7 @@ const MachineListPage = () => {
       power: "",
       pressure: "",
       voltage: "",
+      traffic_flow: "",
       note: "",
       current_status: "available",
       name_category: "Máy móc thiết bị", // Default category
@@ -1570,9 +1573,10 @@ const MachineListPage = () => {
     "Ngày sử dụng (DD/MM/YYYY)": "date_of_use",
     "Tuổi thọ (năm)": "lifespan",
     "Chi phí sửa chữa (VNĐ)": "repair_cost",
-    "Công suất": "power",
-    "Áp suất": "pressure",
-    "Điện áp": "voltage",
+    "Công suất (W)": "power",
+    "Áp suất (MPa)": "pressure",
+    "Điện áp (V)": "voltage",
+    "Lưu lượng khí nén (lít/phút)": "traffic_flow",
     "Ghi chú": "note",
   };
   // Lấy danh sách các cột bắt buộc (sẽ dùng để tô màu)
@@ -1876,12 +1880,13 @@ const MachineListPage = () => {
             "Ngày trả (mượn/thuê)": formatDate(
               item.is_borrowed_or_rented_or_borrowed_out_return_date
             ),
-            "Công suất": item.power || "",
-            "Áp suất": item.pressure || "",
-            "Điện áp": item.voltage || "",
+            "Công suất (W)": item.power || "",
+            "Áp suất (MPa)": item.pressure || "",
+            "Điện áp (V)": item.voltage || "",
+            "Lưu lượng khí nén (lít/phút)": item.traffic_flow || "",
             "Giá (VNĐ)": item.price || "",
             "Tuổi thọ (năm)": item.lifespan || "",
-            "Chi phí sửa chữa": item.repair_cost || "",
+            "Chi phí sửa chữa (VNĐ)": item.repair_cost || "",
             "Ngày sử dụng": formatDate(item.date_of_use),
             "Ghi chú": item.note || "",
           };
@@ -1995,8 +2000,18 @@ const MachineListPage = () => {
                 cellValue = cellValue.trim();
               }
 
-              // 2. Xử lý các trường SỐ (Giá, Chi phí)
-              if (["price", "repair_cost"].includes(englishKey)) {
+              // 2. Xử lý các trường SỐ (Giá, Chi phí, Công suất, Áp suất, Điện áp, Lưu lượng khí nén)
+              if (
+                [
+                  "price",
+                  "repair_cost",
+                  "power",
+                  "pressure",
+                  "voltage",
+                  "traffic_flow",
+                  "lifespan",
+                ].includes(englishKey)
+              ) {
                 if (typeof cellValue === "string") {
                   const clean = cellValue.replace(/[^0-9]/g, "");
                   const parsed = parseInt(clean, 10);
@@ -3940,7 +3955,7 @@ const MachineListPage = () => {
                           }
                           onClick={() => handleSortRequest("power")}
                         >
-                          Công suất
+                          Công suất (W)
                         </TableSortLabel>
                       </TableCell>
                     )}
@@ -3961,7 +3976,7 @@ const MachineListPage = () => {
                           }
                           onClick={() => handleSortRequest("pressure")}
                         >
-                          Áp suất
+                          Áp suất (MPa)
                         </TableSortLabel>
                       </TableCell>
                     )}
@@ -3982,7 +3997,28 @@ const MachineListPage = () => {
                           }
                           onClick={() => handleSortRequest("voltage")}
                         >
-                          Điện áp
+                          Điện áp (V)
+                        </TableSortLabel>
+                      </TableCell>
+                    )}
+                    {columnVisibility.traffic_flow && (
+                      <TableCell
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: "0.95rem",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        <TableSortLabel
+                          active={sortConfig.key === "traffic_flow"}
+                          direction={
+                            sortConfig.key === "traffic_flow"
+                              ? sortConfig.direction
+                              : "asc"
+                          }
+                          onClick={() => handleSortRequest("traffic_flow")}
+                        >
+                          Lưu lượng khí nén (lít/phút)
                         </TableSortLabel>
                       </TableCell>
                     )}
@@ -4003,7 +4039,7 @@ const MachineListPage = () => {
                           }
                           onClick={() => handleSortRequest("price")}
                         >
-                          Giá
+                          Giá (VNĐ)
                         </TableSortLabel>
                       </TableCell>
                     )}
@@ -4045,7 +4081,7 @@ const MachineListPage = () => {
                           }
                           onClick={() => handleSortRequest("repair_cost")}
                         >
-                          Chi phí sửa chữa
+                          Chi phí sửa chữa (VNĐ)
                         </TableSortLabel>
                       </TableCell>
                     )}
@@ -4318,6 +4354,11 @@ const MachineListPage = () => {
                           {columnVisibility.voltage && (
                             <TableCell sx={{ whiteSpace: "nowrap" }}>
                               {machine.voltage || "-"}
+                            </TableCell>
+                          )}
+                          {columnVisibility.traffic_flow && (
+                            <TableCell sx={{ whiteSpace: "nowrap" }}>
+                              {machine.traffic_flow || "-"}
                             </TableCell>
                           )}
                           {columnVisibility.price && (
@@ -4957,10 +4998,10 @@ const MachineListPage = () => {
                     </Divider>
                   </Grid>
 
-                  <Grid size={{ xs: 12, sm: 4 }}>
+                  <Grid size={{ xs: 12, sm: 3 }}>
                     <TextField
                       fullWidth
-                      label="Công suất"
+                      label="Công suất (W)"
                       value={editedData.power?.toString() || ""}
                       onChange={(e) => {
                         const val = e.target.value.replace(/\D/g, "");
@@ -4973,10 +5014,10 @@ const MachineListPage = () => {
                       sx={DISABLED_VIEW_SX}
                     />
                   </Grid>
-                  <Grid size={{ xs: 12, sm: 4 }}>
+                  <Grid size={{ xs: 12, sm: 3 }}>
                     <TextField
                       fullWidth
-                      label="Áp suất"
+                      label="Áp suất (MPa)"
                       value={editedData.pressure?.toString() || ""}
                       onChange={(e) => {
                         const val = e.target.value.replace(/\D/g, "");
@@ -4989,15 +5030,31 @@ const MachineListPage = () => {
                       sx={DISABLED_VIEW_SX}
                     />
                   </Grid>
-                  <Grid size={{ xs: 12, sm: 4 }}>
+                  <Grid size={{ xs: 12, sm: 3 }}>
                     <TextField
                       fullWidth
-                      label="Điện áp"
+                      label="Điện áp (V)"
                       value={editedData.voltage?.toString() || ""}
                       onChange={(e) => {
                         const val = e.target.value.replace(/\D/g, "");
                         handleInputChange(
                           "voltage",
+                          val !== "" ? parseInt(val, 10) : ""
+                        );
+                      }}
+                      disabled={!canCreateOrImport}
+                      sx={DISABLED_VIEW_SX}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 3 }}>
+                    <TextField
+                      fullWidth
+                      label="Lưu lượng khí nén (lít/phút)"
+                      value={editedData.traffic_flow?.toString() || ""}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, "");
+                        handleInputChange(
+                          "traffic_flow",
                           val !== "" ? parseInt(val, 10) : ""
                         );
                       }}

@@ -224,7 +224,6 @@ create table if not exists tb_machine
     power int, -- công xuất điện
     pressure int, -- áp suất
     voltage int, -- điện áp
-    is_compressor_air tinyint, -- có sử dụng nén khí hay không
     traffic_flow int, -- lưu lượng khí nén
     price decimal(15, 0), -- giá
     date_of_use date, -- ngày sử dụng

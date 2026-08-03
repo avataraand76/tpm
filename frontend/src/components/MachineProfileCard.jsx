@@ -253,9 +253,10 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
       .join("");
 
     const sectionA_spec = [
-      ["Công suất (KW/HP)", machine.power],
-      ["Áp suất", machine.pressure],
-      ["Điện áp", machine.voltage],
+      ["Công suất (W)", machine.power],
+      ["Áp suất (MPa)", machine.pressure],
+      ["Điện áp (V)", machine.voltage],
+      ["Lưu lượng khí nén (lít/phút)", machine.traffic_flow],
       ["Đơn giá gốc (VNĐ)", formattedPrice],
     ]
       .filter(([, v]) => v || v === 0)
@@ -263,7 +264,11 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
       .join("");
 
     const specEmpty =
-      !machine.power && !machine.pressure && !machine.voltage && !machine.price;
+      !machine.power &&
+      !machine.pressure &&
+      !machine.voltage &&
+      !machine.traffic_flow &&
+      !machine.price;
 
     const contentRows =
       contentList.length > 0
@@ -592,7 +597,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
     </div>
   </div>
 
-  <!-- SECTION E -->
+  <!-- SECTION D -->
   <div class="section">
     <div class="section-title e">D. LỊCH SỬ SỬA CHỮA MÁY MÓC THIẾT BỊ</div>
     <div class="section-body">
@@ -782,9 +787,13 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
             }}
           >
             <TableBody>
-              <InfoRow label="Công suất (KW/HP)" value={machine.power} />
-              <InfoRow label="Áp suất" value={machine.pressure} />
-              <InfoRow label="Điện áp" value={machine.voltage} />
+              <InfoRow label="Công suất (W)" value={machine.power} />
+              <InfoRow label="Áp suất (MPa)" value={machine.pressure} />
+              <InfoRow label="Điện áp (V)" value={machine.voltage} />
+              <InfoRow
+                label="Lưu lượng khí nén (lít/phút)"
+                value={machine.traffic_flow}
+              />
               <InfoRow
                 label="Đơn giá gốc (VNĐ)"
                 value={
@@ -798,6 +807,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
           {!machine.power &&
             !machine.pressure &&
             !machine.voltage &&
+            !machine.traffic_flow &&
             !machine.price && (
               <Typography
                 variant="caption"
@@ -1190,7 +1200,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
         )}
       </Paper>
 
-      {/* ── Section E: Lịch sử sửa chữa máy móc thiết bị ── */}
+      {/* ── Section D: Lịch sử sửa chữa máy móc thiết bị ── */}
       <Paper
         elevation={0}
         sx={{

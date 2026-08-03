@@ -89,9 +89,10 @@ const excelHeaderMapping = {
   "Ngày sử dụng (DD/MM/YYYY)": "date_of_use",
   "Tuổi thọ (năm)": "lifespan",
   "Chi phí sửa chữa (VNĐ)": "repair_cost",
-  "Công suất": "power",
-  "Áp suất": "pressure",
-  "Điện áp": "voltage",
+  "Công suất (W)": "power",
+  "Áp suất (MPa)": "pressure",
+  "Điện áp (V)": "voltage",
+  "Lưu lượng khí nén (lít/phút)": "traffic_flow",
   "Ghi chú": "note",
 };
 // Lấy danh sách các cột bắt buộc (sẽ dùng để tô màu)
@@ -255,7 +256,6 @@ const TicketManagementPage = () => {
       "& .MuiFormLabel-root": { color: "#f44336 !important" },
     },
     "& .MuiOutlinedInput-root.Mui-disabled": { backgroundColor: "#fffbe5" },
-    "& .MuiOutlinedInput-root": { borderRadius: "12px" },
   };
 
   // Helper functions
@@ -1047,6 +1047,7 @@ const TicketManagementPage = () => {
       power: "",
       pressure: "",
       voltage: "",
+      traffic_flow: "",
       note: "",
       current_status: "available",
       name_category: "Máy móc thiết bị",
@@ -1402,8 +1403,18 @@ const TicketManagementPage = () => {
                 cellValue = cellValue.trim();
               }
 
-              // 2. Xử lý các trường SỐ (Giá, Chi phí)
-              if (["price", "repair_cost"].includes(englishKey)) {
+              // 2. Xử lý các trường SỐ (Giá, Chi phí, Công suất, Áp suất, Điện áp, Lưu lượng khí nén)
+              if (
+                [
+                  "price",
+                  "repair_cost",
+                  "power",
+                  "pressure",
+                  "voltage",
+                  "traffic_flow",
+                  "lifespan",
+                ].includes(englishKey)
+              ) {
                 if (typeof cellValue === "string") {
                   const clean = cellValue.replace(/[^0-9]/g, "");
                   const parsed = parseInt(clean, 10);
@@ -4222,10 +4233,10 @@ const TicketManagementPage = () => {
                   <Chip label="Thông tin kỹ thuật" />
                 </Divider>
               </Grid>
-              <Grid size={{ xs: 12, sm: 4 }}>
+              <Grid size={{ xs: 12, sm: 3 }}>
                 <TextField
                   fullWidth
-                  label="Công suất"
+                  label="Công suất (W)"
                   value={newMachineData.power?.toString() || ""}
                   onChange={(e) => {
                     const val = e.target.value.replace(/\D/g, "");
@@ -4237,10 +4248,10 @@ const TicketManagementPage = () => {
                   disabled={!canCreateOrImportMachines}
                 />
               </Grid>
-              <Grid size={{ xs: 12, sm: 4 }}>
+              <Grid size={{ xs: 12, sm: 3 }}>
                 <TextField
                   fullWidth
-                  label="Áp suất"
+                  label="Áp suất (MPa)"
                   value={newMachineData.pressure?.toString() || ""}
                   onChange={(e) => {
                     const val = e.target.value.replace(/\D/g, "");
@@ -4252,15 +4263,30 @@ const TicketManagementPage = () => {
                   disabled={!canCreateOrImportMachines}
                 />
               </Grid>
-              <Grid size={{ xs: 12, sm: 4 }}>
+              <Grid size={{ xs: 12, sm: 3 }}>
                 <TextField
                   fullWidth
-                  label="Điện áp"
+                  label="Điện áp (V)"
                   value={newMachineData.voltage?.toString() || ""}
                   onChange={(e) => {
                     const val = e.target.value.replace(/\D/g, "");
                     handleCreateMachineInputChange(
                       "voltage",
+                      val !== "" ? parseInt(val, 10) : ""
+                    );
+                  }}
+                  disabled={!canCreateOrImportMachines}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 3 }}>
+                <TextField
+                  fullWidth
+                  label="Lưu lượng khí nén (lít/phút)"
+                  value={newMachineData.traffic_flow?.toString() || ""}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, "");
+                    handleCreateMachineInputChange(
+                      "traffic_flow",
                       val !== "" ? parseInt(val, 10) : ""
                     );
                   }}

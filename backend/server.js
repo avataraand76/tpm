@@ -880,6 +880,7 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
         power: "m.power",
         pressure: "m.pressure",
         voltage: "m.voltage",
+        traffic_flow: "m.traffic_flow",
         price: "m.price",
         lifespan: "m.lifespan",
         repair_cost: "m.repair_cost",
@@ -939,6 +940,7 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
         m.power,
         m.pressure,
         m.voltage,
+        m.traffic_flow,
         m.created_at,
         m.updated_at,
         c.name_category,
@@ -1802,6 +1804,7 @@ app.get("/api/machines/:uuid", authenticateToken, async (req, res) => {
         m.power,
         m.pressure,
         m.voltage,
+        m.traffic_flow,
         m.created_at,
         m.updated_at,
         c.name_category,
@@ -2694,6 +2697,7 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
       power,
       pressure,
       voltage,
+      traffic_flow,
     } = req.body;
 
     // Validate required fields
@@ -2784,9 +2788,9 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
       INSERT INTO tb_machine 
         (code_machine, serial_machine, RFID_machine, NFC_machine, type_machine, model_machine, manufacturer, 
          price, date_of_use, lifespan, repair_cost, note, current_status, id_category,
-         attribute_machine, supplier, power, pressure, voltage,
+         attribute_machine, supplier, power, pressure, voltage, traffic_flow,
          created_by, updated_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         code_machine,
@@ -2808,6 +2812,7 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
         power || null,
         pressure || null,
         voltage || null,
+        traffic_flow || null,
         userId, // created_by
         userId, // updated_by
       ]
@@ -2852,6 +2857,7 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
         m.power,
         m.pressure,
         m.voltage,
+        m.traffic_flow,
         m.created_at,
         m.updated_at,
         c.name_category,
@@ -2956,6 +2962,7 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
       power,
       pressure,
       voltage,
+      traffic_flow,
     } = req.body;
 
     // Check if machine exists + lấy id_machine & RFID hiện tại để ghi lịch sử khi đổi RFID
@@ -3071,6 +3078,7 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         power = ?,
         pressure = ?,
         voltage = ?,
+        traffic_flow = ?,
         updated_by = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE uuid_machine = ?
@@ -3098,6 +3106,7 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         power || null,
         pressure || null,
         voltage || null,
+        traffic_flow || null,
         userId, // updated_by
         uuid,
       ]
@@ -3156,6 +3165,7 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         m.power,
         m.pressure,
         m.voltage,
+        m.traffic_flow,
         m.created_at,
         m.updated_at,
         c.name_category,
@@ -3491,9 +3501,9 @@ app.post("/api/machines/batch-import", authenticateToken, async (req, res) => {
         `INSERT INTO tb_machine 
           (code_machine, serial_machine, RFID_machine, NFC_machine, type_machine, model_machine, manufacturer, 
            price, date_of_use, lifespan, repair_cost, note, current_status, id_category,
-           attribute_machine, supplier, power, pressure, voltage,
+           attribute_machine, supplier, power, pressure, voltage, traffic_flow,
            created_by, updated_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           m.code_machine,
           m.serial_machine,
@@ -3514,6 +3524,7 @@ app.post("/api/machines/batch-import", authenticateToken, async (req, res) => {
           m.power || null,
           m.pressure || null,
           m.voltage || null,
+          m.traffic_flow || null,
           userId,
           userId,
         ]
@@ -14670,6 +14681,7 @@ app.get("/api/maintenance-schedule-detail", async (req, res) => {
         m.power,
         m.pressure,
         m.voltage,
+        m.traffic_flow,
         m.price,
         m.note,
         DATE_FORMAT(m.date_of_use, '%d/%m/%Y') AS date_of_use,
@@ -15252,6 +15264,7 @@ app.post(
            m.power,
            m.pressure,
            m.voltage,
+           m.traffic_flow,
            m.price,
            m.note,
            DATE_FORMAT(m.date_of_use, '%d/%m/%Y') AS date_of_use

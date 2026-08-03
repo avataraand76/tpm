@@ -1601,9 +1601,10 @@ const MaintenanceHistoryDialog = ({
       .join("");
 
     const sectionA_spec = [
-      ["Công suất (KW/HP)", machine.power],
-      ["Áp suất", machine.pressure],
-      ["Điện áp", machine.voltage],
+      ["Công suất (W)", machine.power],
+      ["Áp suất (MPa)", machine.pressure],
+      ["Điện áp (V)", machine.voltage],
+      ["Lưu lượng khí nén (lít/phút)", machine.traffic_flow],
       ["Đơn giá gốc (VNĐ)", formattedPrice],
     ]
       .filter(([, v]) => v || v === 0)
@@ -1611,7 +1612,11 @@ const MaintenanceHistoryDialog = ({
       .join("");
 
     const specEmpty =
-      !machine.power && !machine.pressure && !machine.voltage && !machine.price;
+      !machine.power &&
+      !machine.pressure &&
+      !machine.voltage &&
+      !machine.traffic_flow &&
+      !machine.price;
 
     const contentRows =
       contentList.length > 0
@@ -1954,7 +1959,7 @@ const MaintenanceHistoryDialog = ({
     </div>
   </div>
 
-  <!-- SECTION E -->
+  <!-- SECTION D -->
   <div class="section">
     <div class="section-title e">D. LỊCH SỬ SỬA CHỮA MÁY MÓC THIẾT BỊ</div>
     <div class="section-body">
@@ -2245,9 +2250,13 @@ const MaintenanceHistoryDialog = ({
               }}
             >
               <TableBody>
-                <InfoRow label="Công suất (KW/HP)" value={machine.power} />
-                <InfoRow label="Áp suất" value={machine.pressure} />
-                <InfoRow label="Điện áp" value={machine.voltage} />
+                <InfoRow label="Công suất (W)" value={machine.power} />
+                <InfoRow label="Áp suất (MPa)" value={machine.pressure} />
+                <InfoRow label="Điện áp (V)" value={machine.voltage} />
+                <InfoRow
+                  label="Lưu lượng khí nén (lít/phút)"
+                  value={machine.traffic_flow}
+                />
                 <InfoRow
                   label="Đơn giá gốc (VNĐ)"
                   value={
@@ -2261,6 +2270,7 @@ const MaintenanceHistoryDialog = ({
             {!machine.power &&
               !machine.pressure &&
               !machine.voltage &&
+              !machine.traffic_flow &&
               !machine.price && (
                 <Typography
                   variant="caption"
@@ -2673,167 +2683,7 @@ const MaintenanceHistoryDialog = ({
           )}
         </Paper>
 
-        {/* ── Section D: Hình ảnh bảo dưỡng ── */}
-        <Paper
-          elevation={0}
-          sx={{
-            border: "1px solid #e0e0e0",
-            borderRadius: "12px",
-            overflow: "hidden",
-            mt: 2,
-          }}
-        >
-          <Box
-            sx={{
-              background: "linear-gradient(90deg,#ef6c00,#ff9800)",
-              px: 2,
-              py: 1,
-            }}
-          >
-            <Typography
-              variant="subtitle1"
-              fontWeight={700}
-              sx={{ color: "#fff", letterSpacing: "0.03em" }}
-            >
-              D. HÌNH ẢNH BẢO DƯỠNG
-            </Typography>
-          </Box>
-
-          <Box sx={{ p: 2 }}>
-            {/* Ảnh đã upload */}
-            {currentAttached.length > 0 && (
-              <Box sx={{ mb: 2 }}>
-                <Typography
-                  variant="caption"
-                  sx={{
-                    fontWeight: 700,
-                    color: "#555",
-                    display: "block",
-                    mb: 1,
-                  }}
-                >
-                  Ảnh đã upload ({currentAttached.length})
-                </Typography>
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  sx={{ flexWrap: "wrap", gap: 1 }}
-                >
-                  {currentAttached.map((att, idx) => (
-                    <EvidenceImageFrame
-                      key={`${att.link}-${idx}`}
-                      src={toDriveThumbnail(att.link)}
-                      title={att.name}
-                    />
-                  ))}
-                </Stack>
-              </Box>
-            )}
-
-            {/* Ảnh chưa upload (đang chọn) — chỉ hiện khi đang pending & có quyền */}
-            {canToggleStatus && machine.status === "pending" && (
-              <>
-                {evidencePreviews.length > 0 && (
-                  <Box sx={{ mb: 2 }}>
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        fontWeight: 700,
-                        color: "#ef6c00",
-                        display: "block",
-                        mb: 1,
-                      }}
-                    >
-                      Ảnh sẽ upload khi đánh dấu thực hiện (
-                      {evidencePreviews.length})
-                    </Typography>
-                    <Stack
-                      direction="row"
-                      spacing={1}
-                      sx={{ flexWrap: "wrap", gap: 1 }}
-                    >
-                      {evidencePreviews.map((p, idx) => (
-                        <EvidenceImageFrame
-                          key={p.url}
-                          src={p.url}
-                          title={p.name}
-                          onRemove={() => handleRemoveEvidence(idx)}
-                        />
-                      ))}
-                    </Stack>
-                  </Box>
-                )}
-
-                <Stack
-                  direction="row"
-                  spacing={1.5}
-                  sx={{ flexWrap: "wrap", gap: 1 }}
-                >
-                  <Button
-                    component="label"
-                    variant="outlined"
-                    startIcon={<AddPhotoAlternate />}
-                    sx={{
-                      borderRadius: "10px",
-                      borderColor: "#ef6c00",
-                      color: "#ef6c00",
-                      "&:hover": {
-                        borderColor: "#bf360c",
-                        bgcolor: "#fff3e0",
-                      },
-                      fontWeight: 600,
-                    }}
-                  >
-                    Chọn ảnh minh chứng
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      hidden
-                      onChange={handlePickFiles}
-                    />
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    component="label"
-                    startIcon={<PhotoCamera />}
-                    sx={{
-                      borderRadius: "10px",
-                      borderColor: "#ef6c00",
-                      color: "#ef6c00",
-                      "&:hover": {
-                        borderColor: "#bf360c",
-                        bgcolor: "#fff3e0",
-                      },
-                      fontWeight: 600,
-                    }}
-                  >
-                    Chụp ảnh minh chứng
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      hidden
-                      onChange={handlePickFiles}
-                    />
-                  </Button>
-                </Stack>
-              </>
-            )}
-
-            {currentAttached.length === 0 && machine.status !== "pending" && (
-              <Typography
-                variant="caption"
-                color="text.disabled"
-                fontStyle="italic"
-              >
-                Chưa có ảnh minh chứng
-              </Typography>
-            )}
-          </Box>
-        </Paper>
-
-        {/* ── Section E: Lịch sử sửa chữa máy móc thiết bị ── */}
+        {/* ── Section D: Lịch sử sửa chữa máy móc thiết bị ── */}
         <Paper
           elevation={0}
           sx={{
@@ -2855,7 +2705,7 @@ const MaintenanceHistoryDialog = ({
               fontWeight={700}
               sx={{ color: "#fff", letterSpacing: "0.03em" }}
             >
-              E. LỊCH SỬ SỬA CHỮA MÁY MÓC THIẾT BỊ
+              D. LỊCH SỬ SỬA CHỮA MÁY MÓC THIẾT BỊ
             </Typography>
           </Box>
 
@@ -3025,6 +2875,166 @@ const MaintenanceHistoryDialog = ({
                   {savingBreakdown ? "Đang lưu..." : "Lưu lịch sử sửa chữa"}
                 </Button>
               </Box>
+            )}
+          </Box>
+        </Paper>
+
+        {/* ── Section E: Hình ảnh bảo dưỡng ── */}
+        <Paper
+          elevation={0}
+          sx={{
+            border: "1px solid #e0e0e0",
+            borderRadius: "12px",
+            overflow: "hidden",
+            mt: 2,
+          }}
+        >
+          <Box
+            sx={{
+              background: "linear-gradient(90deg,#ef6c00,#ff9800)",
+              px: 2,
+              py: 1,
+            }}
+          >
+            <Typography
+              variant="subtitle1"
+              fontWeight={700}
+              sx={{ color: "#fff", letterSpacing: "0.03em" }}
+            >
+              E. HÌNH ẢNH BẢO DƯỠNG
+            </Typography>
+          </Box>
+
+          <Box sx={{ p: 2 }}>
+            {/* Ảnh đã upload */}
+            {currentAttached.length > 0 && (
+              <Box sx={{ mb: 2 }}>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    fontWeight: 700,
+                    color: "#555",
+                    display: "block",
+                    mb: 1,
+                  }}
+                >
+                  Ảnh đã upload ({currentAttached.length})
+                </Typography>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{ flexWrap: "wrap", gap: 1 }}
+                >
+                  {currentAttached.map((att, idx) => (
+                    <EvidenceImageFrame
+                      key={`${att.link}-${idx}`}
+                      src={toDriveThumbnail(att.link)}
+                      title={att.name}
+                    />
+                  ))}
+                </Stack>
+              </Box>
+            )}
+
+            {/* Ảnh chưa upload (đang chọn) — chỉ hiện khi đang pending & có quyền */}
+            {canToggleStatus && machine.status === "pending" && (
+              <>
+                {evidencePreviews.length > 0 && (
+                  <Box sx={{ mb: 2 }}>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        fontWeight: 700,
+                        color: "#ef6c00",
+                        display: "block",
+                        mb: 1,
+                      }}
+                    >
+                      Ảnh sẽ upload khi đánh dấu thực hiện (
+                      {evidencePreviews.length})
+                    </Typography>
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      sx={{ flexWrap: "wrap", gap: 1 }}
+                    >
+                      {evidencePreviews.map((p, idx) => (
+                        <EvidenceImageFrame
+                          key={p.url}
+                          src={p.url}
+                          title={p.name}
+                          onRemove={() => handleRemoveEvidence(idx)}
+                        />
+                      ))}
+                    </Stack>
+                  </Box>
+                )}
+
+                <Stack
+                  direction="row"
+                  spacing={1.5}
+                  sx={{ flexWrap: "wrap", gap: 1 }}
+                >
+                  <Button
+                    component="label"
+                    variant="outlined"
+                    startIcon={<AddPhotoAlternate />}
+                    sx={{
+                      borderRadius: "10px",
+                      borderColor: "#ef6c00",
+                      color: "#ef6c00",
+                      "&:hover": {
+                        borderColor: "#bf360c",
+                        bgcolor: "#fff3e0",
+                      },
+                      fontWeight: 600,
+                    }}
+                  >
+                    Chọn ảnh minh chứng
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      hidden
+                      onChange={handlePickFiles}
+                    />
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    component="label"
+                    startIcon={<PhotoCamera />}
+                    sx={{
+                      borderRadius: "10px",
+                      borderColor: "#ef6c00",
+                      color: "#ef6c00",
+                      "&:hover": {
+                        borderColor: "#bf360c",
+                        bgcolor: "#fff3e0",
+                      },
+                      fontWeight: 600,
+                    }}
+                  >
+                    Chụp ảnh minh chứng
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      hidden
+                      onChange={handlePickFiles}
+                    />
+                  </Button>
+                </Stack>
+              </>
+            )}
+
+            {currentAttached.length === 0 && machine.status !== "pending" && (
+              <Typography
+                variant="caption"
+                color="text.disabled"
+                fontStyle="italic"
+              >
+                Chưa có ảnh minh chứng
+              </Typography>
             )}
           </Box>
         </Paper>
