@@ -92,7 +92,7 @@ const excelHeaderMapping = {
   "Công suất (W)": "power",
   "Áp suất (MPa)": "pressure",
   "Điện áp (V)": "voltage",
-  "Lưu lượng khí nén (lít/phút)": "traffic_flow",
+  "Lưu lượng khí nén (lít/phút)": "air_volume",
   "Ghi chú": "note",
 };
 // Lấy danh sách các cột bắt buộc (sẽ dùng để tô màu)
@@ -1047,7 +1047,7 @@ const TicketManagementPage = () => {
       power: "",
       pressure: "",
       voltage: "",
-      traffic_flow: "",
+      air_volume: "",
       note: "",
       current_status: "available",
       name_category: "Máy móc thiết bị",
@@ -1411,7 +1411,7 @@ const TicketManagementPage = () => {
                   "power",
                   "pressure",
                   "voltage",
-                  "traffic_flow",
+                  "air_volume",
                   "lifespan",
                 ].includes(englishKey)
               ) {
@@ -4230,7 +4230,7 @@ const TicketManagementPage = () => {
 
               <Grid size={{ xs: 12 }}>
                 <Divider sx={{ my: 2 }}>
-                  <Chip label="Thông tin kỹ thuật" />
+                  <Chip label="Thông số kỹ thuật" />
                 </Divider>
               </Grid>
               <Grid size={{ xs: 12, sm: 3 }}>
@@ -4282,11 +4282,11 @@ const TicketManagementPage = () => {
                 <TextField
                   fullWidth
                   label="Lưu lượng khí nén (lít/phút)"
-                  value={newMachineData.traffic_flow?.toString() || ""}
+                  value={newMachineData.air_volume?.toString() || ""}
                   onChange={(e) => {
                     const val = e.target.value.replace(/\D/g, "");
                     handleCreateMachineInputChange(
-                      "traffic_flow",
+                      "air_volume",
                       val !== "" ? parseInt(val, 10) : ""
                     );
                   }}

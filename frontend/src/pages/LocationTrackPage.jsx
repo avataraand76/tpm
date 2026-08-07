@@ -36,12 +36,12 @@ import {
   IconButton,
   Autocomplete,
   TextField,
+  Switch,
 } from "@mui/material";
 import {
   LocationOn,
   ArrowForward,
   Business,
-  MeetingRoom,
   Refresh,
   KeyboardArrowDown,
   KeyboardArrowUp,
@@ -585,6 +585,7 @@ const LocationTrackPage = () => {
     name_locations: [], // Dùng khi xem theo Đơn vị
     current_status: [], // Dùng cho cả 2
     borrow_status: [], // Dùng cho cả 2
+    has_air_volume: false,
   });
 
   // ĐỊNH NGHĨA CONFIG TRẠNG THÁI (ĐỒNG BỘ VỚI TicketManagementPage.jsx)
@@ -840,6 +841,7 @@ const LocationTrackPage = () => {
         manufacturers: currentFilters.manufacturers || [],
         suppliers: currentFilters.suppliers || [],
         name_locations: currentFilters.name_locations || [],
+        has_air_volume: currentFilters.has_air_volume || false,
       });
 
       try {
@@ -934,6 +936,23 @@ const LocationTrackPage = () => {
     }
   };
 
+  const handleSwitchFilterChange = (filterName) => (event) => {
+    setFilters((prev) => ({
+      ...prev,
+      [filterName]: event.target.checked,
+    }));
+    setPage(1);
+
+    if (tableCardRef.current) {
+      setTimeout(() => {
+        tableCardRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 100);
+    }
+  };
+
   const handleDepartmentChange = (department) => {
     setSelectedDepartment(department);
     // Reset vị trí và máy móc khi đổi đơn vị
@@ -949,6 +968,7 @@ const LocationTrackPage = () => {
       name_locations: [],
       current_status: [],
       borrow_status: [],
+      has_air_volume: false,
     });
   };
 
@@ -1944,6 +1964,58 @@ const LocationTrackPage = () => {
                   />
                 </Grid>
               )}
+
+              {/* Filter: Sử dụng khí nén */}
+              <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                <Box
+                  onClick={() =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      has_air_volume: !prev.has_air_volume,
+                    }))
+                  }
+                  sx={{
+                    height: "40px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    px: 1.5,
+                    borderRadius: "12px",
+                    border: "1px solid",
+                    borderColor: "rgba(0, 0, 0, 0.23)",
+                    backgroundColor: "transparent",
+                    cursor: "pointer",
+                    userSelect: "none",
+                    boxSizing: "border-box",
+                    transition: "all 0.2s ease-in-out",
+                    "&:hover": {
+                      borderColor: "rgba(0, 0, 0, 0.87)",
+                    },
+                  }}
+                >
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontSize: "1rem",
+                      fontWeight: 500,
+                      color: "text.secondary",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    Máy sử dụng khí nén
+                  </Typography>
+                  <Switch
+                    checked={filters.has_air_volume}
+                    onChange={handleSwitchFilterChange("has_air_volume")}
+                    onClick={(e) => e.stopPropagation()}
+                    color="primary"
+                    size="small"
+                    sx={{ ml: 0.5 }}
+                  />
+                </Box>
+              </Grid>
             </Grid>
           </CardContent>
         </Card>
@@ -2303,7 +2375,7 @@ const LocationTrackPage = () => {
                                   : "inherit",
                               }}
                             >
-                              <MeetingRoom fontSize="small" />
+                              <LocationOn fontSize="small" />
                             </ListItemIcon>
                             <ListItemText
                               primary={`${loc.name_location} (${

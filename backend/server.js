@@ -634,6 +634,7 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
       name_locations,
       current_status,
       is_borrowed_or_rented_or_borrowed_out,
+      has_air_volume,
       sortBy,
       sortOrder,
     } = req.query;
@@ -847,6 +848,11 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
       }
     }
 
+    // 10. Air volume / Air compressor filter
+    if (has_air_volume === "true" || has_air_volume === true) {
+      whereConditions.push(`(m.air_volume IS NOT NULL AND m.air_volume != '')`);
+    }
+
     const whereClause =
       whereConditions.length > 0
         ? `WHERE ${whereConditions.join(" AND ")}`
@@ -880,7 +886,7 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
         power: "m.power",
         pressure: "m.pressure",
         voltage: "m.voltage",
-        traffic_flow: "m.traffic_flow",
+        air_volume: "m.air_volume",
         price: "m.price",
         lifespan: "m.lifespan",
         repair_cost: "m.repair_cost",
@@ -940,7 +946,7 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
         m.power,
         m.pressure,
         m.voltage,
-        m.traffic_flow,
+        m.air_volume,
         m.created_at,
         m.updated_at,
         c.name_category,
@@ -999,6 +1005,7 @@ app.get(
         manufacturers,
         suppliers,
         name_locations,
+        has_air_volume,
       } = req.query;
 
       const toArray = (val) => (Array.isArray(val) ? val : [val]);
@@ -1083,6 +1090,13 @@ app.get(
       if (field !== "name_location" && hasValue(name_locations)) {
         whereConditions.push(`tl.name_location IN (?)`);
         params.push(toArray(name_locations));
+      }
+
+      // Air volume / Air compressor
+      if (has_air_volume === "true" || has_air_volume === true) {
+        whereConditions.push(
+          "(m.air_volume IS NOT NULL AND m.air_volume != '')"
+        );
       }
 
       // 4. Execute
@@ -1804,7 +1818,7 @@ app.get("/api/machines/:uuid", authenticateToken, async (req, res) => {
         m.power,
         m.pressure,
         m.voltage,
-        m.traffic_flow,
+        m.air_volume,
         m.created_at,
         m.updated_at,
         c.name_category,
@@ -2697,7 +2711,7 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
       power,
       pressure,
       voltage,
-      traffic_flow,
+      air_volume,
     } = req.body;
 
     // Validate required fields
@@ -2788,7 +2802,7 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
       INSERT INTO tb_machine 
         (code_machine, serial_machine, RFID_machine, NFC_machine, type_machine, model_machine, manufacturer, 
          price, date_of_use, lifespan, repair_cost, note, current_status, id_category,
-         attribute_machine, supplier, power, pressure, voltage, traffic_flow,
+         attribute_machine, supplier, power, pressure, voltage, air_volume,
          created_by, updated_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
@@ -2812,7 +2826,7 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
         power || null,
         pressure || null,
         voltage || null,
-        traffic_flow || null,
+        air_volume || null,
         userId, // created_by
         userId, // updated_by
       ]
@@ -2857,7 +2871,7 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
         m.power,
         m.pressure,
         m.voltage,
-        m.traffic_flow,
+        m.air_volume,
         m.created_at,
         m.updated_at,
         c.name_category,
@@ -2962,7 +2976,7 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
       power,
       pressure,
       voltage,
-      traffic_flow,
+      air_volume,
     } = req.body;
 
     // Check if machine exists + lấy id_machine & RFID hiện tại để ghi lịch sử khi đổi RFID
@@ -3078,7 +3092,7 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         power = ?,
         pressure = ?,
         voltage = ?,
-        traffic_flow = ?,
+        air_volume = ?,
         updated_by = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE uuid_machine = ?
@@ -3106,7 +3120,7 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         power || null,
         pressure || null,
         voltage || null,
-        traffic_flow || null,
+        air_volume || null,
         userId, // updated_by
         uuid,
       ]
@@ -3165,7 +3179,7 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         m.power,
         m.pressure,
         m.voltage,
-        m.traffic_flow,
+        m.air_volume,
         m.created_at,
         m.updated_at,
         c.name_category,
@@ -3501,7 +3515,7 @@ app.post("/api/machines/batch-import", authenticateToken, async (req, res) => {
         `INSERT INTO tb_machine 
           (code_machine, serial_machine, RFID_machine, NFC_machine, type_machine, model_machine, manufacturer, 
            price, date_of_use, lifespan, repair_cost, note, current_status, id_category,
-           attribute_machine, supplier, power, pressure, voltage, traffic_flow,
+           attribute_machine, supplier, power, pressure, voltage, air_volume,
            created_by, updated_by)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
@@ -3524,7 +3538,7 @@ app.post("/api/machines/batch-import", authenticateToken, async (req, res) => {
           m.power || null,
           m.pressure || null,
           m.voltage || null,
-          m.traffic_flow || null,
+          m.air_volume || null,
           userId,
           userId,
         ]
@@ -7586,6 +7600,7 @@ app.get(
         suppliers,
         current_status,
         is_borrowed_or_rented_or_borrowed_out,
+        has_air_volume,
       } = req.query;
 
       // 1. Get internal location ID
@@ -7723,6 +7738,13 @@ app.get(
         if (conditionParts.length > 0) {
           whereConditions.push(`(${conditionParts.join(" OR ")})`);
         }
+      }
+
+      // 8. Air volume / Air compressor filter
+      if (has_air_volume === "true" || has_air_volume === true) {
+        whereConditions.push(
+          `(m.air_volume IS NOT NULL AND m.air_volume != '')`
+        );
       }
 
       const filterClause =
@@ -7962,6 +7984,7 @@ app.get(
         name_locations,
         current_status,
         is_borrowed_or_rented_or_borrowed_out,
+        has_air_volume,
       } = req.query;
 
       // 1. Get internal department ID
@@ -8106,6 +8129,13 @@ app.get(
         if (conditionParts.length > 0) {
           whereConditions.push(`(${conditionParts.join(" OR ")})`);
         }
+      }
+
+      // 7. Air volume / Air compressor filter
+      if (has_air_volume === "true" || has_air_volume === true) {
+        whereConditions.push(
+          `(m.air_volume IS NOT NULL AND m.air_volume != '')`
+        );
       }
 
       const filterClause =
@@ -14681,7 +14711,7 @@ app.get("/api/maintenance-schedule-detail", async (req, res) => {
         m.power,
         m.pressure,
         m.voltage,
-        m.traffic_flow,
+        m.air_volume,
         m.price,
         m.note,
         DATE_FORMAT(m.date_of_use, '%d/%m/%Y') AS date_of_use,
@@ -14962,6 +14992,7 @@ app.get(
            m.power,
            m.pressure,
            m.voltage,
+           m.air_volume,
            m.price,
            m.note,
            DATE_FORMAT(m.date_of_use, '%d/%m/%Y') AS date_of_use,
@@ -15102,6 +15133,7 @@ app.get(
            m.power,
            m.pressure,
            m.voltage,
+           m.air_volume,
            m.price,
            m.note,
            DATE_FORMAT(m.date_of_use, '%d/%m/%Y') AS date_of_use,
@@ -15264,7 +15296,7 @@ app.post(
            m.power,
            m.pressure,
            m.voltage,
-           m.traffic_flow,
+           m.air_volume,
            m.price,
            m.note,
            DATE_FORMAT(m.date_of_use, '%d/%m/%Y') AS date_of_use
@@ -15808,6 +15840,176 @@ app.get("/api/reports/monthly-summary", authenticateToken, async (req, res) => {
       }
     });
 
+    // 3. Fetch air consumption report statistics (Lưu lượng khí nén)
+    const [airSummaryRows] = await tpmConnection.query(
+      `SELECT 
+        COUNT(CASE 
+          WHEN ml.id_location != 1 
+           AND (m.current_status IS NULL OR m.current_status != 'broken')
+          THEN 1 
+        END) as total_machines,
+
+        COALESCE(SUM(CASE 
+          WHEN ml.id_location != 1 
+           AND (m.current_status IS NULL OR m.current_status != 'broken')
+          THEN CAST(m.air_volume AS DECIMAL(10,2)) 
+        END), 0) as total_volume,
+
+        COALESCE(AVG(CASE 
+          WHEN ml.id_location != 1 
+           AND (m.current_status IS NULL OR m.current_status != 'broken')
+          THEN CAST(m.air_volume AS DECIMAL(10,2)) 
+        END), 0) as avg_volume,
+
+        COALESCE(MAX(CASE 
+          WHEN ml.id_location != 1 
+           AND (m.current_status IS NULL OR m.current_status != 'broken')
+          THEN CAST(m.air_volume AS DECIMAL(10,2)) 
+        END), 0) as max_volume,
+
+        COALESCE(MIN(CASE 
+          WHEN ml.id_location != 1 
+           AND (m.current_status IS NULL OR m.current_status != 'broken')
+          THEN CAST(m.air_volume AS DECIMAL(10,2)) 
+        END), 0) as min_volume,
+
+        COUNT(*) as all_total_machines,
+
+        COALESCE(SUM(CAST(m.air_volume AS DECIMAL(10,2))), 0) as all_total_volume
+      FROM tb_machine m
+      LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
+      WHERE m.air_volume IS NOT NULL 
+        AND m.air_volume != ''
+        AND CAST(m.air_volume AS DECIMAL(10,2)) > 0
+        AND (m.current_status IS NULL OR m.current_status NOT IN ('temporary', 'liquidation'))
+        AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL 
+          OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return', 'borrowed_out'))`
+    );
+    const airSummary = airSummaryRows[0] || {
+      total_machines: 0,
+      total_volume: 0,
+      avg_volume: 0,
+      max_volume: 0,
+      min_volume: 0,
+      all_total_machines: 0,
+      all_total_volume: 0,
+    };
+
+    const [airHierarchyRows] = await tpmConnection.query(
+      `SELECT 
+        id_department,
+        name_department,
+        id_location,
+        name_location,
+        formatted_type as type_machine,
+        COUNT(DISTINCT id_machine) as machine_count,
+        COALESCE(SUM(CAST(air_volume AS DECIMAL(10,2))), 0) as total_volume,
+        COALESCE(AVG(CAST(air_volume AS DECIMAL(10,2))), 0) as avg_volume,
+        COALESCE(MIN(CAST(air_volume AS DECIMAL(10,2))), 0) as min_volume,
+        COALESCE(MAX(CAST(air_volume AS DECIMAL(10,2))), 0) as max_volume
+      FROM (
+        SELECT 
+          m.id_machine,
+          m.air_volume,
+          COALESCE(d.id_department, 0) as id_department,
+          COALESCE(d.name_department, 'Chưa gán đơn vị') as name_department,
+          COALESCE(l.id_location, 0) as id_location,
+          COALESCE(l.name_location, 'Chưa gán vị trí') as name_location,
+          COALESCE(
+            NULLIF(
+              TRIM(
+                CASE
+                  WHEN m.attribute_machine IS NOT NULL AND TRIM(m.attribute_machine) != '' 
+                    THEN CONCAT(TRIM(COALESCE(m.type_machine, '')), ' ', TRIM(m.attribute_machine))
+                  ELSE TRIM(COALESCE(m.type_machine, ''))
+                END
+              ), ''
+            ), 'Chưa phân loại'
+          ) as formatted_type
+        FROM tb_machine m
+        LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
+        LEFT JOIN tb_location l ON l.id_location = ml.id_location
+        LEFT JOIN tb_department d ON d.id_department = l.id_department
+        WHERE m.air_volume IS NOT NULL 
+          AND m.air_volume != ''
+          AND CAST(m.air_volume AS DECIMAL(10,2)) > 0
+          AND ml.id_location != 1
+          AND m.current_status NOT IN ('temporary', 'liquidation', 'broken')
+          AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL 
+            OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return', 'borrowed_out'))
+      ) sub
+      GROUP BY id_department, name_department, id_location, name_location, formatted_type
+      ORDER BY id_department ASC, id_location ASC`
+    );
+
+    // Build 3-level hierarchy tree: Department -> Location -> Machine Type
+    const deptTreeMap = {};
+    airHierarchyRows.forEach((r) => {
+      const deptId = r.id_department;
+      if (!deptTreeMap[deptId]) {
+        deptTreeMap[deptId] = {
+          id_department: r.id_department,
+          name_department: r.name_department,
+          machine_count: 0,
+          total_volume: 0,
+          locations_map: {},
+        };
+      }
+      deptTreeMap[deptId].machine_count += Number(r.machine_count || 0);
+      deptTreeMap[deptId].total_volume += Number(r.total_volume || 0);
+
+      const locMap = deptTreeMap[deptId].locations_map;
+      const locId = r.id_location;
+      if (!locMap[locId]) {
+        locMap[locId] = {
+          id_location: r.id_location,
+          name_location: r.name_location,
+          machine_count: 0,
+          total_volume: 0,
+          types: [],
+        };
+      }
+      locMap[locId].machine_count += Number(r.machine_count || 0);
+      locMap[locId].total_volume += Number(r.total_volume || 0);
+      locMap[locId].types.push({
+        type_machine: r.type_machine,
+        machine_count: Number(r.machine_count || 0),
+        total_volume: Number(r.total_volume || 0),
+        avg_volume: Number(r.avg_volume || 0),
+        min_volume: Number(r.min_volume || 0),
+        max_volume: Number(r.max_volume || 0),
+      });
+    });
+
+    const hierarchyTree = Object.values(deptTreeMap).map((d) => ({
+      id_department: d.id_department,
+      name_department: d.name_department,
+      machine_count: d.machine_count,
+      total_volume: d.total_volume,
+      avg_volume: d.machine_count > 0 ? d.total_volume / d.machine_count : 0,
+      locations: Object.values(d.locations_map).map((l) => ({
+        id_location: l.id_location,
+        name_location: l.name_location,
+        machine_count: l.machine_count,
+        total_volume: l.total_volume,
+        avg_volume: l.machine_count > 0 ? l.total_volume / l.machine_count : 0,
+        types: l.types.sort((a, b) => b.total_volume - a.total_volume),
+      })),
+    }));
+
+    const airConsumptionData = {
+      summary: {
+        total_machines: Number(airSummary.total_machines || 0),
+        total_volume: Number(airSummary.total_volume || 0),
+        avg_volume: Number(airSummary.avg_volume || 0),
+        max_volume: Number(airSummary.max_volume || 0),
+        min_volume: Number(airSummary.min_volume || 0),
+        all_total_machines: Number(airSummary.all_total_machines || 0),
+        all_total_volume: Number(airSummary.all_total_volume || 0),
+      },
+      hierarchy: hierarchyTree,
+    };
+
     res.json({
       success: true,
       data: {
@@ -15825,6 +16027,7 @@ app.get("/api/reports/monthly-summary", authenticateToken, async (req, res) => {
           },
           departments: Object.values(maintDeptMap),
         },
+        air_consumption: airConsumptionData,
       },
     });
   } catch (error) {

@@ -52,6 +52,7 @@ import {
   Badge,
   Tabs,
   Tab,
+  Switch,
 } from "@mui/material";
 import {
   PrecisionManufacturing,
@@ -142,7 +143,7 @@ const columnConfig = {
   power: "Công suất (W)",
   pressure: "Áp suất (MPa)",
   voltage: "Điện áp (V)",
-  traffic_flow: "Lưu lượng khí nén (lít/phút)",
+  air_volume: "Lưu lượng khí nén (lít/phút)",
   price: "Giá (VNĐ)",
   lifespan: "Tuổi thọ (năm)",
   repair_cost: "Chi phí sửa chữa (VNĐ)",
@@ -173,7 +174,7 @@ const initialColumnVisibility = {
   power: false,
   pressure: false,
   voltage: false,
-  traffic_flow: false,
+  air_volume: false,
   date_of_use: false,
 };
 
@@ -856,6 +857,7 @@ const MachineListPage = () => {
     name_locations: [],
     current_status: [],
     borrow_status: [],
+    has_air_volume: false,
   });
 
   // State cho matrix
@@ -924,7 +926,11 @@ const MachineListPage = () => {
 
       // Thêm các bộ lọc vào params NẾU chúng có giá trị
       Object.keys(filters).forEach((key) => {
-        if (filters[key] && filters[key].length > 0) {
+        if (key === "has_air_volume") {
+          if (filters.has_air_volume) {
+            apiParams.has_air_volume = true;
+          }
+        } else if (filters[key] && filters[key].length > 0) {
           if (key === "borrow_status") {
             apiParams["is_borrowed_or_rented_or_borrowed_out"] = filters[key];
           } else {
@@ -982,6 +988,7 @@ const MachineListPage = () => {
         manufacturers: currentFilters.manufacturers || [],
         suppliers: currentFilters.suppliers || [],
         name_locations: currentFilters.name_locations || [],
+        has_air_volume: currentFilters.has_air_volume || false,
         // Nếu trang này có lọc theo department/location cứng (như trang tracking)
         // department_uuid: currentDepartmentUuid,
       });
@@ -1135,6 +1142,14 @@ const MachineListPage = () => {
     // useEffect [searchTerm, filters] sẽ tự động kích hoạt refetch
   };
 
+  const handleSwitchFilterChange = (filterName) => (event) => {
+    setFilters((prev) => ({
+      ...prev,
+      [filterName]: event.target.checked,
+    }));
+    setPage(1);
+  };
+
   const handlePageChange = (event, newPage) => {
     setPage(newPage);
     if (tableCardRef.current) {
@@ -1233,7 +1248,7 @@ const MachineListPage = () => {
       power: "",
       pressure: "",
       voltage: "",
-      traffic_flow: "",
+      air_volume: "",
       note: "",
       current_status: "available",
       name_category: "Máy móc thiết bị", // Default category
@@ -1576,7 +1591,7 @@ const MachineListPage = () => {
     "Công suất (W)": "power",
     "Áp suất (MPa)": "pressure",
     "Điện áp (V)": "voltage",
-    "Lưu lượng khí nén (lít/phút)": "traffic_flow",
+    "Lưu lượng khí nén (lít/phút)": "air_volume",
     "Ghi chú": "note",
   };
   // Lấy danh sách các cột bắt buộc (sẽ dùng để tô màu)
@@ -1883,7 +1898,7 @@ const MachineListPage = () => {
             "Công suất (W)": item.power || "",
             "Áp suất (MPa)": item.pressure || "",
             "Điện áp (V)": item.voltage || "",
-            "Lưu lượng khí nén (lít/phút)": item.traffic_flow || "",
+            "Lưu lượng khí nén (lít/phút)": item.air_volume || "",
             "Giá (VNĐ)": item.price || "",
             "Tuổi thọ (năm)": item.lifespan || "",
             "Chi phí sửa chữa (VNĐ)": item.repair_cost || "",
@@ -2008,7 +2023,7 @@ const MachineListPage = () => {
                   "power",
                   "pressure",
                   "voltage",
-                  "traffic_flow",
+                  "air_volume",
                   "lifespan",
                 ].includes(englishKey)
               ) {
@@ -3494,6 +3509,57 @@ const MachineListPage = () => {
                   }}
                 />
               </Grid>
+              {/* Filter: Sử dụng khí nén */}
+              <Grid size={{ xs: 12, sm: 6, md: 2 }}>
+                <Box
+                  onClick={() =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      has_air_volume: !prev.has_air_volume,
+                    }))
+                  }
+                  sx={{
+                    height: "40px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    px: 1.5,
+                    borderRadius: "12px",
+                    border: "1px solid",
+                    borderColor: "rgba(0, 0, 0, 0.23)",
+                    backgroundColor: "transparent",
+                    cursor: "pointer",
+                    userSelect: "none",
+                    boxSizing: "border-box",
+                    transition: "all 0.2s ease-in-out",
+                    "&:hover": {
+                      borderColor: "rgba(0, 0, 0, 0.87)",
+                    },
+                  }}
+                >
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontSize: "1rem",
+                      fontWeight: 500,
+                      color: "text.secondary",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    Máy sử dụng khí nén
+                  </Typography>
+                  <Switch
+                    checked={filters.has_air_volume}
+                    onChange={handleSwitchFilterChange("has_air_volume")}
+                    onClick={(e) => e.stopPropagation()}
+                    color="primary"
+                    size="small"
+                    sx={{ ml: 0.5 }}
+                  />
+                </Box>
+              </Grid>
             </Grid>
           </CardContent>
         </Card>
@@ -4001,7 +4067,7 @@ const MachineListPage = () => {
                         </TableSortLabel>
                       </TableCell>
                     )}
-                    {columnVisibility.traffic_flow && (
+                    {columnVisibility.air_volume && (
                       <TableCell
                         sx={{
                           fontWeight: 600,
@@ -4010,13 +4076,13 @@ const MachineListPage = () => {
                         }}
                       >
                         <TableSortLabel
-                          active={sortConfig.key === "traffic_flow"}
+                          active={sortConfig.key === "air_volume"}
                           direction={
-                            sortConfig.key === "traffic_flow"
+                            sortConfig.key === "air_volume"
                               ? sortConfig.direction
                               : "asc"
                           }
-                          onClick={() => handleSortRequest("traffic_flow")}
+                          onClick={() => handleSortRequest("air_volume")}
                         >
                           Lưu lượng khí nén (lít/phút)
                         </TableSortLabel>
@@ -4356,9 +4422,9 @@ const MachineListPage = () => {
                               {machine.voltage || "-"}
                             </TableCell>
                           )}
-                          {columnVisibility.traffic_flow && (
+                          {columnVisibility.air_volume && (
                             <TableCell sx={{ whiteSpace: "nowrap" }}>
-                              {machine.traffic_flow || "-"}
+                              {machine.air_volume || "-"}
                             </TableCell>
                           )}
                           {columnVisibility.price && (
@@ -4994,7 +5060,7 @@ const MachineListPage = () => {
 
                   <Grid size={{ xs: 12 }}>
                     <Divider sx={{ my: 2 }}>
-                      <Chip label="Thông tin kỹ thuật" />
+                      <Chip label="Thông số kỹ thuật" />
                     </Divider>
                   </Grid>
 
@@ -5050,11 +5116,11 @@ const MachineListPage = () => {
                     <TextField
                       fullWidth
                       label="Lưu lượng khí nén (lít/phút)"
-                      value={editedData.traffic_flow?.toString() || ""}
+                      value={editedData.air_volume?.toString() || ""}
                       onChange={(e) => {
                         const val = e.target.value.replace(/\D/g, "");
                         handleInputChange(
-                          "traffic_flow",
+                          "air_volume",
                           val !== "" ? parseInt(val, 10) : ""
                         );
                       }}

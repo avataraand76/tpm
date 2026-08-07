@@ -159,6 +159,29 @@ create table if not exists tb_machine_type_attribute
     updated_by bigint default '0'
 );
 
+-- MARK: machine type attribute specs thông số kỹ thuật của loại máy móc
+create table if not exists tb_machine_type_attribute_specs
+(
+    -- foreign
+    id_machine_type bigint,
+    id_machine_attribute bigint,
+    
+    -- properties
+    power int, -- công suất điện
+    pressure int, -- áp suất
+    voltage int, -- điện áp
+    air_volume int, -- lưu lượng khí nén
+    
+    -- key
+    unique (id_machine_type, id_machine_attribute),
+    
+    -- timestamp
+    created_at timestamp default current_timestamp,
+    created_by bigint default '0',
+    updated_at timestamp default current_timestamp on update current_timestamp,
+    updated_by bigint default '0'
+);
+
 -- MARK: machine manufacturer hãng sản xuất
 create table if not exists tb_machine_manufacturer
 (
@@ -221,10 +244,10 @@ create table if not exists tb_machine
     model_machine text,
     manufacturer text, -- hãng sản xuất
     supplier text, -- nhà cung cấp
-    power int, -- công xuất điện
+    power int, -- công suất điện
     pressure int, -- áp suất
     voltage int, -- điện áp
-    traffic_flow int, -- lưu lượng khí nén
+    air_volume int, -- lưu lượng khí nén
     price decimal(15, 0), -- giá
     date_of_use date, -- ngày sử dụng
     lifespan int, -- tuổi thọ

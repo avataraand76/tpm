@@ -256,7 +256,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
       ["Công suất (W)", machine.power],
       ["Áp suất (MPa)", machine.pressure],
       ["Điện áp (V)", machine.voltage],
-      ["Lưu lượng khí nén (lít/phút)", machine.traffic_flow],
+      ["Lưu lượng khí nén (lít/phút)", machine.air_volume],
       ["Đơn giá gốc (VNĐ)", formattedPrice],
     ]
       .filter(([, v]) => v || v === 0)
@@ -267,7 +267,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
       !machine.power &&
       !machine.pressure &&
       !machine.voltage &&
-      !machine.traffic_flow &&
+      !machine.air_volume &&
       !machine.price;
 
     const contentRows =
@@ -792,7 +792,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
               <InfoRow label="Điện áp (V)" value={machine.voltage} />
               <InfoRow
                 label="Lưu lượng khí nén (lít/phút)"
-                value={machine.traffic_flow}
+                value={machine.air_volume}
               />
               <InfoRow
                 label="Đơn giá gốc (VNĐ)"
@@ -807,7 +807,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
           {!machine.power &&
             !machine.pressure &&
             !machine.voltage &&
-            !machine.traffic_flow &&
+            !machine.air_volume &&
             !machine.price && (
               <Typography
                 variant="caption"

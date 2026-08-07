@@ -44,6 +44,10 @@ import {
   CheckCircle,
   Business,
   FileDownload,
+  Air,
+  Speed,
+  PrecisionManufacturing,
+  LocationOn,
 } from "@mui/icons-material";
 import ExcelJS from "exceljs";
 import NavigationBar from "../components/NavigationBar";
@@ -116,6 +120,19 @@ const ReportPage = () => {
     maintenance: {
       summary: { total: 0, pending: 0, completed: 0, confirmed: 0 },
       departments: [],
+    },
+    air_consumption: {
+      summary: {
+        total_machines: 0,
+        total_volume: 0,
+        avg_volume: 0,
+        max_volume: 0,
+        min_volume: 0,
+      },
+      by_type: [],
+      by_department: [],
+      by_location: [],
+      by_department_type: [],
     },
   });
 
@@ -585,6 +602,11 @@ const ReportPage = () => {
             icon={<CalendarMonth sx={{ mr: 1 }} />}
             iconPosition="start"
             label="Thống kê bảo dưỡng"
+          />
+          <Tab
+            icon={<Air sx={{ mr: 1 }} />}
+            iconPosition="start"
+            label="Thống kê lưu lượng khí nén"
           />
         </Tabs>
 
@@ -1217,7 +1239,7 @@ const ReportPage = () => {
                                   fontWeight={600}
                                   color="text.secondary"
                                 >
-                                  Tiến độ đến ngày hiện tại
+                                  Tiến độ đến hiện tại
                                 </Typography>
                                 <Typography
                                   variant="caption"
@@ -1274,7 +1296,7 @@ const ReportPage = () => {
                         <TableHead>
                           <TableRow sx={{ bgcolor: "#f5f6f8" }}>
                             <TableCell
-                              sx={{ fontWeight: 700, pl: 3, width: "22%" }}
+                              sx={{ fontWeight: 700, pl: 3, width: "15%" }}
                             >
                               <Stack
                                 direction="row"
@@ -1339,7 +1361,7 @@ const ReportPage = () => {
                               }}
                               align="center"
                             >
-                              Tiến độ đến ngày hiện tại
+                              Tiến độ đến hiện tại
                             </TableCell>
                           </TableRow>
                         </TableHead>
@@ -1711,6 +1733,1086 @@ const ReportPage = () => {
                         </TableBody>
                       </Table>
                     </TableContainer>
+                  </Stack>
+                )}
+              </Box>
+            )}
+
+            {/* TAB 3: COMPRESSED AIR CONSUMPTION REPORT */}
+            {activeTab === 2 && (
+              <Box>
+                {!reportData.air_consumption ||
+                reportData.air_consumption.summary.total_machines === 0 ? (
+                  <Paper
+                    elevation={0}
+                    sx={{
+                      p: 6,
+                      textAlign: "center",
+                      borderRadius: "16px",
+                      border: "1px dashed rgba(0,0,0,0.12)",
+                    }}
+                  >
+                    <Air
+                      sx={{ fontSize: 48, color: "text.disabled", mb: 1.5 }}
+                    />
+                    <Typography variant="body1" color="text.secondary">
+                      Không có máy móc nào khai báo dữ liệu sử dụng khí nén
+                    </Typography>
+                  </Paper>
+                ) : (
+                  <Stack spacing={2.5}>
+                    {/* HERO CARDS SECTION FOR AIR CONSUMPTION REPORT */}
+                    <Grid container spacing={2.5} sx={{ mb: 3 }}>
+                      {/* COLUMN 1: HERO CARD - CÔNG SUẤT MÁY BƠM KHÍ NÉN */}
+                      <Grid size={{ xs: 12, md: 5 }}>
+                        <Paper
+                          elevation={0}
+                          sx={{
+                            p: 3,
+                            borderRadius: "20px",
+                            background:
+                              "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+                            color: "#fff",
+                            boxShadow: "0 10px 30px rgba(15,23,42,0.3)",
+                            height: "100%",
+                            display: "flex",
+                            flexDirection: "column",
+                            justifyContent: "space-between",
+                            boxSizing: "border-box",
+                            border: "1px solid rgba(255,255,255,0.1)",
+                          }}
+                        >
+                          <Box>
+                            <Stack
+                              direction="row"
+                              justifyContent="space-between"
+                              alignItems="center"
+                              sx={{ mb: 2 }}
+                            >
+                              <Stack
+                                direction="row"
+                                spacing={1.5}
+                                alignItems="center"
+                              >
+                                <Avatar
+                                  sx={{
+                                    bgcolor: "rgba(56,189,248,0.2)",
+                                    color: "#38bdf8",
+                                    width: 44,
+                                    height: 44,
+                                  }}
+                                >
+                                  <Speed sx={{ fontSize: 26 }} />
+                                </Avatar>
+                                <Box>
+                                  <Typography
+                                    variant="h6"
+                                    sx={{
+                                      color: "#f8fafc",
+                                      textTransform: "uppercase",
+                                      fontWeight: 700,
+                                      letterSpacing: 0.8,
+                                    }}
+                                  >
+                                    CÔNG SUẤT MÁY BƠM KHÍ NÉN
+                                  </Typography>
+                                </Box>
+                              </Stack>
+                            </Stack>
+
+                            <Box
+                              sx={{
+                                my: 2,
+                                p: 2,
+                                borderRadius: "14px",
+                                bgcolor: "rgba(255,255,255,0.05)",
+                                border: "1px solid rgba(255,255,255,0.08)",
+                              }}
+                            >
+                              <Typography
+                                variant="caption"
+                                sx={{ color: "#cbd5e1", fontWeight: 600 }}
+                              >
+                                TỔNG LƯỢNG KHÍ NÉN
+                              </Typography>
+                              <Typography
+                                variant="h3"
+                                fontWeight={900}
+                                sx={{ color: "#38bdf8", my: 0.5 }}
+                              >
+                                20,000
+                                <Typography
+                                  component="span"
+                                  variant="subtitle1"
+                                  sx={{
+                                    ml: 1,
+                                    color: "#94a3b8",
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  lít/phút
+                                </Typography>
+                              </Typography>
+                            </Box>
+
+                            <Stack spacing={1.5}>
+                              <Box
+                                sx={{
+                                  p: 1.8,
+                                  borderRadius: "12px",
+                                  bgcolor: "rgba(255,255,255,0.04)",
+                                  border: "1px solid rgba(255,255,255,0.06)",
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                }}
+                              >
+                                <Box>
+                                  <Typography
+                                    variant="body2"
+                                    fontWeight={700}
+                                    sx={{ color: "#f1f5f9" }}
+                                  >
+                                    Máy bơm khí nén 1
+                                  </Typography>
+                                </Box>
+                                <Typography
+                                  variant="subtitle1"
+                                  fontWeight={800}
+                                  sx={{ color: "#38bdf8" }}
+                                >
+                                  10,500{" "}
+                                  <Typography
+                                    component="span"
+                                    variant="caption"
+                                    sx={{ color: "#94a3b8" }}
+                                  >
+                                    lít/phút
+                                  </Typography>
+                                </Typography>
+                              </Box>
+
+                              <Box
+                                sx={{
+                                  p: 1.8,
+                                  borderRadius: "12px",
+                                  bgcolor: "rgba(255,255,255,0.04)",
+                                  border: "1px solid rgba(255,255,255,0.06)",
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                }}
+                              >
+                                <Box>
+                                  <Typography
+                                    variant="body2"
+                                    fontWeight={700}
+                                    sx={{ color: "#f1f5f9" }}
+                                  >
+                                    Máy bơm khí nén 2
+                                  </Typography>
+                                </Box>
+                                <Typography
+                                  variant="subtitle1"
+                                  fontWeight={800}
+                                  sx={{ color: "#38bdf8" }}
+                                >
+                                  9,500{" "}
+                                  <Typography
+                                    component="span"
+                                    variant="caption"
+                                    sx={{ color: "#94a3b8" }}
+                                  >
+                                    lít/phút
+                                  </Typography>
+                                </Typography>
+                              </Box>
+                            </Stack>
+                          </Box>
+                        </Paper>
+                      </Grid>
+
+                      {/* COLUMN 2: STACKED RIGHT CARDS */}
+                      <Grid size={{ xs: 12, md: 7 }}>
+                        <Stack
+                          spacing={2}
+                          sx={{
+                            height: "100%",
+                            display: "flex",
+                            flexDirection: "column",
+                          }}
+                        >
+                          {/* ROW 1 OF RIGHT COLUMN: TỔNG LƯU LƯỢNG SỬ DỤNG + % SỬ DỤNG KHÍ NÉN */}
+                          {(() => {
+                            const totalPumpSupply = 20000;
+                            const totalUsedFlow =
+                              reportData.air_consumption.summary.total_volume ||
+                              0;
+                            const allUsedFlow =
+                              reportData.air_consumption.summary
+                                .all_total_volume || 0;
+                            const usagePct =
+                              totalPumpSupply > 0
+                                ? (totalUsedFlow / totalPumpSupply) * 100
+                                : 0;
+
+                            return (
+                              <Paper
+                                elevation={0}
+                                sx={{
+                                  p: 2.5,
+                                  borderRadius: "18px",
+                                  background:
+                                    "linear-gradient(135deg, #f57c00 0%, #ff9800 100%)",
+                                  color: "#fff",
+                                  boxShadow: "0 6px 20px rgba(245,124,0,0.25)",
+                                  flex: 1,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  boxSizing: "border-box",
+                                }}
+                              >
+                                <Grid
+                                  container
+                                  spacing={2}
+                                  alignItems="center"
+                                  sx={{ width: "100%" }}
+                                >
+                                  {/* Left part: Tổng lưu lượng sử dụng */}
+                                  <Grid size={{ xs: 12, sm: 7 }}>
+                                    <Stack
+                                      direction="row"
+                                      spacing={1}
+                                      alignItems="center"
+                                      sx={{ mb: 0.5 }}
+                                    >
+                                      <Avatar
+                                        sx={{
+                                          bgcolor: "rgba(255,255,255,0.2)",
+                                          width: 40,
+                                          height: 40,
+                                        }}
+                                      >
+                                        <Air
+                                          sx={{ fontSize: 26, color: "#fff" }}
+                                        />
+                                      </Avatar>
+                                      <Typography
+                                        variant="caption"
+                                        sx={{
+                                          opacity: 0.9,
+                                          textTransform: "uppercase",
+                                          fontWeight: 700,
+                                          letterSpacing: 0.5,
+                                        }}
+                                      >
+                                        LƯU LƯỢNG KHÍ NÉN THỰC TẾ
+                                      </Typography>
+                                    </Stack>
+                                    <Box
+                                      sx={{
+                                        display: "inline-flex",
+                                        alignItems: "stretch",
+                                        my: 0.5,
+                                      }}
+                                    >
+                                      {/* TOP-LEFT: NUMERATOR */}
+                                      <Box
+                                        sx={{
+                                          alignSelf: "flex-start",
+                                          textAlign: "left",
+                                        }}
+                                      >
+                                        <Typography
+                                          variant="h3"
+                                          fontWeight={900}
+                                          sx={{ lineHeight: 1 }}
+                                        >
+                                          {new Intl.NumberFormat("en-US", {
+                                            maximumFractionDigits: 1,
+                                          }).format(totalUsedFlow)}
+                                        </Typography>
+                                        <Typography
+                                          variant="caption"
+                                          sx={{
+                                            opacity: 0.9,
+                                            fontWeight: 700,
+                                            display: "block",
+                                            mt: 0.3,
+                                          }}
+                                        >
+                                          lít/phút
+                                        </Typography>
+                                      </Box>
+
+                                      {/* CONTINUOUS SINGLE DIAGONAL SLASH SVG */}
+                                      {allUsedFlow > 0 && (
+                                        <>
+                                          <Box
+                                            sx={{
+                                              display: "flex",
+                                              alignItems: "center",
+                                              px: 1,
+                                              alignSelf: "stretch",
+                                            }}
+                                          >
+                                            <svg
+                                              width="26"
+                                              height="54"
+                                              viewBox="0 0 26 54"
+                                              fill="none"
+                                              xmlns="http://www.w3.org/2000/svg"
+                                              style={{ display: "block" }}
+                                            >
+                                              <line
+                                                x1="22"
+                                                y1="3"
+                                                x2="4"
+                                                y2="51"
+                                                stroke="white"
+                                                strokeWidth="3.5"
+                                                strokeLinecap="round"
+                                                opacity="0.85"
+                                              />
+                                            </svg>
+                                          </Box>
+
+                                          {/* BOTTOM-RIGHT: DENOMINATOR */}
+                                          <Box
+                                            sx={{
+                                              alignSelf: "flex-end",
+                                              textAlign: "left",
+                                            }}
+                                          >
+                                            <Typography
+                                              variant="h4"
+                                              fontWeight={800}
+                                              sx={{ lineHeight: 1 }}
+                                            >
+                                              {new Intl.NumberFormat("en-US", {
+                                                maximumFractionDigits: 1,
+                                              }).format(allUsedFlow)}
+                                            </Typography>
+                                            <Typography
+                                              variant="caption"
+                                              sx={{
+                                                opacity: 0.85,
+                                                fontWeight: 700,
+                                                display: "block",
+                                                mt: 0.3,
+                                              }}
+                                            >
+                                              tổng công suất
+                                            </Typography>
+                                          </Box>
+                                        </>
+                                      )}
+                                    </Box>
+                                    {/* <Typography
+                                      variant="caption"
+                                      sx={{
+                                        display: "block",
+                                        opacity: 0.85,
+                                        mt: 0.5,
+                                      }}
+                                    >
+                                      Công suất tiêu thụ thực tế
+                                    </Typography> */}
+                                  </Grid>
+
+                                  {/* Right part: % Sử dụng khí nén */}
+                                  <Grid size={{ xs: 12, sm: 5 }}>
+                                    <Box
+                                      sx={{
+                                        p: 1.5,
+                                        borderRadius: "14px",
+                                        bgcolor: "rgba(255,255,255,0.18)",
+                                        backdropFilter: "blur(6px)",
+                                        textAlign: "right",
+                                        border:
+                                          "1px solid rgba(255,255,255,0.25)",
+                                      }}
+                                    >
+                                      <Typography
+                                        variant="caption"
+                                        sx={{
+                                          fontWeight: 700,
+                                          opacity: 0.95,
+                                          textTransform: "uppercase",
+                                          display: "block",
+                                        }}
+                                      >
+                                        % SỬ DỤNG KHÍ NÉN
+                                      </Typography>
+                                      <Typography
+                                        variant="h4"
+                                        fontWeight={900}
+                                        sx={{ my: 0.3 }}
+                                      >
+                                        {usagePct.toFixed(1)}%
+                                      </Typography>
+                                      <Box
+                                        sx={{
+                                          width: "100%",
+                                          height: 5,
+                                          bgcolor: "rgba(255,255,255,0.3)",
+                                          borderRadius: 3,
+                                          overflow: "hidden",
+                                          my: 0.6,
+                                        }}
+                                      >
+                                        <Box
+                                          sx={{
+                                            width: `${Math.min(
+                                              100,
+                                              usagePct
+                                            )}%`,
+                                            height: "100%",
+                                            bgcolor: "#fff",
+                                            borderRadius: 3,
+                                          }}
+                                        />
+                                      </Box>
+                                      <Typography
+                                        variant="caption"
+                                        sx={{
+                                          opacity: 0.9,
+                                          fontSize: "0.72rem",
+                                        }}
+                                      >
+                                        {new Intl.NumberFormat("en-US", {
+                                          maximumFractionDigits: 0,
+                                        }).format(totalUsedFlow)}{" "}
+                                        / 20,000 lít/phút
+                                      </Typography>
+                                    </Box>
+                                  </Grid>
+                                </Grid>
+                              </Paper>
+                            );
+                          })()}
+
+                          {/* ROW 2 OF RIGHT COLUMN: MÁY SỬ DỤNG KHÍ NÉN (2A) & LƯU LƯỢNG TB / MÁY (2B) */}
+                          <Grid container spacing={2} sx={{ flex: 1 }}>
+                            {/* Card 2A: Số máy dùng khí nén */}
+                            <Grid size={{ xs: 12, sm: 6 }}>
+                              <Paper
+                                elevation={0}
+                                sx={{
+                                  p: 2.5,
+                                  borderRadius: "18px",
+                                  background:
+                                    "linear-gradient(135deg, #3f51b5 0%, #5c6bc0 100%)",
+                                  color: "#fff",
+                                  boxShadow: "0 6px 20px rgba(63,81,181,0.25)",
+                                  height: "100%",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  boxSizing: "border-box",
+                                }}
+                              >
+                                <Box sx={{ width: "100%" }}>
+                                  <Stack
+                                    direction="row"
+                                    spacing={1}
+                                    alignItems="center"
+                                    sx={{ mb: 0.5 }}
+                                  >
+                                    <Avatar
+                                      sx={{
+                                        bgcolor: "rgba(255,255,255,0.2)",
+                                        width: 40,
+                                        height: 40,
+                                      }}
+                                    >
+                                      <PrecisionManufacturing
+                                        sx={{ fontSize: 26, color: "#fff" }}
+                                      />
+                                    </Avatar>
+                                    <Typography
+                                      variant="caption"
+                                      sx={{
+                                        opacity: 0.9,
+                                        textTransform: "uppercase",
+                                        fontWeight: 700,
+                                        letterSpacing: 0.5,
+                                      }}
+                                    >
+                                      SỐ MÁY ĐANG SỬ DỤNG KHÍ NÉN
+                                    </Typography>
+                                  </Stack>
+                                  <Box
+                                    sx={{
+                                      display: "inline-flex",
+                                      alignItems: "stretch",
+                                      my: 0.5,
+                                    }}
+                                  >
+                                    {/* TOP-LEFT: NUMERATOR */}
+                                    <Box
+                                      sx={{
+                                        alignSelf: "flex-start",
+                                        textAlign: "left",
+                                      }}
+                                    >
+                                      <Typography
+                                        variant="h3"
+                                        fontWeight={900}
+                                        sx={{ lineHeight: 1 }}
+                                      >
+                                        {new Intl.NumberFormat("en-US").format(
+                                          reportData.air_consumption.summary
+                                            .total_machines || 0
+                                        )}
+                                      </Typography>
+                                      <Typography
+                                        variant="caption"
+                                        sx={{
+                                          opacity: 0.9,
+                                          fontWeight: 700,
+                                          display: "block",
+                                          mt: 0.3,
+                                        }}
+                                      >
+                                        máy
+                                      </Typography>
+                                    </Box>
+
+                                    {/* CONTINUOUS SINGLE DIAGONAL SLASH SVG */}
+                                    {reportData.air_consumption.summary
+                                      .all_total_machines > 0 && (
+                                      <>
+                                        <Box
+                                          sx={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            px: 1,
+                                            alignSelf: "stretch",
+                                          }}
+                                        >
+                                          <svg
+                                            width="24"
+                                            height="50"
+                                            viewBox="0 0 24 50"
+                                            fill="none"
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            style={{ display: "block" }}
+                                          >
+                                            <line
+                                              x1="20"
+                                              y1="3"
+                                              x2="4"
+                                              y2="47"
+                                              stroke="white"
+                                              strokeWidth="3.5"
+                                              strokeLinecap="round"
+                                              opacity="0.85"
+                                            />
+                                          </svg>
+                                        </Box>
+
+                                        {/* BOTTOM-RIGHT: DENOMINATOR */}
+                                        <Box
+                                          sx={{
+                                            alignSelf: "flex-end",
+                                            textAlign: "left",
+                                          }}
+                                        >
+                                          <Typography
+                                            variant="h4"
+                                            fontWeight={800}
+                                            sx={{ lineHeight: 1 }}
+                                          >
+                                            {new Intl.NumberFormat(
+                                              "en-US"
+                                            ).format(
+                                              reportData.air_consumption.summary
+                                                .all_total_machines
+                                            )}
+                                          </Typography>
+                                          <Typography
+                                            variant="caption"
+                                            sx={{
+                                              opacity: 0.85,
+                                              fontWeight: 700,
+                                              display: "block",
+                                              mt: 0.3,
+                                            }}
+                                          >
+                                            tổng số máy
+                                          </Typography>
+                                        </Box>
+                                      </>
+                                    )}
+                                  </Box>
+                                  {/* <Typography
+                                    variant="caption"
+                                    sx={{
+                                      display: "block",
+                                      opacity: 0.85,
+                                      mt: 0.5,
+                                    }}
+                                  >
+                                    Tổng số MMTB sử dụng khí nén
+                                  </Typography> */}
+                                </Box>
+                              </Paper>
+                            </Grid>
+
+                            {/* Card 2B: Lưu lượng trung bình / máy */}
+                            <Grid size={{ xs: 12, sm: 6 }}>
+                              <Paper
+                                elevation={0}
+                                sx={{
+                                  p: 2.5,
+                                  borderRadius: "18px",
+                                  background:
+                                    "linear-gradient(135deg, #00897b 0%, #26a69a 100%)",
+                                  color: "#fff",
+                                  boxShadow: "0 6px 20px rgba(0,137,123,0.25)",
+                                  height: "100%",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  boxSizing: "border-box",
+                                }}
+                              >
+                                <Box sx={{ width: "100%" }}>
+                                  <Stack
+                                    direction="row"
+                                    spacing={1}
+                                    alignItems="center"
+                                    sx={{ mb: 0.5 }}
+                                  >
+                                    <Avatar
+                                      sx={{
+                                        bgcolor: "rgba(255,255,255,0.2)",
+                                        width: 40,
+                                        height: 40,
+                                      }}
+                                    >
+                                      <Speed
+                                        sx={{ fontSize: 26, color: "#fff" }}
+                                      />
+                                    </Avatar>
+                                    <Typography
+                                      variant="caption"
+                                      sx={{
+                                        opacity: 0.9,
+                                        textTransform: "uppercase",
+                                        fontWeight: 700,
+                                        letterSpacing: 0.5,
+                                      }}
+                                    >
+                                      LƯU LƯỢNG TB / MÁY
+                                    </Typography>
+                                  </Stack>
+                                  <Typography
+                                    variant="h4"
+                                    fontWeight={800}
+                                    sx={{ my: 0.3 }}
+                                  >
+                                    {new Intl.NumberFormat("en-US", {
+                                      maximumFractionDigits: 1,
+                                    }).format(
+                                      reportData.air_consumption.summary
+                                        .avg_volume
+                                    )}
+                                    <Typography
+                                      component="span"
+                                      variant="subtitle2"
+                                      sx={{ ml: 0.8, opacity: 0.9 }}
+                                    >
+                                      lít/phút
+                                    </Typography>
+                                  </Typography>
+                                  {/* <Typography
+                                    variant="caption"
+                                    sx={{
+                                      display: "block",
+                                      opacity: 0.85,
+                                      mt: 0.3,
+                                    }}
+                                  >
+                                    Mức sử dụng bình quân
+                                  </Typography> */}
+                                </Box>
+                              </Paper>
+                            </Grid>
+                          </Grid>
+                        </Stack>
+                      </Grid>
+                    </Grid>
+
+                    {/* 3-Level Hierarchical Tree: Department -> Location -> Machine Type */}
+                    <Box sx={{ mt: 1 }}>
+                      {!reportData.air_consumption.hierarchy ||
+                      reportData.air_consumption.hierarchy.length === 0 ? (
+                        <Paper
+                          elevation={0}
+                          sx={{
+                            p: 4,
+                            textAlign: "center",
+                            borderRadius: "16px",
+                            border: "1px dashed rgba(0,0,0,0.12)",
+                          }}
+                        >
+                          <Typography color="text.secondary">
+                            Chưa có dữ liệu phân bổ theo đơn vị và vị trí
+                          </Typography>
+                        </Paper>
+                      ) : (
+                        <Stack spacing={2} sx={{ width: "100%" }}>
+                          {reportData.air_consumption.hierarchy.map(
+                            (dept, deptIdx) => {
+                              return (
+                                <Accordion
+                                  key={dept.id_department || deptIdx}
+                                  elevation={0}
+                                  sx={{
+                                    borderRadius: "16px !important",
+                                    border: "1px solid rgba(0,0,0,0.08)",
+                                    overflow: "hidden",
+                                    boxShadow: "0 2px 8px rgba(0,0,0,0.02)",
+                                    "&:before": { display: "none" },
+                                  }}
+                                >
+                                  {/* LEVEL 1 HEADER: DEPARTMENT */}
+                                  <AccordionSummary
+                                    expandIcon={<ExpandMore />}
+                                    sx={{
+                                      bgcolor: "#f8fafc",
+                                      px: 3,
+                                      py: 1.5,
+                                      borderBottom:
+                                        "1px solid rgba(0,0,0,0.04)",
+                                    }}
+                                  >
+                                    <Grid
+                                      container
+                                      spacing={2}
+                                      alignItems="center"
+                                      sx={{ width: "100%" }}
+                                    >
+                                      {/* Dept Name */}
+                                      <Grid size={{ xs: 6, sm: 6 }}>
+                                        <Stack
+                                          direction="row"
+                                          spacing={1.5}
+                                          alignItems="center"
+                                        >
+                                          <Avatar
+                                            sx={{
+                                              bgcolor: "#e3f2fd",
+                                              color: "#0288d1",
+                                              width: 42,
+                                              height: 42,
+                                              fontWeight: 700,
+                                            }}
+                                          >
+                                            <Business fontSize="small" />
+                                          </Avatar>
+                                          <Box>
+                                            <Typography
+                                              variant="subtitle1"
+                                              fontWeight={700}
+                                              sx={{ color: "#0f172a" }}
+                                            >
+                                              {dept.name_department}
+                                            </Typography>
+                                            <Typography
+                                              variant="caption"
+                                              color="text.secondary"
+                                              fontWeight={600}
+                                            >
+                                              {dept.machine_count} máy
+                                            </Typography>
+                                          </Box>
+                                        </Stack>
+                                      </Grid>
+
+                                      {/* Total Flow */}
+                                      <Grid
+                                        size={{ xs: 6, sm: 6 }}
+                                        textAlign="right"
+                                      >
+                                        <Typography
+                                          variant="caption"
+                                          color="text.secondary"
+                                          display="block"
+                                          fontWeight={600}
+                                        >
+                                          TỔNG LƯU LƯỢNG SỬ DỤNG KHÍ NÉN
+                                        </Typography>
+                                        <Typography
+                                          variant="subtitle1"
+                                          fontWeight={800}
+                                          sx={{ color: "#0288d1" }}
+                                        >
+                                          {new Intl.NumberFormat("en-US", {
+                                            maximumFractionDigits: 1,
+                                          }).format(dept.total_volume)}{" "}
+                                          lít/phút
+                                        </Typography>
+                                      </Grid>
+                                    </Grid>
+                                  </AccordionSummary>
+
+                                  {/* LEVEL 1 DETAILS: LOCATIONS UNDER DEPARTMENT */}
+                                  <AccordionDetails
+                                    sx={{ p: 2, bgcolor: "#f1f5f9" }}
+                                  >
+                                    <Stack spacing={1.5}>
+                                      {dept.locations.map((loc, locIdx) => {
+                                        return (
+                                          <Accordion
+                                            key={loc.id_location || locIdx}
+                                            elevation={0}
+                                            sx={{
+                                              borderRadius: "12px !important",
+                                              border:
+                                                "1px solid rgba(0,0,0,0.06)",
+                                              bgcolor: "#ffffff",
+                                              overflow: "hidden",
+                                              "&:before": { display: "none" },
+                                            }}
+                                          >
+                                            {/* LEVEL 2 HEADER: LOCATION */}
+                                            <AccordionSummary
+                                              expandIcon={<ExpandMore />}
+                                              sx={{
+                                                px: 2.5,
+                                                py: 1,
+                                                bgcolor: "#fafafa",
+                                              }}
+                                            >
+                                              <Grid
+                                                container
+                                                spacing={2}
+                                                alignItems="center"
+                                                sx={{ width: "100%" }}
+                                              >
+                                                {/* Location Name */}
+                                                <Grid size={{ xs: 6, sm: 6 }}>
+                                                  <Stack
+                                                    direction="row"
+                                                    spacing={1.5}
+                                                    alignItems="center"
+                                                  >
+                                                    <Avatar
+                                                      sx={{
+                                                        bgcolor: "#e0f2f1",
+                                                        color: "#00897b",
+                                                        width: 34,
+                                                        height: 34,
+                                                      }}
+                                                    >
+                                                      <LocationOn fontSize="small" />
+                                                    </Avatar>
+                                                    <Box>
+                                                      <Typography
+                                                        variant="subtitle2"
+                                                        fontWeight={700}
+                                                        sx={{
+                                                          color: "#334155",
+                                                        }}
+                                                      >
+                                                        {loc.name_location}
+                                                      </Typography>
+                                                      <Typography
+                                                        variant="caption"
+                                                        color="text.secondary"
+                                                      >
+                                                        {loc.machine_count} máy
+                                                      </Typography>
+                                                    </Box>
+                                                  </Stack>
+                                                </Grid>
+
+                                                {/* Location Total Flow */}
+                                                <Grid
+                                                  size={{ xs: 6, sm: 6 }}
+                                                  textAlign="right"
+                                                >
+                                                  <Typography
+                                                    variant="body2"
+                                                    color="text.secondary"
+                                                    display="block"
+                                                  >
+                                                    Lưu lượng sử dụng khí nén
+                                                  </Typography>
+                                                  <Typography
+                                                    variant="body2"
+                                                    fontWeight={700}
+                                                    sx={{ color: "#00897b" }}
+                                                  >
+                                                    {new Intl.NumberFormat(
+                                                      "en-US",
+                                                      {
+                                                        maximumFractionDigits: 1,
+                                                      }
+                                                    ).format(
+                                                      loc.total_volume
+                                                    )}{" "}
+                                                    lít/phút
+                                                  </Typography>
+                                                </Grid>
+                                              </Grid>
+                                            </AccordionSummary>
+
+                                            {/* LEVEL 3 DETAILS: MACHINE TYPES TABLE */}
+                                            <AccordionDetails sx={{ p: 0 }}>
+                                              <TableContainer
+                                                component={Paper}
+                                                elevation={0}
+                                                sx={{ borderRadius: 0 }}
+                                              >
+                                                <Table size="small">
+                                                  <TableHead>
+                                                    <TableRow
+                                                      sx={{
+                                                        bgcolor: "#f8fafc",
+                                                      }}
+                                                    >
+                                                      <TableCell
+                                                        sx={{
+                                                          fontWeight: 700,
+                                                          width: "50px",
+                                                          pl: 3,
+                                                        }}
+                                                        align="center"
+                                                      >
+                                                        STT
+                                                      </TableCell>
+                                                      <TableCell
+                                                        sx={{ fontWeight: 700 }}
+                                                      >
+                                                        Loại máy
+                                                      </TableCell>
+                                                      <TableCell
+                                                        align="center"
+                                                        sx={{ fontWeight: 700 }}
+                                                      >
+                                                        Số máy
+                                                      </TableCell>
+
+                                                      <TableCell
+                                                        align="center"
+                                                        sx={{
+                                                          fontWeight: 700,
+                                                          color: "#00897b",
+                                                        }}
+                                                      >
+                                                        Lưu lượng (lít/phút)
+                                                      </TableCell>
+                                                      <TableCell
+                                                        align="center"
+                                                        sx={{
+                                                          fontWeight: 700,
+                                                          color: "#00897b",
+                                                        }}
+                                                      >
+                                                        Tổng lưu lượng
+                                                        (lít/phút)
+                                                      </TableCell>
+                                                    </TableRow>
+                                                  </TableHead>
+                                                  <TableBody>
+                                                    {loc.types.map(
+                                                      (typeItem, typeIdx) => {
+                                                        return (
+                                                          <TableRow
+                                                            key={
+                                                              typeItem.type_machine ||
+                                                              typeIdx
+                                                            }
+                                                            hover
+                                                          >
+                                                            <TableCell
+                                                              align="center"
+                                                              sx={{
+                                                                pl: 3,
+                                                                fontWeight: 600,
+                                                                color:
+                                                                  "text.secondary",
+                                                              }}
+                                                            >
+                                                              {typeIdx + 1}
+                                                            </TableCell>
+                                                            <TableCell
+                                                              sx={{
+                                                                fontWeight: 700,
+                                                                color:
+                                                                  "#1e293b",
+                                                              }}
+                                                            >
+                                                              {
+                                                                typeItem.type_machine
+                                                              }
+                                                            </TableCell>
+                                                            <TableCell
+                                                              align="center"
+                                                              sx={{
+                                                                fontWeight: 600,
+                                                              }}
+                                                            >
+                                                              {`${typeItem.machine_count} máy`}
+                                                            </TableCell>
+                                                            <TableCell
+                                                              align="center"
+                                                              sx={{
+                                                                fontWeight: 600,
+                                                                color:
+                                                                  "#00897b",
+                                                              }}
+                                                            >
+                                                              {new Intl.NumberFormat(
+                                                                "en-US",
+                                                                {
+                                                                  maximumFractionDigits: 1,
+                                                                }
+                                                              ).format(
+                                                                typeItem.avg_volume
+                                                              )}{" "}
+                                                              lít/phút
+                                                            </TableCell>
+                                                            <TableCell
+                                                              align="center"
+                                                              sx={{
+                                                                fontWeight: 700,
+                                                                color:
+                                                                  "#00897b",
+                                                              }}
+                                                            >
+                                                              {new Intl.NumberFormat(
+                                                                "en-US",
+                                                                {
+                                                                  maximumFractionDigits: 1,
+                                                                }
+                                                              ).format(
+                                                                typeItem.total_volume
+                                                              )}{" "}
+                                                              lít/phút
+                                                            </TableCell>
+                                                          </TableRow>
+                                                        );
+                                                      }
+                                                    )}
+                                                  </TableBody>
+                                                </Table>
+                                              </TableContainer>
+                                            </AccordionDetails>
+                                          </Accordion>
+                                        );
+                                      })}
+                                    </Stack>
+                                  </AccordionDetails>
+                                </Accordion>
+                              );
+                            }
+                          )}
+                        </Stack>
+                      )}
+                    </Box>
                   </Stack>
                 )}
               </Box>
