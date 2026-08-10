@@ -48,6 +48,7 @@ import {
   Speed,
   PrecisionManufacturing,
   LocationOn,
+  WarningAmber,
 } from "@mui/icons-material";
 import ExcelJS from "exceljs";
 import NavigationBar from "../components/NavigationBar";
@@ -579,36 +580,99 @@ const ReportPage = () => {
         )}
 
         {/* Tab Selection */}
-        <Tabs
-          value={activeTab}
-          onChange={(_, val) => setActiveTab(val)}
-          textColor="primary"
-          indicatorColor="primary"
-          sx={{
-            mb: 3,
-            "& .MuiTab-root": {
-              fontWeight: 600,
-              fontSize: "1rem",
-              textTransform: "none",
-            },
-          }}
-        >
-          <Tab
-            icon={<Receipt sx={{ mr: 1 }} />}
-            iconPosition="start"
-            label="Thống kê kiểm kê"
-          />
-          <Tab
-            icon={<CalendarMonth sx={{ mr: 1 }} />}
-            iconPosition="start"
-            label="Thống kê bảo dưỡng"
-          />
-          <Tab
-            icon={<Air sx={{ mr: 1 }} />}
-            iconPosition="start"
-            label="Thống kê lưu lượng khí nén"
-          />
-        </Tabs>
+        {isMobile ? (
+          <Grid container spacing={1} sx={{ mb: 3 }}>
+            {[
+              {
+                label: "Thống kê kiểm kê",
+                icon: <Receipt sx={{ fontSize: 20 }} />,
+                value: 0,
+              },
+              {
+                label: "Thống kê bảo dưỡng",
+                icon: <CalendarMonth sx={{ fontSize: 20 }} />,
+                value: 1,
+              },
+              {
+                label: "Thống kê lưu lượng khí nén",
+                icon: <Air sx={{ fontSize: 20 }} />,
+                value: 2,
+              },
+            ].map((tab) => {
+              const isActive = activeTab === tab.value;
+              return (
+                <Grid size={{ xs: 12 }} key={tab.value}>
+                  <Button
+                    fullWidth
+                    variant={isActive ? "contained" : "outlined"}
+                    onClick={() => setActiveTab(tab.value)}
+                    startIcon={tab.icon}
+                    sx={{
+                      justifyContent: "flex-start",
+                      py: 1.2,
+                      px: 2,
+                      borderRadius: "12px",
+                      fontWeight: isActive ? 700 : 600,
+                      textTransform: "none",
+                      fontSize: "0.95rem",
+                      background: isActive
+                        ? "linear-gradient(45deg, #667eea, #764ba2)"
+                        : "#fff",
+                      color: isActive ? "#fff" : "#475569",
+                      borderColor: isActive
+                        ? "transparent"
+                        : "rgba(0,0,0,0.12)",
+                      boxShadow: isActive
+                        ? "0 4px 14px rgba(102,126,234,0.35)"
+                        : "none",
+                      "&:hover": {
+                        background: isActive
+                          ? "linear-gradient(45deg, #5a67d8, #6b46c1)"
+                          : "#f8fafc",
+                      },
+                    }}
+                  >
+                    {tab.label}
+                  </Button>
+                </Grid>
+              );
+            })}
+          </Grid>
+        ) : (
+          <Tabs
+            value={activeTab}
+            onChange={(_, val) => setActiveTab(val)}
+            textColor="primary"
+            indicatorColor="primary"
+            variant="scrollable"
+            scrollButtons="auto"
+            allowScrollButtonsMobile
+            sx={{
+              mb: 3,
+              "& .MuiTab-root": {
+                fontWeight: 600,
+                fontSize: "1rem",
+                textTransform: "none",
+              },
+            }}
+          >
+            <Tab
+              icon={<Receipt sx={{ mr: 1 }} />}
+              iconPosition="start"
+              label="Thống kê kiểm kê"
+            />
+            <Tab
+              icon={<CalendarMonth sx={{ mr: 1 }} />}
+              iconPosition="start"
+              label="Thống kê bảo dưỡng"
+            />
+            <Tab
+              icon={<Air sx={{ mr: 1 }} />}
+              iconPosition="start"
+              label="Thống kê lưu lượng khí nén"
+            />
+          </Tabs>
+        )}
 
         {loading ? (
           <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
@@ -1833,7 +1897,7 @@ const ReportPage = () => {
                                 variant="caption"
                                 sx={{ color: "#cbd5e1", fontWeight: 600 }}
                               >
-                                TỔNG LƯỢNG KHÍ NÉN
+                                TỔNG CÔNG SUẤT MÁY NÉN KHÍ
                               </Typography>
                               <Typography
                                 variant="h3"
@@ -2122,70 +2186,118 @@ const ReportPage = () => {
 
                                   {/* Right part: % Sử dụng khí nén */}
                                   <Grid size={{ xs: 12, sm: 5 }}>
-                                    <Box
-                                      sx={{
-                                        p: 1.5,
-                                        borderRadius: "14px",
-                                        bgcolor: "rgba(255,255,255,0.18)",
-                                        backdropFilter: "blur(6px)",
-                                        textAlign: "right",
-                                        border:
-                                          "1px solid rgba(255,255,255,0.25)",
-                                      }}
-                                    >
-                                      <Typography
-                                        variant="caption"
-                                        sx={{
-                                          fontWeight: 700,
-                                          opacity: 0.95,
-                                          textTransform: "uppercase",
-                                          display: "block",
-                                        }}
-                                      >
-                                        % SỬ DỤNG KHÍ NÉN
-                                      </Typography>
-                                      <Typography
-                                        variant="h4"
-                                        fontWeight={900}
-                                        sx={{ my: 0.3 }}
-                                      >
-                                        {usagePct.toFixed(1)}%
-                                      </Typography>
-                                      <Box
-                                        sx={{
-                                          width: "100%",
-                                          height: 5,
-                                          bgcolor: "rgba(255,255,255,0.3)",
-                                          borderRadius: 3,
-                                          overflow: "hidden",
-                                          my: 0.6,
-                                        }}
-                                      >
+                                    {(() => {
+                                      const isWarning = usagePct >= 80;
+                                      return (
                                         <Box
                                           sx={{
-                                            width: `${Math.min(
-                                              100,
-                                              usagePct
-                                            )}%`,
-                                            height: "100%",
-                                            bgcolor: "#fff",
-                                            borderRadius: 3,
+                                            p: 1.5,
+                                            borderRadius: "14px",
+                                            bgcolor: isWarning
+                                              ? "#fef08a"
+                                              : "rgba(255,255,255,0.18)",
+                                            backdropFilter: "blur(6px)",
+                                            textAlign: "right",
+                                            border: isWarning
+                                              ? "2px solid #dc2626"
+                                              : "1px solid rgba(255,255,255,0.25)",
+                                            boxShadow: isWarning
+                                              ? "0 4px 14px rgba(220,38,38,0.3)"
+                                              : "none",
+                                            transition: "all 0.3s ease",
                                           }}
-                                        />
-                                      </Box>
-                                      <Typography
-                                        variant="caption"
-                                        sx={{
-                                          opacity: 0.9,
-                                          fontSize: "0.72rem",
-                                        }}
-                                      >
-                                        {new Intl.NumberFormat("en-US", {
-                                          maximumFractionDigits: 0,
-                                        }).format(totalUsedFlow)}{" "}
-                                        / 20,000 lít/phút
-                                      </Typography>
-                                    </Box>
+                                        >
+                                          <Typography
+                                            variant="caption"
+                                            sx={{
+                                              fontWeight: 700,
+                                              opacity: 0.95,
+                                              textTransform: "uppercase",
+                                              display: "block",
+                                              color: isWarning
+                                                ? "#dc2626"
+                                                : "inherit",
+                                            }}
+                                          >
+                                            % MỨC SỬ DỤNG CÔNG SUẤT
+                                          </Typography>
+
+                                          <Box
+                                            sx={{
+                                              display: "flex",
+                                              alignItems: "center",
+                                              justifyContent: "flex-end",
+                                              gap: 0.8,
+                                              my: 0.3,
+                                            }}
+                                          >
+                                            {isWarning && (
+                                              <WarningAmber
+                                                sx={{
+                                                  color: "#dc2626",
+                                                  fontSize: "1.8rem",
+                                                  filter:
+                                                    "drop-shadow(0px 1px 2px rgba(220,38,38,0.3))",
+                                                }}
+                                              />
+                                            )}
+                                            <Typography
+                                              variant="h4"
+                                              fontWeight={900}
+                                              sx={{
+                                                color: isWarning
+                                                  ? "#dc2626"
+                                                  : "inherit",
+                                              }}
+                                            >
+                                              {usagePct.toFixed(1)}%
+                                            </Typography>
+                                          </Box>
+
+                                          <Box
+                                            sx={{
+                                              width: "100%",
+                                              height: 5,
+                                              bgcolor: isWarning
+                                                ? "rgba(220, 38, 38, 0.2)"
+                                                : "rgba(255,255,255,0.3)",
+                                              borderRadius: 3,
+                                              overflow: "hidden",
+                                              my: 0.6,
+                                            }}
+                                          >
+                                            <Box
+                                              sx={{
+                                                width: `${Math.min(
+                                                  100,
+                                                  usagePct
+                                                )}%`,
+                                                height: "100%",
+                                                bgcolor: isWarning
+                                                  ? "#dc2626"
+                                                  : "#fff",
+                                                borderRadius: 3,
+                                              }}
+                                            />
+                                          </Box>
+                                          <Typography
+                                            variant="caption"
+                                            sx={{
+                                              opacity: 0.9,
+                                              fontSize: "0.72rem",
+                                              color: isWarning
+                                                ? "#dc2626"
+                                                : "inherit",
+                                            }}
+                                          >
+                                            {new Intl.NumberFormat("en-US", {
+                                              maximumFractionDigits: 0,
+                                            }).format(totalUsedFlow)}{" "}
+                                            / 20,000 lít/phút
+                                          </Typography>
+                                        </Box>
+                                      );
+                                    })()}
                                   </Grid>
                                 </Grid>
                               </Paper>

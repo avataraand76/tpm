@@ -16174,31 +16174,31 @@ app.get("/api/reports/monthly-summary", authenticateToken, async (req, res) => {
       `SELECT 
         COUNT(CASE 
           WHEN ml.id_location != 1 
-           AND (m.current_status IS NULL OR m.current_status != 'broken')
+           AND m.current_status != 'broken'
           THEN 1 
         END) as total_machines,
 
         COALESCE(SUM(CASE 
           WHEN ml.id_location != 1 
-           AND (m.current_status IS NULL OR m.current_status != 'broken')
+           AND m.current_status != 'broken'
           THEN CAST(m.air_volume AS DECIMAL(10,2)) 
         END), 0) as total_volume,
 
         COALESCE(AVG(CASE 
           WHEN ml.id_location != 1 
-           AND (m.current_status IS NULL OR m.current_status != 'broken')
+           AND m.current_status != 'broken'
           THEN CAST(m.air_volume AS DECIMAL(10,2)) 
         END), 0) as avg_volume,
 
         COALESCE(MAX(CASE 
           WHEN ml.id_location != 1 
-           AND (m.current_status IS NULL OR m.current_status != 'broken')
+           AND m.current_status != 'broken'
           THEN CAST(m.air_volume AS DECIMAL(10,2)) 
         END), 0) as max_volume,
 
         COALESCE(MIN(CASE 
           WHEN ml.id_location != 1 
-           AND (m.current_status IS NULL OR m.current_status != 'broken')
+           AND m.current_status != 'broken'
           THEN CAST(m.air_volume AS DECIMAL(10,2)) 
         END), 0) as min_volume,
 
@@ -16207,10 +16207,10 @@ app.get("/api/reports/monthly-summary", authenticateToken, async (req, res) => {
         COALESCE(SUM(CAST(m.air_volume AS DECIMAL(10,2))), 0) as all_total_volume
       FROM tb_machine m
       LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
-      WHERE m.air_volume IS NOT NULL 
-        AND m.air_volume != ''
+      WHERE (m.air_volume IS NOT NULL AND m.air_volume != '')
+        AND (m.type_machine IS NOT NULL AND m.type_machine != '')
         AND CAST(m.air_volume AS DECIMAL(10,2)) > 0
-        AND (m.current_status IS NULL OR m.current_status NOT IN ('temporary', 'liquidation'))
+        AND m.current_status NOT IN ('temporary', 'liquidation')
         AND (m.is_borrowed_or_rented_or_borrowed_out IS NULL 
           OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return', 'borrowed_out'))`
     );
@@ -16259,8 +16259,8 @@ app.get("/api/reports/monthly-summary", authenticateToken, async (req, res) => {
         LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
         LEFT JOIN tb_location l ON l.id_location = ml.id_location
         LEFT JOIN tb_department d ON d.id_department = l.id_department
-        WHERE m.air_volume IS NOT NULL 
-          AND m.air_volume != ''
+        WHERE (m.air_volume IS NOT NULL AND m.air_volume != '')
+          AND (m.type_machine IS NOT NULL AND m.type_machine != '')
           AND CAST(m.air_volume AS DECIMAL(10,2)) > 0
           AND ml.id_location != 1
           AND m.current_status NOT IN ('temporary', 'liquidation', 'broken')
