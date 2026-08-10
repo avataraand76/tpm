@@ -151,6 +151,12 @@ export const api = {
       const response = await httpConnect.get(`/api/machines/${uuid}`);
       return response.data;
     },
+    getDefaultSpecs: async (params) => {
+      const response = await httpConnect.get("/api/machines/default-specs", {
+        params,
+      });
+      return response.data;
+    },
     create: async (data) => {
       const response = await httpConnect.post("/api/machines", data);
       return response.data;
@@ -576,6 +582,19 @@ export const api = {
     unlinkAttributeFromType: async (typeUuid, attributeUuid) => {
       const response = await httpConnect.delete(
         `/api/admin/machine-types/${typeUuid}/attributes/${attributeUuid}`
+      );
+      return response.data;
+    },
+    getMachineTypeAttributeSpecs: async (typeUuid) => {
+      const response = await httpConnect.get(
+        `/api/admin/machine-type-attribute-specs/${typeUuid}`
+      );
+      return response.data;
+    },
+    saveMachineTypeAttributeSpec: async (data) => {
+      const response = await httpConnect.post(
+        "/api/admin/machine-type-attribute-specs",
+        data
       );
       return response.data;
     },

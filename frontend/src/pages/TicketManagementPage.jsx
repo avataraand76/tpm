@@ -1029,6 +1029,47 @@ const TicketManagementPage = () => {
     }
   };
 
+  // Hàm lấy thông số kỹ thuật mặc định dựa trên Loại máy và Đặc tính
+  const fetchAndApplyDefaultSpecs = async (typeName, attributeName) => {
+    if (!typeName) return;
+    try {
+      const res = await api.machines.getDefaultSpecs({
+        type_machine: typeName,
+        attribute_machine: attributeName || "",
+      });
+      if (res.success && res.data) {
+        const specs = res.data;
+        setNewMachineData((prev) => ({
+          ...prev,
+          power:
+            prev.power === "" || prev.power === null || prev.power === undefined
+              ? (specs.power ?? "")
+              : prev.power,
+          pressure:
+            prev.pressure === "" ||
+            prev.pressure === null ||
+            prev.pressure === undefined
+              ? (specs.pressure ?? "")
+              : prev.pressure,
+          voltage:
+            prev.voltage === "" ||
+            prev.voltage === null ||
+            prev.voltage === undefined
+              ? (specs.voltage ?? "")
+              : prev.voltage,
+          air_volume:
+            prev.air_volume === "" ||
+            prev.air_volume === null ||
+            prev.air_volume === undefined
+              ? (specs.air_volume ?? "")
+              : prev.air_volume,
+        }));
+      }
+    } catch (err) {
+      console.error("Error fetching default specs:", err);
+    }
+  };
+
   const handleOpenCreateMachineDialog = async () => {
     setNewMachineData({
       code_machine: "",
@@ -1415,12 +1456,25 @@ const TicketManagementPage = () => {
                   "lifespan",
                 ].includes(englishKey)
               ) {
+                const isSpecKey = [
+                  "power",
+                  "pressure",
+                  "voltage",
+                  "air_volume",
+                ].includes(englishKey);
+
                 if (typeof cellValue === "string") {
                   const clean = cellValue.replace(/[^0-9]/g, "");
                   const parsed = parseInt(clean, 10);
-                  newRow[englishKey] = isNaN(parsed) ? 0 : parsed;
+                  newRow[englishKey] = isNaN(parsed)
+                    ? isSpecKey
+                      ? null
+                      : 0
+                    : parsed;
                 } else if (typeof cellValue === "number") {
                   newRow[englishKey] = cellValue;
+                } else if (cellValue === null || cellValue === undefined) {
+                  newRow[englishKey] = isSpecKey ? null : 0;
                 }
               }
               // 3. Giữ nguyên các trường khác
@@ -4118,6 +4172,10 @@ const TicketManagementPage = () => {
                     const typeName = newValue ? newValue.name : "";
                     handleCreateMachineInputChange("type_machine", typeName);
                     fetchAttributesByTypeName(typeName);
+                    fetchAndApplyDefaultSpecs(
+                      typeName,
+                      newMachineData.attribute_machine
+                    );
                   }}
                   disabled={!canCreateOrImportMachines}
                   renderInput={(params) => (
@@ -4135,9 +4193,14 @@ const TicketManagementPage = () => {
                     ) || null
                   }
                   onChange={(event, newValue) => {
+                    const attrName = newValue ? newValue.name : "";
                     handleCreateMachineInputChange(
                       "attribute_machine",
-                      newValue ? newValue.name : ""
+                      attrName
+                    );
+                    fetchAndApplyDefaultSpecs(
+                      newMachineData.type_machine,
+                      attrName
                     );
                   }}
                   disabled={!canCreateOrImportMachines}

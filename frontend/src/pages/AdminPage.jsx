@@ -42,7 +42,6 @@ import {
   Checkbox,
   FormControlLabel,
   FormGroup,
-  FormLabel,
   ListItemButton,
   ListItemAvatar,
   Divider,
@@ -56,6 +55,8 @@ import {
   TableHead,
   TableRow,
   Switch,
+  InputAdornment,
+  Card,
 } from "@mui/material";
 import {
   AdminPanelSettings,
@@ -70,7 +71,7 @@ import {
   Save,
   Close,
   Delete,
-  Build,
+  PrecisionManufacturing,
   Settings,
   Factory,
   LocalShipping,
@@ -622,6 +623,11 @@ const AdminPage = () => {
   const [selectedTypeForAttributes, setSelectedTypeForAttributes] =
     useState(null);
   const [typeAttributes, setTypeAttributes] = useState([]);
+  const [typeSpecsMap, setTypeSpecsMap] = useState({});
+  const [savingSpecKey, setSavingSpecKey] = useState(null);
+  const [searchMachineTypeCatalog, setSearchMachineTypeCatalog] = useState("");
+  const [searchMachineAttributeCatalog, setSearchMachineAttributeCatalog] =
+    useState("");
 
   // Quản lý RFID (tab)
   const [rfidPayload, setRfidPayload] = useState(null);
@@ -845,7 +851,12 @@ const AdminPage = () => {
       if (hiTimeSheetRes.success)
         setHiTimeSheetDepartments(hiTimeSheetRes.data);
       if (allPermsRes.success) setAllPermissions(allPermsRes.data);
-      if (typesRes.success) setMachineTypes(typesRes.data);
+      if (typesRes.success) {
+        setMachineTypes(typesRes.data);
+        if (typesRes.data.length > 0 && !selectedTypeForAttributes) {
+          setSelectedTypeForAttributes(typesRes.data[0].uuid);
+        }
+      }
       if (attrsRes.success) setMachineAttributes(attrsRes.data);
       if (mfrsRes.success) setMachineManufacturers(mfrsRes.data);
       if (suppsRes.success) setMachineSuppliers(suppsRes.data);
@@ -859,7 +870,7 @@ const AdminPage = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedTypeForAttributes]);
 
   // Fetch attributes for a specific type
   const fetchTypeAttributes = useCallback(async (typeUuid) => {
@@ -876,6 +887,126 @@ const AdminPage = () => {
       console.error("Error fetching type attributes:", error);
     }
   }, []);
+
+  // Fetch specs for a specific type and its attributes
+  const fetchTypeSpecs = useCallback(async (typeUuid, isMerge = false) => {
+    if (!typeUuid) {
+      setTypeSpecsMap({});
+      return;
+    }
+    try {
+      const res = await api.admin.getMachineTypeAttributeSpecs(typeUuid);
+      if (res.success && res.data) {
+        const specMap = {};
+        res.data.forEach((item) => {
+          const key = item.uuid_machine_attribute || "GENERAL";
+          specMap[key] = {
+            power: item.power ?? "",
+            pressure: item.pressure ?? "",
+            voltage: item.voltage ?? "",
+            air_volume: item.air_volume ?? "",
+          };
+        });
+        if (isMerge) {
+          setTypeSpecsMap((prev) => ({
+            ...prev,
+            ...specMap,
+          }));
+        } else {
+          setTypeSpecsMap(specMap);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching type specs:", error);
+    }
+  }, []);
+
+  const handleSpecInputChange = (key, field, val) => {
+    setTypeSpecsMap((prev) => ({
+      ...prev,
+      [key]: {
+        ...(prev[key] || {
+          power: "",
+          pressure: "",
+          voltage: "",
+          air_volume: "",
+        }),
+        [field]: val,
+      },
+    }));
+  };
+
+  const handleSaveSpec = async (typeUuid, attributeUuid) => {
+    const key = attributeUuid || "GENERAL";
+    const specObj = typeSpecsMap[key] || {};
+    try {
+      setSavingSpecKey(`${typeUuid}_${key}`);
+      const res = await api.admin.saveMachineTypeAttributeSpec({
+        type_uuid: typeUuid,
+        attribute_uuid: attributeUuid === "GENERAL" ? null : attributeUuid,
+        power: specObj.power,
+        pressure: specObj.pressure,
+        voltage: specObj.voltage,
+        air_volume: specObj.air_volume,
+      });
+      if (res.success) {
+        showNotification("success", "Thành công", "Đã lưu thông số kỹ thuật!");
+        fetchTypeSpecs(typeUuid, true);
+      } else {
+        showNotification(
+          "error",
+          "Lỗi",
+          res.message || "Không thể lưu thông số kỹ thuật"
+        );
+      }
+    } catch (err) {
+      console.error("Error saving spec:", err);
+      showNotification(
+        "error",
+        "Lỗi",
+        "Đã xảy ra lỗi khi lưu thông số kỹ thuật"
+      );
+    } finally {
+      setSavingSpecKey(null);
+    }
+  };
+
+  const handleSaveAllSpecs = async (typeUuid) => {
+    if (!typeUuid) return;
+    try {
+      setSavingSpecKey(`${typeUuid}_ALL`);
+      const keysToSave = ["GENERAL", ...typeAttributes.map((a) => a.uuid)];
+
+      const savePromises = keysToSave.map((key) => {
+        const specObj = typeSpecsMap[key] || {};
+        return api.admin.saveMachineTypeAttributeSpec({
+          type_uuid: typeUuid,
+          attribute_uuid: key === "GENERAL" ? null : key,
+          power: specObj.power,
+          pressure: specObj.pressure,
+          voltage: specObj.voltage,
+          air_volume: specObj.air_volume,
+        });
+      });
+
+      await Promise.all(savePromises);
+      showNotification(
+        "success",
+        "Thành công",
+        "Đã lưu tất cả thông số kỹ thuật!"
+      );
+      fetchTypeSpecs(typeUuid, false);
+    } catch (err) {
+      console.error("Error saving all specs:", err);
+      showNotification(
+        "error",
+        "Lỗi",
+        "Đã xảy ra lỗi khi lưu tất cả thông số kỹ thuật"
+      );
+    } finally {
+      setSavingSpecKey(null);
+    }
+  };
 
   const fetchRfidList = useCallback(async () => {
     setRfidLoading(true);
@@ -1006,8 +1137,9 @@ const AdminPage = () => {
   useEffect(() => {
     if (selectedTypeForAttributes) {
       fetchTypeAttributes(selectedTypeForAttributes);
+      fetchTypeSpecs(selectedTypeForAttributes);
     }
-  }, [selectedTypeForAttributes, fetchTypeAttributes]);
+  }, [selectedTypeForAttributes, fetchTypeAttributes, fetchTypeSpecs]);
 
   useEffect(() => {
     if (currentTab === 2) {
@@ -1988,7 +2120,7 @@ const AdminPage = () => {
               {/* <Tab label="Phân Loại" icon={<Category />} iconPosition="start" /> */}
               <Tab
                 label="Danh mục máy móc"
-                icon={<Build />}
+                icon={<PrecisionManufacturing />}
                 iconPosition="start"
               />
               <Tab label="Quản lý RFID" icon={<Nfc />} iconPosition="start" />
@@ -2312,267 +2444,866 @@ const AdminPage = () => {
                   index={0}
                 >
                   <Grid container spacing={3}>
-                    {/* LIÊN KẾT ĐẶC TÍNH VỚI LOẠI MÁY */}
-                    <Grid size={{ xs: 12 }}>
-                      <Paper
-                        variant="outlined"
-                        sx={{
-                          p: 3,
-                          borderRadius: "16px",
-                        }}
-                      >
-                        <Typography variant="h6" fontWeight={600} mb={2}>
-                          Liên kết Đặc tính với Loại máy
-                        </Typography>
-                        <Grid container spacing={2}>
-                          <Grid size={{ xs: 12, md: 4 }}>
-                            <FormControl fullWidth sx={inputStyle}>
-                              <InputLabel>Chọn Loại máy</InputLabel>
-                              <Select
-                                value={selectedTypeForAttributes || ""}
-                                label="Chọn Loại máy"
-                                onChange={(e) => {
-                                  const uuid = e.target.value;
-                                  setSelectedTypeForAttributes(uuid);
-                                  fetchTypeAttributes(uuid);
+                    {/* CỘT 1 (TRÁI): DANH SÁCH LOẠI MÁY & ĐẶC TÍNH */}
+                    <Grid size={{ xs: 12, md: 5 }}>
+                      <Stack spacing={3}>
+                        {/* 1. KHAI BÁO LOẠI MÁY */}
+                        <Paper
+                          variant="outlined"
+                          sx={{
+                            p: 2.5,
+                            borderRadius: "16px",
+                            borderColor: "#e2e8f0",
+                          }}
+                        >
+                          <Box
+                            sx={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              mb: 2,
+                            }}
+                          >
+                            <Stack
+                              direction="row"
+                              spacing={1}
+                              alignItems="center"
+                            >
+                              <Typography
+                                variant="h6"
+                                fontWeight={700}
+                                color="#2d3748"
+                              >
+                                Loại máy
+                              </Typography>
+                              <Chip
+                                label={machineTypes.length}
+                                size="small"
+                                color="primary"
+                                sx={{ fontWeight: 700 }}
+                              />
+                            </Stack>
+                            <Button
+                              size="small"
+                              variant="contained"
+                              startIcon={<Add />}
+                              onClick={() =>
+                                handleOpenDialog("create", "machine-type")
+                              }
+                              sx={btnGreenStyle}
+                            >
+                              Thêm Loại máy
+                            </Button>
+                          </Box>
+
+                          <TextField
+                            fullWidth
+                            size="small"
+                            placeholder="Tìm loại máy..."
+                            value={searchMachineTypeCatalog}
+                            onChange={(e) =>
+                              setSearchMachineTypeCatalog(e.target.value)
+                            }
+                            InputProps={{
+                              startAdornment: (
+                                <InputAdornment position="start">
+                                  <Search fontSize="small" />
+                                </InputAdornment>
+                              ),
+                            }}
+                            sx={{ mb: 2 }}
+                          />
+
+                          <Box
+                            sx={{ maxHeight: 300, overflowY: "auto", pr: 0.5 }}
+                          >
+                            <List disablePadding>
+                              {machineTypes
+                                .filter((item) =>
+                                  item.name
+                                    .toLowerCase()
+                                    .includes(
+                                      searchMachineTypeCatalog.toLowerCase()
+                                    )
+                                )
+                                .map((item, index, arr) => {
+                                  const isSelected =
+                                    selectedTypeForAttributes === item.uuid;
+                                  return (
+                                    <ListItem
+                                      key={item.uuid}
+                                      onClick={() => {
+                                        setSelectedTypeForAttributes(item.uuid);
+                                        fetchTypeAttributes(item.uuid);
+                                        fetchTypeSpecs(item.uuid);
+                                      }}
+                                      secondaryAction={
+                                        <Box>
+                                          <IconButton
+                                            size="small"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleOpenDialog(
+                                                "edit",
+                                                "machine-type",
+                                                {
+                                                  uuid: item.uuid,
+                                                  name_machine_type: item.name,
+                                                }
+                                              );
+                                            }}
+                                          >
+                                            <Edit
+                                              fontSize="small"
+                                              color="primary"
+                                            />
+                                          </IconButton>
+                                          <IconButton
+                                            size="small"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleDelete(
+                                                "machine-type",
+                                                item.uuid,
+                                                item.name
+                                              );
+                                            }}
+                                          >
+                                            <Delete
+                                              fontSize="small"
+                                              color="error"
+                                            />
+                                          </IconButton>
+                                        </Box>
+                                      }
+                                      divider={index < arr.length - 1}
+                                      sx={{
+                                        py: 1.2,
+                                        px: 2,
+                                        borderRadius: "10px",
+                                        cursor: "pointer",
+                                        bgcolor: isSelected
+                                          ? "#667eea15"
+                                          : "transparent",
+                                        borderLeft: isSelected
+                                          ? "4px solid #667eea"
+                                          : "4px solid transparent",
+                                        "&:hover": {
+                                          bgcolor: isSelected
+                                            ? "#667eea22"
+                                            : "#f7fafc",
+                                        },
+                                        mb: 0.5,
+                                      }}
+                                    >
+                                      <ListItemText
+                                        primary={item.name}
+                                        primaryTypographyProps={{
+                                          fontWeight: isSelected ? 700 : 500,
+                                          color: isSelected
+                                            ? "#5a67d8"
+                                            : "#2d3748",
+                                        }}
+                                      />
+                                    </ListItem>
+                                  );
+                                })}
+                            </List>
+                          </Box>
+                        </Paper>
+
+                        {/* 2. KHAI BÁO ĐẶC TÍNH MÁY */}
+                        <Paper
+                          variant="outlined"
+                          sx={{
+                            p: 2.5,
+                            borderRadius: "16px",
+                            borderColor: "#e2e8f0",
+                          }}
+                        >
+                          <Box
+                            sx={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              mb: 2,
+                            }}
+                          >
+                            <Stack
+                              direction="row"
+                              spacing={1}
+                              alignItems="center"
+                            >
+                              <Typography
+                                variant="h6"
+                                fontWeight={700}
+                                color="#2d3748"
+                              >
+                                Đặc tính
+                              </Typography>
+                              <Chip
+                                label={machineAttributes.length}
+                                size="small"
+                                color="secondary"
+                                sx={{ fontWeight: 700 }}
+                              />
+                            </Stack>
+                            <Button
+                              size="small"
+                              variant="contained"
+                              startIcon={<Add />}
+                              onClick={() =>
+                                handleOpenDialog("create", "machine-attribute")
+                              }
+                              sx={btnGreenStyle}
+                            >
+                              Thêm Đặc tính
+                            </Button>
+                          </Box>
+
+                          <TextField
+                            fullWidth
+                            size="small"
+                            placeholder="Tìm đặc tính..."
+                            value={searchMachineAttributeCatalog}
+                            onChange={(e) =>
+                              setSearchMachineAttributeCatalog(e.target.value)
+                            }
+                            InputProps={{
+                              startAdornment: (
+                                <InputAdornment position="start">
+                                  <Search fontSize="small" />
+                                </InputAdornment>
+                              ),
+                            }}
+                            sx={{ mb: 2 }}
+                          />
+
+                          <Box
+                            sx={{ maxHeight: 300, overflowY: "auto", pr: 0.5 }}
+                          >
+                            <List disablePadding>
+                              {machineAttributes
+                                .filter((item) =>
+                                  item.name
+                                    .toLowerCase()
+                                    .includes(
+                                      searchMachineAttributeCatalog.toLowerCase()
+                                    )
+                                )
+                                .map((item, index, arr) => (
+                                  <ListItem
+                                    key={item.uuid}
+                                    secondaryAction={
+                                      <Box>
+                                        <IconButton
+                                          size="small"
+                                          onClick={() =>
+                                            handleOpenDialog(
+                                              "edit",
+                                              "machine-attribute",
+                                              {
+                                                uuid: item.uuid,
+                                                name_machine_attribute:
+                                                  item.name,
+                                              }
+                                            )
+                                          }
+                                        >
+                                          <Edit
+                                            fontSize="small"
+                                            color="primary"
+                                          />
+                                        </IconButton>
+                                        <IconButton
+                                          size="small"
+                                          onClick={() =>
+                                            handleDelete(
+                                              "machine-attribute",
+                                              item.uuid,
+                                              item.name
+                                            )
+                                          }
+                                        >
+                                          <Delete
+                                            fontSize="small"
+                                            color="error"
+                                          />
+                                        </IconButton>
+                                      </Box>
+                                    }
+                                    divider={index < arr.length - 1}
+                                    sx={{ py: 1 }}
+                                  >
+                                    <ListItemText primary={item.name} />
+                                  </ListItem>
+                                ))}
+                            </List>
+                          </Box>
+                        </Paper>
+                      </Stack>
+                    </Grid>
+
+                    {/* CỘT 2 (PHẢI): WORKSPACE CẤU HÌNH LOẠI MÁY ĐƯỢC CHỌN */}
+                    <Grid size={{ xs: 12, md: 7 }}>
+                      {selectedTypeForAttributes ? (
+                        <Stack spacing={3}>
+                          {/* HEADER LOẠI MÁY ĐANG CHỌN */}
+                          <Paper
+                            elevation={0}
+                            sx={{
+                              p: 2.5,
+                              borderRadius: "16px",
+                              background:
+                                "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                              color: "white",
+                            }}
+                          >
+                            <Stack
+                              direction="row"
+                              alignItems="center"
+                              justifyContent="space-between"
+                            >
+                              <Box>
+                                <Typography
+                                  variant="caption"
+                                  sx={{
+                                    opacity: 0.8,
+                                    textTransform: "uppercase",
+                                    letterSpacing: 1,
+                                  }}
+                                >
+                                  Đang cấu hình loại máy
+                                </Typography>
+                                <Typography variant="h5" fontWeight={700}>
+                                  {machineTypes.find(
+                                    (t) => t.uuid === selectedTypeForAttributes
+                                  )?.name || "Loại máy"}
+                                </Typography>
+                              </Box>
+                              <Chip
+                                label={`${typeAttributes.length} đặc tính đã liên kết`}
+                                sx={{
+                                  bgcolor: "rgba(255,255,255,0.2)",
+                                  color: "white",
+                                  fontWeight: 600,
+                                }}
+                              />
+                            </Stack>
+                          </Paper>
+
+                          {/* QUẢN LÝ LIÊN KẾT ĐẶC TÍNH */}
+                          <Paper
+                            variant="outlined"
+                            sx={{ p: 3, borderRadius: "16px" }}
+                          >
+                            <Typography
+                              variant="h6"
+                              fontWeight={700}
+                              color="#2d3748"
+                              mb={2}
+                            >
+                              1. Liên kết Đặc tính với Loại máy
+                            </Typography>
+
+                            <Typography
+                              variant="subtitle2"
+                              color="text.secondary"
+                              mb={1}
+                            >
+                              Đặc tính đã liên kết:
+                            </Typography>
+                            <Box
+                              sx={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                gap: 1,
+                                mb: 3,
+                              }}
+                            >
+                              {typeAttributes.length > 0 ? (
+                                typeAttributes.map((attr) => (
+                                  <Chip
+                                    key={attr.uuid}
+                                    label={attr.name}
+                                    onDelete={() =>
+                                      handleUnlinkAttribute(
+                                        selectedTypeForAttributes,
+                                        attr.uuid
+                                      )
+                                    }
+                                    deleteIcon={<LinkOff />}
+                                    color="primary"
+                                    variant="outlined"
+                                    sx={{ fontWeight: 600 }}
+                                  />
+                                ))
+                              ) : (
+                                <Typography
+                                  variant="body2"
+                                  color="text.secondary"
+                                  sx={{ fontStyle: "italic" }}
+                                >
+                                  Chưa có đặc tính nào được liên kết
+                                </Typography>
+                              )}
+                            </Box>
+
+                            <Typography
+                              variant="subtitle2"
+                              color="text.secondary"
+                              mb={1}
+                            >
+                              Đặc tính chưa liên kết (Bấm để liên kết):
+                            </Typography>
+                            <Box
+                              sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}
+                            >
+                              {machineAttributes
+                                .filter(
+                                  (attr) =>
+                                    !typeAttributes.some(
+                                      (ta) => ta.uuid === attr.uuid
+                                    )
+                                )
+                                .map((attr) => (
+                                  <Chip
+                                    key={attr.uuid}
+                                    label={attr.name}
+                                    onClick={() =>
+                                      handleLinkAttribute(
+                                        selectedTypeForAttributes,
+                                        attr.uuid
+                                      )
+                                    }
+                                    icon={<Link />}
+                                    color="default"
+                                    variant="outlined"
+                                    sx={{
+                                      cursor: "pointer",
+                                      "&:hover": { bgcolor: "#edf2f7" },
+                                    }}
+                                  />
+                                ))}
+                            </Box>
+                          </Paper>
+
+                          {/* KHAI BÁO THÔNG SỐ KỸ THUẬT */}
+                          <Paper
+                            variant="outlined"
+                            sx={{ p: 3, borderRadius: "16px" }}
+                          >
+                            <Box
+                              sx={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "flex-start",
+                                mb: 2.5,
+                              }}
+                            >
+                              <Box>
+                                <Typography
+                                  variant="h6"
+                                  fontWeight={700}
+                                  color="#2d3748"
+                                >
+                                  2. Khai báo Thông số kỹ thuật
+                                </Typography>
+                                <Typography
+                                  variant="body2"
+                                  color="text.secondary"
+                                >
+                                  Thiết lập các thông số Công suất, Áp suất,
+                                  Điện áp và Lưu lượng khí nén.
+                                </Typography>
+                              </Box>
+                              <Button
+                                size="small"
+                                variant="contained"
+                                startIcon={<Save />}
+                                onClick={() =>
+                                  handleSaveAllSpecs(selectedTypeForAttributes)
+                                }
+                                disabled={
+                                  savingSpecKey ===
+                                  `${selectedTypeForAttributes}_ALL`
+                                }
+                                sx={{
+                                  bgcolor: "#4f46e5",
+                                  "&:hover": { bgcolor: "#4338ca" },
+                                  borderRadius: "10px",
+                                  px: 2,
                                 }}
                               >
-                                <MenuItem value="">
-                                  <em>Chọn loại máy</em>
-                                </MenuItem>
-                                {machineTypes.map((type) => (
-                                  <MenuItem key={type.uuid} value={type.uuid}>
-                                    {type.name}
-                                  </MenuItem>
-                                ))}
-                              </Select>
-                            </FormControl>
-                          </Grid>
-                          <Grid size={{ xs: 12, md: 8 }}>
-                            {selectedTypeForAttributes ? (
-                              <Box>
-                                <Typography variant="subtitle2" mb={1}>
-                                  Đặc tính đã liên kết:
-                                </Typography>
-                                <Box
-                                  sx={{
-                                    display: "flex",
-                                    flexWrap: "wrap",
-                                    gap: 1,
-                                    mb: 2,
-                                  }}
+                                Lưu tất cả thông số
+                              </Button>
+                            </Box>
+
+                            <Stack spacing={2.5}>
+                              {/* THÔNG SỐ CHO LOẠI MÁY (KHÔNG CHỌN ĐẶC TÍNH) */}
+                              <Card
+                                variant="outlined"
+                                sx={{
+                                  p: 2,
+                                  borderRadius: "12px",
+                                  bgcolor: "#f8fafc",
+                                  borderColor: "#cbd5e1",
+                                }}
+                              >
+                                <Stack
+                                  direction={{ xs: "column", sm: "row" }}
+                                  alignItems={{ sm: "center" }}
+                                  justifyContent="space-between"
+                                  mb={2}
                                 >
-                                  {typeAttributes.map((attr) => (
-                                    <Chip
-                                      key={attr.uuid}
-                                      label={attr.name}
-                                      onDelete={() =>
-                                        handleUnlinkAttribute(
-                                          selectedTypeForAttributes,
-                                          attr.uuid
+                                  <Box>
+                                    <Stack
+                                      direction="row"
+                                      spacing={1}
+                                      alignItems="center"
+                                      mb={0.5}
+                                    >
+                                      <Chip
+                                        label="Loại máy"
+                                        size="small"
+                                        color="info"
+                                        variant="outlined"
+                                      />
+                                      <Typography
+                                        variant="subtitle1"
+                                        fontWeight={700}
+                                        color="#1e293b"
+                                      >
+                                        {machineTypes.find(
+                                          (t) =>
+                                            t.uuid === selectedTypeForAttributes
+                                        )?.name || "Loại máy"}
+                                      </Typography>
+                                    </Stack>
+                                    <Typography
+                                      variant="caption"
+                                      color="text.secondary"
+                                    >
+                                      Áp dụng khi tạo máy chỉ có Loại máy là "
+                                      {machineTypes.find(
+                                        (t) =>
+                                          t.uuid === selectedTypeForAttributes
+                                      )?.name || "Loại máy"}
+                                      "
+                                    </Typography>
+                                  </Box>
+                                  <Button
+                                    size="small"
+                                    variant="contained"
+                                    startIcon={<Save />}
+                                    onClick={() =>
+                                      handleSaveSpec(
+                                        selectedTypeForAttributes,
+                                        "GENERAL"
+                                      )
+                                    }
+                                    disabled={
+                                      savingSpecKey ===
+                                      `${selectedTypeForAttributes}_GENERAL`
+                                    }
+                                    sx={{
+                                      mt: { xs: 1, sm: 0 },
+                                      alignSelf: "flex-start",
+                                      bgcolor: "#3b82f6",
+                                      "&:hover": { bgcolor: "#2563eb" },
+                                    }}
+                                  >
+                                    Lưu thông số
+                                  </Button>
+                                </Stack>
+                                <Grid container spacing={2}>
+                                  <Grid size={{ xs: 12, sm: 3 }}>
+                                    <TextField
+                                      fullWidth
+                                      size="small"
+                                      label="Công suất (W)"
+                                      value={
+                                        typeSpecsMap["GENERAL"]?.power ?? ""
+                                      }
+                                      onChange={(e) =>
+                                        handleSpecInputChange(
+                                          "GENERAL",
+                                          "power",
+                                          e.target.value.replace(/\D/g, "")
                                         )
                                       }
-                                      deleteIcon={<LinkOff />}
-                                      color="primary"
-                                      variant="outlined"
+                                      sx={{ bgcolor: "white" }}
                                     />
-                                  ))}
-                                </Box>
-                                <Typography variant="subtitle2" mb={1}>
-                                  Đặc tính chưa liên kết:
-                                </Typography>
-                                <Box
-                                  sx={{
-                                    display: "flex",
-                                    flexWrap: "wrap",
-                                    gap: 1,
-                                  }}
-                                >
-                                  {machineAttributes
-                                    .filter(
-                                      (attr) =>
-                                        !typeAttributes.some(
-                                          (ta) => ta.uuid === attr.uuid
+                                  </Grid>
+                                  <Grid size={{ xs: 12, sm: 3 }}>
+                                    <TextField
+                                      fullWidth
+                                      size="small"
+                                      label="Áp suất (MPa)"
+                                      value={
+                                        typeSpecsMap["GENERAL"]?.pressure ?? ""
+                                      }
+                                      onChange={(e) =>
+                                        handleSpecInputChange(
+                                          "GENERAL",
+                                          "pressure",
+                                          e.target.value.replace(/\D/g, "")
                                         )
-                                    )
-                                    .map((attr) => (
-                                      <Chip
-                                        key={attr.uuid}
-                                        label={attr.name}
-                                        onClick={() =>
-                                          handleLinkAttribute(
-                                            selectedTypeForAttributes,
-                                            attr.uuid
-                                          )
-                                        }
-                                        icon={<Link />}
-                                        color="default"
-                                        variant="outlined"
-                                        sx={{ cursor: "pointer" }}
-                                      />
-                                    ))}
-                                </Box>
-                              </Box>
-                            ) : (
-                              <Alert severity="info">
-                                Vui lòng chọn loại máy để quản lý đặc tính
-                              </Alert>
-                            )}
-                          </Grid>
-                        </Grid>
-                      </Paper>
-                    </Grid>
+                                      }
+                                      sx={{ bgcolor: "white" }}
+                                    />
+                                  </Grid>
+                                  <Grid size={{ xs: 12, sm: 3 }}>
+                                    <TextField
+                                      fullWidth
+                                      size="small"
+                                      label="Điện áp (V)"
+                                      value={
+                                        typeSpecsMap["GENERAL"]?.voltage ?? ""
+                                      }
+                                      onChange={(e) =>
+                                        handleSpecInputChange(
+                                          "GENERAL",
+                                          "voltage",
+                                          e.target.value.replace(/\D/g, "")
+                                        )
+                                      }
+                                      sx={{ bgcolor: "white" }}
+                                    />
+                                  </Grid>
+                                  <Grid size={{ xs: 12, sm: 3 }}>
+                                    <TextField
+                                      fullWidth
+                                      size="small"
+                                      label="Khí nén (lít/phút)"
+                                      value={
+                                        typeSpecsMap["GENERAL"]?.air_volume ??
+                                        ""
+                                      }
+                                      onChange={(e) =>
+                                        handleSpecInputChange(
+                                          "GENERAL",
+                                          "air_volume",
+                                          e.target.value.replace(/\D/g, "")
+                                        )
+                                      }
+                                      sx={{ bgcolor: "white" }}
+                                    />
+                                  </Grid>
+                                </Grid>
+                              </Card>
 
-                    {/* LOẠI MÁY */}
-                    <Grid size={{ xs: 12, md: 6 }}>
-                      <Paper
-                        variant="outlined"
-                        sx={{
-                          p: 3,
-                          borderRadius: "16px",
-                          height: "100%",
-                        }}
-                      >
-                        <Box
+                              {/* THÔNG SỐ CHO TỪNG ĐẶC TÍNH ĐÃ LIÊN KẾT */}
+                              {typeAttributes.length > 0 && (
+                                <Box>
+                                  <Typography
+                                    variant="subtitle2"
+                                    fontWeight={700}
+                                    color="#475569"
+                                    mb={1.5}
+                                  >
+                                    Thông số khi kết hợp với Đặc tính (Loại máy
+                                    + Đặc tính):
+                                  </Typography>
+                                  <Stack spacing={2}>
+                                    {typeAttributes.map((attr) => {
+                                      const typeName =
+                                        machineTypes.find(
+                                          (t) =>
+                                            t.uuid === selectedTypeForAttributes
+                                        )?.name || "Loại máy";
+                                      const specData = typeSpecsMap[
+                                        attr.uuid
+                                      ] || {
+                                        power: "",
+                                        pressure: "",
+                                        voltage: "",
+                                        air_volume: "",
+                                      };
+                                      const isSaving =
+                                        savingSpecKey ===
+                                        `${selectedTypeForAttributes}_${attr.uuid}`;
+                                      return (
+                                        <Card
+                                          key={attr.uuid}
+                                          variant="outlined"
+                                          sx={{
+                                            p: 2,
+                                            borderRadius: "12px",
+                                            bgcolor: "white",
+                                            borderColor: "#e2e8f0",
+                                          }}
+                                        >
+                                          <Stack
+                                            direction={{
+                                              xs: "column",
+                                              sm: "row",
+                                            }}
+                                            alignItems={{ sm: "center" }}
+                                            justifyContent="space-between"
+                                            mb={1.5}
+                                          >
+                                            <Box>
+                                              <Stack
+                                                direction="row"
+                                                spacing={1}
+                                                alignItems="center"
+                                                mb={0.5}
+                                              >
+                                                <Chip
+                                                  label="Loại máy + Đặc tính"
+                                                  size="small"
+                                                  color="primary"
+                                                  variant="outlined"
+                                                />
+                                                <Typography
+                                                  variant="subtitle1"
+                                                  fontWeight={700}
+                                                  color="#334155"
+                                                >
+                                                  {typeName} {attr.name}
+                                                </Typography>
+                                              </Stack>
+                                              <Typography
+                                                variant="caption"
+                                                color="text.secondary"
+                                              >
+                                                Áp dụng khi tạo máy với Loại máy
+                                                "{typeName}" và Đặc tính "
+                                                {attr.name}"
+                                              </Typography>
+                                            </Box>
+                                            <Button
+                                              size="small"
+                                              variant="contained"
+                                              startIcon={<Save />}
+                                              onClick={() =>
+                                                handleSaveSpec(
+                                                  selectedTypeForAttributes,
+                                                  attr.uuid
+                                                )
+                                              }
+                                              disabled={isSaving}
+                                              sx={{
+                                                mt: { xs: 1, sm: 0 },
+                                                alignSelf: "flex-start",
+                                                bgcolor: "#10b981",
+                                                "&:hover": {
+                                                  bgcolor: "#059669",
+                                                },
+                                              }}
+                                            >
+                                              Lưu thông số
+                                            </Button>
+                                          </Stack>
+                                          <Grid container spacing={2}>
+                                            <Grid size={{ xs: 12, sm: 3 }}>
+                                              <TextField
+                                                fullWidth
+                                                size="small"
+                                                label="Công suất (W)"
+                                                value={specData.power}
+                                                onChange={(e) =>
+                                                  handleSpecInputChange(
+                                                    attr.uuid,
+                                                    "power",
+                                                    e.target.value.replace(
+                                                      /\D/g,
+                                                      ""
+                                                    )
+                                                  )
+                                                }
+                                              />
+                                            </Grid>
+                                            <Grid size={{ xs: 12, sm: 3 }}>
+                                              <TextField
+                                                fullWidth
+                                                size="small"
+                                                label="Áp suất (MPa)"
+                                                value={specData.pressure}
+                                                onChange={(e) =>
+                                                  handleSpecInputChange(
+                                                    attr.uuid,
+                                                    "pressure",
+                                                    e.target.value.replace(
+                                                      /\D/g,
+                                                      ""
+                                                    )
+                                                  )
+                                                }
+                                              />
+                                            </Grid>
+                                            <Grid size={{ xs: 12, sm: 3 }}>
+                                              <TextField
+                                                fullWidth
+                                                size="small"
+                                                label="Điện áp (V)"
+                                                value={specData.voltage}
+                                                onChange={(e) =>
+                                                  handleSpecInputChange(
+                                                    attr.uuid,
+                                                    "voltage",
+                                                    e.target.value.replace(
+                                                      /\D/g,
+                                                      ""
+                                                    )
+                                                  )
+                                                }
+                                              />
+                                            </Grid>
+                                            <Grid size={{ xs: 12, sm: 3 }}>
+                                              <TextField
+                                                fullWidth
+                                                size="small"
+                                                label="Khí nén (lít/phút)"
+                                                value={specData.air_volume}
+                                                onChange={(e) =>
+                                                  handleSpecInputChange(
+                                                    attr.uuid,
+                                                    "air_volume",
+                                                    e.target.value.replace(
+                                                      /\D/g,
+                                                      ""
+                                                    )
+                                                  )
+                                                }
+                                              />
+                                            </Grid>
+                                          </Grid>
+                                        </Card>
+                                      );
+                                    })}
+                                  </Stack>
+                                </Box>
+                              )}
+                            </Stack>
+                          </Paper>
+                        </Stack>
+                      ) : (
+                        <Paper
+                          variant="outlined"
                           sx={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            mb: 2,
+                            p: 5,
+                            borderRadius: "16px",
+                            textAlign: "center",
+                            bgcolor: "#f8fafc",
+                            borderColor: "#e2e8f0",
                           }}
                         >
-                          <Typography variant="h6" fontWeight={600}>
-                            Loại máy
-                          </Typography>
-                          <Button
-                            size="small"
-                            variant="contained"
-                            startIcon={<Add />}
-                            onClick={() =>
-                              handleOpenDialog("create", "machine-type")
-                            }
-                            sx={btnGreenStyle}
+                          <Typography
+                            variant="h6"
+                            color="text.secondary"
+                            gutterBottom
                           >
-                            Thêm
-                          </Button>
-                        </Box>
-                        <List disablePadding>
-                          {machineTypes.map((item, index) => (
-                            <ListItem
-                              key={item.uuid}
-                              secondaryAction={
-                                <Box>
-                                  <IconButton
-                                    size="small"
-                                    onClick={() =>
-                                      handleOpenDialog("edit", "machine-type", {
-                                        uuid: item.uuid,
-                                        name_machine_type: item.name,
-                                      })
-                                    }
-                                  >
-                                    <Edit fontSize="small" color="primary" />
-                                  </IconButton>
-                                  <IconButton
-                                    size="small"
-                                    onClick={() =>
-                                      handleDelete(
-                                        "machine-type",
-                                        item.uuid,
-                                        item.name
-                                      )
-                                    }
-                                  >
-                                    <Delete fontSize="small" color="error" />
-                                  </IconButton>
-                                </Box>
-                              }
-                              divider={index < machineTypes.length - 1}
-                              sx={{ py: 1 }}
-                            >
-                              <ListItemText primary={item.name} />
-                            </ListItem>
-                          ))}
-                        </List>
-                      </Paper>
-                    </Grid>
-
-                    {/* ĐẶC TÍNH */}
-                    <Grid size={{ xs: 12, md: 6 }}>
-                      <Paper
-                        variant="outlined"
-                        sx={{
-                          p: 3,
-                          borderRadius: "16px",
-                          height: "100%",
-                        }}
-                      >
-                        <Box
-                          sx={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            mb: 2,
-                          }}
-                        >
-                          <Typography variant="h6" fontWeight={600}>
-                            Đặc tính
+                            Vui lòng chọn một Loại máy
                           </Typography>
-                          <Button
-                            size="small"
-                            variant="contained"
-                            startIcon={<Add />}
-                            onClick={() =>
-                              handleOpenDialog("create", "machine-attribute")
-                            }
-                            sx={btnGreenStyle}
-                          >
-                            Thêm
-                          </Button>
-                        </Box>
-                        <List disablePadding>
-                          {machineAttributes.map((item, index) => (
-                            <ListItem
-                              key={item.uuid}
-                              secondaryAction={
-                                <Box>
-                                  <IconButton
-                                    size="small"
-                                    onClick={() =>
-                                      handleOpenDialog(
-                                        "edit",
-                                        "machine-attribute",
-                                        {
-                                          uuid: item.uuid,
-                                          name_machine_attribute: item.name,
-                                        }
-                                      )
-                                    }
-                                  >
-                                    <Edit fontSize="small" color="primary" />
-                                  </IconButton>
-                                  <IconButton
-                                    size="small"
-                                    onClick={() =>
-                                      handleDelete(
-                                        "machine-attribute",
-                                        item.uuid,
-                                        item.name
-                                      )
-                                    }
-                                  >
-                                    <Delete fontSize="small" color="error" />
-                                  </IconButton>
-                                </Box>
-                              }
-                              divider={index < machineAttributes.length - 1}
-                              sx={{ py: 1 }}
-                            >
-                              <ListItemText primary={item.name} />
-                            </ListItem>
-                          ))}
-                        </List>
-                      </Paper>
+                          <Typography variant="body2" color="text.secondary">
+                            Nhấp vào bất kỳ Loại máy nào ở danh sách bên trái để
+                            liên kết Đặc tính và cấu hình Thông số kỹ thuật
+                            (`tb_machine_type_attribute_specs`).
+                          </Typography>
+                        </Paper>
+                      )}
                     </Grid>
                   </Grid>
                 </MachineCatalogSubTabPanel>

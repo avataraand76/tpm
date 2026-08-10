@@ -2688,6 +2688,91 @@ const getMachineFilterConditions = (ticket_type) => {
   return { where, message };
 };
 
+// Helper: Tra cứu thông số kỹ thuật mặc định từ tb_machine_type_attribute_specs
+const getDefaultSpecsForMachineTypeAndAttribute = async (
+  connection,
+  type_machine,
+  attribute_machine
+) => {
+  if (!type_machine || type_machine.toString().trim() === "") return null;
+
+  const typeName = type_machine.toString().trim();
+  const attrName = attribute_machine
+    ? attribute_machine.toString().trim()
+    : null;
+
+  try {
+    if (attrName) {
+      const [rows] = await connection.query(
+        `SELECT specs.power, specs.pressure, specs.voltage, specs.air_volume
+         FROM tb_machine_type_attribute_specs specs
+         JOIN tb_machine_type mt ON mt.id_machine_type = specs.id_machine_type
+         JOIN tb_machine_attribute ma ON ma.id_machine_attribute = specs.id_machine_attribute
+         WHERE mt.name_machine_type = ? AND ma.name_machine_attribute = ?
+         LIMIT 1`,
+        [typeName, attrName]
+      );
+      if (rows.length > 0) {
+        return rows[0];
+      }
+    }
+
+    const [fallbackRows] = await connection.query(
+      `SELECT specs.power, specs.pressure, specs.voltage, specs.air_volume
+       FROM tb_machine_type_attribute_specs specs
+       JOIN tb_machine_type mt ON mt.id_machine_type = specs.id_machine_type
+       WHERE mt.name_machine_type = ?
+       ORDER BY (specs.id_machine_attribute IS NULL) DESC
+       LIMIT 1`,
+      [typeName]
+    );
+
+    if (fallbackRows.length > 0) {
+      return fallbackRows[0];
+    }
+  } catch (err) {
+    console.error("Error looking up default machine specs:", err);
+  }
+
+  return null;
+};
+
+// GET /api/machines/default-specs - Lấy thông số kỹ thuật mặc định từ loại máy & đặc tính
+app.get("/api/machines/default-specs", authenticateToken, async (req, res) => {
+  try {
+    const { type_machine, attribute_machine } = req.query;
+    if (!type_machine) {
+      return res.status(400).json({
+        success: false,
+        message: "type_machine là bắt buộc",
+      });
+    }
+
+    const defaultSpecs = await getDefaultSpecsForMachineTypeAndAttribute(
+      tpmConnection,
+      type_machine,
+      attribute_machine
+    );
+
+    return res.json({
+      success: true,
+      data: defaultSpecs || {
+        power: null,
+        pressure: null,
+        voltage: null,
+        air_volume: null,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching default machine specs:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
 // POST /api/machines - Create new machine
 app.post("/api/machines", authenticateToken, async (req, res) => {
   try {
@@ -2796,6 +2881,41 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
     // Get user ID from token
     const userId = req.user.id;
 
+    // Fallback to default specs from tb_machine_type_attribute_specs if missing
+    let finalPower = power;
+    let finalPressure = pressure;
+    let finalVoltage = voltage;
+    let finalAirVolume = air_volume;
+
+    const isMissingSpec = (val) =>
+      val === null ||
+      val === undefined ||
+      val === "" ||
+      String(val).trim() === "";
+
+    if (
+      isMissingSpec(finalPower) ||
+      isMissingSpec(finalPressure) ||
+      isMissingSpec(finalVoltage) ||
+      isMissingSpec(finalAirVolume)
+    ) {
+      const defaultSpecs = await getDefaultSpecsForMachineTypeAndAttribute(
+        tpmConnection,
+        type_machine,
+        attribute_machine
+      );
+      if (defaultSpecs) {
+        if (isMissingSpec(finalPower) && defaultSpecs.power != null)
+          finalPower = defaultSpecs.power;
+        if (isMissingSpec(finalPressure) && defaultSpecs.pressure != null)
+          finalPressure = defaultSpecs.pressure;
+        if (isMissingSpec(finalVoltage) && defaultSpecs.voltage != null)
+          finalVoltage = defaultSpecs.voltage;
+        if (isMissingSpec(finalAirVolume) && defaultSpecs.air_volume != null)
+          finalAirVolume = defaultSpecs.air_volume;
+      }
+    }
+
     // Insert new machine
     const [result] = await tpmConnection.query(
       `
@@ -2823,10 +2943,10 @@ app.post("/api/machines", authenticateToken, async (req, res) => {
         id_category,
         attribute_machine || null,
         supplier || null,
-        power || null,
-        pressure || null,
-        voltage || null,
-        air_volume || null,
+        finalPower || null,
+        finalPressure || null,
+        finalVoltage || null,
+        finalAirVolume || null,
         userId, // created_by
         userId, // updated_by
       ]
@@ -3505,6 +3625,55 @@ app.post("/api/machines/batch-import", authenticateToken, async (req, res) => {
         }
       }
       machine.formattedDate = formattedDate;
+
+      // F. Xử lý thông số kỹ thuật mặc định nếu trong file Excel để trống
+      let finalPower = machine.power;
+      let finalPressure = machine.pressure;
+      let finalVoltage = machine.voltage;
+      let finalAirVolume = machine.air_volume;
+
+      const isMissingSpec = (val) =>
+        val === null ||
+        val === undefined ||
+        val === "" ||
+        val === 0 ||
+        String(val).trim() === "";
+
+      if (
+        isMissingSpec(finalPower) ||
+        isMissingSpec(finalPressure) ||
+        isMissingSpec(finalVoltage) ||
+        isMissingSpec(finalAirVolume)
+      ) {
+        const specCacheKey = `SPEC_${machine.type_machine}_${machine.attribute_machine || ""}`;
+        let defaultSpecs = null;
+        if (sequenceCache.has(specCacheKey)) {
+          defaultSpecs = sequenceCache.get(specCacheKey);
+        } else {
+          defaultSpecs = await getDefaultSpecsForMachineTypeAndAttribute(
+            connection,
+            machine.type_machine,
+            machine.attribute_machine
+          );
+          sequenceCache.set(specCacheKey, defaultSpecs);
+        }
+
+        if (defaultSpecs) {
+          if (isMissingSpec(finalPower) && defaultSpecs.power != null)
+            finalPower = defaultSpecs.power;
+          if (isMissingSpec(finalPressure) && defaultSpecs.pressure != null)
+            finalPressure = defaultSpecs.pressure;
+          if (isMissingSpec(finalVoltage) && defaultSpecs.voltage != null)
+            finalVoltage = defaultSpecs.voltage;
+          if (isMissingSpec(finalAirVolume) && defaultSpecs.air_volume != null)
+            finalAirVolume = defaultSpecs.air_volume;
+        }
+      }
+
+      machine.power = finalPower;
+      machine.pressure = finalPressure;
+      machine.voltage = finalVoltage;
+      machine.air_volume = finalAirVolume;
 
       machinesToInsert.push(machine);
     }
@@ -9187,6 +9356,166 @@ app.delete(
       );
       res.json({ success: true, message: "Hủy liên kết đặc tính thành công" });
     } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+);
+
+// GET /api/admin/machine-type-attribute-specs/:typeUuid - Get specs for machine type & attributes
+app.get(
+  "/api/admin/machine-type-attribute-specs/:typeUuid",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { typeUuid } = req.params;
+      const [specs] = await tpmConnection.query(
+        `SELECT 
+          mt.uuid_machine_type,
+          mt.name_machine_type,
+          ma.uuid_machine_attribute,
+          ma.name_machine_attribute,
+          specs.power,
+          specs.pressure,
+          specs.voltage,
+          specs.air_volume
+        FROM tb_machine_type_attribute_specs specs
+        JOIN tb_machine_type mt ON mt.id_machine_type = specs.id_machine_type
+        LEFT JOIN tb_machine_attribute ma ON ma.id_machine_attribute = specs.id_machine_attribute
+        WHERE mt.uuid_machine_type = ?`,
+        [typeUuid]
+      );
+      res.json({ success: true, data: specs });
+    } catch (error) {
+      console.error("Error fetching machine type attribute specs:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+);
+
+// POST /api/admin/machine-type-attribute-specs - Save/update spec for machine type and attribute
+app.post(
+  "/api/admin/machine-type-attribute-specs",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const {
+        type_uuid,
+        attribute_uuid,
+        power,
+        pressure,
+        voltage,
+        air_volume,
+      } = req.body;
+      const userId = req.user.id;
+
+      if (!type_uuid) {
+        return res
+          .status(400)
+          .json({ success: false, message: "type_uuid là bắt buộc" });
+      }
+
+      // Lookup type ID
+      const [typeRows] = await tpmConnection.query(
+        "SELECT id_machine_type FROM tb_machine_type WHERE uuid_machine_type = ?",
+        [type_uuid]
+      );
+      if (typeRows.length === 0) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Loại máy không tồn tại" });
+      }
+      const id_machine_type = typeRows[0].id_machine_type;
+
+      // Lookup attribute ID if attribute_uuid provided
+      let id_machine_attribute = null;
+      if (attribute_uuid) {
+        const [attrRows] = await tpmConnection.query(
+          "SELECT id_machine_attribute FROM tb_machine_attribute WHERE uuid_machine_attribute = ?",
+          [attribute_uuid]
+        );
+        if (attrRows.length > 0) {
+          id_machine_attribute = attrRows[0].id_machine_attribute;
+        }
+      }
+
+      const pPower =
+        power !== undefined && power !== null && power !== ""
+          ? parseInt(power, 10)
+          : null;
+      const pPressure =
+        pressure !== undefined && pressure !== null && pressure !== ""
+          ? parseInt(pressure, 10)
+          : null;
+      const pVoltage =
+        voltage !== undefined && voltage !== null && voltage !== ""
+          ? parseInt(voltage, 10)
+          : null;
+      const pAirVolume =
+        air_volume !== undefined && air_volume !== null && air_volume !== ""
+          ? parseInt(air_volume, 10)
+          : null;
+
+      let existingRows = [];
+      if (id_machine_attribute === null) {
+        [existingRows] = await tpmConnection.query(
+          "SELECT * FROM tb_machine_type_attribute_specs WHERE id_machine_type = ? AND id_machine_attribute IS NULL",
+          [id_machine_type]
+        );
+      } else {
+        [existingRows] = await tpmConnection.query(
+          "SELECT * FROM tb_machine_type_attribute_specs WHERE id_machine_type = ? AND id_machine_attribute = ?",
+          [id_machine_type, id_machine_attribute]
+        );
+      }
+
+      if (existingRows.length > 0) {
+        if (id_machine_attribute === null) {
+          await tpmConnection.query(
+            `UPDATE tb_machine_type_attribute_specs 
+             SET power = ?, pressure = ?, voltage = ?, air_volume = ?, updated_by = ?
+             WHERE id_machine_type = ? AND id_machine_attribute IS NULL`,
+            [pPower, pPressure, pVoltage, pAirVolume, userId, id_machine_type]
+          );
+        } else {
+          await tpmConnection.query(
+            `UPDATE tb_machine_type_attribute_specs 
+             SET power = ?, pressure = ?, voltage = ?, air_volume = ?, updated_by = ?
+             WHERE id_machine_type = ? AND id_machine_attribute = ?`,
+            [
+              pPower,
+              pPressure,
+              pVoltage,
+              pAirVolume,
+              userId,
+              id_machine_type,
+              id_machine_attribute,
+            ]
+          );
+        }
+      } else {
+        await tpmConnection.query(
+          `INSERT INTO tb_machine_type_attribute_specs 
+           (id_machine_type, id_machine_attribute, power, pressure, voltage, air_volume, created_by, updated_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            id_machine_type,
+            id_machine_attribute,
+            pPower,
+            pPressure,
+            pVoltage,
+            pAirVolume,
+            userId,
+            userId,
+          ]
+        );
+      }
+
+      res.json({
+        success: true,
+        message: "Lưu thông số kỹ thuật thành công",
+      });
+    } catch (error) {
+      console.error("Error saving machine type attribute spec:", error);
       res.status(500).json({ success: false, message: error.message });
     }
   }
