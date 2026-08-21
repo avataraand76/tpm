@@ -167,10 +167,10 @@ create table if not exists tb_machine_type_attribute_specs
     id_machine_attribute bigint,
     
     -- properties
-    power int, -- công suất điện
-    pressure int, -- áp suất
-    voltage int, -- điện áp
-    air_volume int, -- lưu lượng khí nén
+    power double, -- công suất điện
+    pressure double, -- áp suất
+    voltage double, -- điện áp
+    air_volume double, -- lưu lượng khí nén
     
     -- key
     unique (id_machine_type, id_machine_attribute),
@@ -244,10 +244,10 @@ create table if not exists tb_machine
     model_machine text,
     manufacturer text, -- hãng sản xuất
     supplier text, -- nhà cung cấp
-    power int, -- công suất điện
-    pressure int, -- áp suất
-    voltage int, -- điện áp
-    air_volume int, -- lưu lượng khí nén
+    power double, -- công suất điện
+    pressure double, -- áp suất
+    voltage double, -- điện áp
+    air_volume double, -- lưu lượng khí nén
     price decimal(15, 0), -- giá
     date_of_use date, -- ngày sử dụng
     lifespan int, -- tuổi thọ

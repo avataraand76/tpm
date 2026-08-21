@@ -78,12 +78,27 @@ import {
   Link,
   LinkOff,
   Nfc,
-  Radar,
+  WifiTethering,
   PlaylistAddCheck,
 } from "@mui/icons-material";
 import NavigationBar from "../components/NavigationBar";
 import RfidDialog from "../components/rfidScanner/RfidDialog";
 import { api } from "../api/api"; // Import API
+
+// Cho phép nhập số thập phân cho các thông số kỹ thuật
+// (chỉ giữ chữ số và duy nhất 1 dấu thập phân, chấp nhận cả "," lẫn ".")
+const sanitizeDecimalInput = (value) => {
+  const cleaned = String(value ?? "")
+    .replace(/,/g, ".")
+    .replace(/[^0-9.]/g, "");
+  const firstDot = cleaned.indexOf(".");
+  if (firstDot === -1) return cleaned;
+  return (
+    cleaned.slice(0, firstDot + 1) +
+    cleaned.slice(firstDot + 1).replace(/\./g, "")
+  );
+};
+
 
 // --- STYLES ĐỒNG NHẤT ---
 const gradientText = {
@@ -3029,7 +3044,7 @@ const AdminPage = () => {
                                         handleSpecInputChange(
                                           "GENERAL",
                                           "power",
-                                          e.target.value.replace(/\D/g, "")
+                                          sanitizeDecimalInput(e.target.value)
                                         )
                                       }
                                       sx={{ bgcolor: "white" }}
@@ -3047,7 +3062,7 @@ const AdminPage = () => {
                                         handleSpecInputChange(
                                           "GENERAL",
                                           "pressure",
-                                          e.target.value.replace(/\D/g, "")
+                                          sanitizeDecimalInput(e.target.value)
                                         )
                                       }
                                       sx={{ bgcolor: "white" }}
@@ -3065,7 +3080,7 @@ const AdminPage = () => {
                                         handleSpecInputChange(
                                           "GENERAL",
                                           "voltage",
-                                          e.target.value.replace(/\D/g, "")
+                                          sanitizeDecimalInput(e.target.value)
                                         )
                                       }
                                       sx={{ bgcolor: "white" }}
@@ -3084,7 +3099,7 @@ const AdminPage = () => {
                                         handleSpecInputChange(
                                           "GENERAL",
                                           "air_volume",
-                                          e.target.value.replace(/\D/g, "")
+                                          sanitizeDecimalInput(e.target.value)
                                         )
                                       }
                                       sx={{ bgcolor: "white" }}
@@ -3207,10 +3222,7 @@ const AdminPage = () => {
                                                   handleSpecInputChange(
                                                     attr.uuid,
                                                     "power",
-                                                    e.target.value.replace(
-                                                      /\D/g,
-                                                      ""
-                                                    )
+                                                    sanitizeDecimalInput(e.target.value)
                                                   )
                                                 }
                                               />
@@ -3225,10 +3237,7 @@ const AdminPage = () => {
                                                   handleSpecInputChange(
                                                     attr.uuid,
                                                     "pressure",
-                                                    e.target.value.replace(
-                                                      /\D/g,
-                                                      ""
-                                                    )
+                                                    sanitizeDecimalInput(e.target.value)
                                                   )
                                                 }
                                               />
@@ -3243,10 +3252,7 @@ const AdminPage = () => {
                                                   handleSpecInputChange(
                                                     attr.uuid,
                                                     "voltage",
-                                                    e.target.value.replace(
-                                                      /\D/g,
-                                                      ""
-                                                    )
+                                                    sanitizeDecimalInput(e.target.value)
                                                   )
                                                 }
                                               />
@@ -3261,10 +3267,7 @@ const AdminPage = () => {
                                                   handleSpecInputChange(
                                                     attr.uuid,
                                                     "air_volume",
-                                                    e.target.value.replace(
-                                                      /\D/g,
-                                                      ""
-                                                    )
+                                                    sanitizeDecimalInput(e.target.value)
                                                   )
                                                 }
                                               />
@@ -3641,7 +3644,7 @@ const AdminPage = () => {
                         </Typography>
                         <Button
                           variant="contained"
-                          startIcon={<Radar />}
+                          startIcon={<WifiTethering />}
                           disabled={rfidLoading}
                           onClick={() => setOpenUnusedRfidSearchDialog(true)}
                           sx={{

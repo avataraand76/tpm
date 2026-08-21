@@ -238,6 +238,14 @@ function App() {
               }
             />
             <Route
+              path="/reports/machine-overview"
+              element={
+                <ProtectedRoute>
+                  <ReportPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/up-rfid"
               element={
                 <AdminPCDRoute>

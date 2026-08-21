@@ -1,4 +1,3 @@
-import React from "react";
 import {
   Alert,
   Box,
@@ -11,7 +10,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { Radar, WifiTethering } from "@mui/icons-material";
+import { WifiTethering } from "@mui/icons-material";
 import {
   RFID_CONTENT_BG,
   RFID_DIALOG_RADIUS,
@@ -224,7 +223,9 @@ export const RfidScanZone = ({
         cursor: "pointer",
       }}
     >
-      <Radar sx={{ fontSize: 52, color: v.iconColor, opacity: 0.45, mb: 1 }} />
+      <WifiTethering
+        sx={{ fontSize: 52, color: v.iconColor, opacity: 0.45, mb: 1 }}
+      />
       <Typography variant="subtitle1" fontWeight={700}>
         Đang quét tín hiệu
       </Typography>

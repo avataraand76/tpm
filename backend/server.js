@@ -9438,22 +9438,16 @@ app.post(
         }
       }
 
-      const pPower =
-        power !== undefined && power !== null && power !== ""
-          ? parseInt(power, 10)
-          : null;
-      const pPressure =
-        pressure !== undefined && pressure !== null && pressure !== ""
-          ? parseInt(pressure, 10)
-          : null;
-      const pVoltage =
-        voltage !== undefined && voltage !== null && voltage !== ""
-          ? parseInt(voltage, 10)
-          : null;
-      const pAirVolume =
-        air_volume !== undefined && air_volume !== null && air_volume !== ""
-          ? parseInt(air_volume, 10)
-          : null;
+      // Thông số kỹ thuật lưu dạng double -> dùng parseFloat để giữ phần thập phân
+      const toSpecNumber = (val) => {
+        if (val === undefined || val === null || val === "") return null;
+        const parsed = parseFloat(String(val).replace(",", "."));
+        return isNaN(parsed) ? null : parsed;
+      };
+      const pPower = toSpecNumber(power);
+      const pPressure = toSpecNumber(pressure);
+      const pVoltage = toSpecNumber(voltage);
+      const pAirVolume = toSpecNumber(air_volume);
 
       let existingRows = [];
       if (id_machine_attribute === null) {
@@ -16326,6 +16320,195 @@ app.get("/api/reports/monthly-summary", authenticateToken, async (req, res) => {
       })),
     }));
 
+    // 4. Fetch machine overview statistics (Tổng quan máy móc)
+    // Gộp: trạng thái máy, tình trạng mượn/thuê/cho mượn, vị trí và tình trạng bảo dưỡng của tháng
+    const [machineOverviewRows] = await tpmConnection.query(
+      `SELECT
+        id_department,
+        name_department,
+        id_location,
+        name_location,
+        current_status,
+        source_type,
+        maint_state,
+        COUNT(*) as machine_count
+      FROM (
+        SELECT
+          m.id_machine,
+          COALESCE(d.id_department, 0) as id_department,
+          COALESCE(d.name_department, 'Chưa gán đơn vị') as name_department,
+          COALESCE(l.id_location, 0) as id_location,
+          COALESCE(l.name_location, 'Chưa gán vị trí') as name_location,
+          COALESCE(m.current_status, 'available') as current_status,
+          COALESCE(m.is_borrowed_or_rented_or_borrowed_out, 'internal') as source_type,
+          CASE
+            WHEN ms.id_machine IS NULL THEN 'no_schedule'
+            WHEN ms.done_tasks >= ms.total_tasks THEN 'done'
+            WHEN ms.done_tasks > 0 THEN 'partial'
+            ELSE 'pending'
+          END as maint_state
+        FROM tb_machine m
+        LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
+        LEFT JOIN tb_location l ON l.id_location = ml.id_location
+        LEFT JOIN tb_department d ON d.id_department = l.id_department
+        LEFT JOIN (
+          SELECT
+            id_machine,
+            COUNT(*) as total_tasks,
+            SUM(CASE WHEN status IN ('completed', 'confirm_completed') THEN 1 ELSE 0 END) as done_tasks
+          FROM tb_maintenance_schedule_detail
+          WHERE year = ? AND month = ?
+          GROUP BY id_machine
+        ) ms ON ms.id_machine = m.id_machine
+        WHERE (m.current_status IS NULL OR m.current_status <> 'temporary')
+      ) sub
+      GROUP BY
+        id_department, name_department, id_location, name_location,
+        current_status, source_type, maint_state
+      ORDER BY id_department ASC, id_location ASC`,
+      [targetYear, targetMonth]
+    );
+
+    const MACHINE_STATUS_KEYS = [
+      "available",
+      "in_use",
+      "maintenance",
+      "broken",
+      "disabled",
+      "pending_liquidation",
+      "liquidation",
+    ];
+    const MACHINE_SOURCE_KEYS = [
+      "internal",
+      "borrowed",
+      "rented",
+      "borrowed_out",
+      "borrowed_return",
+      "rented_return",
+    ];
+    const MACHINE_MAINT_KEYS = ["no_schedule", "pending", "partial", "done"];
+
+    const createMachineBucket = () => {
+      const bucket = {
+        total: 0,
+        by_status: {},
+        by_source: {},
+        maintenance: {},
+      };
+      MACHINE_STATUS_KEYS.forEach((k) => (bucket.by_status[k] = 0));
+      MACHINE_SOURCE_KEYS.forEach((k) => (bucket.by_source[k] = 0));
+      MACHINE_MAINT_KEYS.forEach((k) => (bucket.maintenance[k] = 0));
+      return bucket;
+    };
+
+    const addToMachineBucket = (bucket, row, count) => {
+      bucket.total += count;
+      bucket.by_status[row.current_status] =
+        (bucket.by_status[row.current_status] || 0) + count;
+      bucket.by_source[row.source_type] =
+        (bucket.by_source[row.source_type] || 0) + count;
+      bucket.maintenance[row.maint_state] =
+        (bucket.maintenance[row.maint_state] || 0) + count;
+    };
+
+    const machineSummary = createMachineBucket();
+    const machineDeptMap = {};
+
+    // Ma trận trạng thái x nguồn máy (giống /api/machines/matrix-stats)
+    const machineMatrix = {};
+    MACHINE_STATUS_KEYS.forEach((status) => {
+      machineMatrix[status] = {};
+      MACHINE_SOURCE_KEYS.forEach((source) => {
+        machineMatrix[status][source] = 0;
+      });
+    });
+
+    machineOverviewRows.forEach((r) => {
+      const count = Number(r.machine_count || 0);
+      addToMachineBucket(machineSummary, r, count);
+
+      if (!machineMatrix[r.current_status])
+        machineMatrix[r.current_status] = {};
+      machineMatrix[r.current_status][r.source_type] =
+        (machineMatrix[r.current_status][r.source_type] || 0) + count;
+
+      if (!machineDeptMap[r.id_department]) {
+        machineDeptMap[r.id_department] = {
+          id_department: r.id_department,
+          name_department: r.name_department,
+          ...createMachineBucket(),
+          locations_map: {},
+        };
+      }
+      const dept = machineDeptMap[r.id_department];
+      addToMachineBucket(dept, r, count);
+
+      if (!dept.locations_map[r.id_location]) {
+        dept.locations_map[r.id_location] = {
+          id_location: r.id_location,
+          name_location: r.name_location,
+          ...createMachineBucket(),
+        };
+      }
+      addToMachineBucket(dept.locations_map[r.id_location], r, count);
+    });
+
+    // Số máy đang quản lý = tổng - thanh lý - đã trả (mượn/thuê)
+    const machineActiveTotal = (bucket) =>
+      bucket.total -
+      (bucket.by_status.liquidation || 0) -
+      (bucket.by_source.borrowed_return || 0) -
+      (bucket.by_source.rented_return || 0);
+
+    // Chi tiết (đơn vị x vị trí x trạng thái x nguồn máy) cho drill-down khi bấm
+    // vào một ô của bảng "Trạng thái chi tiết". matrix/by_status/by_source chỉ là
+    // các tổng biên nên không suy ngược ra được phân bố theo vị trí.
+    const machineBreakdownMap = {};
+    machineOverviewRows.forEach((r) => {
+      const key = `${r.id_department}|${r.id_location}|${r.current_status}|${r.source_type}`;
+      if (!machineBreakdownMap[key]) {
+        machineBreakdownMap[key] = {
+          id_department: r.id_department,
+          name_department: r.name_department,
+          id_location: r.id_location,
+          name_location: r.name_location,
+          status: r.current_status,
+          source: r.source_type,
+          count: 0,
+        };
+      }
+      machineBreakdownMap[key].count += Number(r.machine_count || 0);
+    });
+
+    const machineOverviewData = {
+      summary: {
+        ...machineSummary,
+        active_total: machineActiveTotal(machineSummary),
+      },
+      matrix: machineMatrix,
+      breakdown: Object.values(machineBreakdownMap),
+      departments: Object.values(machineDeptMap).map((d) => ({
+        id_department: d.id_department,
+        name_department: d.name_department,
+        total: d.total,
+        active_total: machineActiveTotal(d),
+        by_status: d.by_status,
+        by_source: d.by_source,
+        maintenance: d.maintenance,
+        locations: Object.values(d.locations_map)
+          .map((l) => ({
+            id_location: l.id_location,
+            name_location: l.name_location,
+            total: l.total,
+            active_total: machineActiveTotal(l),
+            by_status: l.by_status,
+            by_source: l.by_source,
+            maintenance: l.maintenance,
+          }))
+          .sort((a, b) => b.total - a.total),
+      })),
+    };
+
     const airConsumptionData = {
       summary: {
         total_machines: Number(airSummary.total_machines || 0),
@@ -16357,6 +16540,7 @@ app.get("/api/reports/monthly-summary", authenticateToken, async (req, res) => {
           departments: Object.values(maintDeptMap),
         },
         air_consumption: airConsumptionData,
+        machine_overview: machineOverviewData,
       },
     });
   } catch (error) {

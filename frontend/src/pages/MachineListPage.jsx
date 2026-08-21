@@ -76,7 +76,7 @@ import {
   KeyboardArrowDown,
   KeyboardArrowUp,
   HourglassFull,
-  Radar,
+  WifiTethering,
   PictureAsPdf,
   Lock,
   LockOpen,
@@ -182,6 +182,30 @@ const formatNumber = (num) => {
   if (num === null || num === undefined || num === "") return "0";
   return new Intl.NumberFormat("en-US").format(num);
 };
+// Cho phép nhập số thập phân cho các thông số kỹ thuật
+// (chỉ giữ chữ số và duy nhất 1 dấu thập phân, chấp nhận cả "," lẫn ".")
+const sanitizeDecimalInput = (value) => {
+  const cleaned = String(value ?? "")
+    .replace(/,/g, ".")
+    .replace(/[^0-9.]/g, "");
+  const firstDot = cleaned.indexOf(".");
+  if (firstDot === -1) return cleaned;
+  return (
+    cleaned.slice(0, firstDot + 1) +
+    cleaned.slice(firstDot + 1).replace(/\./g, "")
+  );
+};
+
+// Chuyển giá trị thông số kỹ thuật từ Excel/ô nhập -> số thực (double)
+const parseDecimalValue = (value) => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number") return isNaN(value) ? null : value;
+  const cleaned = sanitizeDecimalInput(value);
+  if (cleaned === "" || cleaned === ".") return null;
+  const parsed = parseFloat(cleaned);
+  return isNaN(parsed) ? null : parsed;
+};
+
 
 const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
   const theme = useTheme();
@@ -2075,18 +2099,17 @@ const MachineListPage = () => {
                   "air_volume",
                 ].includes(englishKey);
 
-                if (typeof cellValue === "string") {
+                // Thông số kỹ thuật: cho phép số thập phân (double)
+                if (isSpecKey) {
+                  newRow[englishKey] = parseDecimalValue(cellValue);
+                } else if (typeof cellValue === "string") {
                   const clean = cellValue.replace(/[^0-9]/g, "");
                   const parsed = parseInt(clean, 10);
-                  newRow[englishKey] = isNaN(parsed)
-                    ? isSpecKey
-                      ? null
-                      : 0
-                    : parsed;
+                  newRow[englishKey] = isNaN(parsed) ? 0 : parsed;
                 } else if (typeof cellValue === "number") {
                   newRow[englishKey] = cellValue;
                 } else if (cellValue === null || cellValue === undefined) {
-                  newRow[englishKey] = isSpecKey ? null : 0;
+                  newRow[englishKey] = 0;
                 }
               }
               // 3. Giữ nguyên các trường khác
@@ -3185,7 +3208,7 @@ const MachineListPage = () => {
                   {/* Nút RFID */}
                   <Button
                     variant="outlined"
-                    startIcon={<Radar />}
+                    startIcon={<WifiTethering />}
                     onClick={handleOpenRfidDialog}
                     // disabled={selectedMachines.size === 0}
                     sx={{
@@ -5129,13 +5152,13 @@ const MachineListPage = () => {
                       fullWidth
                       label="Công suất (W)"
                       value={editedData.power?.toString() || ""}
-                      onChange={(e) => {
-                        const val = e.target.value.replace(/\D/g, "");
+                      onChange={(e) =>
                         handleInputChange(
                           "power",
-                          val !== "" ? parseInt(val, 10) : ""
-                        );
-                      }}
+                          sanitizeDecimalInput(e.target.value)
+                        )
+                      }
+                      inputProps={{ inputMode: "decimal" }}
                       disabled={!canCreateOrImport}
                       sx={DISABLED_VIEW_SX}
                     />
@@ -5145,13 +5168,13 @@ const MachineListPage = () => {
                       fullWidth
                       label="Áp suất (MPa)"
                       value={editedData.pressure?.toString() || ""}
-                      onChange={(e) => {
-                        const val = e.target.value.replace(/\D/g, "");
+                      onChange={(e) =>
                         handleInputChange(
                           "pressure",
-                          val !== "" ? parseInt(val, 10) : ""
-                        );
-                      }}
+                          sanitizeDecimalInput(e.target.value)
+                        )
+                      }
+                      inputProps={{ inputMode: "decimal" }}
                       disabled={!canCreateOrImport}
                       sx={DISABLED_VIEW_SX}
                     />
@@ -5161,13 +5184,13 @@ const MachineListPage = () => {
                       fullWidth
                       label="Điện áp (V)"
                       value={editedData.voltage?.toString() || ""}
-                      onChange={(e) => {
-                        const val = e.target.value.replace(/\D/g, "");
+                      onChange={(e) =>
                         handleInputChange(
                           "voltage",
-                          val !== "" ? parseInt(val, 10) : ""
-                        );
-                      }}
+                          sanitizeDecimalInput(e.target.value)
+                        )
+                      }
+                      inputProps={{ inputMode: "decimal" }}
                       disabled={!canCreateOrImport}
                       sx={DISABLED_VIEW_SX}
                     />
@@ -5177,13 +5200,13 @@ const MachineListPage = () => {
                       fullWidth
                       label="Lưu lượng khí nén (lít/phút)"
                       value={editedData.air_volume?.toString() || ""}
-                      onChange={(e) => {
-                        const val = e.target.value.replace(/\D/g, "");
+                      onChange={(e) =>
                         handleInputChange(
                           "air_volume",
-                          val !== "" ? parseInt(val, 10) : ""
-                        );
-                      }}
+                          sanitizeDecimalInput(e.target.value)
+                        )
+                      }
+                      inputProps={{ inputMode: "decimal" }}
                       disabled={!canCreateOrImport}
                       sx={DISABLED_VIEW_SX}
                     />
@@ -5960,7 +5983,7 @@ const MachineListPage = () => {
                 },
               }}
             >
-              <Radar />
+              <WifiTethering />
             </Badge>
           </Fab>
         )}

@@ -892,6 +892,16 @@ export const api = {
       return response.data;
     },
   },
+
+  // MARK: REPORTS
+  reports: {
+    getMonthlySummary: async (year, month) => {
+      const response = await httpConnect.get("/api/reports/monthly-summary", {
+        params: { year, month },
+      });
+      return response.data;
+    },
+  },
 };
 
 export default httpConnect;

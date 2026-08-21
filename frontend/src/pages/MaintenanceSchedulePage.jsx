@@ -79,7 +79,6 @@ import {
   RotateRight,
   Flip,
   CenterFocusStrong,
-  Radar,
 } from "@mui/icons-material";
 import { alpha } from "@mui/material/styles";
 import NavigationBar from "../components/NavigationBar";
@@ -3193,7 +3192,7 @@ const MaintenanceHistoryDialog = ({
         >
           <Button
             variant="outlined"
-            startIcon={<Radar />}
+            startIcon={<WifiTethering />}
             onClick={() => setRfidRadarOpen(true)}
             sx={{
               borderRadius: "10px",
@@ -5065,7 +5064,7 @@ const MaintenanceSchedulePage = () => {
                     variant="outlined"
                     size="small"
                     onClick={() => handleOpenBulkRadar(unmaintainedMachines)}
-                    startIcon={<Radar sx={{ fontSize: 18 }} />}
+                    startIcon={<WifiTethering sx={{ fontSize: 18 }} />}
                     disabled={unmaintainedMachines.length === 0}
                     sx={{
                       borderRadius: "10px",

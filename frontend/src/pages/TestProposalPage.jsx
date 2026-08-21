@@ -530,6 +530,30 @@ const excelHeaderMapping = {
 };
 // Lấy danh sách các cột bắt buộc (sẽ dùng để tô màu)
 const requiredHeaders = ["Serial", "Loại máy"];
+// Cho phép nhập số thập phân cho các thông số kỹ thuật
+// (chỉ giữ chữ số và duy nhất 1 dấu thập phân, chấp nhận cả "," lẫn ".")
+const sanitizeDecimalInput = (value) => {
+  const cleaned = String(value ?? "")
+    .replace(/,/g, ".")
+    .replace(/[^0-9.]/g, "");
+  const firstDot = cleaned.indexOf(".");
+  if (firstDot === -1) return cleaned;
+  return (
+    cleaned.slice(0, firstDot + 1) +
+    cleaned.slice(firstDot + 1).replace(/\./g, "")
+  );
+};
+
+// Chuyển giá trị thông số kỹ thuật từ Excel/ô nhập -> số thực (double)
+const parseDecimalValue = (value) => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number") return isNaN(value) ? null : value;
+  const cleaned = sanitizeDecimalInput(value);
+  if (cleaned === "" || cleaned === ".") return null;
+  const parsed = parseFloat(cleaned);
+  return isNaN(parsed) ? null : parsed;
+};
+
 
 const TestProposalPage = () => {
   const theme = useTheme();
@@ -3973,18 +3997,17 @@ const TestProposalPage = () => {
                   "air_volume",
                 ].includes(englishKey);
 
-                if (typeof cellValue === "string") {
+                // Thông số kỹ thuật: cho phép số thập phân (double)
+                if (isSpecKey) {
+                  newRow[englishKey] = parseDecimalValue(cellValue);
+                } else if (typeof cellValue === "string") {
                   const clean = cellValue.replace(/[^0-9]/g, "");
                   const parsed = parseInt(clean, 10);
-                  newRow[englishKey] = isNaN(parsed)
-                    ? isSpecKey
-                      ? null
-                      : 0
-                    : parsed;
+                  newRow[englishKey] = isNaN(parsed) ? 0 : parsed;
                 } else if (typeof cellValue === "number") {
                   newRow[englishKey] = cellValue;
                 } else if (cellValue === null || cellValue === undefined) {
-                  newRow[englishKey] = isSpecKey ? null : 0;
+                  newRow[englishKey] = 0;
                 }
               }
               // 3. Giữ nguyên các trường khác
@@ -9782,13 +9805,13 @@ const TestProposalPage = () => {
                   fullWidth
                   label="Công suất (W)"
                   value={newMachineData.power?.toString() || ""}
-                  onChange={(e) => {
-                    const val = e.target.value.replace(/\D/g, "");
+                  onChange={(e) =>
                     handleCreateMachineInputChange(
                       "power",
-                      val !== "" ? parseInt(val, 10) : ""
-                    );
-                  }}
+                      sanitizeDecimalInput(e.target.value)
+                    )
+                  }
+                  inputProps={{ inputMode: "decimal" }}
                   disabled={!canCreateOrImportMachines}
                 />
               </Grid>
@@ -9797,13 +9820,13 @@ const TestProposalPage = () => {
                   fullWidth
                   label="Áp suất (MPa)"
                   value={newMachineData.pressure?.toString() || ""}
-                  onChange={(e) => {
-                    const val = e.target.value.replace(/\D/g, "");
+                  onChange={(e) =>
                     handleCreateMachineInputChange(
                       "pressure",
-                      val !== "" ? parseInt(val, 10) : ""
-                    );
-                  }}
+                      sanitizeDecimalInput(e.target.value)
+                    )
+                  }
+                  inputProps={{ inputMode: "decimal" }}
                   disabled={!canCreateOrImportMachines}
                 />
               </Grid>
@@ -9812,13 +9835,13 @@ const TestProposalPage = () => {
                   fullWidth
                   label="Điện áp (V)"
                   value={newMachineData.voltage?.toString() || ""}
-                  onChange={(e) => {
-                    const val = e.target.value.replace(/\D/g, "");
+                  onChange={(e) =>
                     handleCreateMachineInputChange(
                       "voltage",
-                      val !== "" ? parseInt(val, 10) : ""
-                    );
-                  }}
+                      sanitizeDecimalInput(e.target.value)
+                    )
+                  }
+                  inputProps={{ inputMode: "decimal" }}
                   disabled={!canCreateOrImportMachines}
                 />
               </Grid>
@@ -9827,13 +9850,13 @@ const TestProposalPage = () => {
                   fullWidth
                   label="Lưu lượng khí nén (lít/phút)"
                   value={newMachineData.air_volume?.toString() || ""}
-                  onChange={(e) => {
-                    const val = e.target.value.replace(/\D/g, "");
+                  onChange={(e) =>
                     handleCreateMachineInputChange(
                       "air_volume",
-                      val !== "" ? parseInt(val, 10) : ""
-                    );
-                  }}
+                      sanitizeDecimalInput(e.target.value)
+                    )
+                  }
+                  inputProps={{ inputMode: "decimal" }}
                   disabled={!canCreateOrImportMachines}
                 />
               </Grid>
