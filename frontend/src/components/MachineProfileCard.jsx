@@ -10,46 +10,42 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
+  alpha,
+  borders,
   Box,
-  Paper,
-  Typography,
-  Stack,
-  Table,
-  TableBody,
-  TableRow,
-  TableCell,
   Checkbox,
-  FormControlLabel,
+  CheckCircle,
   Chip,
   CircularProgress,
-} from "@mui/material";
-import { CheckCircle, TaskAlt, HourglassEmpty } from "@mui/icons-material";
-import { alpha } from "@mui/material/styles";
+  colors,
+  fontSizes,
+  FormControlLabel,
+  HourglassEmpty,
+  MAINT_STATUS_CARD,
+  muiColors,
+  Paper,
+  radii,
+  Stack,
+  sx as preset,
+  Table,
+  TableBody,
+  TableCell,
+  TableRow,
+  TaskAlt,
+  Typography,
+} from "../ui";
 import { api } from "../api/api";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Cấu hình hằng số dùng chung
 // ─────────────────────────────────────────────────────────────────────────────
+// Nhãn + màu lấy từ theme/statusTokens.js. Dùng biến thể MAINT_STATUS_CARD
+// vì thẻ này có viền đậm hơn và gọi trạng thái cuối là "Đã duyệt hoàn thành".
 const MAINT_STATUS_CONFIG = {
-  pending: {
-    label: "Chưa thực hiện",
-    color: "#e65100",
-    bg: "#fff3e0",
-    borderColor: "#ffb74d",
-    icon: HourglassEmpty,
-  },
-  completed: {
-    label: "Đã thực hiện",
-    color: "#1565c0",
-    bg: "#e3f2fd",
-    borderColor: "#64b5f6",
-    icon: TaskAlt,
-  },
+  pending: { ...MAINT_STATUS_CARD.pending, icon: HourglassEmpty },
+  completed: { ...MAINT_STATUS_CARD.completed, icon: TaskAlt },
   confirm_completed: {
-    label: "Đã duyệt hoàn thành",
-    color: "#2e7d32",
-    bg: "#e8f5e9",
-    borderColor: "#81c784",
+    ...MAINT_STATUS_CARD.confirm_completed,
     icon: CheckCircle,
   },
 };
@@ -85,12 +81,12 @@ const SectionTitle = ({ children }) => (
       variant="subtitle2"
       fontWeight={700}
       sx={{
-        background: "linear-gradient(90deg,#667eea,#764ba2)",
-        color: "#fff",
+        background: `linear-gradient(90deg,${colors.brand.main},${colors.brand.alt})`,
+        color: colors.white,
         px: 1.5,
         py: 0.5,
-        borderRadius: "6px",
-        fontSize: "0.8rem",
+        borderRadius: `${radii.sm}px`,
+        fontSize: fontSizes.px12_8,
         display: "inline-block",
       }}
     >
@@ -106,19 +102,19 @@ const InfoRow = ({ label, value }) => {
       <TableCell
         sx={{
           fontWeight: 700,
-          fontSize: "0.82rem",
-          color: "#444",
+          fontSize: fontSizes.px13_12,
+          color: colors.grey[800],
           py: 0.6,
           px: 1.5,
-          borderRight: "1px solid #e0e0e0",
-          bgcolor: "#fafafa",
+          borderRight: borders.light,
+          bgcolor: colors.grey[50],
           width: "40%",
         }}
       >
         {label}
       </TableCell>
       <TableCell
-        sx={{ fontSize: "0.82rem", color: "#1a1a2e", py: 0.6, px: 1.5 }}
+        sx={{ fontSize: fontSizes.px13_12, color: colors.grey[900], py: 0.6, px: 1.5 }}
       >
         {value}
       </TableCell>
@@ -672,21 +668,16 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
 
   return (
     <Box
-      sx={{ bgcolor: "#f8f9fc", borderRadius: "12px", p: { xs: 1.5, sm: 2 } }}
+      sx={{ bgcolor: colors.grey[50], borderRadius: `${radii.md}px`, p: { xs: 1.5, sm: 2 } }}
     >
       {/* ── Section A: Lý lịch thiết bị ── */}
       <Paper
         elevation={0}
-        sx={{
-          border: "1px solid #e0e0e0",
-          borderRadius: "12px",
-          overflow: "hidden",
-          mb: 2,
-        }}
+        sx={{ ...preset.panel, mb: 2 }}
       >
         <Box
           sx={{
-            background: "linear-gradient(90deg,#667eea,#764ba2)",
+            background: `linear-gradient(90deg,${colors.brand.main},${colors.brand.alt})`,
             px: 2,
             py: 1,
           }}
@@ -694,7 +685,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
           <Typography
             variant="subtitle1"
             fontWeight={700}
-            sx={{ color: "#fff", letterSpacing: "0.03em" }}
+            sx={{ color: colors.white, letterSpacing: "0.03em" }}
           >
             A. LÝ LỊCH THIẾT BỊ
           </Typography>
@@ -706,8 +697,8 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
           <Table
             size="small"
             sx={{
-              border: "1px solid #e0e0e0",
-              borderRadius: "8px",
+              border: borders.light,
+              borderRadius: `${radii.sm}px`,
               overflow: "hidden",
               mb: 1,
             }}
@@ -734,15 +725,15 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                     checked={isNew}
                     onChange={() => setIsNew(true)}
                     sx={{
-                      color: "#667eea",
-                      "&.Mui-checked": { color: "#667eea" },
+                      color: colors.brand.main,
+                      "&.Mui-checked": { color: colors.brand.main },
                     }}
                   />
                 }
                 label={
                   <Typography
                     sx={{
-                      fontSize: "0.85rem",
+                      fontSize: fontSizes.px13_6,
                       fontWeight: isNew ? 700 : 400,
                     }}
                   >
@@ -756,15 +747,15 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                     checked={!isNew}
                     onChange={() => setIsNew(false)}
                     sx={{
-                      color: "#764ba2",
-                      "&.Mui-checked": { color: "#764ba2" },
+                      color: colors.brand.alt,
+                      "&.Mui-checked": { color: colors.brand.alt },
                     }}
                   />
                 }
                 label={
                   <Typography
                     sx={{
-                      fontSize: "0.85rem",
+                      fontSize: fontSizes.px13_6,
                       fontWeight: !isNew ? 700 : 400,
                     }}
                   >
@@ -780,8 +771,8 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
           <Table
             size="small"
             sx={{
-              border: "1px solid #e0e0e0",
-              borderRadius: "8px",
+              border: borders.light,
+              borderRadius: `${radii.sm}px`,
               overflow: "hidden",
               mb: 1,
             }}
@@ -826,7 +817,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
             <Typography
               variant="body2"
               fontWeight={700}
-              sx={{ mb: 0.75, fontSize: "0.8rem", color: "#555" }}
+              sx={{ mb: 0.75, fontSize: fontSizes.px12_8, color: colors.grey[700] }}
             >
               a. Lịch xích sửa chữa
             </Typography>
@@ -845,7 +836,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                   sx={{
                     px: 1.5,
                     py: 0.75,
-                    borderRadius: "8px",
+                    borderRadius: `${radii.sm}px`,
                     flex: 1,
                     textAlign: "center",
                   }}
@@ -857,7 +848,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                   >
                     Xem xét bảo dưỡng
                   </Typography>
-                  <Typography variant="body2" fontWeight={700} color="#667eea">
+                  <Typography variant="body2" fontWeight={700} color={colors.brand.main}>
                     3 tháng
                   </Typography>
                 </Paper>
@@ -866,7 +857,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                   sx={{
                     px: 1.5,
                     py: 0.75,
-                    borderRadius: "8px",
+                    borderRadius: `${radii.sm}px`,
                     flex: 1,
                     textAlign: "center",
                   }}
@@ -878,7 +869,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                   >
                     Bảo trì định kỳ
                   </Typography>
-                  <Typography variant="body2" fontWeight={700} color="#764ba2">
+                  <Typography variant="body2" fontWeight={700} color={colors.brand.alt}>
                     5 năm
                   </Typography>
                 </Paper>
@@ -896,12 +887,12 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                   </Typography>
                   <Paper
                     variant="outlined"
-                    sx={{ p: 1.25, borderRadius: "8px" }}
+                    sx={{ p: 1.25, borderRadius: `${radii.sm}px` }}
                   >
                     <Typography
                       variant="body2"
                       sx={{
-                        fontSize: "0.82rem",
+                        fontSize: fontSizes.px13_12,
                         whiteSpace: "pre-wrap",
                       }}
                     >
@@ -918,7 +909,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
             <Typography
               variant="body2"
               fontWeight={700}
-              sx={{ mb: 0.75, fontSize: "0.8rem", color: "#555" }}
+              sx={{ mb: 0.75, fontSize: fontSizes.px12_8, color: colors.grey[700] }}
             >
               b. Nội dung xem xét bảo dưỡng
             </Typography>
@@ -935,15 +926,15 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                       sx={{
                         fontSize: 14,
                         mt: 0.25,
-                        color: item.is_check ? "#2e7d32" : "#bdbdbd",
+                        color: item.is_check ? colors.green.main : colors.grey[400],
                         flexShrink: 0,
                       }}
                     />
                     <Typography
                       variant="body2"
                       sx={{
-                        fontSize: "0.82rem",
-                        color: item.is_check ? "#2e7d32" : "text.primary",
+                        fontSize: fontSizes.px13_12,
+                        color: item.is_check ? colors.green.main : "text.primary",
                         textDecoration: item.is_check ? "line-through" : "none",
                       }}
                     >
@@ -968,16 +959,11 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
       {/* ── Section B: Thông tin đơn vị quản lý thiết bị ── */}
       <Paper
         elevation={0}
-        sx={{
-          border: "1px solid #e0e0e0",
-          borderRadius: "12px",
-          overflow: "hidden",
-          mb: 2,
-        }}
+        sx={{ ...preset.panel, mb: 2 }}
       >
         <Box
           sx={{
-            background: "linear-gradient(90deg,#546e7a,#78909c)",
+            background: `linear-gradient(90deg,${muiColors.blueGrey[600]},${muiColors.blueGrey[400]})`,
             px: 2,
             py: 1,
           }}
@@ -985,7 +971,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
           <Typography
             variant="subtitle1"
             fontWeight={700}
-            sx={{ color: "#fff", letterSpacing: "0.03em" }}
+            sx={{ color: colors.white, letterSpacing: "0.03em" }}
           >
             B. THÔNG TIN ĐƠN VỊ QUẢN LÝ THIẾT BỊ
           </Typography>
@@ -995,8 +981,8 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
           <Table
             size="small"
             sx={{
-              border: "1px solid #e0e0e0",
-              borderRadius: "8px",
+              border: borders.light,
+              borderRadius: `${radii.sm}px`,
               overflow: "hidden",
             }}
           >
@@ -1017,15 +1003,11 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
       {/* ── Section C: Bảng tổng hợp lịch bảo dưỡng ── */}
       <Paper
         elevation={0}
-        sx={{
-          border: "1px solid #e0e0e0",
-          borderRadius: "12px",
-          overflow: "hidden",
-        }}
+        sx={preset.panel}
       >
         <Box
           sx={{
-            background: "linear-gradient(90deg,#00897b,#26a69a)",
+            background: `linear-gradient(90deg,${colors.teal.main},${colors.teal.light})`,
             px: 2,
             py: 1,
           }}
@@ -1033,7 +1015,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
           <Typography
             variant="subtitle1"
             fontWeight={700}
-            sx={{ color: "#fff", letterSpacing: "0.03em" }}
+            sx={{ color: colors.white, letterSpacing: "0.03em" }}
           >
             C. KIỂM TRA THAY DẦU, HOÁ CHẤT, VỆ SINH ĐỊNH KỲ
           </Typography>
@@ -1041,7 +1023,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
 
         {historyLoading ? (
           <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
-            <CircularProgress size={28} sx={{ color: "#00897b" }} />
+            <CircularProgress size={28} sx={{ color: colors.teal.main }} />
           </Box>
         ) : historyRows.length === 0 ? (
           <Box sx={{ py: 3, textAlign: "center" }}>
@@ -1057,7 +1039,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
           <Box sx={{ overflowX: "auto" }}>
             <Table size="small">
               <TableBody>
-                <TableRow sx={{ bgcolor: "#f5f5f5" }}>
+                <TableRow sx={{ bgcolor: colors.grey[100] }}>
                   {[
                     "Năm",
                     "Quý",
@@ -1069,9 +1051,9 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                       key={col}
                       sx={{
                         fontWeight: 700,
-                        fontSize: "0.78rem",
-                        color: "#555",
-                        borderBottom: "2px solid #e0e0e0",
+                        fontSize: fontSizes.px12_48,
+                        color: colors.grey[700],
+                        borderBottom: `2px solid ${colors.grey[300]}`,
                         py: 0.75,
                         px: 1.5,
                         whiteSpace: "nowrap",
@@ -1103,7 +1085,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                         key={row.uuid_maintenance_schedule_detail}
                         sx={{
                           bgcolor:
-                            idx % 2 === 0 ? "#fff" : alpha("#000", 0.015),
+                            idx % 2 === 0 ? colors.white : alpha(colors.black, 0.015),
                         }}
                       >
                         {isFirstInYear && (
@@ -1111,13 +1093,13 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                             rowSpan={yearGroup.length}
                             sx={{
                               fontWeight: 700,
-                              fontSize: "0.82rem",
-                              color: "#1a1a2e",
+                              fontSize: fontSizes.px13_12,
+                              color: colors.grey[900],
                               verticalAlign: "middle",
                               textAlign: "center",
                               px: 1.5,
-                              borderRight: "1px solid #e0e0e0",
-                              bgcolor: "#f8f8f8",
+                              borderRight: borders.light,
+                              bgcolor: colors.grey[50],
                             }}
                           >
                             {row.year}
@@ -1128,7 +1110,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                           sx={{
                             px: 1.5,
                             py: 0.75,
-                            fontSize: "0.8rem",
+                            fontSize: fontSizes.px12_8,
                             whiteSpace: "nowrap",
                           }}
                         >
@@ -1140,7 +1122,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                             icon={
                               <Icon
                                 sx={{
-                                  fontSize: "12px !important",
+                                  fontSize: `${fontSizes.px12} !important`,
                                   color: `${sc.color} !important`,
                                 }}
                               />
@@ -1156,7 +1138,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                               color: sc.color,
                               border: `1px solid ${sc.borderColor}`,
                               fontWeight: 700,
-                              fontSize: "0.7rem",
+                              fontSize: fontSizes.px11_2,
                               height: 20,
                               "& .MuiChip-label": { px: 0.75 },
                               "& .MuiChip-icon": { ml: 0.5 },
@@ -1168,7 +1150,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                           sx={{
                             px: 1.5,
                             py: 0.75,
-                            fontSize: "0.78rem",
+                            fontSize: fontSizes.px12_48,
                             color: "text.secondary",
                             whiteSpace: "nowrap",
                           }}
@@ -1180,7 +1162,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                           sx={{
                             px: 1.5,
                             py: 0.75,
-                            fontSize: "0.78rem",
+                            fontSize: fontSizes.px12_48,
                             color: "text.secondary",
                           }}
                         >
@@ -1203,16 +1185,11 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
       {/* ── Section D: Lịch sử sửa chữa máy móc thiết bị ── */}
       <Paper
         elevation={0}
-        sx={{
-          border: "1px solid #e0e0e0",
-          borderRadius: "12px",
-          overflow: "hidden",
-          mt: 2,
-        }}
+        sx={{ ...preset.panel, mt: 2 }}
       >
         <Box
           sx={{
-            background: "linear-gradient(90deg,#7b1fa2,#9c27b0)",
+            background: `linear-gradient(90deg,${colors.purple.deep},${colors.purple.magenta})`,
             px: 2,
             py: 1,
           }}
@@ -1220,7 +1197,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
           <Typography
             variant="subtitle1"
             fontWeight={700}
-            sx={{ color: "#fff", letterSpacing: "0.03em" }}
+            sx={{ color: colors.white, letterSpacing: "0.03em" }}
           >
             D. LỊCH SỬ SỬA CHỮA MÁY MÓC THIẾT BỊ
           </Typography>
@@ -1228,7 +1205,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
 
         {historyLoading ? (
           <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
-            <CircularProgress size={28} sx={{ color: "#7b1fa2" }} />
+            <CircularProgress size={28} sx={{ color: colors.purple.deep }} />
           </Box>
         ) : allBreakdowns.length === 0 ? (
           <Box sx={{ py: 3, textAlign: "center" }}>
@@ -1244,7 +1221,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
           <Box sx={{ overflowX: "auto" }}>
             <Table size="small">
               <TableBody>
-                <TableRow sx={{ bgcolor: "#f5f5f5" }}>
+                <TableRow sx={{ bgcolor: colors.grey[100] }}>
                   {[
                     "STT",
                     "Tên lỗi",
@@ -1256,9 +1233,9 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                       key={col}
                       sx={{
                         fontWeight: 700,
-                        fontSize: "0.78rem",
-                        color: "#555",
-                        borderBottom: "2px solid #e0e0e0",
+                        fontSize: fontSizes.px12_48,
+                        color: colors.grey[700],
+                        borderBottom: `2px solid ${colors.grey[300]}`,
                         py: 0.75,
                         px: 1.5,
                         whiteSpace: "nowrap",
@@ -1273,14 +1250,14 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                   <TableRow
                     key={idx}
                     sx={{
-                      bgcolor: idx % 2 === 0 ? "#fff" : alpha("#000", 0.015),
+                      bgcolor: idx % 2 === 0 ? colors.white : alpha(colors.black, 0.015),
                     }}
                   >
                     <TableCell
                       sx={{
                         px: 1.5,
                         py: 0.75,
-                        fontSize: "0.8rem",
+                        fontSize: fontSizes.px12_8,
                         width: 50,
                         textAlign: "center",
                       }}
@@ -1291,21 +1268,21 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                       sx={{
                         px: 1.5,
                         py: 0.75,
-                        fontSize: "0.8rem",
+                        fontSize: fontSizes.px12_8,
                         fontWeight: 700,
-                        color: "#7b1fa2",
+                        color: colors.purple.deep,
                       }}
                     >
                       {item.name}
                     </TableCell>
-                    <TableCell sx={{ px: 1.5, py: 0.75, fontSize: "0.8rem" }}>
+                    <TableCell sx={{ px: 1.5, py: 0.75, fontSize: fontSizes.px12_8 }}>
                       {item.note || "—"}
                     </TableCell>
                     <TableCell
                       sx={{
                         px: 1.5,
                         py: 0.75,
-                        fontSize: "0.78rem",
+                        fontSize: fontSizes.px12_48,
                         color: "text.secondary",
                         whiteSpace: "nowrap",
                       }}
@@ -1316,7 +1293,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                       sx={{
                         px: 1.5,
                         py: 0.75,
-                        fontSize: "0.78rem",
+                        fontSize: fontSizes.px12_48,
                         color: "text.secondary",
                       }}
                     >

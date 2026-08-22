@@ -1,18 +1,20 @@
 import React from "react";
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Typography,
-  Stack,
-  IconButton,
-  Box,
+  alpha,
   Avatar,
-  useTheme,
-  useMediaQuery,
-} from "@mui/material";
-import { Close, WifiTethering } from "@mui/icons-material";
+  Box,
+  Close,
+  colors,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  Stack,
+  Typography,
+  useResponsive,
+  WifiTethering,
+} from "../../ui";
 import {
   RFID_CONTENT_BG,
   RFID_DIALOG_PAPER_SX,
@@ -33,8 +35,7 @@ const RfidDialogShell = ({
   disableClose = false,
   disableEnforceFocus = false,
 }) => {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const { isMobile } = useResponsive();
   const variantStyle = getRfidVariantStyle(variant);
 
   const handleClose = (...args) => {
@@ -79,11 +80,11 @@ const RfidDialogShell = ({
               sx={{
                 width: 40,
                 height: 40,
-                bgcolor: "rgba(255,255,255,0.2)",
+                bgcolor: alpha(colors.white, 0.2),
                 flexShrink: 0,
               }}
             >
-              <WifiTethering sx={{ color: "#fff" }} />
+              <WifiTethering sx={{ color: colors.white }} />
             </Avatar>
             <Box sx={{ minWidth: 0 }}>
               <Typography
@@ -131,7 +132,7 @@ const RfidDialogShell = ({
           sx={{
             p: { xs: 2, sm: 2.5 },
             bgcolor: RFID_CONTENT_BG,
-            borderTop: "1px solid rgba(0,0,0,0.06)",
+            borderTop: `1px solid ${alpha(colors.black, 0.06)}`,
             flexDirection: { xs: "column-reverse", sm: "row" },
             gap: 1,
             "& > :not(style) + :not(style)": {

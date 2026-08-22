@@ -1,16 +1,19 @@
 import {
   Alert,
+  alpha,
   Box,
   Button,
   Chip,
+  colors,
+  fontSizes,
   IconButton,
   InputAdornment,
   LinearProgress,
   Stack,
   TextField,
   Typography,
-} from "@mui/material";
-import { WifiTethering } from "@mui/icons-material";
+  WifiTethering,
+} from "../../ui";
 import {
   RFID_CONTENT_BG,
   RFID_DIALOG_RADIUS,
@@ -160,8 +163,8 @@ export const RfidTargetList = ({ targets, foundSet }) => (
       maxHeight: 280,
       overflowY: "auto",
       borderRadius: RFID_DIALOG_RADIUS.section,
-      border: "1px solid rgba(0,0,0,0.06)",
-      bgcolor: "#fff",
+      border: `1px solid ${alpha(colors.black, 0.06)}`,
+      bgcolor: colors.white,
     }}
   >
     {targets.map((target, idx) => {
@@ -173,8 +176,8 @@ export const RfidTargetList = ({ targets, foundSet }) => (
             px: 2,
             py: 1.25,
             borderBottom:
-              idx < targets.length - 1 ? "1px solid rgba(0,0,0,0.06)" : "none",
-            bgcolor: isFound ? "rgba(46, 125, 50, 0.08)" : "transparent",
+              idx < targets.length - 1 ? `1px solid ${alpha(colors.black, 0.06)}` : "none",
+            bgcolor: isFound ? alpha(colors.green.main, 0.08) : "transparent",
           }}
         >
           <Typography variant="body2" fontWeight={600}>
@@ -219,7 +222,7 @@ export const RfidScanZone = ({
         p: 3,
         borderRadius: RFID_DIALOG_RADIUS.section,
         border: `2px dashed ${v.softBorder}`,
-        bgcolor: "#fff",
+        bgcolor: colors.white,
         cursor: "pointer",
       }}
     >
@@ -237,8 +240,8 @@ export const RfidScanZone = ({
           p: 1.25,
           borderRadius: RFID_DIALOG_RADIUS.input,
           bgcolor: RFID_CONTENT_BG,
-          border: "1px solid rgba(0,0,0,0.06)",
-          fontSize: "0.78rem",
+          border: `1px solid ${alpha(colors.black, 0.06)}`,
+          fontSize: fontSizes.px12_48,
           color: v.iconColor,
           overflow: "hidden",
           whiteSpace: "nowrap",

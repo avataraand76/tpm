@@ -3,34 +3,36 @@
 import React from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
+  AccountCircle,
+  AdminPanelSettings,
+  alpha,
   AppBar,
+  Assessment,
+  Avatar,
+  Box,
+  CalendarMonth,
+  colors,
+  Dashboard,
+  ExitToApp,
+  gradients,
+  Home,
+  IconButton,
+  LocationOn,
+  Menu,
+  MenuIcon,
+  MenuItem,
+  PrecisionManufacturing,
+  QuestionMark,
+  radii,
+  Receipt,
+  shadows,
+  Tab,
+  Tabs,
   Toolbar,
   Typography,
-  Box,
-  Avatar,
-  Menu,
-  MenuItem,
-  IconButton,
-  Tabs,
-  Tab,
-  useTheme, // NEW: Import useTheme
-  useMediaQuery, // NEW: Import useMediaQuery
-} from "@mui/material";
-import {
-  AccountCircle,
-  ExitToApp,
-  Home,
-  Dashboard,
-  PrecisionManufacturing,
-  Receipt,
-  LocationOn,
-  Menu as MenuIcon,
   Update,
-  AdminPanelSettings,
-  QuestionMark,
-  CalendarMonth,
-  Assessment,
-} from "@mui/icons-material";
+  useResponsive,
+} from "../ui";
 import { useAuth } from "../hooks/useAuth";
 
 const NavigationBar = () => {
@@ -41,9 +43,8 @@ const NavigationBar = () => {
   const [mobileAnchorEl, setMobileAnchorEl] = React.useState(null); // NEW: State cho menu mobile
 
   // NEW: Sử dụng hook để kiểm tra kích thước màn hình
-  const theme = useTheme();
-  // Thay đổi breakpoint từ "md" lên "lg" để tránh tràn nội dung trên màn hình vừa
-  const isMobile = useMediaQuery(theme.breakpoints.down("lg"));
+  // Ngưỡng lg (< 1200px) - menu dọc cho cả tablet, xem hooks/useResponsive.js
+  const { belowLg: isMobile } = useResponsive();
 
   const isAdmin = permissions.includes("admin");
   const canEdit = permissions.includes("edit");
@@ -159,9 +160,9 @@ const NavigationBar = () => {
       position="static"
       elevation={0}
       sx={{
-        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+        background: gradients.brandDeep,
         backdropFilter: "blur(20px)",
-        borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
+        borderBottom: `1px solid ${alpha(colors.white, 0.1)}`,
       }}
     >
       <Toolbar sx={{ py: 1 }}>
@@ -206,7 +207,7 @@ const NavigationBar = () => {
                 sx={{
                   width: 40,
                   height: 40,
-                  background: "rgba(255, 255, 255, 0.2)",
+                  background: alpha(colors.white, 0.2),
                   mr: 2,
                 }}
               >
@@ -233,22 +234,22 @@ const NavigationBar = () => {
                 textColor="inherit"
                 sx={{
                   "& .MuiTab-root": {
-                    color: "rgba(255, 255, 255, 0.8)",
+                    color: alpha(colors.white, 0.8),
                     fontWeight: 600,
                     fontSize: { lg: "0.9rem", xl: "1rem" },
                     minWidth: { lg: 120, xl: 140 },
-                    borderRadius: "12px",
+                    borderRadius: `${radii.md}px`,
                     margin: "0 2px",
                     px: { lg: 1, xl: 2 },
                     transition: "all 0.3s ease",
                     "&.Mui-selected": {
                       color: "white",
-                      background: "rgba(255, 255, 255, 0.2)",
+                      background: alpha(colors.white, 0.2),
                       backdropFilter: "blur(10px)",
-                      boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+                      boxShadow: shadows.medium,
                     },
                     "&:hover": {
-                      background: "rgba(255, 255, 255, 0.1)",
+                      background: alpha(colors.white, 0.1),
                       transform: "translateY(-2px)",
                     },
                   },
@@ -300,10 +301,10 @@ const NavigationBar = () => {
                 mr: 3,
                 px: 2,
                 py: 1,
-                borderRadius: "12px",
-                background: "rgba(255, 255, 255, 0.1)",
+                borderRadius: `${radii.md}px`,
+                background: alpha(colors.white, 0.1),
                 backdropFilter: "blur(10px)",
-                border: "1px solid rgba(255, 255, 255, 0.2)",
+                border: `1px solid ${alpha(colors.white, 0.2)}`,
               }}
             >
               <Typography
@@ -330,13 +331,13 @@ const NavigationBar = () => {
             onClick={handleOpenDocs}
             sx={{
               color: "white",
-              background: "rgba(255, 255, 255, 0.1)",
+              background: alpha(colors.white, 0.1),
               backdropFilter: "blur(10px)",
-              border: "1px solid rgba(255, 255, 255, 0.2)",
+              border: `1px solid ${alpha(colors.white, 0.2)}`,
               "&:hover": {
-                background: "rgba(255, 255, 255, 0.2)",
+                background: alpha(colors.white, 0.2),
                 transform: "translateY(-2px)",
-                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+                boxShadow: shadows.medium,
               },
               transition: "all 0.3s ease",
             }}
@@ -351,13 +352,13 @@ const NavigationBar = () => {
             onClick={handleMenu}
             sx={{
               color: "white",
-              background: "rgba(255, 255, 255, 0.1)",
+              background: alpha(colors.white, 0.1),
               backdropFilter: "blur(10px)",
-              border: "1px solid rgba(255, 255, 255, 0.2)",
+              border: `1px solid ${alpha(colors.white, 0.2)}`,
               "&:hover": {
-                background: "rgba(255, 255, 255, 0.2)",
+                background: alpha(colors.white, 0.2),
                 transform: "translateY(-2px)",
-                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+                boxShadow: shadows.medium,
               },
               transition: "all 0.3s ease",
             }}

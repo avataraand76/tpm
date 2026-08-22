@@ -2,29 +2,29 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import {
+  alpha,
+  AttachFile,
   Box,
   Button,
+  Close,
+  CloudUpload,
+  colors,
+  Delete,
+  Description,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  Link,
   List,
   ListItem,
-  ListItemText,
   ListItemIcon,
-  IconButton,
-  Typography,
-  Link,
+  ListItemText,
   Paper,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  useTheme,
-  useMediaQuery,
-} from "@mui/material";
-import {
-  AttachFile,
-  Delete,
-  CloudUpload,
-  Description,
-  Close,
-} from "@mui/icons-material";
+  radii,
+  Typography,
+  useResponsive,
+} from "../ui";
 
 const FileUploadComponent = ({
   onFilesChange,
@@ -32,8 +32,7 @@ const FileUploadComponent = ({
   disabled,
   showNotification,
 }) => {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const { isMobile } = useResponsive();
   const [selectedFiles, setSelectedFiles] = useState([]);
   const fileInputRef = useRef(null);
   const [previewFile, setPreviewFile] = useState(null); // {name, link}
@@ -140,7 +139,7 @@ const FileUploadComponent = ({
     <>
       <Paper
         variant="outlined"
-        sx={{ p: 2, borderRadius: "12px", mt: 2, mb: 1 }}
+        sx={{ p: 2, mt: 2, mb: 1 }}
       >
         <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
           File đính kèm
@@ -152,7 +151,6 @@ const FileUploadComponent = ({
               variant="outlined"
               component="label"
               startIcon={<CloudUpload />}
-              sx={{ borderRadius: "12px" }}
             >
               Chọn file
               <input
@@ -189,8 +187,8 @@ const FileUploadComponent = ({
                     )
                   }
                   sx={{
-                    bgcolor: "rgba(102, 126, 234, 0.05)",
-                    borderRadius: "8px",
+                    bgcolor: alpha(colors.brand.main, 0.05),
+                    borderRadius: `${radii.sm}px`,
                     mb: 0.5,
                   }}
                 >
@@ -226,8 +224,8 @@ const FileUploadComponent = ({
                   <ListItem
                     key={index}
                     sx={{
-                      bgcolor: "rgba(0, 0, 0, 0.03)",
-                      borderRadius: "8px",
+                      bgcolor: alpha(colors.black, 0.03),
+                      borderRadius: `${radii.sm}px`,
                       mb: 0.5,
                     }}
                   >

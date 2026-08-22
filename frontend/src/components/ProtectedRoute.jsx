@@ -2,7 +2,12 @@
 
 import React from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { Box, CircularProgress, Typography } from "@mui/material";
+import {
+  Box,
+  CircularProgress,
+  sx as preset,
+  Typography,
+} from "../ui";
 import { useAuth } from "../hooks/useAuth";
 
 const ProtectedRoute = ({ children }) => {
@@ -11,15 +16,7 @@ const ProtectedRoute = ({ children }) => {
 
   if (loading) {
     return (
-      <Box
-        sx={{
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          alignItems: "center",
-          height: "100vh",
-        }}
-      >
+      <Box sx={{ ...preset.centerFull, flexDirection: "column" }}>
         <CircularProgress size={60} />
         <Typography variant="h6" sx={{ mt: 2 }}>
           Đang tải...
