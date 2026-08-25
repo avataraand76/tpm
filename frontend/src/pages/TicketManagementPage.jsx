@@ -1709,7 +1709,7 @@ const TicketManagementPage = () => {
                           minHeight: "80px",
                           py: 2,
                           fontWeight: 600,
-                          fontSize: fontSizes.px14_4,
+                          fontSize: fontSizes.body,
                           textTransform: "none",
                           display: "flex",
                           flexDirection: "column",
@@ -1756,7 +1756,7 @@ const TicketManagementPage = () => {
                           minHeight: "80px",
                           py: 2,
                           fontWeight: 600,
-                          fontSize: fontSizes.px14_4,
+                          fontSize: fontSizes.body,
                           textTransform: "none",
                           display: "flex",
                           flexDirection: "column",
@@ -1807,7 +1807,7 @@ const TicketManagementPage = () => {
                         minHeight: "80px",
                         py: 2,
                         fontWeight: 600,
-                        fontSize: fontSizes.px14_4,
+                        fontSize: fontSizes.body,
                         textTransform: "none",
                         display: "flex",
                         flexDirection: "column",
@@ -1853,7 +1853,7 @@ const TicketManagementPage = () => {
                     width: { xs: "100%", md: "auto" },
                     "& .MuiTab-root": {
                       fontWeight: 600,
-                      fontSize: fontSizes.px16,
+                      fontSize: fontSizes.lead,
                       minWidth: 140,
                       borderRadius: `${radii.md}px`,
                       margin: "0 4px",
@@ -2013,98 +2013,82 @@ const TicketManagementPage = () => {
                       Thống kê phiếu nhập
                     </Typography>
                     {/* Hàng 1: Trạng thái */}
-                    <Grid container spacing={2} sx={{ mb: 2 }}>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Chờ duyệt: ${
-                            importStats.byStatus?.pending || 0
-                          }`}
-                          color="warning"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Đã duyệt: ${
-                            importStats.byStatus?.completed || 0
-                          }`}
-                          color="success"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Đã hủy: ${
-                            importStats.byStatus?.cancelled || 0
-                          }`}
-                          color="error"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                    </Grid>
+                    <Box sx={{ ...preset.chipRow, mb: 2 }}>
+                      <Chip
+                        label={`Chờ duyệt: ${
+                          importStats.byStatus?.pending || 0
+                        }`}
+                        color="warning"
+                        sx={{ fontWeight: 600 }}
+                      />
+                      <Chip
+                        label={`Đã duyệt: ${
+                          importStats.byStatus?.completed || 0
+                        }`}
+                        color="success"
+                        sx={{ fontWeight: 600 }}
+                      />
+                      <Chip
+                        label={`Đã hủy: ${
+                          importStats.byStatus?.cancelled || 0
+                        }`}
+                        color="error"
+                        sx={{ fontWeight: 600 }}
+                      />
+                    </Box>
                     {/* Hàng 2: Loại phiếu */}
-                    <Grid container spacing={2}>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Nhập mua mới: ${
-                            importStats.byType?.purchased || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: hexA(colors.blue.main, "11"),
-                            color: colors.blue.main,
-                          }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Sau bảo trì: ${
-                            importStats.byType?.maintenance_return || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: hexA(colors.orange.main, "11"),
-                            color: colors.orange.main,
-                          }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Nhập thuê máy: ${
-                            importStats.byType?.rented || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: hexA(colors.purple.main, "11"),
-                            color: colors.purple.main,
-                          }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Nhập mượn máy: ${
-                            importStats.byType?.borrowed || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: hexA(colors.blue.sky, "11"),
-                            color: colors.blue.sky,
-                          }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Trả (máy cho mượn): ${
-                            importStats.byType?.borrowed_out_return || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: hexA(colors.cyan.main, "11"),
-                            color: colors.cyan.main,
-                          }}
-                        />
-                      </Grid>
-                    </Grid>
+                    <Box sx={preset.chipRow}>
+                      <Chip
+                        label={`Nhập mua mới: ${
+                          importStats.byType?.purchased || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.blue.main, "11"),
+                          color: colors.blue.main,
+                        }}
+                      />
+                      <Chip
+                        label={`Sau bảo trì: ${
+                          importStats.byType?.maintenance_return || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.orange.main, "11"),
+                          color: colors.orange.main,
+                        }}
+                      />
+                      <Chip
+                        label={`Nhập thuê máy: ${
+                          importStats.byType?.rented || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.purple.main, "11"),
+                          color: colors.purple.main,
+                        }}
+                      />
+                      <Chip
+                        label={`Nhập mượn máy: ${
+                          importStats.byType?.borrowed || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.blue.sky, "11"),
+                          color: colors.blue.sky,
+                        }}
+                      />
+                      <Chip
+                        label={`Trả (máy cho mượn): ${
+                          importStats.byType?.borrowed_out_return || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.cyan.main, "11"),
+                          color: colors.cyan.main,
+                        }}
+                      />
+                    </Box>
                   </Box>
                 )}
 
@@ -2124,98 +2108,82 @@ const TicketManagementPage = () => {
                       Thống kê phiếu xuất
                     </Typography>
                     {/* Hàng 1: Trạng thái */}
-                    <Grid container spacing={2} sx={{ mb: 2 }}>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Chờ duyệt: ${
-                            exportStats.byStatus?.pending || 0
-                          }`}
-                          color="warning"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Đã duyệt: ${
-                            exportStats.byStatus?.completed || 0
-                          }`}
-                          color="success"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Đã hủy: ${
-                            exportStats.byStatus?.cancelled || 0
-                          }`}
-                          color="error"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                    </Grid>
+                    <Box sx={{ ...preset.chipRow, mb: 2 }}>
+                      <Chip
+                        label={`Chờ duyệt: ${
+                          exportStats.byStatus?.pending || 0
+                        }`}
+                        color="warning"
+                        sx={{ fontWeight: 600 }}
+                      />
+                      <Chip
+                        label={`Đã duyệt: ${
+                          exportStats.byStatus?.completed || 0
+                        }`}
+                        color="success"
+                        sx={{ fontWeight: 600 }}
+                      />
+                      <Chip
+                        label={`Đã hủy: ${
+                          exportStats.byStatus?.cancelled || 0
+                        }`}
+                        color="error"
+                        sx={{ fontWeight: 600 }}
+                      />
+                    </Box>
                     {/* Hàng 2: Loại phiếu */}
-                    <Grid container spacing={2}>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Xuất thanh lý: ${
-                            exportStats.byType?.liquidation || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: hexA(colors.red.main, "11"),
-                            color: colors.red.main,
-                          }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Bảo trì: ${
-                            exportStats.byType?.maintenance || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: hexA(colors.orange.main, "11"),
-                            color: colors.orange.main,
-                          }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Cho mượn máy: ${
-                            exportStats.byType?.borrowed_out || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: hexA(colors.cyan.main, "11"),
-                            color: colors.cyan.main,
-                          }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Trả (máy thuê): ${
-                            exportStats.byType?.rented_return || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: hexA(colors.purple.main, "11"),
-                            color: colors.purple.main,
-                          }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Trả (máy mượn): ${
-                            exportStats.byType?.borrowed_return || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: hexA(colors.blue.sky, "11"),
-                            color: colors.blue.sky,
-                          }}
-                        />
-                      </Grid>
-                    </Grid>
+                    <Box sx={preset.chipRow}>
+                      <Chip
+                        label={`Xuất thanh lý: ${
+                          exportStats.byType?.liquidation || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.red.main, "11"),
+                          color: colors.red.main,
+                        }}
+                      />
+                      <Chip
+                        label={`Bảo trì: ${
+                          exportStats.byType?.maintenance || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.orange.main, "11"),
+                          color: colors.orange.main,
+                        }}
+                      />
+                      <Chip
+                        label={`Cho mượn máy: ${
+                          exportStats.byType?.borrowed_out || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.cyan.main, "11"),
+                          color: colors.cyan.main,
+                        }}
+                      />
+                      <Chip
+                        label={`Trả (máy thuê): ${
+                          exportStats.byType?.rented_return || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.purple.main, "11"),
+                          color: colors.purple.main,
+                        }}
+                      />
+                      <Chip
+                        label={`Trả (máy mượn): ${
+                          exportStats.byType?.borrowed_return || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.blue.sky, "11"),
+                          color: colors.blue.sky,
+                        }}
+                      />
+                    </Box>
                   </Box>
                 )}
 
@@ -2234,40 +2202,32 @@ const TicketManagementPage = () => {
                     >
                       Thống kê phiếu điều chuyển
                     </Typography>
-                    <Grid container spacing={2}>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Chờ xác nhận: ${
-                            transferStats.pending_confirmation || 0
-                          }`}
-                          color="warning"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Chờ duyệt: ${
-                            transferStats.pending_approval || 0
-                          }`}
-                          color="warning"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Đã duyệt: ${transferStats.completed || 0}`}
-                          color="success"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Đã hủy: ${transferStats.cancelled || 0}`}
-                          color="error"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                    </Grid>
+                    <Box sx={preset.chipRow}>
+                      <Chip
+                        label={`Chờ xác nhận: ${
+                          transferStats.pending_confirmation || 0
+                        }`}
+                        color="warning"
+                        sx={{ fontWeight: 600 }}
+                      />
+                      <Chip
+                        label={`Chờ duyệt: ${
+                          transferStats.pending_approval || 0
+                        }`}
+                        color="warning"
+                        sx={{ fontWeight: 600 }}
+                      />
+                      <Chip
+                        label={`Đã duyệt: ${transferStats.completed || 0}`}
+                        color="success"
+                        sx={{ fontWeight: 600 }}
+                      />
+                      <Chip
+                        label={`Đã hủy: ${transferStats.cancelled || 0}`}
+                        color="error"
+                        sx={{ fontWeight: 600 }}
+                      />
+                    </Box>
                   </Box>
                 )}
               </Box>
@@ -3109,7 +3069,7 @@ const TicketManagementPage = () => {
                                     style={{
                                       margin: 0,
                                       paddingLeft: "1.2rem",
-                                      fontSize: fontSizes.px13_6,
+                                      fontSize: fontSizes.body,
                                       lineHeight: "1.5",
                                     }}
                                   >
@@ -3270,7 +3230,7 @@ const TicketManagementPage = () => {
                                                     sx={{
                                                       ml: 1,
                                                       height: 20,
-                                                      fontSize: fontSizes.px12,
+                                                      fontSize: fontSizes.small,
                                                       background: getStatusInfo(
                                                         machine.current_status
                                                       ).bg,
@@ -3288,7 +3248,7 @@ const TicketManagementPage = () => {
                                                       sx={{
                                                         ml: 0.5,
                                                         height: 20,
-                                                        fontSize: fontSizes.px12,
+                                                        fontSize: fontSizes.small,
                                                         background:
                                                           getStatusInfo(
                                                             machine.is_borrowed_or_rented_or_borrowed_out
@@ -3407,7 +3367,7 @@ const TicketManagementPage = () => {
                                                   sx={{
                                                     ml: 1,
                                                     height: 20,
-                                                    fontSize: fontSizes.px12,
+                                                    fontSize: fontSizes.small,
                                                     background: getStatusInfo(
                                                       machine.current_status
                                                     ).bg,
@@ -3425,7 +3385,7 @@ const TicketManagementPage = () => {
                                                     sx={{
                                                       ml: 0.5,
                                                       height: 20,
-                                                      fontSize: fontSizes.px12,
+                                                      fontSize: fontSizes.small,
                                                       background: getStatusInfo(
                                                         machine.is_borrowed_or_rented_or_borrowed_out
                                                       ).bg,
@@ -4714,7 +4674,7 @@ const TicketManagementPage = () => {
               boxShadow: shadows.overlay,
             }}
           >
-            <AlertTitle sx={{ fontWeight: "bold", fontSize: fontSizes.px17_6 }}>
+            <AlertTitle sx={{ fontWeight: "bold", fontSize: fontSizes.title }}>
               {notification.title}
             </AlertTitle>
             {notification.message}

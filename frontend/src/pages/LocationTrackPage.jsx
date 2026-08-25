@@ -350,7 +350,7 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
             "& .MuiTableCell-root": {
               borderBottom: `1px solid ${alpha(colors.grey[300], 0.4)}`,
               textAlign: "center",
-              fontSize: fontSizes.px14_4,
+              fontSize: fontSizes.body,
               transition: "all 0.2s ease-in-out",
               position: "relative",
             },
@@ -501,7 +501,7 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
                   backgroundColor: `${alpha(TOTAL_ROW_COLOR, 0.15)} !important`,
                   color: `${TOTAL_ROW_COLOR} !important`,
                   fontWeight: "bold",
-                  fontSize: `${fontSizes.px17_6} !important`,
+                  fontSize: `${fontSizes.title} !important`,
                   cursor: "pointer",
                   boxShadow: isSelected("ALL", "ALL")
                     ? `inset 0 0 0 2px ${TOTAL_ROW_COLOR}`
@@ -1651,7 +1651,7 @@ const LocationTrackPage = () => {
                   <Typography
                     variant="body2"
                     sx={{
-                      fontSize: fontSizes.px16,
+                      fontSize: fontSizes.lead,
                       color: "text.secondary",
                       whiteSpace: "nowrap",
                       overflow: "hidden",
@@ -1874,9 +1874,16 @@ const LocationTrackPage = () => {
                   variant="outlined"
                   sx={{
                     p: 2,
-                    display: "flex",
-                    flexDirection: "row", // Xếp các nút theo hàng ngang
-                    flexWrap: "wrap", // Tự động xuống hàng nếu hết chỗ
+                    // ĐIỆN THOẠI (<600px): 1 cột, mọi nút rộng bằng nhau.
+                    //   Khung chỉ rộng ~262px mà nhãn dài nhất ("Kho nguyên phụ
+                    //   liệu (32)") cần ~226px, nên 2 cột là không thể. Xếp ngang
+                    //   ở bề rộng này cho ra 11 dòng lởm chởm, mỗi nút một độ dài.
+                    // TỪ 600px: xếp ngang tự xuống dòng - tận dụng bề rộng tốt hơn
+                    //   lưới cột đều (ở 1536px: 2 dòng thay vì 3).
+                    display: { xs: "grid", sm: "flex" },
+                    gridTemplateColumns: "1fr",
+                    flexDirection: "row",
+                    flexWrap: "wrap",
                     gap: 1.5, // Khoảng cách giữa các nút
                     minHeight: "80px", // Chiều cao tối thiểu để chứa loading
                     alignItems: "flex-start",
@@ -1911,6 +1918,9 @@ const LocationTrackPage = () => {
                           borderRadius: `${radii.sm}px`,
                           textTransform: "none", // Không viết hoa
                           fontWeight: 600,
+                          // Trên điện thoại nút chiếm cả dòng -> canh trái để icon
+                          // và chữ thẳng cột, thay vì mỗi dòng lệch một kiểu.
+                          justifyContent: { xs: "flex-start", sm: "center" },
                         }}
                       >
                         {dept.name_department} ({dept.machine_count || 0})

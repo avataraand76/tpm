@@ -15,7 +15,7 @@ import {
 } from "../../theme";
 
 /**
- * @param {string}  accent      khoá màu trong theme/tokens.js (red|green|cyan|amber|purple|slate|brand)
+ * @param {string}  accent      khoá màu trong theme.js §3 (red|green|cyan|amber|purple|slate|brand)
  * @param {node}    icon        icon MUI, ví dụ <Receipt />
  * @param {string}  title       tiêu đề thẻ
  * @param {node}    description mô tả

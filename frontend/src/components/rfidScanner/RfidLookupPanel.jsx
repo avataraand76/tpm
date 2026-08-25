@@ -55,7 +55,7 @@ export const RfidLookupPanelBody = ({
       <Alert
         severity="error"
         onClose={() => setError(null)}
-        sx={{ borderRadius: RFID_DIALOG_RADIUS.alert, fontSize: fontSizes.px13_12 }}
+        sx={{ borderRadius: RFID_DIALOG_RADIUS.alert, fontSize: fontSizes.body }}
       >
         {error}
       </Alert>
@@ -68,7 +68,7 @@ export const RfidLookupPanelBody = ({
         onClose={() => setWarning(null)}
         sx={{
           borderRadius: RFID_DIALOG_RADIUS.alert,
-          fontSize: fontSizes.px13_12,
+          fontSize: fontSizes.body,
           "& .MuiAlert-message": { width: "100%" },
         }}
       >

@@ -1431,7 +1431,7 @@ const RfidRadarPanel = ({
                     color="error"
                     sx={{
                       "& .MuiBadge-badge": {
-                        fontSize: fontSizes.px12,
+                        fontSize: fontSizes.small,
                         fontWeight: "bold",
                         minWidth: "24px",
                         height: "24px",
@@ -1475,7 +1475,7 @@ const RfidRadarPanel = ({
                       bgcolor: alpha(colors.white, 0.25),
                       color: "white",
                       fontWeight: 700,
-                      fontSize: fontSizes.px15_2,
+                      fontSize: fontSizes.lead,
                     }}
                   />
                 </DialogTitle>
@@ -1633,7 +1633,7 @@ const RfidRadarPanel = ({
             boxShadow: shadows.overlay,
           }}
         >
-          <AlertTitle sx={{ fontWeight: "bold", fontSize: fontSizes.px17_6 }}>
+          <AlertTitle sx={{ fontWeight: "bold", fontSize: fontSizes.title }}>
             {snackbarTitle}
           </AlertTitle>
           {snackbarMessage}

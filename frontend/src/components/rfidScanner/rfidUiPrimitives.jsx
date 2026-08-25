@@ -241,7 +241,7 @@ export const RfidScanZone = ({
           borderRadius: RFID_DIALOG_RADIUS.input,
           bgcolor: RFID_CONTENT_BG,
           border: `1px solid ${alpha(colors.black, 0.06)}`,
-          fontSize: fontSizes.px12_48,
+          fontSize: fontSizes.small,
           color: v.iconColor,
           overflow: "hidden",
           whiteSpace: "nowrap",

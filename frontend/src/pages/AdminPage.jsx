@@ -152,7 +152,7 @@ const STICKY_LABEL_SX_BASE = {
   zIndex: 1,
   borderRight: `2px solid ${colors.brand.line}`,
   fontWeight: 500,
-  fontSize: fontSizes.px13_6,
+  fontSize: fontSizes.body,
   minWidth: 250,
   width: 250,
   maxWidth: 300,
@@ -186,7 +186,7 @@ const InlineEditCell = React.memo(function InlineEditCell({
         disabled={isSaving}
         sx={{
           flex: 1,
-          "& .MuiInputBase-input": { fontSize: fontSizes.px12_8, py: "5px" },
+          "& .MuiInputBase-input": { fontSize: fontSizes.small, py: "5px" },
         }}
       />
       <IconButton
@@ -260,7 +260,7 @@ const MatrixRow = React.memo(
                 variant="body2"
                 sx={{
                   fontWeight: 500,
-                  fontSize: fontSizes.px13_6,
+                  fontSize: fontSizes.body,
                   lineHeight: 1.4,
                   flex: 1,
                 }}
@@ -278,7 +278,7 @@ const MatrixRow = React.memo(
                   sx={{ color: colors.brand.main, p: "3px" }}
                   title="Chỉnh sửa"
                 >
-                  <Edit sx={{ fontSize: fontSizes.px24 }} />
+                  <Edit sx={{ fontSize: fontSizes.xl }} />
                 </IconButton>
                 <IconButton
                   size="medium"
@@ -290,7 +290,7 @@ const MatrixRow = React.memo(
                   {isDeleting ? (
                     <CircularProgress size={12} />
                   ) : (
-                    <Delete sx={{ fontSize: fontSizes.px24 }} />
+                    <Delete sx={{ fontSize: fontSizes.xl }} />
                   )}
                 </IconButton>
               </Stack>
@@ -364,7 +364,7 @@ const SCHEDULE_LABEL_SX_BASE = {
   zIndex: 1,
   borderRight: `2px solid ${colors.brand.line}`,
   fontWeight: 500,
-  fontSize: fontSizes.px13_6,
+  fontSize: fontSizes.body,
   minWidth: 220,
   width: 220,
   maxWidth: 280,
@@ -443,7 +443,7 @@ const ScheduleRow = React.memo(
               {isDirty && (
                 <Box
                   component="span"
-                  sx={{ color: colors.orange.main, fontSize: fontSizes.px11_2, lineHeight: 1 }}
+                  sx={{ color: colors.orange.main, fontSize: fontSizes.label, lineHeight: 1 }}
                 >
                   ●
                 </Box>
@@ -455,7 +455,7 @@ const ScheduleRow = React.memo(
                 px: 0.75,
                 py: 0.1,
                 borderRadius: `${radii.md}px`,
-                fontSize: fontSizes.px11_2,
+                fontSize: fontSizes.label,
                 fontWeight: 600,
                 color: muiColors.indigo["A700"],
                 backgroundColor: colors.brand.wash,
@@ -2089,7 +2089,7 @@ const AdminPage = () => {
                 "& .MuiTab-root": {
                   textTransform: "none",
                   fontWeight: 600,
-                  fontSize: fontSizes.px16,
+                  fontSize: fontSizes.lead,
                   borderRadius: `${radii.md}px ${radii.md}px 0 0`,
                 },
                 "& .Mui-selected": {
@@ -2262,7 +2262,7 @@ const AdminPage = () => {
                             fontWeight: 700,
                             color: "text.secondary",
                             textTransform: "uppercase",
-                            fontSize: fontSizes.px12,
+                            fontSize: fontSizes.small,
                             letterSpacing: "0.5px",
                           }}
                         >
@@ -2294,7 +2294,7 @@ const AdminPage = () => {
                                   <ListItemText
                                     primary={loc.name_location}
                                     primaryTypographyProps={{
-                                      fontSize: fontSizes.px15_2,
+                                      fontSize: fontSizes.lead,
                                       fontWeight: 500,
                                     }}
                                   />
@@ -2373,7 +2373,7 @@ const AdminPage = () => {
                           primary={row.name_category}
                           primaryTypographyProps={{
                             fontWeight: 600,
-                            fontSize: fontSizes.px16_8,
+                            fontSize: fontSizes.title,
                           }}
                         />
                       </ListItem>
@@ -2397,7 +2397,7 @@ const AdminPage = () => {
                       "& .MuiTab-root": {
                         textTransform: "none",
                         fontWeight: 600,
-                        fontSize: fontSizes.px15_2,
+                        fontSize: fontSizes.lead,
                         minHeight: 48,
                       },
                       "& .Mui-selected": {
@@ -2442,7 +2442,7 @@ const AdminPage = () => {
                           sx={{
                             p: 2.5,
                             borderRadius: `${radii.lg}px`,
-                            borderColor: colors.grey[300],
+                            borderColor: colors.navy.wash,
                           }}
                         >
                           <Box
@@ -2607,7 +2607,7 @@ const AdminPage = () => {
                           sx={{
                             p: 2.5,
                             borderRadius: `${radii.lg}px`,
-                            borderColor: colors.grey[300],
+                            borderColor: colors.navy.wash,
                           }}
                         >
                           <Box
@@ -2934,7 +2934,7 @@ const AdminPage = () => {
                                 variant="outlined"
                                 sx={{
                                   p: 2,
-                                  bgcolor: colors.grey[50],
+                                  bgcolor: colors.navy.lightest,
                                   borderColor: colors.brand.line,
                                 }}
                               >
@@ -2960,7 +2960,7 @@ const AdminPage = () => {
                                       <Typography
                                         variant="subtitle1"
                                         fontWeight={700}
-                                        color={colors.grey[900]}
+                                        color={colors.navy.dark}
                                       >
                                         {machineTypes.find(
                                           (t) =>
@@ -3087,7 +3087,7 @@ const AdminPage = () => {
                                   <Typography
                                     variant="subtitle2"
                                     fontWeight={700}
-                                    color={colors.grey[700]}
+                                    color={colors.navy.light}
                                     mb={1.5}
                                   >
                                     Thông số khi kết hợp với Đặc tính (Loại máy
@@ -3118,7 +3118,7 @@ const AdminPage = () => {
                                           sx={{
                                             p: 2,
                                             bgcolor: "white",
-                                            borderColor: colors.grey[300],
+                                            borderColor: colors.navy.wash,
                                           }}
                                         >
                                           <Stack
@@ -3146,7 +3146,7 @@ const AdminPage = () => {
                                                 <Typography
                                                   variant="subtitle1"
                                                   fontWeight={700}
-                                                  color={colors.grey[800]}
+                                                  color={colors.navy.main}
                                                 >
                                                   {typeName} {attr.name}
                                                 </Typography>
@@ -3261,8 +3261,8 @@ const AdminPage = () => {
                             p: 5,
                             borderRadius: `${radii.lg}px`,
                             textAlign: "center",
-                            bgcolor: colors.grey[50],
-                            borderColor: colors.grey[300],
+                            bgcolor: colors.navy.lightest,
+                            borderColor: colors.navy.wash,
                           }}
                         >
                           <Typography
@@ -4025,7 +4025,7 @@ const AdminPage = () => {
                     "& .MuiTab-root": {
                       textTransform: "none",
                       fontWeight: 600,
-                      fontSize: fontSizes.px15_2,
+                      fontSize: fontSizes.lead,
                     },
                     "& .Mui-selected": {
                       color: colors.brand.alt,
@@ -4199,7 +4199,7 @@ const AdminPage = () => {
                                     fontWeight: 700,
                                     minWidth: 250,
                                     width: 250,
-                                    fontSize: fontSizes.px14,
+                                    fontSize: fontSizes.body,
                                     whiteSpace: "nowrap",
                                   }}
                                 >
@@ -4225,7 +4225,7 @@ const AdminPage = () => {
                                         width: 100,
                                         whiteSpace: "normal",
                                         lineHeight: 1.3,
-                                        fontSize: fontSizes.px12,
+                                        fontSize: fontSizes.small,
                                         // Màu do React quản lý (dirty/normal)
                                         // Hover do DOM ref quản lý (không re-render)
                                         backgroundColor: isDirty
@@ -4244,7 +4244,7 @@ const AdminPage = () => {
                                           component="span"
                                           sx={{
                                             display: "block",
-                                            fontSize: fontSizes.px9_6,
+                                            fontSize: fontSizes.caption,
                                             color: muiColors.deepOrange[900],
                                             fontWeight: 700,
                                             mt: 0.3,
@@ -4556,7 +4556,7 @@ const AdminPage = () => {
                                     fontWeight: 700,
                                     minWidth: 220,
                                     width: 220,
-                                    fontSize: fontSizes.px14,
+                                    fontSize: fontSizes.body,
                                   }}
                                 >
                                   <Box
@@ -4570,7 +4570,7 @@ const AdminPage = () => {
                                     <span>Loại máy</span>
                                     <span
                                       style={{
-                                        fontSize: fontSizes.px11_2,
+                                        fontSize: fontSizes.label,
                                         fontWeight: 500,
                                         color: colors.grey[600],
                                       }}
@@ -4592,7 +4592,7 @@ const AdminPage = () => {
                                         fontWeight: 700,
                                         minWidth: 52,
                                         width: 52,
-                                        fontSize: fontSizes.px12_8,
+                                        fontSize: fontSizes.small,
                                         whiteSpace: "nowrap",
                                       }}
                                     >
@@ -5134,12 +5134,12 @@ const AdminPage = () => {
             </Stack>
             <Box
               sx={{
-                bgcolor: colors.grey[900],
-                color: colors.grey[300],
+                bgcolor: colors.navy.darkest,
+                color: colors.navy.wash,
                 p: 2,
                 borderRadius: `${radii.md}px`,
                 fontFamily: "monospace",
-                fontSize: fontSizes.px12_8,
+                fontSize: fontSizes.small,
                 whiteSpace: "pre-wrap",
                 maxHeight: 480,
                 overflowY: "auto",

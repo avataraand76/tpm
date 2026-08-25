@@ -440,7 +440,7 @@ const EvidenceImageFrame = ({ src, title, onRemove }) => {
                 px: 1,
                 minWidth: 60,
                 textAlign: "center",
-                fontSize: fontSizes.px13_6,
+                fontSize: fontSizes.body,
               }}
             >
               {Math.round(scale * 100)}%
@@ -764,7 +764,7 @@ const BulkRfidDialog = ({ open, onClose, year, month, onOpenHistory }) => {
                                       fontWeight={700}
                                       sx={{
                                         ...preset.ellipsis,
-                                        fontSize: fontSizes.px13_6,
+                                        fontSize: fontSizes.body,
                                         color: "warning.dark",
                                       }}
                                     >
@@ -787,7 +787,7 @@ const BulkRfidDialog = ({ open, onClose, year, month, onOpenHistory }) => {
                                     size="small"
                                     color="warning"
                                     sx={{
-                                      fontSize: fontSizes.px10_4,
+                                      fontSize: fontSizes.caption,
                                       height: 20,
                                       fontWeight: 600,
                                     }}
@@ -834,7 +834,7 @@ const BulkRfidDialog = ({ open, onClose, year, month, onOpenHistory }) => {
                                       sx={{
                                         color: "warning.dark",
                                         fontWeight: 700,
-                                        fontSize: fontSizes.px12,
+                                        fontSize: fontSizes.small,
                                       }}
                                     >
                                       Vui lòng kiểm tra lại
@@ -845,7 +845,7 @@ const BulkRfidDialog = ({ open, onClose, year, month, onOpenHistory }) => {
                                       color="warning"
                                       sx={{
                                         height: 18,
-                                        fontSize: fontSizes.px9_92,
+                                        fontSize: fontSizes.caption,
                                         fontWeight: 700,
                                       }}
                                     />
@@ -897,7 +897,7 @@ const BulkRfidDialog = ({ open, onClose, year, month, onOpenHistory }) => {
                                       fontWeight={700}
                                       sx={{
                                         ...preset.ellipsis,
-                                        fontSize: fontSizes.px13_6,
+                                        fontSize: fontSizes.body,
                                         color: "text.secondary",
                                       }}
                                     >
@@ -908,7 +908,7 @@ const BulkRfidDialog = ({ open, onClose, year, month, onOpenHistory }) => {
                                       fontWeight={700}
                                       sx={{
                                         ...preset.ellipsis,
-                                        fontSize: fontSizes.px13_6,
+                                        fontSize: fontSizes.body,
                                         color: "text.secondary",
                                       }}
                                     >
@@ -931,7 +931,7 @@ const BulkRfidDialog = ({ open, onClose, year, month, onOpenHistory }) => {
                                     label={statusCfg.label}
                                     size="small"
                                     sx={{
-                                      fontSize: fontSizes.px10_4,
+                                      fontSize: fontSizes.caption,
                                       height: 20,
                                       bgcolor: statusCfg.bg,
                                       color: statusCfg.color,
@@ -1050,7 +1050,7 @@ const BulkRfidDialog = ({ open, onClose, year, month, onOpenHistory }) => {
                                       sx={{
                                         color: "text.disabled",
                                         fontWeight: 700,
-                                        fontSize: fontSizes.px12,
+                                        fontSize: fontSizes.small,
                                       }}
                                     >
                                       Tháng {month}/{year}
@@ -1060,7 +1060,7 @@ const BulkRfidDialog = ({ open, onClose, year, month, onOpenHistory }) => {
                                       size="small"
                                       sx={{
                                         height: 18,
-                                        fontSize: fontSizes.px9_92,
+                                        fontSize: fontSizes.caption,
                                         fontWeight: 700,
                                         bgcolor: colors.grey[300],
                                         color: colors.grey[600],
@@ -1499,12 +1499,12 @@ const MaintenanceHistoryDialog = ({
 
   const labelSx = {
     fontWeight: 700,
-    fontSize: fontSizes.px13_12,
+    fontSize: fontSizes.body,
     color: colors.grey[800],
     minWidth: 160,
     flexShrink: 0,
   };
-  const valueSx = { fontSize: fontSizes.px13_12, color: colors.grey[900] };
+  const valueSx = { fontSize: fontSizes.body, color: colors.grey[900] };
 
   const InfoRow = ({ label, value }) => {
     if (!value && value !== 0) return null;
@@ -2000,7 +2000,7 @@ const MaintenanceHistoryDialog = ({
           px: 1.5,
           py: 0.5,
           borderRadius: `${radii.sm}px`,
-          fontSize: fontSizes.px12_8,
+          fontSize: fontSizes.small,
           display: "inline-block",
         }}
       >
@@ -2054,7 +2054,7 @@ const MaintenanceHistoryDialog = ({
                     icon={
                       <Icon
                         sx={{
-                          fontSize: `${fontSizes.px14} !important`,
+                          fontSize: `${fontSizes.body} !important`,
                           color: `${sc.color} !important`,
                         }}
                       />
@@ -2066,7 +2066,7 @@ const MaintenanceHistoryDialog = ({
                       color: sc.color,
                       border: `1px solid ${sc.borderColor}`,
                       fontWeight: 700,
-                      fontSize: fontSizes.px11_52,
+                      fontSize: fontSizes.label,
                     }}
                   />
                 );
@@ -2153,7 +2153,7 @@ const MaintenanceHistoryDialog = ({
                   label={
                     <Typography
                       sx={{
-                        fontSize: fontSizes.px13_6,
+                        fontSize: fontSizes.body,
                         fontWeight: isNew ? 700 : 400,
                       }}
                     >
@@ -2175,7 +2175,7 @@ const MaintenanceHistoryDialog = ({
                   label={
                     <Typography
                       sx={{
-                        fontSize: fontSizes.px13_6,
+                        fontSize: fontSizes.body,
                         fontWeight: !isNew ? 700 : 400,
                       }}
                     >
@@ -2237,7 +2237,7 @@ const MaintenanceHistoryDialog = ({
               <Typography
                 variant="body2"
                 fontWeight={700}
-                sx={{ mb: 0.75, fontSize: fontSizes.px12_8, color: colors.grey[700] }}
+                sx={{ mb: 0.75, fontSize: fontSizes.small, color: colors.grey[700] }}
               >
                 a. Lịch xích sửa chữa
               </Typography>
@@ -2322,7 +2322,7 @@ const MaintenanceHistoryDialog = ({
                     >
                       <Typography
                         variant="body2"
-                        sx={{ fontSize: fontSizes.px13_12, whiteSpace: "pre-wrap" }}
+                        sx={{ fontSize: fontSizes.body, whiteSpace: "pre-wrap" }}
                       >
                         {machine.note}
                       </Typography>
@@ -2337,7 +2337,7 @@ const MaintenanceHistoryDialog = ({
               <Typography
                 variant="body2"
                 fontWeight={700}
-                sx={{ mb: 0.75, fontSize: fontSizes.px12_8, color: colors.grey[700] }}
+                sx={{ mb: 0.75, fontSize: fontSizes.small, color: colors.grey[700] }}
               >
                 b. Nội dung xem xét bảo dưỡng
               </Typography>
@@ -2361,7 +2361,7 @@ const MaintenanceHistoryDialog = ({
                       <Typography
                         variant="body2"
                         sx={{
-                          fontSize: fontSizes.px13_12,
+                          fontSize: fontSizes.body,
                           color: item.is_check ? colors.green.main : "text.primary",
                           textDecoration: item.is_check
                             ? "line-through"
@@ -2482,7 +2482,7 @@ const MaintenanceHistoryDialog = ({
                         key={col}
                         sx={{
                           fontWeight: 700,
-                          fontSize: fontSizes.px12_48,
+                          fontSize: fontSizes.small,
                           color: colors.grey[700],
                           borderBottom: `2px solid ${colors.grey[300]}`,
                           py: 0.75,
@@ -2533,7 +2533,7 @@ const MaintenanceHistoryDialog = ({
                               rowSpan={yearGroup.length}
                               sx={{
                                 fontWeight: 700,
-                                fontSize: fontSizes.px13_12,
+                                fontSize: fontSizes.body,
                                 color: colors.grey[900],
                                 verticalAlign: "middle",
                                 textAlign: "center",
@@ -2551,7 +2551,7 @@ const MaintenanceHistoryDialog = ({
                             sx={{
                               px: 1.5,
                               py: 0.75,
-                              fontSize: fontSizes.px12_8,
+                              fontSize: fontSizes.small,
                               whiteSpace: "nowrap",
                             }}
                           >
@@ -2564,7 +2564,7 @@ const MaintenanceHistoryDialog = ({
                               icon={
                                 <Icon
                                   sx={{
-                                    fontSize: `${fontSizes.px12} !important`,
+                                    fontSize: `${fontSizes.small} !important`,
                                     color: `${sc.color} !important`,
                                   }}
                                 />
@@ -2576,7 +2576,7 @@ const MaintenanceHistoryDialog = ({
                                 color: sc.color,
                                 border: `1px solid ${sc.borderColor}`,
                                 fontWeight: 700,
-                                fontSize: fontSizes.px11_2,
+                                fontSize: fontSizes.label,
                                 height: 20,
                                 "& .MuiChip-label": { px: 0.75 },
                                 "& .MuiChip-icon": { ml: 0.5 },
@@ -2589,7 +2589,7 @@ const MaintenanceHistoryDialog = ({
                             sx={{
                               px: 1.5,
                               py: 0.75,
-                              fontSize: fontSizes.px12_48,
+                              fontSize: fontSizes.small,
                               color: "text.secondary",
                               whiteSpace: "nowrap",
                             }}
@@ -2602,7 +2602,7 @@ const MaintenanceHistoryDialog = ({
                             sx={{
                               px: 1.5,
                               py: 0.75,
-                              fontSize: fontSizes.px12_48,
+                              fontSize: fontSizes.small,
                               color: "text.secondary",
                             }}
                           >
@@ -3179,7 +3179,7 @@ const MaintenanceHistoryDialog = ({
         fullWidth
         PaperProps={{ sx: { borderRadius: `${radii.lg}px` } }}
       >
-        <DialogTitle sx={{ fontWeight: 700, fontSize: fontSizes.px16_8, pb: 1 }}>
+        <DialogTitle sx={{ fontWeight: 700, fontSize: fontSizes.title, pb: 1 }}>
           {confirmAction?.title}
         </DialogTitle>
         <DialogContent sx={{ pb: 1 }}>
@@ -3300,7 +3300,7 @@ const MachineCard = React.memo(({ machine, onClick }) => {
               fontWeight={700}
               sx={{
                 ...preset.ellipsis,
-                fontSize: fontSizes.px13_6,
+                fontSize: fontSizes.body,
                 color: colors.grey[900],
               }}
             >
@@ -3311,7 +3311,7 @@ const MachineCard = React.memo(({ machine, onClick }) => {
               fontWeight={700}
               sx={{
                 ...preset.ellipsis,
-                fontSize: fontSizes.px13_6,
+                fontSize: fontSizes.body,
                 color: colors.grey[900],
               }}
             >
@@ -3340,7 +3340,7 @@ const MachineCard = React.memo(({ machine, onClick }) => {
               label={statusCfg.label}
               size="small"
               sx={{
-                fontSize: fontSizes.px10_4,
+                fontSize: fontSizes.caption,
                 height: 20,
                 bgcolor: statusCfg.bg,
                 color: statusCfg.color,
@@ -3356,7 +3356,7 @@ const MachineCard = React.memo(({ machine, onClick }) => {
                   }
                   size="small"
                   sx={{
-                    fontSize: fontSizes.px10_4,
+                    fontSize: fontSizes.caption,
                     height: 20,
                     bgcolor:
                       STATUS_CONFIG[
@@ -3468,7 +3468,7 @@ const MachineCard = React.memo(({ machine, onClick }) => {
                       color: item.is_check ? colors.green.main : "text.secondary",
                       textDecoration: item.is_check ? "line-through" : "none",
                       ...preset.ellipsis,
-                      fontSize: fontSizes.px11_2,
+                      fontSize: fontSizes.label,
                     }}
                   >
                     {item.name}
@@ -3479,7 +3479,7 @@ const MachineCard = React.memo(({ machine, onClick }) => {
                 <Typography
                   variant="caption"
                   color="primary"
-                  sx={{ fontSize: fontSizes.px11_2 }}
+                  sx={{ fontSize: fontSizes.label }}
                 >
                   +{contentList.length - 3} nội dung khác
                 </Typography>
@@ -3497,7 +3497,7 @@ const MachineCard = React.memo(({ machine, onClick }) => {
           >
             <Typography
               variant="caption"
-              sx={{ color: accents.brand.from, fontWeight: 700, fontSize: fontSizes.px12 }}
+              sx={{ color: accents.brand.from, fontWeight: 700, fontSize: fontSizes.small }}
             >
               Ngày {machine.day}/{machine.month}/{machine.year}
             </Typography>
@@ -3505,7 +3505,7 @@ const MachineCard = React.memo(({ machine, onClick }) => {
               icon={
                 <MaintIcon
                   sx={{
-                    fontSize: `${fontSizes.px11} !important`,
+                    fontSize: `${fontSizes.label} !important`,
                     color: `${maintStatusCfg.color} !important`,
                   }}
                 />
@@ -3514,7 +3514,7 @@ const MachineCard = React.memo(({ machine, onClick }) => {
               size="small"
               sx={{
                 height: 18,
-                fontSize: fontSizes.px9_92,
+                fontSize: fontSizes.caption,
                 fontWeight: 700,
                 bgcolor: maintStatusCfg.bg,
                 color: maintStatusCfg.color,
@@ -3579,7 +3579,7 @@ const CalendarCard = ({
                 py: 0.5,
                 color: i === 6 ? colors.red.main : "text.secondary",
                 fontWeight: 600,
-                fontSize: fontSizes.px12_48,
+                fontSize: fontSizes.small,
               }}
             >
               {d}
@@ -3641,7 +3641,7 @@ const CalendarCard = ({
                   variant="body2"
                   fontWeight={isToday(day) || isSelected ? 700 : 400}
                   sx={{
-                    fontSize: fontSizes.px12_8,
+                    fontSize: fontSizes.small,
                     color: isSelected
                       ? accents.brand.from
                       : isToday(day)
@@ -3658,7 +3658,7 @@ const CalendarCard = ({
                   <Typography
                     variant="caption"
                     sx={{
-                      fontSize: fontSizes.px9_6,
+                      fontSize: fontSizes.caption,
                       fontWeight: 700,
                       color: countColor,
                       lineHeight: 1,
@@ -3777,7 +3777,7 @@ const GroupedByDay = ({
                       size="small"
                       sx={{
                         height: 18,
-                        fontSize: fontSizes.px10_4,
+                        fontSize: fontSizes.caption,
                         bgcolor: alpha(colors.brand.main, 0.12),
                         color: accents.brand.from,
                         fontWeight: 700,
@@ -3790,7 +3790,7 @@ const GroupedByDay = ({
                       size="small"
                       sx={{
                         height: 18,
-                        fontSize: fontSizes.px10_4,
+                        fontSize: fontSizes.caption,
                         bgcolor: colors.grey[100],
                         color: colors.grey[500],
                       }}
@@ -3832,7 +3832,7 @@ const GroupedByDay = ({
 
 // ==================== Filter helpers ====================
 const FILTER_INPUT_SX = {
-  "& .MuiOutlinedInput-root": { borderRadius: `${radii.md}px`, fontSize: fontSizes.px13_12 },
+  "& .MuiOutlinedInput-root": { borderRadius: `${radii.md}px`, fontSize: fontSizes.body },
 };
 
 const FilterSelect = ({
@@ -3867,7 +3867,7 @@ const FilterSelect = ({
       />
     )}
     renderOption={(props, option) => (
-      <Box component="li" {...props} sx={{ fontSize: fontSizes.px13_12 }}>
+      <Box component="li" {...props} sx={{ fontSize: fontSizes.body }}>
         {option}
       </Box>
     )}
@@ -3883,7 +3883,7 @@ const FilterGroup = ({ label, children }) => (
       sx={{
         display: "block",
         mb: 0.5,
-        fontSize: fontSizes.px11_2,
+        fontSize: fontSizes.label,
         fontWeight: 600,
         textTransform: "uppercase",
         letterSpacing: "0.04em",
@@ -4669,7 +4669,7 @@ const MaintenanceSchedulePage = () => {
                         color: machineCodeInput ? accents.brand.from : "text.secondary",
                         textTransform: "uppercase",
                         letterSpacing: "0.04em",
-                        fontSize: fontSizes.px11_2,
+                        fontSize: fontSizes.label,
                       }}
                     >
                       Tìm kiếm máy
@@ -4696,7 +4696,7 @@ const MaintenanceSchedulePage = () => {
                               style={{
                                 margin: 0,
                                 paddingLeft: "1.2rem",
-                                fontSize: fontSizes.px13_6,
+                                fontSize: fontSizes.body,
                                 lineHeight: "1.5",
                               }}
                             >
@@ -4743,10 +4743,10 @@ const MaintenanceSchedulePage = () => {
                           sx={{
                             "& .MuiOutlinedInput-root": {
                               borderRadius: `${radii.md}px`,
-                              fontSize: fontSizes.px13_12,
+                              fontSize: fontSizes.body,
                             },
                             "& .MuiFormHelperText-root": {
-                              fontSize: fontSizes.px10_88,
+                              fontSize: fontSizes.label,
                               mx: 0.5,
                             },
                           }}
@@ -4825,7 +4825,7 @@ const MaintenanceSchedulePage = () => {
                                         variant="body2"
                                         fontWeight={600}
                                         sx={{
-                                          fontSize: fontSizes.px12_48,
+                                          fontSize: fontSizes.small,
                                           color: colors.grey[800],
                                         }}
                                       >
@@ -4839,7 +4839,7 @@ const MaintenanceSchedulePage = () => {
                                       <Typography
                                         variant="caption"
                                         color="text.secondary"
-                                        sx={{ fontSize: fontSizes.px10_88 }}
+                                        sx={{ fontSize: fontSizes.label }}
                                       >
                                         Serial: {machine.serial_machine || "-"}
                                       </Typography>
@@ -4902,7 +4902,7 @@ const MaintenanceSchedulePage = () => {
                       borderRadius: `${radii.md}px`,
                       textTransform: "none",
                       fontWeight: 600,
-                      fontSize: fontSizes.px12_48,
+                      fontSize: fontSizes.small,
                       py: 1,
                       background:
                         gradients.teal45,
@@ -4930,7 +4930,7 @@ const MaintenanceSchedulePage = () => {
                       borderRadius: `${radii.md}px`,
                       textTransform: "none",
                       fontWeight: 600,
-                      fontSize: fontSizes.px12_48,
+                      fontSize: fontSizes.small,
                       py: 1,
                       borderColor: colors.teal.main,
                       color: colors.teal.main,
@@ -4957,7 +4957,7 @@ const MaintenanceSchedulePage = () => {
                       borderRadius: `${radii.md}px`,
                       textTransform: "none",
                       fontWeight: 600,
-                      fontSize: fontSizes.px12_48,
+                      fontSize: fontSizes.small,
                       py: 1,
                       borderColor: accents.brand.from,
                       color: accents.brand.from,
@@ -5183,7 +5183,7 @@ const MaintenanceSchedulePage = () => {
                                 ? opt.color || accents.brand.from
                                 : "text.secondary",
                               fontWeight: isActive ? 700 : 400,
-                              fontSize: fontSizes.px11_52,
+                              fontSize: fontSizes.label,
                               cursor: "pointer",
                               transition: "all 0.15s ease",
                               "&:hover": {
@@ -5272,13 +5272,13 @@ const MaintenanceSchedulePage = () => {
                             size="small"
                             onDelete={f.onDel}
                             icon={React.cloneElement(f.icon, {
-                              sx: { fontSize: `${fontSizes.px13} !important` },
+                              sx: { fontSize: `${fontSizes.small} !important` },
                             })}
                             sx={{
                               bgcolor: alpha(f.color, 0.1),
                               color: f.color,
                               fontWeight: 600,
-                              fontSize: fontSizes.px10_88,
+                              fontSize: fontSizes.label,
                               "& .MuiChip-deleteIcon": { color: f.color },
                             }}
                           />
@@ -5394,7 +5394,7 @@ const MaintenanceSchedulePage = () => {
                           <Typography
                             variant="caption"
                             color="text.secondary"
-                            sx={{ fontSize: fontSizes.px9_92, lineHeight: 1.1 }}
+                            sx={{ fontSize: fontSizes.caption, lineHeight: 1.1 }}
                           >
                             {s.label}
                           </Typography>
@@ -5402,7 +5402,7 @@ const MaintenanceSchedulePage = () => {
                             <Typography
                               variant="caption"
                               sx={{
-                                fontSize: fontSizes.px9_28,
+                                fontSize: fontSizes.caption,
                                 color: "text.secondary",
                                 display: "block",
                                 lineHeight: 1,
@@ -5540,7 +5540,7 @@ const MaintenanceSchedulePage = () => {
                           bgcolor: alpha(colors.brand.main, 0.1),
                           color: accents.brand.from,
                           fontWeight: 700,
-                          fontSize: fontSizes.px11_52,
+                          fontSize: fontSizes.label,
                         }}
                       />
                       {selectedDay && (

@@ -103,7 +103,7 @@ const LinedTextarea = ({ value, onChange, rows = 10, placeholder = "" }) => {
     backgroundColor: "transparent",
     padding: paddingY,
     lineHeight: lineHeight, // Dùng line-height cố định
-    fontSize: fontSizes.px16,
+    fontSize: fontSizes.lead,
     boxSizing: "border-box",
     // Tính toán chiều cao: (số dòng * chiều cao dòng) + (padding * 2)
     height: `calc(${rows} * ${lineHeight} + 2 * ${paddingY})`,
@@ -833,7 +833,7 @@ const UpdateRfidPage = () => {
                         <TableCell
                           sx={{
                             fontWeight: 600,
-                            fontSize: fontSizes.px15_2,
+                            fontSize: fontSizes.lead,
                             padding: "10px",
                           }}
                         >
@@ -842,7 +842,7 @@ const UpdateRfidPage = () => {
                         <TableCell
                           sx={{
                             fontWeight: 600,
-                            fontSize: fontSizes.px15_2,
+                            fontSize: fontSizes.lead,
                             padding: "10px",
                           }}
                         >
@@ -851,7 +851,7 @@ const UpdateRfidPage = () => {
                         <TableCell
                           sx={{
                             fontWeight: 600,
-                            fontSize: fontSizes.px15_2,
+                            fontSize: fontSizes.lead,
                             padding: "10px",
                           }}
                         >
@@ -860,7 +860,7 @@ const UpdateRfidPage = () => {
                         <TableCell
                           sx={{
                             fontWeight: 600,
-                            fontSize: fontSizes.px15_2,
+                            fontSize: fontSizes.lead,
                             padding: "10px",
                           }}
                         >
@@ -869,7 +869,7 @@ const UpdateRfidPage = () => {
                         <TableCell
                           sx={{
                             fontWeight: 600,
-                            fontSize: fontSizes.px15_2,
+                            fontSize: fontSizes.lead,
                             padding: "10px",
                           }}
                         >
@@ -878,7 +878,7 @@ const UpdateRfidPage = () => {
                         <TableCell
                           sx={{
                             fontWeight: 600,
-                            fontSize: fontSizes.px15_2,
+                            fontSize: fontSizes.lead,
                             padding: "10px",
                             minWidth: 200,
                           }}
@@ -897,7 +897,7 @@ const UpdateRfidPage = () => {
                           statusIcon = (
                             <ErrorOutline
                               color="error"
-                              sx={{ fontSize: fontSizes.px17_6 }}
+                              sx={{ fontSize: fontSizes.title }}
                             />
                           );
                           rfidColor = "text.secondary";
@@ -906,7 +906,7 @@ const UpdateRfidPage = () => {
                           statusIcon = (
                             <ErrorOutline
                               color="error"
-                              sx={{ fontSize: fontSizes.px17_6 }}
+                              sx={{ fontSize: fontSizes.title }}
                             />
                           );
                           rfidColor = "error.main";
@@ -915,7 +915,7 @@ const UpdateRfidPage = () => {
                           statusIcon = (
                             <CheckCircleOutline
                               color="success"
-                              sx={{ fontSize: fontSizes.px17_6 }}
+                              sx={{ fontSize: fontSizes.title }}
                             />
                           );
                           rfidColor = "success.main";
@@ -924,7 +924,7 @@ const UpdateRfidPage = () => {
                           statusIcon = (
                             <Autorenew
                               color="primary"
-                              sx={{ fontSize: fontSizes.px17_6 }}
+                              sx={{ fontSize: fontSizes.title }}
                             />
                           );
                           rfidColor = "primary.main";
@@ -1085,7 +1085,7 @@ const UpdateRfidPage = () => {
             },
           }}
         >
-          <AlertTitle sx={{ fontWeight: "bold", fontSize: fontSizes.px17_6 }}>
+          <AlertTitle sx={{ fontWeight: "bold", fontSize: fontSizes.title }}>
             {notification.title}
           </AlertTitle>
           {notification.message}

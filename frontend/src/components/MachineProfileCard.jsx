@@ -86,7 +86,7 @@ const SectionTitle = ({ children }) => (
         px: 1.5,
         py: 0.5,
         borderRadius: `${radii.sm}px`,
-        fontSize: fontSizes.px12_8,
+        fontSize: fontSizes.small,
         display: "inline-block",
       }}
     >
@@ -102,7 +102,7 @@ const InfoRow = ({ label, value }) => {
       <TableCell
         sx={{
           fontWeight: 700,
-          fontSize: fontSizes.px13_12,
+          fontSize: fontSizes.body,
           color: colors.grey[800],
           py: 0.6,
           px: 1.5,
@@ -114,7 +114,7 @@ const InfoRow = ({ label, value }) => {
         {label}
       </TableCell>
       <TableCell
-        sx={{ fontSize: fontSizes.px13_12, color: colors.grey[900], py: 0.6, px: 1.5 }}
+        sx={{ fontSize: fontSizes.body, color: colors.grey[900], py: 0.6, px: 1.5 }}
       >
         {value}
       </TableCell>
@@ -733,7 +733,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                 label={
                   <Typography
                     sx={{
-                      fontSize: fontSizes.px13_6,
+                      fontSize: fontSizes.body,
                       fontWeight: isNew ? 700 : 400,
                     }}
                   >
@@ -755,7 +755,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                 label={
                   <Typography
                     sx={{
-                      fontSize: fontSizes.px13_6,
+                      fontSize: fontSizes.body,
                       fontWeight: !isNew ? 700 : 400,
                     }}
                   >
@@ -817,7 +817,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
             <Typography
               variant="body2"
               fontWeight={700}
-              sx={{ mb: 0.75, fontSize: fontSizes.px12_8, color: colors.grey[700] }}
+              sx={{ mb: 0.75, fontSize: fontSizes.small, color: colors.grey[700] }}
             >
               a. Lịch xích sửa chữa
             </Typography>
@@ -892,7 +892,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                     <Typography
                       variant="body2"
                       sx={{
-                        fontSize: fontSizes.px13_12,
+                        fontSize: fontSizes.body,
                         whiteSpace: "pre-wrap",
                       }}
                     >
@@ -909,7 +909,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
             <Typography
               variant="body2"
               fontWeight={700}
-              sx={{ mb: 0.75, fontSize: fontSizes.px12_8, color: colors.grey[700] }}
+              sx={{ mb: 0.75, fontSize: fontSizes.small, color: colors.grey[700] }}
             >
               b. Nội dung xem xét bảo dưỡng
             </Typography>
@@ -933,7 +933,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                     <Typography
                       variant="body2"
                       sx={{
-                        fontSize: fontSizes.px13_12,
+                        fontSize: fontSizes.body,
                         color: item.is_check ? colors.green.main : "text.primary",
                         textDecoration: item.is_check ? "line-through" : "none",
                       }}
@@ -1051,7 +1051,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                       key={col}
                       sx={{
                         fontWeight: 700,
-                        fontSize: fontSizes.px12_48,
+                        fontSize: fontSizes.small,
                         color: colors.grey[700],
                         borderBottom: `2px solid ${colors.grey[300]}`,
                         py: 0.75,
@@ -1093,7 +1093,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                             rowSpan={yearGroup.length}
                             sx={{
                               fontWeight: 700,
-                              fontSize: fontSizes.px13_12,
+                              fontSize: fontSizes.body,
                               color: colors.grey[900],
                               verticalAlign: "middle",
                               textAlign: "center",
@@ -1110,7 +1110,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                           sx={{
                             px: 1.5,
                             py: 0.75,
-                            fontSize: fontSizes.px12_8,
+                            fontSize: fontSizes.small,
                             whiteSpace: "nowrap",
                           }}
                         >
@@ -1122,7 +1122,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                             icon={
                               <Icon
                                 sx={{
-                                  fontSize: `${fontSizes.px12} !important`,
+                                  fontSize: `${fontSizes.small} !important`,
                                   color: `${sc.color} !important`,
                                 }}
                               />
@@ -1138,7 +1138,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                               color: sc.color,
                               border: `1px solid ${sc.borderColor}`,
                               fontWeight: 700,
-                              fontSize: fontSizes.px11_2,
+                              fontSize: fontSizes.label,
                               height: 20,
                               "& .MuiChip-label": { px: 0.75 },
                               "& .MuiChip-icon": { ml: 0.5 },
@@ -1150,7 +1150,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                           sx={{
                             px: 1.5,
                             py: 0.75,
-                            fontSize: fontSizes.px12_48,
+                            fontSize: fontSizes.small,
                             color: "text.secondary",
                             whiteSpace: "nowrap",
                           }}
@@ -1162,7 +1162,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                           sx={{
                             px: 1.5,
                             py: 0.75,
-                            fontSize: fontSizes.px12_48,
+                            fontSize: fontSizes.small,
                             color: "text.secondary",
                           }}
                         >
@@ -1233,7 +1233,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                       key={col}
                       sx={{
                         fontWeight: 700,
-                        fontSize: fontSizes.px12_48,
+                        fontSize: fontSizes.small,
                         color: colors.grey[700],
                         borderBottom: `2px solid ${colors.grey[300]}`,
                         py: 0.75,
@@ -1257,7 +1257,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                       sx={{
                         px: 1.5,
                         py: 0.75,
-                        fontSize: fontSizes.px12_8,
+                        fontSize: fontSizes.small,
                         width: 50,
                         textAlign: "center",
                       }}
@@ -1268,21 +1268,21 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                       sx={{
                         px: 1.5,
                         py: 0.75,
-                        fontSize: fontSizes.px12_8,
+                        fontSize: fontSizes.small,
                         fontWeight: 700,
                         color: colors.purple.deep,
                       }}
                     >
                       {item.name}
                     </TableCell>
-                    <TableCell sx={{ px: 1.5, py: 0.75, fontSize: fontSizes.px12_8 }}>
+                    <TableCell sx={{ px: 1.5, py: 0.75, fontSize: fontSizes.small }}>
                       {item.note || "—"}
                     </TableCell>
                     <TableCell
                       sx={{
                         px: 1.5,
                         py: 0.75,
-                        fontSize: fontSizes.px12_48,
+                        fontSize: fontSizes.small,
                         color: "text.secondary",
                         whiteSpace: "nowrap",
                       }}
@@ -1293,7 +1293,7 @@ const MachineProfileCard = ({ machine, onRegisterExport }) => {
                       sx={{
                         px: 1.5,
                         py: 0.75,
-                        fontSize: fontSizes.px12_48,
+                        fontSize: fontSizes.small,
                         color: "text.secondary",
                       }}
                     >

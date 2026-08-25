@@ -152,6 +152,8 @@ const LoginPage = () => {
               <Typography
                 variant="h6"
                 color="text.secondary"
+                // <600px lùi về 1rem - bản cũ: variant={isMobile ? "body1" : "h6"}
+                sx={{ fontSize: { xs: "1rem", sm: "1.25rem" } }}
               >
                 Đăng nhập để truy cập hệ thống
               </Typography>
@@ -290,7 +292,7 @@ const LoginPage = () => {
                     py: 2,
                     borderRadius: `${radii.lg}px`,
                     background: gradients.brand,
-                    fontSize: fontSizes.px17_6,
+                    fontSize: fontSizes.title,
                     fontWeight: 600,
                     textTransform: "none",
                     boxShadow: shadows.brandLift,

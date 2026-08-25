@@ -58,7 +58,7 @@ export {
   Tab as TabIcon,
 } from "@mui/icons-material";
 
-// 4) Design token + preset + bảng trạng thái (theme/)
+// 4) Design token + preset + bảng trạng thái (src/theme.js - MOT file duy nhat)
 export * from "../theme";
 export { default as theme } from "../theme";
 

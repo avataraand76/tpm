@@ -498,7 +498,7 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
             "& .MuiTableCell-root": {
               borderBottom: `1px solid ${alpha(colors.grey[300], 0.4)}`,
               textAlign: "center",
-              fontSize: fontSizes.px14_4,
+              fontSize: fontSizes.body,
               transition: "all 0.2s ease-in-out",
               position: "relative",
             },
@@ -656,7 +656,7 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
                   backgroundColor: `${alpha(TOTAL_ROW_COLOR, 0.15)} !important`,
                   color: `${TOTAL_ROW_COLOR} !important`,
                   fontWeight: "bold",
-                  fontSize: `${fontSizes.px17_6} !important`, // Tăng kích thước chữ một chút
+                  fontSize: `${fontSizes.title} !important`, // Tăng kích thước chữ một chút
                   cursor: "pointer",
                   boxShadow: isSelected("ALL", "ALL")
                     ? `inset 0 0 0 2px ${TOTAL_ROW_COLOR}`
@@ -2742,7 +2742,7 @@ const MachineListPage = () => {
                             style={{
                               margin: 0,
                               paddingLeft: "1.2rem",
-                              fontSize: fontSizes.px13_6,
+                              fontSize: fontSizes.body,
                               lineHeight: "1.5",
                             }}
                           >
@@ -3243,7 +3243,7 @@ const MachineListPage = () => {
                   <Typography
                     variant="body2"
                     sx={{
-                      fontSize: fontSizes.px16,
+                      fontSize: fontSizes.lead,
                       color: "text.secondary",
                       whiteSpace: "nowrap",
                       overflow: "hidden",
@@ -3300,7 +3300,7 @@ const MachineListPage = () => {
                     <TableCell
                       sx={{
                         fontWeight: 600,
-                        fontSize: fontSizes.px15_2,
+                        fontSize: fontSizes.lead,
                         whiteSpace: "nowrap",
                         width: "50px",
                       }}
@@ -3320,7 +3320,7 @@ const MachineListPage = () => {
                     <TableCell
                       sx={{
                         fontWeight: 600,
-                        fontSize: fontSizes.px15_2,
+                        fontSize: fontSizes.lead,
                         whiteSpace: "nowrap",
                       }}
                     >
@@ -3332,7 +3332,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: fontSizes.px15_2,
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3353,7 +3353,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: fontSizes.px15_2,
+                          fontSize: fontSizes.lead,
                           minWidth: "150px",
                           whiteSpace: "nowrap",
                         }}
@@ -3375,7 +3375,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: fontSizes.px15_2,
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3396,7 +3396,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: fontSizes.px15_2,
+                          fontSize: fontSizes.lead,
                           minWidth: "200px",
                           whiteSpace: "nowrap",
                         }}
@@ -3418,7 +3418,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: fontSizes.px15_2,
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3439,7 +3439,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: fontSizes.px15_2,
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3460,7 +3460,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: fontSizes.px15_2,
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3481,7 +3481,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: fontSizes.px15_2,
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3502,7 +3502,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: fontSizes.px15_2,
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3523,7 +3523,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: fontSizes.px15_2,
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3544,7 +3544,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: fontSizes.px15_2,
+                          fontSize: fontSizes.lead,
                           minWidth: "150px",
                           whiteSpace: "nowrap",
                         }}
@@ -3566,7 +3566,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: fontSizes.px15_2,
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3587,7 +3587,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: fontSizes.px15_2,
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3616,7 +3616,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: fontSizes.px15_2,
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3645,7 +3645,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: fontSizes.px15_2,
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3674,7 +3674,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: fontSizes.px15_2,
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3703,7 +3703,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: fontSizes.px15_2,
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3724,7 +3724,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: fontSizes.px15_2,
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3745,7 +3745,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: fontSizes.px15_2,
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3766,7 +3766,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: fontSizes.px15_2,
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3787,7 +3787,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: fontSizes.px15_2,
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3808,7 +3808,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: fontSizes.px15_2,
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3829,7 +3829,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: fontSizes.px15_2,
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3850,7 +3850,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: fontSizes.px15_2,
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -4240,7 +4240,7 @@ const MachineListPage = () => {
                     minHeight: 44,
                     textTransform: "none",
                     fontWeight: 600,
-                    fontSize: fontSizes.px14_08,
+                    fontSize: fontSizes.body,
                   },
                   "& .Mui-selected": {
                     color: `${colors.brand.main} !important`,
@@ -4353,6 +4353,8 @@ const MachineListPage = () => {
                                 variant="h6"
                                 fontWeight="bold"
                                 gutterBottom
+                                // <600px lùi về 1rem - bản cũ: isMobile ? "subtitle1" : "h6"
+                                sx={{ fontSize: { xs: "1rem", sm: "1.25rem" } }}
                               >
                                 Mã QR đã được tạo
                               </Typography>
@@ -5561,7 +5563,7 @@ const MachineListPage = () => {
               borderRadius: `${radii.md}px`,
             }}
           >
-            <AlertTitle sx={{ fontWeight: "bold", fontSize: fontSizes.px17_6 }}>
+            <AlertTitle sx={{ fontWeight: "bold", fontSize: fontSizes.title }}>
               {notification.title}
             </AlertTitle>
             {notification.message}
@@ -5593,7 +5595,7 @@ const MachineListPage = () => {
               color="error"
               sx={{
                 "& .MuiBadge-badge": {
-                  fontSize: fontSizes.px12,
+                  fontSize: fontSizes.small,
                   fontWeight: "bold",
                   minWidth: "24px",
                   height: "24px",

@@ -159,7 +159,12 @@ const HomePage = () => {
           >
             🎉 Chào mừng đến với TPM System!
           </Typography>
-          <Typography variant="h6" color="text.secondary" sx={{ mb: 4 }}>
+          <Typography
+            variant="h6"
+            color="text.secondary"
+            // <600px lùi về 1rem - bản cũ: variant={isMobile ? "body1" : "h6"}
+            sx={{ mb: 4, fontSize: { xs: "1rem", sm: "1.25rem" } }}
+          >
             Hệ thống quản lý, bảo trì máy móc thiết bị sản xuất
           </Typography>
         </Card>

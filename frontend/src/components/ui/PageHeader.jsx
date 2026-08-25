@@ -2,7 +2,11 @@
 //
 // Tiêu đề trang dùng chung: avatar gradient + tiêu đề tô gradient + phụ đề,
 // kèm chỗ đặt widget bên phải (prop `action`).
-// Cỡ chữ do theme lo (variant h3/h6 đã tự co giãn) nên KHÔNG cần isMobile.
+//
+// CỠ CHỮ: tiêu đề dùng variant h3 - theme đã tự lùi xuống cỡ h4 khi màn hình
+// dưới 600px (xem §6 trong theme.js), nên ở đây không cần isMobile.
+// Riêng PHỤ ĐỀ phải lùi tại chỗ: bản cũ dùng `variant={isMobile ? "body1" :
+// "h6"}`, mà h6 KHÔNG được lùi toàn cục (72 chỗ khác dùng h6 cố định).
 //
 // BỐ CỤC: khi có `action`, hàng ngoài xếp DỌC trên điện thoại và NGANG từ
 // tablet trở lên. Không dùng `flex: 1` + `minWidth: 0` cho khối tiêu đề, vì
@@ -56,7 +60,15 @@ const PageHeader = ({
             {title}
           </Typography>
           {subtitle && (
-            <Typography variant="h6" color="text.secondary">
+            <Typography
+              variant="h6"
+              color="text.secondary"
+              // Dưới 600px dùng cỡ body1 (1rem), từ 600px dùng cỡ h6 (1.25rem)
+              // - đúng như bản cũ `variant={isMobile ? "body1" : "h6"}`.
+              // Viết thẳng ở đây thay vì lùi h6 trong theme, vì 72 chỗ khác
+              // trong dự án dùng h6 cố định và không được nhỏ đi.
+              sx={{ fontSize: { xs: "1rem", sm: "1.25rem" } }}
+            >
               {subtitle}
             </Typography>
           )}
