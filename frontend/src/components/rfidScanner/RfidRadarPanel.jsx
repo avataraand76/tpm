@@ -1,43 +1,48 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
-  Typography,
-  Box,
-  Stack,
-  CircularProgress,
   Alert,
+  AlertTitle,
+  alpha,
+  Badge,
+  borders,
+  Box,
+  CheckCircle,
+  Chip,
+  CircularProgress,
+  colors,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Fab,
+  fontSizes,
+  FormControl,
+  FormControlLabel,
+  IconButton,
+  InputLabel,
   List,
   ListItem,
   ListItemIcon,
   ListItemText,
-  IconButton,
-  Snackbar,
-  AlertTitle,
-  useTheme,
-  useMediaQuery,
-  Switch,
-  FormControlLabel,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  MenuItem,
-  Select,
-  InputLabel,
-  FormControl,
-  Chip,
-  Fab,
-  Badge,
-  Tooltip,
-  TextField,
-} from "@mui/material";
-import {
-  Search,
-  CheckCircle,
-  Replay,
   LocationOn,
+  MenuItem,
+  radii,
+  Replay,
   Save,
+  Search,
+  Select,
+  shadow,
+  shadowRgb,
+  shadows,
+  Snackbar,
+  Stack,
   SwapHoriz,
-} from "@mui/icons-material";
+  Switch,
+  TextField,
+  Tooltip,
+  Typography,
+  useResponsive,
+} from "../../ui";
 import { RFID_LOOKUP_LENGTH, filterValidRfidCodes } from "./rfidCodeUtils";
 import { api } from "../../api/api";
 import { buildRadarTargetFromMachine } from "./rfidMachineUtils";
@@ -79,8 +84,7 @@ const RfidRadarPanel = ({
   /** Ẩn khối Chế độ quét (vd. dò tìm cập nhật vị trí kiểm kê) */
   hideScanModeToggle = false,
 }) => {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const { isMobile } = useResponsive();
 
   const isInventoryLocationMode = Boolean(
     skipResolveApi && (onFoundMachineInventory || onBatchConfirm)
@@ -765,31 +769,31 @@ const RfidRadarPanel = ({
             spacing={2}
             sx={{ animation: "pulse 0.5s infinite", cursor: "pointer" }}
           >
-            <CheckCircle sx={{ fontSize: 180, color: "#fff" }} />
-            <Typography variant="h1" sx={{ color: "#fff", fontWeight: "900" }}>
+            <CheckCircle sx={{ fontSize: 180, color: colors.white }} />
+            <Typography variant="h1" sx={{ color: colors.white, fontWeight: "900" }}>
               TÌM THẤY!
             </Typography>
             <Typography
               variant="h3"
-              sx={{ color: "#fff", textAlign: "center" }}
+              sx={{ color: colors.white, textAlign: "center" }}
             >
               {currentFoundTarget.info.serial}
             </Typography>
             <Typography
               variant="h5"
-              sx={{ color: "#fff", textAlign: "center" }}
+              sx={{ color: colors.white, textAlign: "center" }}
             >
               {currentFoundTarget.info.name}
             </Typography>
             <Typography
               variant="h6"
-              sx={{ color: "rgba(255,255,255,0.8)", mt: 2 }}
+              sx={{ color: alpha(colors.white, 0.8), mt: 2 }}
             >
               Đã tìm thấy: {foundTargets.size} / {targets.length} máy
             </Typography>
             <Typography
               variant="h6"
-              sx={{ color: "rgba(255,255,255,0.8)", mt: 2 }}
+              sx={{ color: alpha(colors.white, 0.8), mt: 2 }}
             >
               (Chạm vào màn hình để quét tiếp)
             </Typography>
@@ -804,7 +808,7 @@ const RfidRadarPanel = ({
         maxWidth="sm"
         fullWidth
         disableEnforceFocus
-        PaperProps={{ sx: { borderRadius: "20px" } }}
+        PaperProps={{ sx: { borderRadius: `${radii.lg}px` } }}
       >
         <DialogTitle
           sx={{
@@ -827,7 +831,7 @@ const RfidRadarPanel = ({
           </Box>
         </DialogTitle>
 
-        <DialogContent sx={{ pt: 3, bgcolor: "#f8f9fc" }}>
+        <DialogContent sx={{ pt: 3, bgcolor: colors.grey[50] }}>
           {pendingFoundTarget && (
             <Stack spacing={3} sx={{ pt: 2 }}>
               {/* Thông tin máy tìm thấy */}
@@ -874,7 +878,7 @@ const RfidRadarPanel = ({
                   value={selectedLocationUuid}
                   onChange={(e) => setSelectedLocationUuid(e.target.value)}
                   label="Chọn vị trí lưu máy"
-                  sx={{ borderRadius: "12px" }}
+                  sx={{ borderRadius: `${radii.md}px` }}
                 >
                   {inventoryLocations.length === 0 ? (
                     <MenuItem disabled value="">
@@ -911,8 +915,8 @@ const RfidRadarPanel = ({
               <Box
                 sx={{
                   p: 1.5,
-                  bgcolor: "rgba(0,0,0,0.04)",
-                  borderRadius: "10px",
+                  bgcolor: alpha(colors.black, 0.04),
+                  borderRadius: `${radii.md}px`,
                   textAlign: "center",
                 }}
               >
@@ -931,8 +935,8 @@ const RfidRadarPanel = ({
           sx={{
             p: 2,
             gap: 1,
-            bgcolor: "#f8f9fc",
-            borderTop: "1px solid rgba(0,0,0,0.06)",
+            bgcolor: colors.grey[50],
+            borderTop: `1px solid ${alpha(colors.black, 0.06)}`,
             "& > :not(style) + :not(style)": {
               marginLeft: { xs: "0px !important", sm: "8px !important" },
             },
@@ -968,7 +972,7 @@ const RfidRadarPanel = ({
         maxWidth="sm"
         fullWidth
         disableEnforceFocus
-        PaperProps={{ sx: { borderRadius: "20px" } }}
+        PaperProps={{ sx: { borderRadius: `${radii.lg}px` } }}
       >
         <DialogTitle
           sx={{
@@ -990,7 +994,7 @@ const RfidRadarPanel = ({
             </Typography>
           </Box>
         </DialogTitle>
-        <DialogContent sx={{ pt: 3, bgcolor: "#f8f9fc" }}>
+        <DialogContent sx={{ pt: 3, bgcolor: colors.grey[50] }}>
           {pendingReplaceTarget && (
             <Stack spacing={2.5} sx={{ pt: 2 }}>
               <Box sx={rfidSectionSx(uiVariant)}>
@@ -1020,7 +1024,7 @@ const RfidRadarPanel = ({
                   <Typography
                     variant="caption"
                     fontWeight={600}
-                    color="#2e7d32"
+                    color={colors.green.main}
                     display="block"
                   >
                     RFID hiện trên hệ thống
@@ -1074,8 +1078,8 @@ const RfidRadarPanel = ({
           sx={{
             p: 2,
             gap: 1,
-            bgcolor: "#f8f9fc",
-            borderTop: "1px solid rgba(0,0,0,0.06)",
+            bgcolor: colors.grey[50],
+            borderTop: `1px solid ${alpha(colors.black, 0.06)}`,
             "& > :not(style) + :not(style)": {
               marginLeft: { xs: "0px !important", sm: "8px !important" },
             },
@@ -1150,9 +1154,9 @@ const RfidRadarPanel = ({
               <Box
                 sx={{
                   p: 1.5,
-                  bgcolor: "#fff",
+                  bgcolor: colors.white,
                   borderRadius: RFID_DIALOG_RADIUS.input,
-                  border: "1px solid rgba(0,0,0,0.08)",
+                  border: borders.subtle2,
                 }}
               >
                 <Typography variant="body2" fontWeight={700} gutterBottom>
@@ -1247,9 +1251,9 @@ const RfidRadarPanel = ({
                   alignItems: "center",
                   justifyContent: "space-between",
                   p: 1.5,
-                  bgcolor: "#fff",
+                  bgcolor: colors.white,
                   borderRadius: RFID_DIALOG_RADIUS.input,
-                  border: "1px solid rgba(0,0,0,0.08)",
+                  border: borders.subtle2,
                 }}
               >
                 <Box>
@@ -1312,9 +1316,9 @@ const RfidRadarPanel = ({
             <Box
               sx={{
                 p: 1.5,
-                bgcolor: "#fff",
+                bgcolor: colors.white,
                 borderRadius: RFID_DIALOG_RADIUS.input,
-                border: "1px solid rgba(0,0,0,0.08)",
+                border: borders.subtle2,
               }}
             >
               <Typography variant="body2" fontWeight={700} gutterBottom>
@@ -1414,9 +1418,9 @@ const RfidRadarPanel = ({
                     bottom: 24,
                     right: 24,
                     zIndex: 1000,
-                    color: "#fff",
+                    color: colors.white,
                     background: getRfidVariantStyle(uiVariant).primaryButton,
-                    boxShadow: "0 6px 24px rgba(0,0,0,0.2)",
+                    boxShadow: shadow(6, 24, shadowRgb.black, 0.2),
                     "&:not(:disabled)": {
                       animation: "fabPulse 2s ease-in-out infinite",
                     },
@@ -1427,7 +1431,7 @@ const RfidRadarPanel = ({
                     color="error"
                     sx={{
                       "& .MuiBadge-badge": {
-                        fontSize: "0.75rem",
+                        fontSize: fontSizes.small,
                         fontWeight: "bold",
                         minWidth: "24px",
                         height: "24px",
@@ -1445,7 +1449,7 @@ const RfidRadarPanel = ({
                 onClose={() => !batchSaving && setOpenBatchConfirmDialog(false)}
                 maxWidth="sm"
                 fullWidth
-                PaperProps={{ sx: { borderRadius: "20px" } }}
+                PaperProps={{ sx: { borderRadius: `${radii.lg}px` } }}
               >
                 <DialogTitle
                   sx={{
@@ -1468,10 +1472,10 @@ const RfidRadarPanel = ({
                   <Chip
                     label={`${batchFoundList.length} máy`}
                     sx={{
-                      bgcolor: "rgba(255,255,255,0.25)",
+                      bgcolor: alpha(colors.white, 0.25),
                       color: "white",
                       fontWeight: 700,
-                      fontSize: "0.95rem",
+                      fontSize: fontSizes.lead,
                     }}
                   />
                 </DialogTitle>
@@ -1483,13 +1487,13 @@ const RfidRadarPanel = ({
                         sx={{
                           py: 1,
                           px: 2.5,
-                          borderBottom: "1px solid rgba(0,0,0,0.06)",
+                          borderBottom: `1px solid ${alpha(colors.black, 0.06)}`,
                           "&:last-child": { borderBottom: "none" },
                         }}
                       >
                         <ListItemIcon sx={{ minWidth: 36 }}>
                           <CheckCircle
-                            sx={{ color: "#2e7d32", fontSize: 20 }}
+                            sx={{ color: colors.green.main, fontSize: 20 }}
                           />
                         </ListItemIcon>
                         <ListItemText
@@ -1524,8 +1528,8 @@ const RfidRadarPanel = ({
                   sx={{
                     p: 2.5,
                     gap: 1,
-                    bgcolor: "#f8f9fc",
-                    borderTop: "1px solid rgba(0,0,0,0.06)",
+                    bgcolor: colors.grey[50],
+                    borderTop: `1px solid ${alpha(colors.black, 0.06)}`,
                     "& > :not(style) + :not(style)": {
                       marginLeft: {
                         xs: "0px !important",
@@ -1626,11 +1630,10 @@ const RfidRadarPanel = ({
           sx={{
             width: "100%",
             minWidth: { xs: "auto", sm: "350px" },
-            boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
-            borderRadius: "12px",
+            boxShadow: shadows.overlay,
           }}
         >
-          <AlertTitle sx={{ fontWeight: "bold", fontSize: "1.1rem" }}>
+          <AlertTitle sx={{ fontWeight: "bold", fontSize: fontSizes.title }}>
             {snackbarTitle}
           </AlertTitle>
           {snackbarMessage}

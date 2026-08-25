@@ -2,86 +2,99 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import {
-  Container,
-  Typography,
-  Paper,
+  Add,
+  Alert,
+  AlertTitle,
+  alpha,
+  Autocomplete,
+  autoGrid,
+  Avatar,
+  Badge,
+  borders,
   Box,
-  Grid,
+  Build,
+  Button,
+  Cancel,
   Card,
   CardContent,
+  Checkbox,
+  CheckCircle,
+  CheckCircleOutline,
   Chip,
-  Button,
+  CircularProgress,
+  Close,
+  colors,
+  Container,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
+  Download,
+  ErrorOutline,
+  Fab,
+  FileUpload,
+  fontSizes,
+  FormControl,
+  getStatusInfo,
+  gradients,
+  Grid,
+  hexA,
+  HourglassFull,
+  IconButton,
+  InputAdornment,
+  InputLabel,
+  KeyboardArrowDown,
+  KeyboardArrowUp,
+  Link,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  Lock,
+  LockOpen,
+  Menu,
+  MenuItem,
+  muiColors,
+  PageHeader,
+  Pagination,
+  Paper,
+  PictureAsPdf,
+  PrecisionManufacturing,
+  Print,
+  QrCode2,
+  radii,
+  ReceiptLong,
+  Refresh,
+  Save,
+  Search,
+  Select,
+  shadow,
+  shadowRgb,
+  shadows,
+  Snackbar,
   Stack,
-  Avatar,
+  STAT_COLORS,
+  StatCard,
+  SwapHoriz,
+  Switch,
+  sx as preset,
+  Tab,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  CircularProgress,
-  Alert,
-  TextField,
-  InputAdornment,
-  Pagination,
-  MenuItem,
-  Select,
-  FormControl,
-  InputLabel,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  IconButton,
-  Divider,
-  Snackbar,
-  AlertTitle,
   TableSortLabel,
-  Menu,
-  Checkbox,
-  ListItemText,
-  List,
-  ListItem,
-  ListItemIcon,
-  Link,
-  useTheme,
-  useMediaQuery,
-  Tooltip,
-  Autocomplete,
-  Fab,
-  Badge,
   Tabs,
-  Tab,
-  Switch,
-} from "@mui/material";
-import {
-  PrecisionManufacturing,
-  Search,
-  Refresh,
-  CheckCircle,
-  Build,
-  Cancel,
-  Close,
-  Save,
-  QrCode2,
-  Print,
-  Download,
-  Add,
-  ReceiptLong,
-  SwapHoriz,
+  TextField,
+  Tooltip,
+  Typography,
+  useResponsive,
   ViewColumn,
-  FileUpload,
-  CheckCircleOutline,
-  ErrorOutline,
-  KeyboardArrowDown,
-  KeyboardArrowUp,
-  HourglassFull,
   WifiTethering,
-  PictureAsPdf,
-  Lock,
-  LockOpen,
-} from "@mui/icons-material";
-import { alpha } from "@mui/material/styles";
+} from "../ui";
 import * as XLSX from "xlsx-js-style";
 import ExcelJS from "exceljs";
 import { QRCodeSVG } from "qrcode.react";
@@ -91,36 +104,9 @@ import MachineProfileCard from "../components/MachineProfileCard";
 import { api } from "../api/api";
 import { useAuth } from "../hooks/useAuth"; // <<< 1. THÊM MỚI: IMPORT USEAUTH
 
-// Thêm style cho các trường bị disabled/filled để dễ nhận biết (từ yêu cầu trước)
-const DISABLED_VIEW_SX = {
-  // Ghi đè cho disabled
-  "& .MuiInputBase-root.Mui-disabled": {
-    backgroundColor: "#fffbe5 !important", // Nền vàng nhạt
-    "& fieldset": {
-      borderColor: "#f44336 !important", // Viền đỏ
-    },
-    "& .MuiInputBase-input": {
-      color: "#f44336", // Chữ đỏ
-      WebkitTextFillColor: "#f44336 !important", // Ghi đè màu chữ
-      fontWeight: 600,
-      opacity: 1, // Đảm bảo độ mờ không làm mờ chữ
-    },
-    "& .MuiFormLabel-root": {
-      color: "#f44336 !important", // Nhãn đỏ
-    },
-  },
-  // Ghi đè cho variant="filled" (khi disabled=false)
-  "& .MuiFilledInput-root": {
-    backgroundColor: "#fffbe5 !important",
-    "& input": {
-      color: "#f44336",
-      fontWeight: 600,
-    },
-    "& .MuiFormLabel-root": {
-      color: "#f44336",
-    },
-  },
-};
+// Ô nhập được tô sáng (nền vàng, chữ đỏ) cho biết trường tự điền / bị khoá.
+// Định nghĩa nằm ở theme/presets.js để các trang khác dùng lại được.
+const DISABLED_VIEW_SX = preset.fieldHighlight;
 
 // Column configuration for visibility toggle
 const columnConfig = {
@@ -206,9 +192,8 @@ const parseDecimalValue = (value) => {
   return isNaN(parsed) ? null : parsed;
 };
 
-
 const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
-  const theme = useTheme();
+  const { theme } = useResponsive();
   const [openNotInUse, setOpenNotInUse] = useState(false);
 
   // 1. Cấu hình cột: ẨN cột "Cho mượn" (borrowed_out)
@@ -220,35 +205,28 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
   ];
 
   // 2. Cấu hình hàng chính
+  // Màu lấy từ theme/statusTokens.js (STAT_COLORS: color = chữ, pastel = nền ô)
+  const row = (key, label, extra) => ({
+    key,
+    label,
+    color: STAT_COLORS[key].color,
+    bg: STAT_COLORS[key].pastel,
+    ...extra,
+  });
+
   const rowConfig = [
-    {
-      key: "available",
-      label: "Có thể sử dụng",
-      color: "#2e7d32",
-      bg: "#e8f5e9",
-    },
-    { key: "in_use", label: "Đang sử dụng", color: "#1976d2", bg: "#e3f2fd" },
-    {
-      key: "not_in_use",
-      label: "Chưa sử dụng",
-      color: "#ed6c02",
-      bg: "#fff3e0",
-      hasChildren: true,
-    },
-    {
-      key: "pending_liquidation",
-      label: "Chờ thanh lý",
-      color: "#ff5722",
-      bg: "#fbe9e7",
-    },
-    // { key: "liquidation", label: "Thanh lý", color: "#d32f2f", bg: "#ffebee" },
+    row("available", "Có thể sử dụng"),
+    row("in_use", "Đang sử dụng"),
+    row("not_in_use", "Chưa sử dụng", { hasChildren: true }),
+    row("pending_liquidation", "Chờ thanh lý"),
+    // row("liquidation", "Thanh lý"),
   ];
 
   // 3. Cấu hình hàng con: ĐỔI TÊN "Vô hiệu hóa" thành "Cho mượn"
   const subRowConfig = [
-    { key: "maintenance", label: "Bảo trì", color: "#00bcd4", bg: "#e0f7fa" },
-    { key: "broken", label: "Máy hư", color: "#00bcd4", bg: "#e0f7fa" },
-    { key: "disabled", label: "Cho mượn", color: "#00bcd4", bg: "#e0f7fa" },
+    row("maintenance", "Bảo trì"),
+    row("broken", "Máy hư"),
+    row("disabled", "Cho mượn"),
   ];
 
   // 4. Xử lý dữ liệu: Cộng 'borrowed_out' vào 'internal'
@@ -371,10 +349,10 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
     return total;
   };
 
-  const TOTAL_COL_COLOR = "#667eea";
-  const TOTAL_COL_BG = "#ede7f6";
-  const TOTAL_ROW_COLOR = "#667eea";
-  const TOTAL_ROW_BG = "#ede7f6";
+  const TOTAL_COL_COLOR = colors.brand.main;
+  const TOTAL_COL_BG = colors.brand.wash;
+  const TOTAL_ROW_COLOR = colors.brand.main;
+  const TOTAL_ROW_BG = colors.brand.wash;
 
   if (loading) {
     return (
@@ -398,7 +376,7 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
           sx={{
             cursor: "default",
             color: row.color,
-            bgcolor: rowActive ? row.bg : "#fff",
+            bgcolor: rowActive ? row.bg : colors.white,
             boxShadow: rowActive ? `inset 3px 0 0 0 ${row.color}` : "none",
             pl: isSubRow ? 4 : 2,
             "&:hover": {
@@ -443,7 +421,8 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
                   : hasDataCell
                     ? row.bg
                     : "transparent",
-                color: hasDataCell || cellSelected ? row.color : "#e0e0e0",
+                color:
+                  hasDataCell || cellSelected ? row.color : colors.grey[300],
                 fontWeight: hasDataCell || cellSelected ? "bold" : "normal",
                 boxShadow: cellSelected
                   ? `inset 0 0 0 2px ${row.color}`
@@ -452,9 +431,10 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
                   bgcolor:
                     hasDataCell || cellSelected
                       ? alpha(row.color, 0.25)
-                      : "#f5f5f5",
+                      : colors.grey[100],
                   boxShadow: `inset 0 0 0 2px ${row.color}`,
-                  color: hasDataCell || cellSelected ? row.color : "#757575",
+                  color:
+                    hasDataCell || cellSelected ? row.color : colors.grey[600],
                 },
               }}
             >
@@ -471,7 +451,8 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
               sx={{
                 cursor: "pointer",
                 fontWeight: "bold",
-                color: hasDataRow || cellSelected ? row.color : "#bdbdbd",
+                color:
+                  hasDataRow || cellSelected ? row.color : colors.grey[400],
                 backgroundColor: cellSelected
                   ? alpha(row.color, 0.2)
                   : hasDataRow
@@ -498,15 +479,14 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
     <Card
       elevation={0}
       sx={{
-        borderRadius: "20px",
-        border: "1px solid rgba(0, 0, 0, 0.05)",
+        ...preset.softCard,
         overflow: "hidden",
         height: "100%",
         transition: "all 0.2s ease",
-        "&:hover": { boxShadow: "0 4px 12px rgba(0,0,0,0.05)" },
+        "&:hover": { boxShadow: shadows.hover },
       }}
     >
-      <Box sx={{ p: 2, borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
+      <Box sx={{ p: 2, borderBottom: borders.subtle }}>
         <Typography variant="h6" fontWeight="bold">
           Trạng thái chi tiết
         </Typography>
@@ -516,16 +496,16 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
           size="small"
           sx={{
             "& .MuiTableCell-root": {
-              borderBottom: "1px solid rgba(224, 224, 224, 0.4)",
+              borderBottom: `1px solid ${alpha(colors.grey[300], 0.4)}`,
               textAlign: "center",
-              fontSize: "0.9rem",
+              fontSize: fontSizes.body,
               transition: "all 0.2s ease-in-out",
               position: "relative",
             },
             "& .MuiTableCell-head": {
-              backgroundColor: "#f9fafb",
+              backgroundColor: colors.grey[50],
               fontWeight: 700,
-              color: "#637381",
+              color: colors.grey[600],
               py: 2,
             },
             "& .cell-first-col": {
@@ -534,7 +514,7 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
               position: "sticky",
               left: 0,
               zIndex: 1,
-              borderRight: "1px solid rgba(0,0,0,0.05)",
+              borderRight: borders.subtle,
             },
           }}
         >
@@ -551,13 +531,13 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
                     sx={{
                       cursor: "default",
                       color: active ? theme.palette.primary.main : "inherit",
-                      bgcolor: active ? "#f0f4f8" : "inherit",
+                      bgcolor: active ? colors.grey[100] : "inherit",
                       boxShadow: active
                         ? `inset 0 -3px 0 0 ${theme.palette.primary.main}`
                         : "none",
                       "&:hover": {
                         color: theme.palette.primary.main,
-                        bgcolor: "#f0f4f8",
+                        bgcolor: colors.grey[100],
                         boxShadow: `inset 0 -3px 0 0 ${theme.palette.primary.main}`,
                       },
                     }}
@@ -579,7 +559,7 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
                         : `${TOTAL_COL_COLOR} !important`,
                       backgroundColor: active
                         ? `${TOTAL_COL_BG} !important`
-                        : "#f9fafb !important",
+                        : `${colors.grey[50]} !important`,
                       boxShadow: active
                         ? `inset 0 -3px 0 0 ${TOTAL_COL_COLOR}`
                         : "none",
@@ -606,7 +586,7 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
             ))}
 
             {/* --- CẬP NHẬT HÀNG TỔNG DƯỚI CÙNG --- */}
-            <TableRow sx={{ backgroundColor: "#fafafa" }}>
+            <TableRow sx={{ backgroundColor: colors.grey[50] }}>
               {(() => {
                 const active = isRowActive("ALL");
                 return (
@@ -621,7 +601,7 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
                         : `${TOTAL_ROW_COLOR} !important`,
                       backgroundColor: active
                         ? `${TOTAL_ROW_BG} !important`
-                        : "#fafafa !important",
+                        : `${colors.grey[50]} !important`,
                       boxShadow: active
                         ? `inset 3px 0 0 0 ${TOTAL_ROW_COLOR}`
                         : "none",
@@ -651,7 +631,7 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
                       color:
                         colTotal > 0 || cellSelected
                           ? TOTAL_ROW_COLOR
-                          : "#bdbdbd",
+                          : colors.grey[400],
                       bgcolor: cellSelected ? TOTAL_ROW_BG : "transparent",
                       boxShadow: cellSelected
                         ? `inset 0 0 0 2px ${TOTAL_ROW_COLOR}`
@@ -676,7 +656,7 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
                   backgroundColor: `${alpha(TOTAL_ROW_COLOR, 0.15)} !important`,
                   color: `${TOTAL_ROW_COLOR} !important`,
                   fontWeight: "bold",
-                  fontSize: "1.1rem !important", // Tăng kích thước chữ một chút
+                  fontSize: `${fontSizes.title} !important`, // Tăng kích thước chữ một chút
                   cursor: "pointer",
                   boxShadow: isSelected("ALL", "ALL")
                     ? `inset 0 0 0 2px ${TOTAL_ROW_COLOR}`
@@ -700,8 +680,7 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
 };
 
 const MachineListPage = () => {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const { isMobile, dialogFullScreen } = useResponsive();
   // <<< 2. THÊM MỚI: LẤY QUYỀN USER
   const { user, permissions } = useAuth(); // Lấy cả user
   const isAdmin = permissions.includes("admin");
@@ -2179,35 +2158,9 @@ const MachineListPage = () => {
     reader.readAsBinaryString(importFile);
   };
 
-  const getStatusColor = (status) => {
-    const statusColors = {
-      available: { bg: "#2e7d3222", color: "#2e7d32", label: "Có thể sử dụng" },
-      in_use: { bg: "#667eea22", color: "#667eea", label: "Đang sử dụng" },
-      maintenance: { bg: "#ff980022", color: "#ff9800", label: "Bảo trì" },
-      rented: { bg: "#673ab722", color: "#673ab7", label: "Máy thuê" },
-      borrowed: { bg: "#03a9f422", color: "#03a9f4", label: "Máy mượn" },
-      borrowed_out: { bg: "#00bcd422", color: "#00bcd4", label: "Cho mượn" },
-      liquidation: { bg: "#f4433622", color: "#f44336", label: "Thanh lý" },
-      pending_liquidation: {
-        bg: "#ff572222",
-        color: "#ff5722",
-        label: "Chờ thanh lý",
-      },
-      disabled: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Chưa sử dụng" },
-      broken: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Máy hư" },
-      borrowed_return: {
-        bg: "#03a9f422",
-        color: "#03a9f4",
-        label: "Đã trả (Máy Mượn)",
-      },
-      rented_return: {
-        bg: "#673ab722",
-        color: "#673ab7",
-        label: "Đã trả (Máy Thuê)",
-      },
-    };
-    return statusColors[status] || { bg: "#f0f0f0", color: "#555", label: "-" };
-  };
+  // Màu + nhãn trạng thái lấy từ theme/statusTokens.js (nguồn duy nhất,
+  // trước đây bảng này bị copy nguyên văn trong 6 trang).
+  const getStatusColor = (status) => getStatusInfo(status);
 
   const getStatusIcon = (status) => {
     switch (status) {
@@ -2442,492 +2395,183 @@ const MachineListPage = () => {
     setRfidDialogOpen(true);
   };
 
-  // Định nghĩa style cho thẻ active/inactive
-  const activeCardSx = {
-    cursor: "pointer",
-    border: `3px solid ${theme.palette.primary.main}`, // Viền màu tím
-    boxShadow: "0 8px 25px rgba(102, 126, 234, 0.3)", // Đổ bóng
-    transform: "translateY(-4px)", // Nâng lên
-    transition: "all 0.2s ease",
-  };
-  const inactiveCardSx = {
-    cursor: "pointer",
-    border: "1px solid rgba(0, 0, 0, 0.05)",
-    transition: "all 0.2s ease",
-    "&:hover": {
-      transform: "translateY(-2px)",
-      boxShadow: "0 4px 12px rgba(0,0,0,0.05)", // Bóng mờ khi hover
-    },
-  };
   const displayTotal =
     (stats.total || 0) -
     (stats.liquidation || 0) -
     (stats.borrowed_return || 0) -
     (stats.rented_return || 0);
+
+  // -------------------------------------------------------------------------
+  // CÁC THẺ SỐ LIỆU khai báo bằng DỮ LIỆU thay vì JSX.
+  // Trước đây 12 thẻ là 422 dòng JSX (8 thẻ trong số đó bị comment lại).
+  // Nay bật/tắt một thẻ chỉ là đổi `enabled`, không phải comment cả khối.
+  //   statuses / borrow : tham số truyền cho handleStatusFilterClick
+  //   color / background: lấy từ theme/statusTokens.js
+  // -------------------------------------------------------------------------
+  const statCards = [
+    {
+      enabled: true,
+      label: "Có thể sử dụng",
+      value: stats.available || 0,
+      color: STAT_COLORS.available.color,
+      background: STAT_COLORS.available.soft,
+      statuses: ["available"],
+      borrow: [],
+    },
+    {
+      enabled: true,
+      label: "Đang sử dụng",
+      value: stats.in_use || 0,
+      color: STAT_COLORS.in_use.color,
+      background: STAT_COLORS.in_use.soft,
+      statuses: ["in_use"],
+      borrow: [],
+    },
+    {
+      enabled: true,
+      label: "Chưa sử dụng",
+      // Gộp: Bảo trì + Máy hư + Cho mượn
+      value:
+        (Number(stats.maintenance) || 0) +
+        (Number(stats.broken) || 0) +
+        (Number(stats.borrowed_out) || 0),
+      color: STAT_COLORS.not_in_use.color,
+      background: STAT_COLORS.not_in_use.soft,
+      statuses: ["maintenance", "broken", "disabled"],
+      borrow: [],
+    },
+    {
+      enabled: true,
+      label: "Chờ thanh lý",
+      value: stats.pending_liquidation || 0,
+      color: STAT_COLORS.pending_liquidation.color,
+      background: STAT_COLORS.pending_liquidation.soft,
+      statuses: ["pending_liquidation"],
+      borrow: [],
+    },
+
+    // --- Các thẻ đang TẮT (trước đây là 8 khối JSX bị comment) ---
+    {
+      enabled: false,
+      label: "Bảo trì",
+      value: stats.maintenance || 0,
+      color: colors.orange.main,
+      background: hexA(colors.orange.main, "11"),
+      statuses: ["maintenance"],
+      borrow: [],
+    },
+    {
+      enabled: false,
+      label: "Thanh lý",
+      value: stats.liquidation || 0,
+      color: colors.red.main,
+      background: hexA(colors.red.main, "11"),
+      statuses: ["liquidation"],
+      borrow: [],
+    },
+    {
+      enabled: false,
+      label: "Máy hư",
+      value: stats.broken || 0,
+      color: colors.grey[500],
+      background: hexA(colors.grey[500], "11"),
+      statuses: ["broken"],
+      borrow: [],
+    },
+    {
+      enabled: false,
+      label: "Thuê",
+      value: stats.rented || 0,
+      color: colors.purple.main,
+      background: hexA(colors.purple.main, "11"),
+      statuses: [],
+      borrow: ["rented"],
+    },
+    {
+      enabled: false,
+      label: "Đã trả (Máy thuê)",
+      value: stats.rented_return || 0,
+      color: colors.purple.main,
+      background: hexA(colors.purple.main, "11"),
+      statuses: ["disabled"],
+      borrow: ["rented_return"],
+    },
+    {
+      enabled: false,
+      label: "Mượn",
+      value: stats.borrowed || 0,
+      color: colors.blue.sky,
+      background: hexA(colors.blue.sky, "11"),
+      statuses: [],
+      borrow: ["borrowed"],
+    },
+    {
+      enabled: false,
+      label: "Đã trả (Máy mượn)",
+      value: stats.borrowed_return || 0,
+      color: colors.blue.sky,
+      background: hexA(colors.blue.sky, "11"),
+      statuses: ["disabled"],
+      borrow: ["borrowed_return"],
+    },
+    {
+      enabled: false,
+      label: "Cho mượn",
+      value: stats.borrowed_out || 0,
+      color: colors.cyan.main,
+      background: hexA(colors.cyan.main, "11"),
+      statuses: ["disabled"],
+      borrow: ["borrowed_out"],
+    },
+  ];
+
   return (
     <>
       <NavigationBar />
       <Container maxWidth="xl" sx={{ py: 4 }}>
         {/* Header */}
-        <Box sx={{ mb: 6 }}>
-          <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
-            <Avatar
-              sx={{
-                width: 60,
-                height: 60,
-                background: "linear-gradient(45deg, #667eea, #764ba2)",
-              }}
-            >
-              <PrecisionManufacturing sx={{ fontSize: 30 }} />
-            </Avatar>
-            <Box>
-              <Typography
-                variant={isMobile ? "h4" : "h3"}
-                component="h1"
-                sx={{
-                  fontWeight: 700,
-                  background: "linear-gradient(45deg, #667eea, #764ba2)",
-                  backgroundClip: "text",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  textTransform: "uppercase",
-                }}
-              >
-                Danh sách Máy móc thiết bị
-              </Typography>
-              <Typography
-                variant={isMobile ? "body1" : "h6"}
-                color="text.secondary"
-              >
-                Quản lý thông tin máy móc thiết bị
-              </Typography>
-            </Box>
-          </Stack>
-        </Box>
+        <PageHeader
+          icon={<PrecisionManufacturing />}
+          title="Danh sách Máy móc thiết bị"
+          subtitle="Quản lý thông tin máy móc thiết bị"
+          titleSx={{ textTransform: "uppercase" }}
+        />
 
         {/* Statistics Cards */}
         <Grid container spacing={3} sx={{ mb: 4 }}>
-          {/* Cột chính cho thẻ "Hero" */}
+          {/* Thẻ tổng - cột riêng vì bố cục lệch (4/8), Grid vẫn là công cụ đúng */}
           <Grid size={{ xs: 12, md: 5, lg: 4 }}>
-            <Card
-              elevation={0}
+            <StatCard
+              size="heroLg"
+              label="Tổng số máy"
+              value={formatNumber(displayTotal || 0)}
+              color={STAT_COLORS.total.color}
+              background={gradients.brandWash2}
+              active={isStatusFilterActive([], [])}
               onClick={() => handleStatusFilterClick([], [])}
-              sx={{
-                borderRadius: "20px",
-                background:
-                  "linear-gradient(135deg, #667eea22 0%, #764ba222 100%)",
-                border: "1px solid rgba(0, 0, 0, 0.05)",
-                height: "100%", // Kéo dài thẻ để cân đối
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "center",
-                ...(isStatusFilterActive([], [])
-                  ? activeCardSx
-                  : inactiveCardSx),
-              }}
-            >
-              <CardContent sx={{ textAlign: "center", p: 4 }}>
-                <Typography
-                  variant="body1"
-                  color="text.secondary"
-                  sx={{ mb: 1, textTransform: "uppercase" }}
-                >
-                  Tổng số máy
-                </Typography>
-                <Typography
-                  variant={isMobile ? "h2" : "h1"}
-                  fontWeight="bold"
-                  color="#667eea"
-                >
-                  {formatNumber(displayTotal || 0)}
-                </Typography>
-              </CardContent>
-            </Card>
+            />
           </Grid>
 
-          {/* Cột phụ cho các thẻ còn lại */}
+          {/* Các thẻ trạng thái - lưới tự tính số cột.
+              Đổi số 2 cuối trong autoGrid(120, 3, 2) thành 3 là 3 thẻ mỗi hàng. */}
           <Grid size={{ xs: 12, md: 7, lg: 8 }}>
-            <Grid container spacing={3}>
-              {/* --- HÀNG 1 --- */}
-              {/* 1. Có thể sử dụng */}
-              <Grid size={{ xs: 6 }}>
-                <Card
-                  elevation={0}
-                  onClick={() => handleStatusFilterClick(["available"], [])}
-                  sx={{
-                    borderRadius: "20px",
-                    background: "#2e7d3211",
-                    border: "1px solid rgba(0, 0, 0, 0.05)",
-                    ...(isStatusFilterActive(["available"], [])
-                      ? activeCardSx
-                      : inactiveCardSx),
-                  }}
-                >
-                  <CardContent sx={{ textAlign: "center", py: 3 }}>
-                    <Typography
-                      variant={isMobile ? "h5" : "h4"}
-                      fontWeight="bold"
-                      color="#2e7d32"
-                    >
-                      {formatNumber(stats.available || 0)}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Có thể sử dụng
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-
-              {/* 2. Đang sử dụng */}
-              <Grid size={{ xs: 6 }}>
-                <Card
-                  elevation={0}
-                  onClick={() => handleStatusFilterClick(["in_use"], [])}
-                  sx={{
-                    borderRadius: "20px",
-                    background: "#1976d211",
-                    border: "1px solid rgba(0, 0, 0, 0.05)",
-                    ...(isStatusFilterActive(["in_use"], [])
-                      ? activeCardSx
-                      : inactiveCardSx),
-                  }}
-                >
-                  <CardContent sx={{ textAlign: "center", py: 3 }}>
-                    <Typography
-                      variant={isMobile ? "h5" : "h4"}
-                      fontWeight="bold"
-                      color="#1976d2"
-                    >
-                      {formatNumber(stats.in_use || 0)}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Đang sử dụng
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-              {/* Bảo trì */}
-              {/* <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
-                <Card
-                  elevation={0}
-                  onClick={() => handleStatusFilterClick(["maintenance"], [])}
-                  sx={{
-                    borderRadius: "20px",
-                    background: "#ff980011",
-                    border: "1px solid rgba(0, 0, 0, 0.05)",
-                    ...(isStatusFilterActive(["maintenance"], [])
-                      ? activeCardSx
-                      : inactiveCardSx),
-                  }}
-                >
-                  <CardContent sx={{ textAlign: "center", py: 3 }}>
-                    <Typography
-                      variant={isMobile ? "h5" : "h4"}
-                      fontWeight="bold"
-                      color="#ff9800"
-                    >
-                      {stats.maintenance || 0}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Bảo trì
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid> */}
-              {/* Thanh lý */}
-              {/* <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
-                <Card
-                  elevation={0}
-                  onClick={() => handleStatusFilterClick(["liquidation"], [])}
-                  sx={{
-                    borderRadius: "20px",
-                    background: "#f4433611",
-                    border: "1px solid rgba(0, 0, 0, 0.05)",
-                    ...(isStatusFilterActive(["liquidation"], [])
-                      ? activeCardSx
-                      : inactiveCardSx),
-                  }}
-                >
-                  <CardContent sx={{ textAlign: "center", py: 3 }}>
-                    <Typography
-                      variant={isMobile ? "h5" : "h4"}
-                      fontWeight="bold"
-                      color="#f44336"
-                    >
-                      {stats.liquidation || 0}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Thanh lý
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid> */}
-              {/* Chưa sử dụng / Bị hỏng */}
-              {/* <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
-                <Card
-                  elevation={0}
-                  onClick={() =>
-                    handleStatusFilterClick(
-                      [
-                        // "disabled",
-                        "broken",
-                      ],
-                      []
-                    )
-                  }
-                  sx={{
-                    borderRadius: "20px",
-                    background: "#9e9e9e11",
-                    border: "1px solid rgba(0, 0, 0, 0.05)",
-                    ...(isStatusFilterActive(
-                      [
-                        // "disabled",
-                        "broken",
-                      ],
-                      []
-                    )
-                      ? activeCardSx
-                      : inactiveCardSx),
-                  }}
-                >
-                  <CardContent sx={{ textAlign: "center", py: 3 }}>
-                    <Typography
-                      variant={isMobile ? "h5" : "h4"}
-                      fontWeight="bold"
-                      color="#9e9e9e"
-                    > */}
-              {/* {stats.disabled || 0}/ */}
-              {/* {stats.broken || 0}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary"> */}
-              {/* Chưa sử dụng/ */}
-              {/* Máy hư
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>             */}
-
-              {/* --- HÀNG 2 --- */}
-              {/* 3. Chưa sử dụng (Gộp: Bảo trì + Máy hư + Chưa sử dụng/Cho mượn) */}
-              <Grid size={{ xs: 6 }}>
-                <Card
-                  elevation={0}
-                  onClick={() =>
-                    handleStatusFilterClick(
-                      ["maintenance", "broken", "disabled"],
-                      []
-                    )
-                  }
-                  sx={{
-                    borderRadius: "20px",
-                    background: "#ff980011", // Màu cam nhạt
-                    border: "1px solid rgba(0, 0, 0, 0.05)",
-                    ...(isStatusFilterActive(
-                      ["maintenance", "broken", "disabled"],
-                      []
-                    )
-                      ? activeCardSx
-                      : inactiveCardSx),
-                  }}
-                >
-                  <CardContent sx={{ textAlign: "center", py: 3 }}>
-                    <Typography
-                      variant={isMobile ? "h5" : "h4"}
-                      fontWeight="bold"
-                      color="#ed6c02" // Màu cam đậm
-                    >
-                      {/* Tổng hợp số lượng các trạng thái con */}
-                      {formatNumber(
-                        (Number(stats.maintenance) || 0) +
-                          (Number(stats.broken) || 0) +
-                          (Number(stats.borrowed_out) || 0)
-                      )}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Chưa sử dụng
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-
-              {/* 4. Chờ thanh lý */}
-              <Grid size={{ xs: 6 }}>
-                <Card
-                  elevation={0}
-                  onClick={() =>
-                    handleStatusFilterClick(["pending_liquidation"], [])
-                  }
-                  sx={{
-                    borderRadius: "20px",
-                    background: "#ff572211",
-                    border: "1px solid rgba(0, 0, 0, 0.05)",
-                    ...(isStatusFilterActive(["pending_liquidation"], [])
-                      ? activeCardSx
-                      : inactiveCardSx),
-                  }}
-                >
-                  <CardContent sx={{ textAlign: "center", py: 3 }}>
-                    <Typography
-                      variant={isMobile ? "h5" : "h4"}
-                      fontWeight="bold"
-                      color="#ff5722"
-                    >
-                      {formatNumber(stats.pending_liquidation || 0)}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Chờ thanh lý
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-
-              {/* Thuê */}
-              {/* <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
-                <Card
-                  elevation={0}
-                  onClick={() => handleStatusFilterClick([], ["rented"])}
-                  sx={{
-                    borderRadius: "20px",
-                    background: "#673ab711",
-                    border: "1px solid rgba(0, 0, 0, 0.05)",
-                    ...(isStatusFilterActive([], ["rented"])
-                      ? activeCardSx
-                      : inactiveCardSx),
-                  }}
-                >
-                  <CardContent sx={{ textAlign: "center", py: 3 }}>
-                    <Typography
-                      variant={isMobile ? "h5" : "h4"}
-                      fontWeight="bold"
-                      color="#673ab7"
-                    >
-                      {stats.rented || 0}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Thuê
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid> */}
-              {/* Đã trả (Máy thuê) */}
-              {/* <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
-                <Card
-                  elevation={0}
-                  onClick={() =>
-                    handleStatusFilterClick(["disabled"], ["rented_return"])
-                  }
-                  sx={{
-                    borderRadius: "20px",
-                    background: "#673ab711", // Màu tím thuê
-                    border: "1px solid rgba(0, 0, 0, 0.05)",
-                    ...(isStatusFilterActive(["disabled"], ["rented_return"])
-                      ? activeCardSx
-                      : inactiveCardSx),
-                  }}
-                >
-                  <CardContent sx={{ textAlign: "center", py: 3 }}>
-                    <Typography
-                      variant={isMobile ? "h5" : "h4"}
-                      fontWeight="bold"
-                      color="#673ab7"
-                    >
-                      {stats.rented_return || 0}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Đã trả (Máy thuê)
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid> */}
-              {/* Mượn */}
-              {/* <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
-                <Card
-                  elevation={0}
-                  onClick={() => handleStatusFilterClick([], ["borrowed"])}
-                  sx={{
-                    borderRadius: "20px",
-                    background: "#03a9f411",
-                    border: "1px solid rgba(0, 0, 0, 0.05)",
-                    ...(isStatusFilterActive([], ["borrowed"])
-                      ? activeCardSx
-                      : inactiveCardSx),
-                  }}
-                >
-                  <CardContent sx={{ textAlign: "center", py: 3 }}>
-                    <Typography
-                      variant={isMobile ? "h5" : "h4"}
-                      fontWeight="bold"
-                      color="#03a9f4"
-                    >
-                      {stats.borrowed || 0}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Mượn
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid> */}
-              {/* Đã trả (Máy mượn) */}
-              {/* <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
-                <Card
-                  elevation={0}
-                  onClick={() =>
-                    handleStatusFilterClick(["disabled"], ["borrowed_return"])
-                  }
-                  sx={{
-                    borderRadius: "20px",
-                    background: "#03a9f411", // Màu xanh mượn
-                    border: "1px solid rgba(0, 0, 0, 0.05)",
-                    ...(isStatusFilterActive(["disabled"], ["borrowed_return"])
-                      ? activeCardSx
-                      : inactiveCardSx),
-                  }}
-                >
-                  <CardContent sx={{ textAlign: "center", py: 3 }}>
-                    <Typography
-                      variant={isMobile ? "h5" : "h4"}
-                      fontWeight="bold"
-                      color="#03a9f4"
-                    >
-                      {stats.borrowed_return || 0}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Đã trả (Máy mượn)
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid> */}
-              {/* Cho mượn (ĐÃ CHUYỂN LÊN) */}
-              {/* <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
-                <Card
-                  elevation={0}
-                  onClick={() =>
-                    handleStatusFilterClick(["disabled"], ["borrowed_out"])
-                  }
-                  sx={{
-                    borderRadius: "20px",
-                    background: "#00bcd411",
-                    border: "1px solid rgba(0, 0, 0, 0.05)",
-                    ...(isStatusFilterActive(["disabled"], ["borrowed_out"])
-                      ? activeCardSx
-                      : inactiveCardSx),
-                  }}
-                >
-                  <CardContent sx={{ textAlign: "center", py: 3 }}>
-                    <Typography
-                      variant={isMobile ? "h5" : "h4"}
-                      fontWeight="bold"
-                      color="#00bcd4"
-                    >
-                      {stats.borrowed_out || 0}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Cho mượn
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid> */}
-            </Grid>
+            <Box sx={autoGrid(120, 3, 2)}>
+              {statCards
+                .filter((card) => card.enabled)
+                .map((card) => (
+                  <StatCard
+                    key={card.label}
+                    label={card.label}
+                    value={formatNumber(card.value)}
+                    color={card.color}
+                    background={card.background}
+                    active={isStatusFilterActive(card.statuses, card.borrow)}
+                    onClick={() =>
+                      handleStatusFilterClick(card.statuses, card.borrow)
+                    }
+                  />
+                ))}
+            </Box>
           </Grid>
 
           <Grid size={12} sx={{ mt: 1 }}>
@@ -2945,11 +2589,7 @@ const MachineListPage = () => {
               {/* Tăng mt để tách biệt khỏi hàng trên */}
               <Card
                 elevation={0}
-                sx={{
-                  borderRadius: "20px",
-                  background: "#f5f5f5", // Màu xám nhạt
-                  border: "1px solid rgba(0, 0, 0, 0.05)",
-                }}
+                sx={{ ...preset.softCard, background: colors.grey[100] }}
               >
                 <CardContent>
                   <Typography variant="h6" fontWeight="bold" gutterBottom>
@@ -2965,7 +2605,7 @@ const MachineListPage = () => {
                           key={typeStat.type_machine}
                           disableGutters
                           sx={{
-                            borderBottom: "1px dashed #e0e0e0",
+                            borderBottom: borders.dashed,
                             py: 0.5,
                           }}
                         >
@@ -2992,7 +2632,7 @@ const MachineListPage = () => {
                                   component="span"
                                   variant="body1"
                                   fontWeight="bold"
-                                  color="#333"
+                                  color={colors.grey[800]}
                                   sx={{ flexShrink: 0 }} // Đảm bảo số lượng không bị cắt
                                 >
                                   {typeStat.count} máy
@@ -3012,7 +2652,7 @@ const MachineListPage = () => {
                           setIsTypeStatsExpanded(!isTypeStatsExpanded)
                         }
                         size="small"
-                        sx={{ borderRadius: "12px" }}
+                        sx={{ borderRadius: `${radii.md}px` }}
                       >
                         {isTypeStatsExpanded ? "Thu gọn" : "Xem thêm"}
                       </Button>
@@ -3036,9 +2676,9 @@ const MachineListPage = () => {
               <Card
                 elevation={0}
                 sx={{
-                  borderRadius: "20px",
-                  background: "#f5f5f5", // Màu xám nhạt
-                  border: "1px solid rgba(0, 0, 0, 0.05)",
+                  borderRadius: `${radii.lg}px`,
+                  background: colors.grey[100], // Màu xám nhạt
+                  border: borders.subtle,
                   height: "100%", // Đảm bảo các thẻ cao bằng nhau
                   display: "flex",
                   flexDirection: "column",
@@ -3046,7 +2686,7 @@ const MachineListPage = () => {
                 }}
               >
                 <CardContent sx={{ textAlign: "center", py: 3 }}>
-                  <Typography variant="h4" fontWeight="bold" color="#333">
+                  <Typography variant="h4" fontWeight="bold" color={colors.grey[800]}>
                     {typeStat.count}
                   </Typography>
                   <Typography
@@ -3070,14 +2710,7 @@ const MachineListPage = () => {
 
         {/* Search and Actions */}
         {/* Search and Actions - Đã phân chia Trái/Phải */}
-        <Card
-          elevation={0}
-          sx={{
-            mb: 3,
-            borderRadius: "20px",
-            border: "1px solid rgba(0, 0, 0, 0.05)",
-          }}
-        >
+        <Card elevation={0} sx={{ ...preset.softCard, mb: 3 }}>
           <CardContent sx={{ p: 3 }}>
             <Grid container spacing={2} alignItems="center">
               {/* === KHU VỰC BÊN TRÁI: Tìm kiếm, RFID, Số dòng === */}
@@ -3109,7 +2742,7 @@ const MachineListPage = () => {
                             style={{
                               margin: 0,
                               paddingLeft: "1.2rem",
-                              fontSize: "0.85rem",
+                              fontSize: fontSizes.body,
                               lineHeight: "1.5",
                             }}
                           >
@@ -3152,7 +2785,7 @@ const MachineListPage = () => {
                         onChange={handleSearchChange}
                         sx={{
                           "& .MuiOutlinedInput-root": {
-                            borderRadius: "12px",
+                            borderRadius: `${radii.md}px`,
                             paddingRight: 1,
                           },
                         }}
@@ -3193,7 +2826,7 @@ const MachineListPage = () => {
                       value={rowsPerPage}
                       label="Số dòng"
                       onChange={handleRowsPerPageChange}
-                      sx={{ borderRadius: "12px" }}
+                      sx={{ borderRadius: `${radii.md}px` }}
                     >
                       <MenuItem value={5}>5</MenuItem>
                       <MenuItem value={10}>10</MenuItem>
@@ -3212,19 +2845,19 @@ const MachineListPage = () => {
                     onClick={handleOpenRfidDialog}
                     // disabled={selectedMachines.size === 0}
                     sx={{
-                      borderRadius: "12px",
-                      color: "#667eea",
-                      borderColor: "#667eea",
+                      borderRadius: `${radii.md}px`,
+                      color: colors.brand.main,
+                      borderColor: colors.brand.main,
                       px: 1,
                       py: 1.5,
                       whiteSpace: "nowrap", // Không cho chữ xuống dòng
                       "&:hover": {
-                        borderColor: "#764ba2",
-                        bgcolor: "rgba(102, 126, 234, 0.04)",
+                        borderColor: colors.brand.alt,
+                        bgcolor: alpha(colors.brand.main, 0.04),
                       },
                       "&:disabled": {
-                        borderColor: "rgba(0, 0, 0, 0.26)",
-                        color: "rgba(0, 0, 0, 0.26)",
+                        borderColor: alpha(colors.black, 0.26),
+                        color: alpha(colors.black, 0.26),
                       },
                     }}
                   >
@@ -3252,9 +2885,9 @@ const MachineListPage = () => {
                       startIcon={<FileUpload />}
                       onClick={handleOpenImportDialog}
                       sx={{
-                        borderRadius: "12px",
-                        color: "#2e7d32",
-                        borderColor: "#2e7d32",
+                        borderRadius: `${radii.md}px`,
+                        color: colors.green.main,
+                        borderColor: colors.green.main,
                         px: 3,
                         py: 1.5,
                         whiteSpace: "nowrap",
@@ -3271,14 +2904,14 @@ const MachineListPage = () => {
                       startIcon={<Add />}
                       onClick={handleOpenCreateDialog}
                       sx={{
-                        borderRadius: "12px",
-                        background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                        borderRadius: `${radii.md}px`,
+                        background: `linear-gradient(45deg, ${colors.green.main}, ${colors.green.light})`,
                         px: 3,
                         py: 1.5,
                         whiteSpace: "nowrap",
                         "&:hover": {
                           transform: "translateY(-2px)",
-                          boxShadow: "0 8px 25px rgba(46, 125, 50, 0.3)",
+                          boxShadow: shadows.greenLift,
                         },
                         transition: "all 0.3s ease",
                       }}
@@ -3293,15 +2926,15 @@ const MachineListPage = () => {
                     startIcon={<Download />}
                     onClick={handleExportExcel}
                     sx={{
-                      borderRadius: "12px",
+                      borderRadius: `${radii.md}px`,
                       px: 3,
                       py: 1.5,
-                      color: "#1976d2",
-                      borderColor: "#1976d2",
+                      color: colors.blue.main,
+                      borderColor: colors.blue.main,
                       whiteSpace: "nowrap",
                       "&:hover": {
-                        borderColor: "#1565c0",
-                        bgcolor: "rgba(25, 118, 210, 0.04)",
+                        borderColor: colors.blue.dark,
+                        bgcolor: alpha(colors.blue.main, 0.04),
                       },
                     }}
                   >
@@ -3314,11 +2947,11 @@ const MachineListPage = () => {
                     startIcon={<ViewColumn />}
                     onClick={handleColumnMenuOpen}
                     sx={{
-                      borderRadius: "12px",
+                      borderRadius: `${radii.md}px`,
                       px: 3,
                       py: 1.5,
-                      color: "#667eea",
-                      borderColor: "#667eea",
+                      color: colors.brand.main,
+                      borderColor: colors.brand.main,
                       whiteSpace: "nowrap",
                     }}
                   >
@@ -3337,14 +2970,14 @@ const MachineListPage = () => {
                       fetchMatrixStats();
                     }}
                     sx={{
-                      borderRadius: "12px",
-                      background: "linear-gradient(45deg, #667eea, #764ba2)",
+                      borderRadius: `${radii.md}px`,
+                      background: gradients.brand,
                       px: 3,
                       py: 1.5,
                       whiteSpace: "nowrap",
                       "&:hover": {
                         transform: "translateY(-2px)",
-                        boxShadow: "0 8px 25px rgba(102, 126, 234, 0.3)",
+                        boxShadow: shadows.brandLift,
                       },
                       transition: "all 0.3s ease",
                     }}
@@ -3357,14 +2990,7 @@ const MachineListPage = () => {
           </CardContent>
         </Card>
 
-        <Card
-          elevation={0}
-          sx={{
-            mb: 3,
-            borderRadius: "20px",
-            border: "1px solid rgba(0, 0, 0, 0.05)",
-          }}
-        >
+        <Card elevation={0} sx={{ ...preset.softCard, mb: 3 }}>
           <CardContent sx={{ p: 3, "&:last-child": { pb: 3 } }}>
             <Typography
               variant="h6"
@@ -3399,7 +3025,7 @@ const MachineListPage = () => {
                       label="Loại máy"
                       sx={{
                         "& .MuiOutlinedInput-root": {
-                          borderRadius: "12px",
+                          borderRadius: `${radii.md}px`,
                         },
                       }}
                     />
@@ -3436,7 +3062,7 @@ const MachineListPage = () => {
                       label="Đặc tính"
                       sx={{
                         "& .MuiOutlinedInput-root": {
-                          borderRadius: "12px",
+                          borderRadius: `${radii.md}px`,
                         },
                       }}
                     />
@@ -3471,7 +3097,7 @@ const MachineListPage = () => {
                       label="Model"
                       sx={{
                         "& .MuiOutlinedInput-root": {
-                          borderRadius: "12px",
+                          borderRadius: `${radii.md}px`,
                         },
                       }}
                     />
@@ -3506,7 +3132,7 @@ const MachineListPage = () => {
                       label="Hãng SX"
                       sx={{
                         "& .MuiOutlinedInput-root": {
-                          borderRadius: "12px",
+                          borderRadius: `${radii.md}px`,
                         },
                       }}
                     />
@@ -3541,7 +3167,7 @@ const MachineListPage = () => {
                       label="Nhà cung cấp"
                       sx={{
                         "& .MuiOutlinedInput-root": {
-                          borderRadius: "12px",
+                          borderRadius: `${radii.md}px`,
                         },
                       }}
                     />
@@ -3576,7 +3202,7 @@ const MachineListPage = () => {
                       label="Vị trí hiện tại"
                       sx={{
                         "& .MuiOutlinedInput-root": {
-                          borderRadius: "12px",
+                          borderRadius: `${radii.md}px`,
                         },
                       }}
                     />
@@ -3601,24 +3227,23 @@ const MachineListPage = () => {
                     alignItems: "center",
                     justifyContent: "space-between",
                     px: 1.5,
-                    borderRadius: "12px",
+                    borderRadius: `${radii.md}px`,
                     border: "1px solid",
-                    borderColor: "rgba(0, 0, 0, 0.23)",
+                    borderColor: alpha(colors.black, 0.23),
                     backgroundColor: "transparent",
                     cursor: "pointer",
                     userSelect: "none",
                     boxSizing: "border-box",
                     transition: "all 0.2s ease-in-out",
                     "&:hover": {
-                      borderColor: "rgba(0, 0, 0, 0.87)",
+                      borderColor: alpha(colors.black, 0.87),
                     },
                   }}
                 >
                   <Typography
                     variant="body2"
                     sx={{
-                      fontSize: "1rem",
-                      fontWeight: 500,
+                      fontSize: fontSizes.lead,
                       color: "text.secondary",
                       whiteSpace: "nowrap",
                       overflow: "hidden",
@@ -3661,28 +3286,21 @@ const MachineListPage = () => {
             <CircularProgress />
           </Box>
         ) : error ? (
-          <Alert severity="error" sx={{ borderRadius: "12px" }}>
+          <Alert severity="error" sx={{ borderRadius: `${radii.md}px` }}>
             {error}
           </Alert>
         ) : (
-          <Card
-            ref={tableCardRef}
-            elevation={0}
-            sx={{
-              borderRadius: "20px",
-              border: "1px solid rgba(0, 0, 0, 0.05)",
-            }}
-          >
+          <Card ref={tableCardRef} elevation={0} sx={preset.softCard}>
             <TableContainer>
               <Table>
                 <TableHead>
                   <TableRow
-                    sx={{ backgroundColor: "rgba(102, 126, 234, 0.05)" }}
+                    sx={{ backgroundColor: alpha(colors.brand.main, 0.05) }}
                   >
                     <TableCell
                       sx={{
                         fontWeight: 600,
-                        fontSize: "0.95rem",
+                        fontSize: fontSizes.lead,
                         whiteSpace: "nowrap",
                         width: "50px",
                       }}
@@ -3692,9 +3310,9 @@ const MachineListPage = () => {
                         checked={isAllSelected}
                         onChange={handleSelectAll}
                         sx={{
-                          color: "#667eea",
+                          color: colors.brand.main,
                           "&.Mui-checked": {
-                            color: "#667eea",
+                            color: colors.brand.main,
                           },
                         }}
                       />
@@ -3702,7 +3320,7 @@ const MachineListPage = () => {
                     <TableCell
                       sx={{
                         fontWeight: 600,
-                        fontSize: "0.95rem",
+                        fontSize: fontSizes.lead,
                         whiteSpace: "nowrap",
                       }}
                     >
@@ -3714,7 +3332,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: "0.95rem",
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3735,7 +3353,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: "0.95rem",
+                          fontSize: fontSizes.lead,
                           minWidth: "150px",
                           whiteSpace: "nowrap",
                         }}
@@ -3757,7 +3375,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: "0.95rem",
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3778,7 +3396,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: "0.95rem",
+                          fontSize: fontSizes.lead,
                           minWidth: "200px",
                           whiteSpace: "nowrap",
                         }}
@@ -3800,7 +3418,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: "0.95rem",
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3821,7 +3439,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: "0.95rem",
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3842,7 +3460,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: "0.95rem",
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3863,7 +3481,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: "0.95rem",
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3884,7 +3502,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: "0.95rem",
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3905,7 +3523,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: "0.95rem",
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3926,7 +3544,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: "0.95rem",
+                          fontSize: fontSizes.lead,
                           minWidth: "150px",
                           whiteSpace: "nowrap",
                         }}
@@ -3948,7 +3566,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: "0.95rem",
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3969,7 +3587,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: "0.95rem",
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -3998,7 +3616,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: "0.95rem",
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -4027,7 +3645,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: "0.95rem",
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -4056,7 +3674,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: "0.95rem",
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -4085,7 +3703,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: "0.95rem",
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -4106,7 +3724,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: "0.95rem",
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -4127,7 +3745,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: "0.95rem",
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -4148,7 +3766,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: "0.95rem",
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -4169,7 +3787,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: "0.95rem",
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -4190,7 +3808,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: "0.95rem",
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -4211,7 +3829,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: "0.95rem",
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -4232,7 +3850,7 @@ const MachineListPage = () => {
                       <TableCell
                         sx={{
                           fontWeight: 600,
-                          fontSize: "0.95rem",
+                          fontSize: fontSizes.lead,
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -4279,7 +3897,7 @@ const MachineListPage = () => {
                           sx={{
                             cursor: "pointer", // Make row look clickable
                             "&:hover": {
-                              bgcolor: "rgba(102, 126, 234, 0.03)", // Màu hover nhẹ
+                              bgcolor: alpha(colors.brand.main, 0.03), // Màu hover nhẹ
                             },
                             transition: "all 0.2s ease",
                           }}
@@ -4300,9 +3918,9 @@ const MachineListPage = () => {
                               }
                               onClick={(e) => e.stopPropagation()}
                               sx={{
-                                color: "#667eea",
+                                color: colors.brand.main,
                                 "&.Mui-checked": {
-                                  color: "#667eea",
+                                  color: colors.brand.main,
                                 },
                               }}
                             />
@@ -4368,7 +3986,7 @@ const MachineListPage = () => {
                                   label={machine.name_category}
                                   size="small"
                                   sx={{
-                                    background: "#f0f0f0",
+                                    background: colors.grey[200],
                                     fontWeight: 500,
                                   }}
                                 />
@@ -4394,7 +4012,7 @@ const MachineListPage = () => {
                                   background: mainStatusInfo.bg,
                                   color: mainStatusInfo.color,
                                   fontWeight: 600,
-                                  borderRadius: "8px",
+                                  borderRadius: `${radii.sm}px`,
                                   textTransform: "uppercase",
                                 }}
                               />
@@ -4455,7 +4073,7 @@ const MachineListPage = () => {
                                           background: borrowStatusInfo.bg,
                                           color: borrowStatusInfo.color,
                                           fontWeight: 600,
-                                          borderRadius: "8px",
+                                          borderRadius: `${radii.sm}px`,
                                           textTransform: "uppercase",
                                         }}
                                       />
@@ -4540,7 +4158,7 @@ const MachineListPage = () => {
                   justifyContent: "space-between",
                   alignItems: "center",
                   p: 3,
-                  borderTop: "1px solid rgba(0, 0, 0, 0.05)",
+                  borderTop: borders.subtle,
                   flexDirection: { xs: "column", sm: "row" },
                   gap: 2,
                 }}
@@ -4560,10 +4178,10 @@ const MachineListPage = () => {
                   showLastButton
                   sx={{
                     "& .MuiPaginationItem-root": {
-                      borderRadius: "8px",
+                      borderRadius: `${radii.sm}px`,
                       fontWeight: 500,
                       "&.Mui-selected": {
-                        background: "linear-gradient(45deg, #667eea, #764ba2)",
+                        background: gradients.brand,
                         color: "white",
                       },
                     },
@@ -4579,29 +4197,18 @@ const MachineListPage = () => {
           open={openDialog}
           onClose={handleCloseDialog}
           maxWidth="md"
-          fullScreen={isMobile}
+          fullScreen={dialogFullScreen}
           fullWidth
-          PaperProps={{
-            sx: {
-              borderRadius: isMobile ? 0 : "20px",
-            },
-          }}
+          PaperProps={{ sx: preset.dialogPaper(dialogFullScreen) }}
         >
           {/* Cập nhật style DialogTitle để giống TicketManagementPage */}
-          <DialogTitle
-            sx={{
-              pb: 1,
-              background: "linear-gradient(45deg, #667eea, #764ba2)",
-              color: "white",
-              fontWeight: 700,
-            }}
-          >
+          <DialogTitle sx={preset.dialogTitle}>
             <Stack
               direction="row"
               alignItems="center"
               justifyContent="space-between"
             >
-              <Typography variant={isMobile ? "h6" : "h5"} fontWeight="bold">
+              <Typography variant="h5" fontWeight="bold">
                 {isCreateMode ? "Thêm máy móc mới" : "Chi tiết máy móc"}
               </Typography>
               <IconButton
@@ -4618,9 +4225,9 @@ const MachineListPage = () => {
           {!isCreateMode && selectedMachine && (
             <Box
               sx={{
-                borderBottom: "1px solid #e0e0e0",
+                borderBottom: borders.light,
                 px: { xs: 1, sm: 3 },
-                bgcolor: "#fafbfc",
+                bgcolor: colors.grey[50],
               }}
             >
               <Tabs
@@ -4633,11 +4240,13 @@ const MachineListPage = () => {
                     minHeight: 44,
                     textTransform: "none",
                     fontWeight: 600,
-                    fontSize: "0.88rem",
+                    fontSize: fontSizes.body,
                   },
-                  "& .Mui-selected": { color: "#667eea !important" },
+                  "& .Mui-selected": {
+                    color: `${colors.brand.main} !important`,
+                  },
                   "& .MuiTabs-indicator": {
-                    background: "linear-gradient(90deg,#667eea,#764ba2)",
+                    background: `linear-gradient(90deg,${colors.brand.main},${colors.brand.alt})`,
                     height: 3,
                     borderRadius: "3px 3px 0 0",
                   },
@@ -4679,10 +4288,9 @@ const MachineListPage = () => {
                       <Card
                         elevation={0}
                         sx={{
-                          borderRadius: "16px",
-                          border: "2px solid #667eea",
-                          background:
-                            "linear-gradient(135deg, #667eea11 0%, #764ba211 100%)",
+                          borderRadius: `${radii.lg}px`,
+                          border: `2px solid ${colors.brand.main}`,
+                          background: `linear-gradient(135deg, ${colors.brand.main}11 0%, ${colors.brand.alt}11 100%)`,
                         }}
                       >
                         <CardContent>
@@ -4696,7 +4304,7 @@ const MachineListPage = () => {
                               sx={{
                                 p: 3,
                                 bgcolor: "white",
-                                borderRadius: "12px",
+                                borderRadius: `${radii.md}px`,
                                 display: "flex",
                                 flexDirection: "column",
                                 alignItems: "center",
@@ -4742,9 +4350,11 @@ const MachineListPage = () => {
                               </Typography>
                             </Box> */}
                               <Typography
-                                variant={isMobile ? "subtitle1" : "h6"}
+                                variant="h6"
                                 fontWeight="bold"
                                 gutterBottom
+                                // <600px lùi về 1rem - bản cũ: isMobile ? "subtitle1" : "h6"
+                                sx={{ fontSize: { xs: "1rem", sm: "1.25rem" } }}
                               >
                                 Mã QR đã được tạo
                               </Typography>
@@ -4768,9 +4378,8 @@ const MachineListPage = () => {
                                   startIcon={<Print />}
                                   onClick={handlePrintQRCode}
                                   sx={{
-                                    borderRadius: "12px",
-                                    background:
-                                      "linear-gradient(45deg, #667eea, #764ba2)",
+                                    borderRadius: `${radii.md}px`,
+                                    background: gradients.brand,
                                     width: { xs: "100%", sm: "auto" },
                                   }}
                                 >
@@ -4781,9 +4390,8 @@ const MachineListPage = () => {
                                   startIcon={<Download />}
                                   onClick={handleDownloadQRCode}
                                   sx={{
-                                    borderRadius: "12px",
-                                    background:
-                                      "linear-gradient(45deg, #2e7d32, #4caf50)",
+                                    borderRadius: `${radii.md}px`,
+                                    background: `linear-gradient(45deg, ${colors.green.main}, ${colors.green.light})`,
                                     width: { xs: "100%", sm: "auto" },
                                   }}
                                 >
@@ -4793,7 +4401,7 @@ const MachineListPage = () => {
                                   variant="outlined"
                                   onClick={() => setShowQRCode(false)}
                                   sx={{
-                                    borderRadius: "12px",
+                                    borderRadius: `${radii.md}px`,
                                     width: { xs: "100%", sm: "auto" },
                                   }}
                                 >
@@ -4816,13 +4424,13 @@ const MachineListPage = () => {
                         startIcon={<QrCode2 />}
                         onClick={() => setShowQRCode(true)}
                         sx={{
-                          borderRadius: "12px",
+                          borderRadius: `${radii.md}px`,
                           py: 1.5,
-                          borderColor: "#667eea",
-                          color: "#667eea",
+                          borderColor: colors.brand.main,
+                          color: colors.brand.main,
                           "&:hover": {
-                            borderColor: "#764ba2",
-                            bgcolor: "#667eea11",
+                            borderColor: colors.brand.alt,
+                            bgcolor: hexA(colors.brand.main, "11"),
                           },
                         }}
                       >
@@ -4925,7 +4533,7 @@ const MachineListPage = () => {
                                     size={32}
                                     thickness={5}
                                     sx={{
-                                      color: "#ed6c02",
+                                      color: colors.orange.dark,
                                       position: "absolute",
                                       zIndex: 1,
                                       "& .MuiCircularProgress-circle": {
@@ -5253,7 +4861,10 @@ const MachineListPage = () => {
                             component={Paper}
                             elevation={0}
                             variant="outlined"
-                            sx={{ borderRadius: "12px", maxHeight: 300 }}
+                            sx={{
+                              borderRadius: `${radii.md}px`,
+                              maxHeight: 300,
+                            }}
                           >
                             <Table stickyHeader size="small">
                               <TableHead>
@@ -5567,7 +5178,10 @@ const MachineListPage = () => {
 
                   {!isCreateMode && selectedMachine && (
                     <Grid size={{ xs: 12 }}>
-                      <Alert severity="info" sx={{ borderRadius: "12px" }}>
+                      <Alert
+                        severity="info"
+                        sx={{ borderRadius: `${radii.md}px` }}
+                      >
                         <Typography variant="body2">
                           <strong>Người tạo:</strong>{" "}
                           {editedData.creator_ma_nv
@@ -5618,7 +5232,10 @@ const MachineListPage = () => {
               onClick={handleCloseDialog}
               variant="outlined"
               color="inherit"
-              sx={{ borderRadius: "12px", width: { xs: "100%", sm: "auto" } }}
+              sx={{
+                borderRadius: `${radii.md}px`,
+                width: { xs: "100%", sm: "auto" },
+              }}
             >
               {/* <<< 4. THAY ĐỔI: ĐỔI TÊN NÚT CHO VIEW-ONLY >>> */}
               Đóng
@@ -5631,10 +5248,13 @@ const MachineListPage = () => {
                 variant="outlined"
                 startIcon={<PictureAsPdf />}
                 sx={{
-                  borderRadius: "12px",
-                  borderColor: "#c62828",
-                  color: "#c62828",
-                  "&:hover": { borderColor: "#8e0000", bgcolor: "#ffebee" },
+                  borderRadius: `${radii.md}px`,
+                  borderColor: colors.red.dark,
+                  color: colors.red.dark,
+                  "&:hover": {
+                    borderColor: muiColors.red[900],
+                    bgcolor: colors.red.wash,
+                  },
                   width: { xs: "100%", sm: "auto" },
                   fontWeight: 600,
                 }}
@@ -5651,8 +5271,8 @@ const MachineListPage = () => {
                 variant="contained"
                 startIcon={<Save />}
                 sx={{
-                  borderRadius: "12px",
-                  background: "linear-gradient(45deg, #667eea, #764ba2)",
+                  borderRadius: `${radii.md}px`,
+                  background: gradients.brand,
                   width: { xs: "100%", sm: "auto" },
                 }}
               >
@@ -5666,18 +5286,14 @@ const MachineListPage = () => {
           open={importDialogOpen}
           onClose={handleCloseImportDialog}
           maxWidth="md"
-          fullScreen={isMobile}
+          fullScreen={dialogFullScreen}
           fullWidth
-          PaperProps={{
-            sx: {
-              borderRadius: isMobile ? 0 : "20px",
-            },
-          }}
+          PaperProps={{ sx: preset.dialogPaper(dialogFullScreen) }}
         >
           <DialogTitle
             sx={{
               pb: 1,
-              background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+              background: `linear-gradient(45deg, ${colors.green.main}, ${colors.green.light})`,
               color: "white",
               fontWeight: 700,
             }}
@@ -5687,7 +5303,7 @@ const MachineListPage = () => {
               alignItems="center"
               justifyContent="space-between"
             >
-              <Typography variant={isMobile ? "h6" : "h5"} fontWeight="bold">
+              <Typography variant="h5" fontWeight="bold">
                 Nhập máy móc từ file Excel
               </Typography>
             </Stack>
@@ -5703,7 +5319,7 @@ const MachineListPage = () => {
             }}
           >
             {/* Hướng dẫn */}
-            <Alert severity="info" sx={{ borderRadius: "12px" }}>
+            <Alert severity="info" sx={{ borderRadius: `${radii.md}px` }}>
               <AlertTitle>Hướng dẫn</AlertTitle>
               <Typography variant="body2" gutterBottom>
                 1. Chuẩn bị file Excel (.xlsx hoặc .xls) với các cột dữ liệu
@@ -5745,8 +5361,8 @@ const MachineListPage = () => {
                 component="label"
                 startIcon={<FileUpload />}
                 sx={{
-                  borderRadius: "12px",
-                  background: "linear-gradient(45deg, #667eea, #764ba2)",
+                  borderRadius: `${radii.md}px`,
+                  background: gradients.brand,
                 }}
               >
                 Chọn file Excel
@@ -5774,7 +5390,7 @@ const MachineListPage = () => {
                   severity={
                     importResults.errorCount > 0 ? "warning" : "success"
                   }
-                  sx={{ borderRadius: "12px", mb: 2 }}
+                  sx={{ borderRadius: `${radii.md}px`, mb: 2 }}
                 >
                   <AlertTitle>Nhập Excel hoàn tất</AlertTitle>
                   Đã thêm thành công:{" "}
@@ -5793,7 +5409,7 @@ const MachineListPage = () => {
                       sx={{
                         maxHeight: 300,
                         overflow: "auto",
-                        borderRadius: "12px",
+                        borderRadius: `${radii.md}px`,
                       }}
                     >
                       <List dense>
@@ -5829,7 +5445,7 @@ const MachineListPage = () => {
                       sx={{
                         maxHeight: 300,
                         overflow: "auto",
-                        borderRadius: "12px",
+                        borderRadius: `${radii.md}px`,
                       }}
                     >
                       <List dense>
@@ -5884,7 +5500,10 @@ const MachineListPage = () => {
               onClick={handleCloseImportDialog}
               variant="outlined"
               color="inherit"
-              sx={{ borderRadius: "12px", width: { xs: "100%", sm: "auto" } }}
+              sx={{
+                borderRadius: `${radii.md}px`,
+                width: { xs: "100%", sm: "auto" },
+              }}
               disabled={isImporting}
             >
               Đóng
@@ -5894,8 +5513,8 @@ const MachineListPage = () => {
               variant="contained"
               startIcon={<Save />}
               sx={{
-                borderRadius: "12px",
-                background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                borderRadius: `${radii.md}px`,
+                background: `linear-gradient(45deg, ${colors.green.main}, ${colors.green.light})`,
                 width: { xs: "100%", sm: "auto" },
               }}
               disabled={!importFile || isImporting}
@@ -5940,11 +5559,11 @@ const MachineListPage = () => {
             sx={{
               width: "100%",
               minWidth: { xs: "auto", sm: "350px" },
-              boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
-              borderRadius: "12px",
+              boxShadow: shadows.overlay,
+              borderRadius: `${radii.md}px`,
             }}
           >
-            <AlertTitle sx={{ fontWeight: "bold", fontSize: "1.1rem" }}>
+            <AlertTitle sx={{ fontWeight: "bold", fontSize: fontSizes.title }}>
               {notification.title}
             </AlertTitle>
             {notification.message}
@@ -5962,13 +5581,13 @@ const MachineListPage = () => {
               bottom: 24,
               right: 24,
               zIndex: 1000,
-              background: "linear-gradient(45deg, #667eea, #764ba2)",
+              background: gradients.brand,
               "&:hover": {
-                background: "linear-gradient(45deg, #764ba2, #667eea)",
+                background: `linear-gradient(45deg, ${colors.brand.alt}, ${colors.brand.main})`,
                 transform: "scale(1.1)",
               },
               transition: "all 0.3s ease",
-              boxShadow: "0 8px 25px rgba(102, 126, 234, 0.4)",
+              boxShadow: shadow(8, 25, shadowRgb.brand, 0.4),
             }}
           >
             <Badge
@@ -5976,7 +5595,7 @@ const MachineListPage = () => {
               color="error"
               sx={{
                 "& .MuiBadge-badge": {
-                  fontSize: "0.75rem",
+                  fontSize: fontSizes.small,
                   fontWeight: "bold",
                   minWidth: "24px",
                   height: "24px",

@@ -1,48 +1,67 @@
-export const RFID_CONTENT_BG = "#f8f9fc";
+// frontend/src/components/rfidScanner/rfidDialogTheme.js
+//
+// Sub-theme riêng của bộ dialog RFID. Giữ nguyên cấu trúc 3 biến thể (default /
+// batch / lookup) vì đó là từ vựng thiết kế riêng của tính năng này, NHƯNG mọi
+// gradient, bo góc và màu xám nay LẤY TỪ theme chính thay vì viết lại hex.
+// Nhờ vậy đổi màu thương hiệu ở theme/tokens.js là dialog RFID đổi theo.
+
+import {
+  gradients,
+  radii,
+  accents,
+  shadow,
+  shadowRgb,
+  colors,
+} from "../../theme";
+
+export const RFID_CONTENT_BG = colors.grey[50];
+
+/** rgba() theo accent + độ mờ, ví dụ soft(accents.brand, 0.08) */
+const soft = (accent, alpha) => `rgba(${accent.rgb}, ${alpha})`;
 
 export const RFID_DIALOG_VARIANTS = {
   default: {
-    gradient: "linear-gradient(45deg, #667eea, #764ba2)",
-    primaryButton: "linear-gradient(45deg, #667eea, #764ba2)",
-    primaryButtonHover: "linear-gradient(45deg, #5a6fd6, #6a4190)",
-    iconColor: "#667eea",
-    softBg: "rgba(102, 126, 234, 0.08)",
-    softBorder: "rgba(102, 126, 234, 0.22)",
-    progressTrack: "rgba(102, 126, 234, 0.12)",
-    // foundOverlay: "rgba(102, 126, 234, 0.95)",
-    foundOverlay: "rgba(46, 125, 50, 0.95)",
+    gradient: gradients.brand,
+    primaryButton: gradients.brand,
+    primaryButtonHover: gradients.brandHover,
+    iconColor: accents.brand.from,
+    softBg: soft(accents.brand, 0.08),
+    softBorder: soft(accents.brand, 0.22),
+    progressTrack: soft(accents.brand, 0.12),
+    // foundOverlay: soft(accents.brand, 0.95),
+    foundOverlay: soft(accents.green, 0.95),
   },
   batch: {
-    gradient: "linear-gradient(45deg, #ff9800, #ff5722)",
-    primaryButton: "linear-gradient(45deg, #ff9800, #ff5722)",
-    primaryButtonHover: "linear-gradient(45deg, #f57c00, #e64a19)",
-    iconColor: "#ff9800",
-    softBg: "rgba(255, 152, 0, 0.08)",
-    softBorder: "rgba(255, 152, 0, 0.25)",
-    progressTrack: "rgba(255, 152, 0, 0.12)",
-    // foundOverlay: "rgba(255, 152, 0, 0.95)",
-    foundOverlay: "rgba(46, 125, 50, 0.95)",
+    gradient: gradients.orange,
+    primaryButton: gradients.orange,
+    primaryButtonHover: gradients.orangeHover,
+    iconColor: accents.orange.from,
+    softBg: soft(accents.orange, 0.08),
+    softBorder: soft(accents.orange, 0.25),
+    progressTrack: soft(accents.orange, 0.12),
+    // foundOverlay: soft(accents.orange, 0.95),
+    foundOverlay: soft(accents.green, 0.95),
   },
   lookup: {
-    gradient: "linear-gradient(135deg, #00897b 0%, #26a69a 100%)",
-    primaryButton: "linear-gradient(45deg, #00897b 0%, #26a69a 100%)",
-    primaryButtonHover: "linear-gradient(45deg, #00796b 0%, #00897b 100%)",
-    iconColor: "#00897b",
-    softBg: "rgba(0, 137, 123, 0.08)",
-    softBorder: "rgba(0, 137, 123, 0.22)",
-    progressTrack: "rgba(0, 137, 123, 0.12)",
-    // foundOverlay: "rgba(0, 137, 123, 0.95)",
-    foundOverlay: "rgba(46, 125, 50, 0.95)",
+    gradient: gradients.teal,
+    primaryButton: gradients.teal45,
+    primaryButtonHover: gradients.teal45Dark,
+    iconColor: accents.teal.from,
+    softBg: soft(accents.teal, 0.08),
+    softBorder: soft(accents.teal, 0.22),
+    progressTrack: soft(accents.teal, 0.12),
+    // foundOverlay: soft(accents.teal, 0.95),
+    foundOverlay: soft(accents.green, 0.95),
   },
 };
 
-export const RFID_DIALOG_PAPER_SX = { borderRadius: "20px" };
+export const RFID_DIALOG_PAPER_SX = { borderRadius: `${radii.lg}px` };
 
 export const RFID_DIALOG_RADIUS = {
-  button: "12px",
-  alert: "12px",
-  input: "12px",
-  section: "16px",
+  button: `${radii.md}px`,
+  alert: `${radii.md}px`,
+  input: `${radii.md}px`,
+  section: `${radii.lg}px`,
 };
 
 export const RFID_PANEL_PADDING = { xs: 2, sm: 3 };
@@ -80,14 +99,14 @@ export function rfidPrimaryButtonSx(variant = "default") {
     textTransform: "none",
     fontWeight: 600,
     background: v.primaryButton,
-    boxShadow: "0 4px 14px rgba(0,0,0,0.12)",
+    boxShadow: shadow(4, 14, shadowRgb.black, 0.12),
     "&:hover": {
       background: v.primaryButtonHover || v.primaryButton,
-      boxShadow: "0 6px 18px rgba(0,0,0,0.16)",
+      boxShadow: shadow(6, 18, shadowRgb.black, 0.16),
     },
     "&.Mui-disabled": {
-      background: "#e0e0e0",
-      color: "#9e9e9e",
+      background: colors.grey[300],
+      color: colors.grey[500],
       boxShadow: "none",
     },
   };
@@ -105,7 +124,7 @@ export function rfidInputRootSx() {
   return {
     "& .MuiOutlinedInput-root": {
       borderRadius: RFID_DIALOG_RADIUS.input,
-      bgcolor: "#fff",
+      bgcolor: colors.white,
     },
   };
 }
@@ -115,7 +134,7 @@ export function rfidMonoInputSx() {
     ...rfidInputRootSx(),
     "& .MuiOutlinedInput-root": {
       borderRadius: RFID_DIALOG_RADIUS.input,
-      bgcolor: "#fff",
+      bgcolor: colors.white,
       fontFamily:
         "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
       letterSpacing: "0.04em",

@@ -8,79 +8,90 @@ import React, {
   useRef,
 } from "react";
 import {
-  Container,
-  Typography,
-  Box,
-  Paper,
-  Avatar,
-  Tabs,
-  Tab,
-  Button,
-  IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  Stack,
-  CircularProgress,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Snackbar,
+  accents,
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
+  Add,
+  AdminPanelSettings,
   Alert,
   AlertTitle,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
-  Grid,
+  alpha,
+  Avatar,
+  borders,
+  Box,
+  Business,
+  Button,
+  Card,
   Checkbox,
+  Chip,
+  CircularProgress,
+  Close,
+  colors,
+  Container,
+  Delete,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
+  Edit,
+  ExpandMore,
+  Factory,
+  fontSizes,
+  FormControl,
   FormControlLabel,
   FormGroup,
-  ListItemButton,
+  gradients,
+  Grid,
+  hexA,
+  IconButton,
+  InputAdornment,
+  InputLabel,
+  LinkIcon,
+  LinkOff,
+  List,
+  ListItem,
   ListItemAvatar,
-  Divider,
-  useTheme,
-  useMediaQuery,
-  Chip,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  LocalShipping,
+  LocationOn,
+  MenuItem,
+  muiColors,
+  Nfc,
+  PageHeader,
+  Paper,
+  People,
+  Person,
+  PlaylistAddCheck,
+  PrecisionManufacturing,
+  radii,
+  Save,
+  Search,
+  Select,
+  Settings,
+  shadow,
+  shadowRgb,
+  shadows,
+  Snackbar,
+  Stack,
+  Switch,
+  sx as preset,
+  Tab,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  Switch,
-  InputAdornment,
-  Card,
-} from "@mui/material";
-import {
-  AdminPanelSettings,
-  Edit,
-  Add,
-  Business,
-  LocationOn,
-  ExpandMore,
-  People,
-  Person,
-  Search,
-  Save,
-  Close,
-  Delete,
-  PrecisionManufacturing,
-  Settings,
-  Factory,
-  LocalShipping,
-  Link,
-  LinkOff,
-  Nfc,
+  Tabs,
+  TextField,
+  Typography,
+  useResponsive,
   WifiTethering,
-  PlaylistAddCheck,
-} from "@mui/icons-material";
+} from "../ui";
 import NavigationBar from "../components/NavigationBar";
 import RfidDialog from "../components/rfidScanner/RfidDialog";
 import { api } from "../api/api"; // Import API
@@ -101,40 +112,28 @@ const sanitizeDecimalInput = (value) => {
 
 
 // --- STYLES ĐỒNG NHẤT ---
-const gradientText = {
-  fontWeight: 700,
-  background: "linear-gradient(45deg, #667eea, #764ba2)",
-  backgroundClip: "text",
-  WebkitBackgroundClip: "text",
-  WebkitTextFillColor: "transparent",
-  textTransform: "uppercase",
-};
-
 const btnGradientStyle = {
-  borderRadius: "12px",
-  background: "linear-gradient(45deg, #667eea, #764ba2)",
+  borderRadius: `${radii.md}px`,
+  background: gradients.brand,
   transition: "all 0.3s ease",
-  boxShadow: "0 4px 12px rgba(102, 126, 234, 0.3)",
+  boxShadow: shadow(4, 12, shadowRgb.brand, 0.3),
   "&:hover": {
     transform: "translateY(-2px)",
-    boxShadow: "0 8px 25px rgba(102, 126, 234, 0.5)",
+    boxShadow: shadow(8, 25, shadowRgb.brand, 0.5),
   },
 };
 
 const btnGreenStyle = {
   ...btnGradientStyle,
-  background: "linear-gradient(45deg, #2e7d32, #4caf50)",
-  boxShadow: "0 4px 12px rgba(46, 125, 50, 0.3)",
+  background: `linear-gradient(45deg, ${colors.green.main}, ${colors.green.light})`,
+  boxShadow: shadow(4, 12, shadowRgb.green, 0.3),
   "&:hover": {
     transform: "translateY(-2px)",
-    boxShadow: "0 8px 25px rgba(46, 125, 50, 0.5)",
+    boxShadow: shadow(8, 25, shadowRgb.green, 0.5),
   },
 };
 
 const inputStyle = {
-  "& .MuiOutlinedInput-root": {
-    borderRadius: "12px",
-  },
 };
 
 // --- MATRIX HELPERS (outside component for stable references) ---
@@ -144,16 +143,16 @@ function getColKey(col) {
 
 const CHECKBOX_SX = {
   padding: "2px",
-  "&.Mui-checked": { color: "#764ba2" },
+  "&.Mui-checked": { color: colors.brand.alt },
 };
 
 const STICKY_LABEL_SX_BASE = {
   position: "sticky",
   left: 0,
   zIndex: 1,
-  borderRight: "2px solid #d0d4f0",
+  borderRight: `2px solid ${colors.brand.line}`,
   fontWeight: 500,
-  fontSize: "0.85rem",
+  fontSize: fontSizes.body,
   minWidth: 250,
   width: 250,
   maxWidth: 300,
@@ -162,7 +161,7 @@ const STICKY_LABEL_SX_BASE = {
   whiteSpace: "normal",
   lineHeight: 1.4,
   transition: "background-color 0.1s ease",
-  "tr:hover &": { backgroundColor: "#fff000 !important" },
+  "tr:hover &": { backgroundColor: `${muiColors.yellow["A400"]} !important` },
 };
 
 // Input nội tuyến — state nằm hoàn toàn bên trong, không trigger parent re-render khi gõ
@@ -187,14 +186,14 @@ const InlineEditCell = React.memo(function InlineEditCell({
         disabled={isSaving}
         sx={{
           flex: 1,
-          "& .MuiInputBase-input": { fontSize: "0.8rem", py: "5px" },
+          "& .MuiInputBase-input": { fontSize: fontSizes.small, py: "5px" },
         }}
       />
       <IconButton
         size="small"
         onClick={() => onSave(localName)}
         disabled={isSaving || !localName.trim()}
-        sx={{ color: "#667eea", p: "4px" }}
+        sx={{ color: colors.brand.main, p: "4px" }}
         title="Lưu"
       >
         {isSaving ? <CircularProgress size={14} /> : <Save fontSize="small" />}
@@ -236,7 +235,7 @@ const MatrixRow = React.memo(
           onMouseEnter={onLabelMouseEnter}
           sx={{
             ...STICKY_LABEL_SX_BASE,
-            backgroundColor: isEditing ? "#f5f4ff" : rowBg,
+            backgroundColor: isEditing ? colors.brand.wash : rowBg,
             py: isEditing ? 0.5 : 0.8,
           }}
         >
@@ -261,7 +260,7 @@ const MatrixRow = React.memo(
                 variant="body2"
                 sx={{
                   fontWeight: 500,
-                  fontSize: "0.85rem",
+                  fontSize: fontSizes.body,
                   lineHeight: 1.4,
                   flex: 1,
                 }}
@@ -276,22 +275,22 @@ const MatrixRow = React.memo(
                 <IconButton
                   size="medium"
                   onClick={() => onEdit(content)}
-                  sx={{ color: "#667eea", p: "3px" }}
+                  sx={{ color: colors.brand.main, p: "3px" }}
                   title="Chỉnh sửa"
                 >
-                  <Edit sx={{ fontSize: "1.5rem" }} />
+                  <Edit sx={{ fontSize: fontSizes.xl }} />
                 </IconButton>
                 <IconButton
                   size="medium"
                   onClick={() => onDelete(content)}
                   disabled={isDeleting}
-                  sx={{ color: "#e53935", p: "3px" }}
+                  sx={{ color: colors.red.main, p: "3px" }}
                   title="Xoá"
                 >
                   {isDeleting ? (
                     <CircularProgress size={12} />
                   ) : (
-                    <Delete sx={{ fontSize: "1.5rem" }} />
+                    <Delete sx={{ fontSize: fontSizes.xl }} />
                   )}
                 </IconButton>
               </Stack>
@@ -363,9 +362,9 @@ const SCHEDULE_LABEL_SX_BASE = {
   position: "sticky",
   left: 0,
   zIndex: 1,
-  borderRight: "2px solid #d0d4f0",
+  borderRight: `2px solid ${colors.brand.line}`,
   fontWeight: 500,
-  fontSize: "0.85rem",
+  fontSize: fontSizes.body,
   minWidth: 220,
   width: 220,
   maxWidth: 280,
@@ -373,7 +372,7 @@ const SCHEDULE_LABEL_SX_BASE = {
   px: 1.5,
   whiteSpace: "normal",
   lineHeight: 1.4,
-  "tr:hover &": { backgroundColor: "#fff000 !important" },
+  "tr:hover &": { backgroundColor: `${muiColors.yellow["A400"]} !important` },
 };
 
 // Hook debounce để tránh re-render liên tục khi gõ filter
@@ -423,8 +422,8 @@ const ScheduleRow = React.memo(
                 sx={{
                   width: 8,
                   height: 8,
-                  borderRadius: "50%",
-                  backgroundColor: hasContent ? "#22c55e" : "#d1d5db",
+                  borderRadius: radii.circle,
+                  backgroundColor: hasContent ? muiColors.green["A700"] : colors.grey[300],
                   flexShrink: 0,
                   boxShadow: hasContent
                     ? "0 0 0 2px rgba(34,197,94,0.18)"
@@ -444,7 +443,7 @@ const ScheduleRow = React.memo(
               {isDirty && (
                 <Box
                   component="span"
-                  sx={{ color: "#f59e0b", fontSize: "0.7rem", lineHeight: 1 }}
+                  sx={{ color: colors.orange.main, fontSize: fontSizes.label, lineHeight: 1 }}
                 >
                   ●
                 </Box>
@@ -455,11 +454,11 @@ const ScheduleRow = React.memo(
               sx={{
                 px: 0.75,
                 py: 0.1,
-                borderRadius: "10px",
-                fontSize: "0.7rem",
+                borderRadius: `${radii.md}px`,
+                fontSize: fontSizes.label,
                 fontWeight: 600,
-                color: "#4f46e5",
-                backgroundColor: "#eef0fb",
+                color: muiColors.indigo["A700"],
+                backgroundColor: colors.brand.wash,
                 lineHeight: 1.4,
                 minWidth: 28,
                 textAlign: "center",
@@ -605,7 +604,7 @@ const RfidTableRow = React.memo(function RfidTableRow({ row, onClick }) {
 
 const RFID_ROW_SX = {
   cursor: "pointer",
-  "&:hover": { bgcolor: "rgba(102, 126, 234, 0.06)" },
+  "&:hover": { bgcolor: alpha(colors.brand.main, 0.06) },
 };
 
 const AdminPage = () => {
@@ -613,8 +612,7 @@ const AdminPage = () => {
   const [machineCatalogSubTab, setMachineCatalogSubTab] = useState(0);
   const [maintConfigSubTab, setMaintConfigSubTab] = useState(0);
   const [loading, setLoading] = useState(true);
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const { isMobile } = useResponsive();
 
   // States for data
   const [departments, setDepartments] = useState([]);
@@ -1903,7 +1901,7 @@ const AdminPage = () => {
     }
     const el = headerCellRefs.current[colKey];
     if (el) {
-      el.style.backgroundColor = "#fff000";
+      el.style.backgroundColor = muiColors.yellow["A400"];
       prevHoveredColKeyRef.current = colKey;
     }
   };
@@ -2065,42 +2063,19 @@ const AdminPage = () => {
       <NavigationBar />
       <Container maxWidth="xl" sx={{ py: 4 }}>
         {/* HEADER */}
-        <Box sx={{ mb: 6 }}>
-          <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
-            <Avatar
-              sx={{
-                width: 60,
-                height: 60,
-                background: "linear-gradient(45deg, #667eea, #764ba2)",
-              }}
-            >
-              <AdminPanelSettings sx={{ fontSize: 30 }} />
-            </Avatar>
-            <Box>
-              <Typography
-                variant={isMobile ? "h4" : "h3"}
-                component="h1"
-                sx={gradientText}
-              >
-                Trang Quản Trị
-              </Typography>
-              <Typography
-                variant={isMobile ? "body1" : "h6"}
-                color="text.secondary"
-              >
-                Quản lý danh mục & phân quyền hệ thống
-              </Typography>
-            </Box>
-          </Stack>
-        </Box>
+        <PageHeader
+          icon={<AdminPanelSettings />}
+          title="Trang Quản Trị"
+          subtitle="Quản lý danh mục & phân quyền hệ thống"
+          titleSx={{ textTransform: "uppercase" }}
+        />
 
         {/* MAIN CONTENT CARD */}
         <Paper
           elevation={0}
           sx={{
+            ...preset.softCard,
             p: { xs: 2, md: 4 },
-            borderRadius: "20px",
-            border: "1px solid rgba(0, 0, 0, 0.05)",
           }}
         >
           <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
@@ -2114,14 +2089,14 @@ const AdminPage = () => {
                 "& .MuiTab-root": {
                   textTransform: "none",
                   fontWeight: 600,
-                  fontSize: "1rem",
-                  borderRadius: "12px 12px 0 0",
+                  fontSize: fontSizes.lead,
+                  borderRadius: `${radii.md}px ${radii.md}px 0 0`,
                 },
                 "& .Mui-selected": {
-                  color: "#764ba2",
+                  color: colors.brand.alt,
                 },
                 "& .MuiTabs-indicator": {
-                  backgroundColor: "#764ba2",
+                  backgroundColor: colors.brand.alt,
                   height: 3,
                   borderRadius: "3px 3px 0 0",
                 },
@@ -2187,8 +2162,8 @@ const AdminPage = () => {
                         }))
                       }
                       sx={{
-                        border: "1px solid rgba(0,0,0,0.08)",
-                        borderRadius: "12px !important",
+                        border: borders.subtle2,
+                        borderRadius: `${radii.md}px !important`,
                         "&:before": { display: "none" },
                         overflow: "hidden",
                       }}
@@ -2196,7 +2171,7 @@ const AdminPage = () => {
                       <AccordionSummary
                         expandIcon={<ExpandMore />}
                         sx={{
-                          bgcolor: "rgba(245, 245, 245, 0.5)",
+                          bgcolor: alpha(colors.grey[100], 0.5),
                           "& .MuiAccordionSummary-content": {
                             alignItems: "center",
                           },
@@ -2213,7 +2188,7 @@ const AdminPage = () => {
                           <Avatar
                             sx={{
                               background:
-                                "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                                gradients.brandDeep,
                               width: 40,
                               height: 40,
                               mr: 2,
@@ -2249,7 +2224,7 @@ const AdminPage = () => {
                               variant="outlined"
                               startIcon={<Add />}
                               onClick={() => handleOpenAddLocation(dept)}
-                              sx={{ borderRadius: "8px" }}
+                              sx={{ borderRadius: `${radii.sm}px` }}
                             >
                               Vị trí
                             </Button>
@@ -2259,8 +2234,8 @@ const AdminPage = () => {
                               size="small"
                               onClick={() => handleOpenAddLocation(dept)}
                               sx={{
-                                border: "1px solid #ddd",
-                                borderRadius: "8px",
+                                border: `1px solid ${muiColors.grey[300]}`,
+                                borderRadius: `${radii.sm}px`,
                               }}
                             >
                               <Add fontSize="small" />
@@ -2272,7 +2247,7 @@ const AdminPage = () => {
                             onClick={() =>
                               handleOpenDialog("edit", "department", dept)
                             }
-                            sx={{ bgcolor: "rgba(102, 126, 234, 0.1)" }}
+                            sx={{ bgcolor: alpha(colors.brand.main, 0.1) }}
                           >
                             <Edit />
                           </IconButton>
@@ -2287,7 +2262,7 @@ const AdminPage = () => {
                             fontWeight: 700,
                             color: "text.secondary",
                             textTransform: "uppercase",
-                            fontSize: "0.75rem",
+                            fontSize: fontSizes.small,
                             letterSpacing: "0.5px",
                           }}
                         >
@@ -2307,8 +2282,7 @@ const AdminPage = () => {
                                     p: 1.5,
                                     display: "flex",
                                     alignItems: "center",
-                                    borderRadius: "12px",
-                                    borderColor: "rgba(0,0,0,0.08)",
+                                    borderColor: alpha(colors.black, 0.08),
                                   }}
                                 >
                                   <ListItemIcon sx={{ minWidth: 36 }}>
@@ -2320,7 +2294,7 @@ const AdminPage = () => {
                                   <ListItemText
                                     primary={loc.name_location}
                                     primaryTypographyProps={{
-                                      fontSize: "0.95rem",
+                                      fontSize: fontSizes.lead,
                                       fontWeight: 500,
                                     }}
                                   />
@@ -2342,7 +2316,7 @@ const AdminPage = () => {
                             ))}
                           </Grid>
                         ) : (
-                          <Alert severity="info" sx={{ borderRadius: "12px" }}>
+                          <Alert severity="info" sx={{ borderRadius: `${radii.md}px` }}>
                             Chưa có vị trí nào được thêm vào đơn vị này.
                           </Alert>
                         )}
@@ -2365,7 +2339,7 @@ const AdminPage = () => {
 
                 <Paper
                   variant="outlined"
-                  sx={{ borderRadius: "16px", overflow: "hidden" }}
+                  sx={{ borderRadius: `${radii.lg}px`, overflow: "hidden" }}
                 >
                   <List disablePadding>
                     {categories.map((row, index) => (
@@ -2377,7 +2351,7 @@ const AdminPage = () => {
                             onClick={() =>
                               handleOpenDialog("edit", "category", row)
                             }
-                            sx={{ bgcolor: "rgba(0,0,0,0.03)" }}
+                            sx={{ bgcolor: alpha(colors.black, 0.03) }}
                           >
                             <Edit color="primary" />
                           </IconButton>
@@ -2388,8 +2362,8 @@ const AdminPage = () => {
                         <ListItemIcon sx={{ minWidth: 50 }}>
                           <Avatar
                             sx={{
-                              bgcolor: "rgba(118, 75, 162, 0.1)",
-                              color: "#764ba2",
+                              bgcolor: alpha(colors.brand.alt, 0.1),
+                              color: colors.brand.alt,
                             }}
                           >
                             <Category />
@@ -2399,7 +2373,7 @@ const AdminPage = () => {
                           primary={row.name_category}
                           primaryTypographyProps={{
                             fontWeight: 600,
-                            fontSize: "1.05rem",
+                            fontSize: fontSizes.title,
                           }}
                         />
                       </ListItem>
@@ -2423,14 +2397,14 @@ const AdminPage = () => {
                       "& .MuiTab-root": {
                         textTransform: "none",
                         fontWeight: 600,
-                        fontSize: "0.95rem",
+                        fontSize: fontSizes.lead,
                         minHeight: 48,
                       },
                       "& .Mui-selected": {
-                        color: "#764ba2",
+                        color: colors.brand.alt,
                       },
                       "& .MuiTabs-indicator": {
-                        backgroundColor: "#764ba2",
+                        backgroundColor: colors.brand.alt,
                         height: 3,
                       },
                     }}
@@ -2467,8 +2441,8 @@ const AdminPage = () => {
                           variant="outlined"
                           sx={{
                             p: 2.5,
-                            borderRadius: "16px",
-                            borderColor: "#e2e8f0",
+                            borderRadius: `${radii.lg}px`,
+                            borderColor: colors.navy.wash,
                           }}
                         >
                           <Box
@@ -2487,7 +2461,7 @@ const AdminPage = () => {
                               <Typography
                                 variant="h6"
                                 fontWeight={700}
-                                color="#2d3748"
+                                color={colors.grey[800]}
                               >
                                 Loại máy
                               </Typography>
@@ -2595,18 +2569,18 @@ const AdminPage = () => {
                                       sx={{
                                         py: 1.2,
                                         px: 2,
-                                        borderRadius: "10px",
+                                        borderRadius: `${radii.md}px`,
                                         cursor: "pointer",
                                         bgcolor: isSelected
-                                          ? "#667eea15"
+                                          ? hexA(colors.brand.main, "15")
                                           : "transparent",
                                         borderLeft: isSelected
-                                          ? "4px solid #667eea"
+                                          ? `4px solid ${colors.brand.main}`
                                           : "4px solid transparent",
                                         "&:hover": {
                                           bgcolor: isSelected
-                                            ? "#667eea22"
-                                            : "#f7fafc",
+                                            ? hexA(colors.brand.main, "22")
+                                            : colors.grey[50],
                                         },
                                         mb: 0.5,
                                       }}
@@ -2616,8 +2590,8 @@ const AdminPage = () => {
                                         primaryTypographyProps={{
                                           fontWeight: isSelected ? 700 : 500,
                                           color: isSelected
-                                            ? "#5a67d8"
-                                            : "#2d3748",
+                                            ? colors.brand.hover
+                                            : colors.grey[800],
                                         }}
                                       />
                                     </ListItem>
@@ -2632,8 +2606,8 @@ const AdminPage = () => {
                           variant="outlined"
                           sx={{
                             p: 2.5,
-                            borderRadius: "16px",
-                            borderColor: "#e2e8f0",
+                            borderRadius: `${radii.lg}px`,
+                            borderColor: colors.navy.wash,
                           }}
                         >
                           <Box
@@ -2652,7 +2626,7 @@ const AdminPage = () => {
                               <Typography
                                 variant="h6"
                                 fontWeight={700}
-                                color="#2d3748"
+                                color={colors.grey[800]}
                               >
                                 Đặc tính
                               </Typography>
@@ -2768,9 +2742,9 @@ const AdminPage = () => {
                             elevation={0}
                             sx={{
                               p: 2.5,
-                              borderRadius: "16px",
+                              borderRadius: `${radii.lg}px`,
                               background:
-                                "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                                gradients.brandDeep,
                               color: "white",
                             }}
                           >
@@ -2799,7 +2773,7 @@ const AdminPage = () => {
                               <Chip
                                 label={`${typeAttributes.length} đặc tính đã liên kết`}
                                 sx={{
-                                  bgcolor: "rgba(255,255,255,0.2)",
+                                  bgcolor: alpha(colors.white, 0.2),
                                   color: "white",
                                   fontWeight: 600,
                                 }}
@@ -2810,12 +2784,12 @@ const AdminPage = () => {
                           {/* QUẢN LÝ LIÊN KẾT ĐẶC TÍNH */}
                           <Paper
                             variant="outlined"
-                            sx={{ p: 3, borderRadius: "16px" }}
+                            sx={{ p: 3, borderRadius: `${radii.lg}px` }}
                           >
                             <Typography
                               variant="h6"
                               fontWeight={700}
-                              color="#2d3748"
+                              color={colors.grey[800]}
                               mb={2}
                             >
                               1. Liên kết Đặc tính với Loại máy
@@ -2891,12 +2865,12 @@ const AdminPage = () => {
                                         attr.uuid
                                       )
                                     }
-                                    icon={<Link />}
+                                    icon={<LinkIcon />}
                                     color="default"
                                     variant="outlined"
                                     sx={{
                                       cursor: "pointer",
-                                      "&:hover": { bgcolor: "#edf2f7" },
+                                      "&:hover": { bgcolor: colors.brand.wash },
                                     }}
                                   />
                                 ))}
@@ -2906,7 +2880,7 @@ const AdminPage = () => {
                           {/* KHAI BÁO THÔNG SỐ KỸ THUẬT */}
                           <Paper
                             variant="outlined"
-                            sx={{ p: 3, borderRadius: "16px" }}
+                            sx={{ p: 3, borderRadius: `${radii.lg}px` }}
                           >
                             <Box
                               sx={{
@@ -2920,7 +2894,7 @@ const AdminPage = () => {
                                 <Typography
                                   variant="h6"
                                   fontWeight={700}
-                                  color="#2d3748"
+                                  color={colors.grey[800]}
                                 >
                                   2. Khai báo Thông số kỹ thuật
                                 </Typography>
@@ -2944,9 +2918,9 @@ const AdminPage = () => {
                                   `${selectedTypeForAttributes}_ALL`
                                 }
                                 sx={{
-                                  bgcolor: "#4f46e5",
-                                  "&:hover": { bgcolor: "#4338ca" },
-                                  borderRadius: "10px",
+                                  bgcolor: muiColors.indigo["A700"],
+                                  "&:hover": { bgcolor: muiColors.deepPurple[600] },
+                                  borderRadius: `${radii.md}px`,
                                   px: 2,
                                 }}
                               >
@@ -2960,9 +2934,8 @@ const AdminPage = () => {
                                 variant="outlined"
                                 sx={{
                                   p: 2,
-                                  borderRadius: "12px",
-                                  bgcolor: "#f8fafc",
-                                  borderColor: "#cbd5e1",
+                                  bgcolor: colors.navy.lightest,
+                                  borderColor: colors.brand.line,
                                 }}
                               >
                                 <Stack
@@ -2987,7 +2960,7 @@ const AdminPage = () => {
                                       <Typography
                                         variant="subtitle1"
                                         fontWeight={700}
-                                        color="#1e293b"
+                                        color={colors.navy.dark}
                                       >
                                         {machineTypes.find(
                                           (t) =>
@@ -3024,8 +2997,8 @@ const AdminPage = () => {
                                     sx={{
                                       mt: { xs: 1, sm: 0 },
                                       alignSelf: "flex-start",
-                                      bgcolor: "#3b82f6",
-                                      "&:hover": { bgcolor: "#2563eb" },
+                                      bgcolor: muiColors.blue["A200"],
+                                      "&:hover": { bgcolor: muiColors.blue["A700"] },
                                     }}
                                   >
                                     Lưu thông số
@@ -3114,7 +3087,7 @@ const AdminPage = () => {
                                   <Typography
                                     variant="subtitle2"
                                     fontWeight={700}
-                                    color="#475569"
+                                    color={colors.navy.light}
                                     mb={1.5}
                                   >
                                     Thông số khi kết hợp với Đặc tính (Loại máy
@@ -3144,9 +3117,8 @@ const AdminPage = () => {
                                           variant="outlined"
                                           sx={{
                                             p: 2,
-                                            borderRadius: "12px",
                                             bgcolor: "white",
-                                            borderColor: "#e2e8f0",
+                                            borderColor: colors.navy.wash,
                                           }}
                                         >
                                           <Stack
@@ -3174,7 +3146,7 @@ const AdminPage = () => {
                                                 <Typography
                                                   variant="subtitle1"
                                                   fontWeight={700}
-                                                  color="#334155"
+                                                  color={colors.navy.main}
                                                 >
                                                   {typeName} {attr.name}
                                                 </Typography>
@@ -3202,9 +3174,9 @@ const AdminPage = () => {
                                               sx={{
                                                 mt: { xs: 1, sm: 0 },
                                                 alignSelf: "flex-start",
-                                                bgcolor: "#10b981",
+                                                bgcolor: muiColors.teal[400],
                                                 "&:hover": {
-                                                  bgcolor: "#059669",
+                                                  bgcolor: muiColors.teal[600],
                                                 },
                                               }}
                                             >
@@ -3287,10 +3259,10 @@ const AdminPage = () => {
                           variant="outlined"
                           sx={{
                             p: 5,
-                            borderRadius: "16px",
+                            borderRadius: `${radii.lg}px`,
                             textAlign: "center",
-                            bgcolor: "#f8fafc",
-                            borderColor: "#e2e8f0",
+                            bgcolor: colors.navy.lightest,
+                            borderColor: colors.navy.wash,
                           }}
                         >
                           <Typography
@@ -3322,7 +3294,7 @@ const AdminPage = () => {
                         variant="outlined"
                         sx={{
                           p: 3,
-                          borderRadius: "16px",
+                          borderRadius: `${radii.lg}px`,
                         }}
                       >
                         <Box
@@ -3406,7 +3378,7 @@ const AdminPage = () => {
                         variant="outlined"
                         sx={{
                           p: 3,
-                          borderRadius: "16px",
+                          borderRadius: `${radii.lg}px`,
                         }}
                       >
                         <Box
@@ -3510,7 +3482,7 @@ const AdminPage = () => {
                             variant="outlined"
                             sx={{
                               p: 2,
-                              borderRadius: "16px",
+                              borderRadius: `${radii.lg}px`,
                               textAlign: "center",
                               cursor: "pointer",
                               borderWidth: 2,
@@ -3552,7 +3524,7 @@ const AdminPage = () => {
                             variant="outlined"
                             sx={{
                               p: 2,
-                              borderRadius: "16px",
+                              borderRadius: `${radii.lg}px`,
                               textAlign: "center",
                               cursor: "pointer",
                               borderWidth: 2,
@@ -3560,7 +3532,7 @@ const AdminPage = () => {
                                 rfidStatusFilter === "active"
                                   ? "primary.main"
                                   : "success.light",
-                              bgcolor: "rgba(46, 125, 50, 0.06)",
+                              bgcolor: alpha(colors.green.main, 0.06),
                               transition: "border-color 0.2s, box-shadow 0.2s",
                               boxShadow:
                                 rfidStatusFilter === "active" ? 2 : "none",
@@ -3599,7 +3571,7 @@ const AdminPage = () => {
                             variant="outlined"
                             sx={{
                               p: 2,
-                              borderRadius: "16px",
+                              borderRadius: `${radii.lg}px`,
                               textAlign: "center",
                               cursor: "pointer",
                               borderWidth: 2,
@@ -3607,7 +3579,7 @@ const AdminPage = () => {
                                 rfidStatusFilter === "inactive"
                                   ? "primary.main"
                                   : "action.disabled",
-                              bgcolor: "rgba(0, 0, 0, 0.04)",
+                              bgcolor: alpha(colors.black, 0.04),
                               transition: "border-color 0.2s, box-shadow 0.2s",
                               boxShadow:
                                 rfidStatusFilter === "inactive" ? 2 : "none",
@@ -3649,7 +3621,6 @@ const AdminPage = () => {
                           onClick={() => setOpenUnusedRfidSearchDialog(true)}
                           sx={{
                             alignSelf: { xs: "stretch", sm: "center" },
-                            borderRadius: "12px",
                             px: 2.5,
                             py: 1,
                             ...btnGradientStyle,
@@ -3703,7 +3674,7 @@ const AdminPage = () => {
                       <TableContainer
                         component={Paper}
                         variant="outlined"
-                        sx={{ maxHeight: 560, borderRadius: "16px" }}
+                        sx={{ maxHeight: 560, borderRadius: `${radii.lg}px` }}
                       >
                         <Table stickyHeader size="small">
                           <TableHead>
@@ -3783,7 +3754,7 @@ const AdminPage = () => {
                       sx={{
                         p: 3,
                         height: "100%",
-                        borderRadius: "20px",
+                        borderRadius: `${radii.lg}px`,
                         display: "flex",
                         flexDirection: "column",
                       }}
@@ -3810,9 +3781,8 @@ const AdminPage = () => {
                           disabled={loadingUsers}
                           sx={{
                             minWidth: "60px",
-                            borderRadius: "12px",
                             background:
-                              "linear-gradient(45deg, #667eea, #764ba2)",
+                              gradients.brand,
                           }}
                         >
                           {loadingUsers ? (
@@ -3838,11 +3808,11 @@ const AdminPage = () => {
                                 onClick={() => handleSelectUser(user)}
                                 selected={selectedUser?.ma_nv === user.ma_nv}
                                 sx={{
-                                  borderRadius: "12px",
+                                  borderRadius: `${radii.md}px`,
                                   mb: 1,
                                   "&.Mui-selected": {
-                                    bgcolor: "rgba(102, 126, 234, 0.1)",
-                                    border: "1px solid #667eea",
+                                    bgcolor: alpha(colors.brand.main, 0.1),
+                                    border: `1px solid ${accents.brand.from}`,
                                   },
                                 }}
                               >
@@ -3885,8 +3855,8 @@ const AdminPage = () => {
                         p: 3,
                         minHeight: "400px",
                         height: "100%",
-                        borderRadius: "20px",
-                        bgcolor: selectedUser ? "white" : "rgba(0,0,0,0.02)",
+                        borderRadius: `${radii.lg}px`,
+                        bgcolor: selectedUser ? "white" : alpha(colors.black, 0.02),
                       }}
                     >
                       {selectedUser ? (
@@ -3929,7 +3899,7 @@ const AdminPage = () => {
                             <Typography
                               variant="caption"
                               sx={{
-                                bgcolor: "#f5f5f5",
+                                bgcolor: colors.grey[100],
                                 px: 1,
                                 borderRadius: 1,
                               }}
@@ -3963,7 +3933,7 @@ const AdminPage = () => {
                                         onChange={handlePermissionToggle}
                                         name={permName}
                                         sx={{
-                                          "&.Mui-checked": { color: "#764ba2" },
+                                          "&.Mui-checked": { color: colors.brand.alt },
                                         }}
                                       />
                                     }
@@ -3979,10 +3949,10 @@ const AdminPage = () => {
                                     sx={{
                                       mb: 1,
                                       p: 1,
-                                      borderRadius: "12px",
+                                      borderRadius: `${radii.md}px`,
                                       transition: "background 0.2s",
                                       "&:hover": {
-                                        bgcolor: "rgba(0,0,0,0.03)",
+                                        bgcolor: alpha(colors.black, 0.03),
                                       },
                                     }}
                                   />
@@ -4055,13 +4025,13 @@ const AdminPage = () => {
                     "& .MuiTab-root": {
                       textTransform: "none",
                       fontWeight: 600,
-                      fontSize: "0.95rem",
+                      fontSize: fontSizes.lead,
                     },
                     "& .Mui-selected": {
-                      color: "#764ba2",
+                      color: colors.brand.alt,
                     },
                     "& .MuiTabs-indicator": {
-                      backgroundColor: "#764ba2",
+                      backgroundColor: colors.brand.alt,
                     },
                   }}
                 >
@@ -4190,7 +4160,7 @@ const AdminPage = () => {
 
                       {maintenanceContents.length === 0 ||
                       machineTypesForMatrix.length === 0 ? (
-                        <Alert severity="info" sx={{ borderRadius: "12px" }}>
+                        <Alert severity="info" sx={{ borderRadius: `${radii.md}px` }}>
                           {maintenanceContents.length === 0
                             ? "Chưa có nội dung bảo dưỡng nào trong hệ thống."
                             : "Chưa có loại máy nào trong hệ thống."}
@@ -4201,7 +4171,7 @@ const AdminPage = () => {
                           variant="outlined"
                           sx={{
                             maxHeight: 600,
-                            borderRadius: "16px",
+                            borderRadius: `${radii.lg}px`,
                             overflow: "auto",
                             position: "relative",
                           }}
@@ -4223,13 +4193,13 @@ const AdminPage = () => {
                                     left: 0,
                                     top: 0,
                                     zIndex: 5,
-                                    backgroundColor: "#eef0fb",
-                                    borderRight: "2px solid #d0d4f0",
-                                    borderBottom: "2px solid #d0d4f0",
+                                    backgroundColor: colors.brand.wash,
+                                    borderRight: `2px solid ${colors.brand.line}`,
+                                    borderBottom: `2px solid ${colors.brand.line}`,
                                     fontWeight: 700,
                                     minWidth: 250,
                                     width: 250,
-                                    fontSize: "0.875rem",
+                                    fontSize: fontSizes.body,
                                     whiteSpace: "nowrap",
                                   }}
                                 >
@@ -4255,15 +4225,15 @@ const AdminPage = () => {
                                         width: 100,
                                         whiteSpace: "normal",
                                         lineHeight: 1.3,
-                                        fontSize: "0.75rem",
+                                        fontSize: fontSizes.small,
                                         // Màu do React quản lý (dirty/normal)
                                         // Hover do DOM ref quản lý (không re-render)
                                         backgroundColor: isDirty
-                                          ? "#fff8dc"
-                                          : "#eef0fb",
+                                          ? colors.orange.wash
+                                          : colors.brand.wash,
                                         borderBottom: isDirty
-                                          ? "2px solid #f59e0b"
-                                          : "2px solid #d0d4f0",
+                                          ? `2px solid ${muiColors.amber[700]}`
+                                          : `2px solid ${colors.brand.line}`,
                                         padding: "8px 4px",
                                         verticalAlign: "bottom",
                                       }}
@@ -4274,8 +4244,8 @@ const AdminPage = () => {
                                           component="span"
                                           sx={{
                                             display: "block",
-                                            fontSize: "0.6rem",
-                                            color: "#b45309",
+                                            fontSize: fontSizes.caption,
+                                            color: muiColors.deepOrange[900],
                                             fontWeight: 700,
                                             mt: 0.3,
                                           }}
@@ -4301,7 +4271,7 @@ const AdminPage = () => {
                                       content.name_maintenance_content
                                     ]
                                   }
-                                  rowBg={idx % 2 === 0 ? "#ffffff" : "#f8f8fc"}
+                                  rowBg={idx % 2 === 0 ? colors.white : colors.grey[50]}
                                   onCheckboxChange={handleMatrixCheckboxChange}
                                   onLabelMouseEnter={
                                     handleMatrixLabelMouseEnter
@@ -4439,15 +4409,15 @@ const AdminPage = () => {
                             onClick={() => setAutoCreateConfirmOpen(true)}
                             disabled={autoCreating || savingSchedule}
                             sx={{
-                              borderRadius: "10px",
-                              borderColor: "#9333ea",
-                              color: "#9333ea",
+                              borderRadius: `${radii.md}px`,
+                              borderColor: colors.purple.violet,
+                              color: colors.purple.violet,
                               fontWeight: 600,
                               px: 2.5,
                               py: 1,
                               "&:hover": {
-                                borderColor: "#7e22ce",
-                                bgcolor: "rgba(147,51,234,0.06)",
+                                borderColor: muiColors.purple[600],
+                                bgcolor: alpha(colors.purple.violet, 0.06),
                               },
                             }}
                           >
@@ -4546,11 +4516,11 @@ const AdminPage = () => {
                       </Grid>
 
                       {machineTypesForMatrix.length === 0 ? (
-                        <Alert severity="info" sx={{ borderRadius: "12px" }}>
+                        <Alert severity="info" sx={{ borderRadius: `${radii.md}px` }}>
                           Chưa có loại máy nào trong hệ thống.
                         </Alert>
                       ) : filteredScheduleMachineTypes.length === 0 ? (
-                        <Alert severity="info" sx={{ borderRadius: "12px" }}>
+                        <Alert severity="info" sx={{ borderRadius: `${radii.md}px` }}>
                           Không tìm thấy loại máy phù hợp.
                         </Alert>
                       ) : (
@@ -4559,7 +4529,7 @@ const AdminPage = () => {
                           variant="outlined"
                           sx={{
                             maxHeight: 500,
-                            borderRadius: "16px",
+                            borderRadius: `${radii.lg}px`,
                             overflow: "auto",
                             position: "relative",
                           }}
@@ -4580,13 +4550,13 @@ const AdminPage = () => {
                                     left: 0,
                                     top: 0,
                                     zIndex: 5,
-                                    backgroundColor: "#eef0fb",
-                                    borderRight: "2px solid #d0d4f0",
-                                    borderBottom: "2px solid #d0d4f0",
+                                    backgroundColor: colors.brand.wash,
+                                    borderRight: `2px solid ${colors.brand.line}`,
+                                    borderBottom: `2px solid ${colors.brand.line}`,
                                     fontWeight: 700,
                                     minWidth: 220,
                                     width: 220,
-                                    fontSize: "0.875rem",
+                                    fontSize: fontSizes.body,
                                   }}
                                 >
                                   <Box
@@ -4600,9 +4570,9 @@ const AdminPage = () => {
                                     <span>Loại máy</span>
                                     <span
                                       style={{
-                                        fontSize: "0.7rem",
+                                        fontSize: fontSizes.label,
                                         fontWeight: 500,
-                                        color: "#6b7280",
+                                        color: colors.grey[600],
                                       }}
                                     >
                                       SL
@@ -4617,12 +4587,12 @@ const AdminPage = () => {
                                       sx={{
                                         top: 0,
                                         zIndex: 2,
-                                        backgroundColor: "#eef0fb",
-                                        borderBottom: "2px solid #d0d4f0",
+                                        backgroundColor: colors.brand.wash,
+                                        borderBottom: `2px solid ${colors.brand.line}`,
                                         fontWeight: 700,
                                         minWidth: 52,
                                         width: 52,
-                                        fontSize: "0.8rem",
+                                        fontSize: fontSizes.small,
                                         whiteSpace: "nowrap",
                                       }}
                                     >
@@ -4642,7 +4612,7 @@ const AdminPage = () => {
                                     rowKey={rowKey}
                                     rowData={scheduleData[rowKey]}
                                     rowBg={
-                                      idx % 2 === 0 ? "#ffffff" : "#f8f8fc"
+                                      idx % 2 === 0 ? colors.white : colors.grey[50]
                                     }
                                     isDirty={dirtyScheduleKeys.has(rowKey)}
                                     onCheckboxChange={handleScheduleChange}
@@ -4715,7 +4685,7 @@ const AdminPage = () => {
                         sx={{
                           p: 4,
                           textAlign: "center",
-                          borderRadius: "16px",
+                          borderRadius: `${radii.lg}px`,
                           bgcolor: "background.default",
                         }}
                       >
@@ -4728,10 +4698,10 @@ const AdminPage = () => {
                       <TableContainer
                         component={Paper}
                         variant="outlined"
-                        sx={{ borderRadius: "16px", overflow: "hidden" }}
+                        sx={{ borderRadius: `${radii.lg}px`, overflow: "hidden" }}
                       >
                         <Table>
-                          <TableHead sx={{ bgcolor: "#fafafa" }}>
+                          <TableHead sx={{ bgcolor: colors.grey[50] }}>
                             <TableRow>
                               <TableCell
                                 sx={{
@@ -4766,7 +4736,7 @@ const AdminPage = () => {
                                   {idx + 1}
                                 </TableCell>
                                 <TableCell
-                                  sx={{ fontWeight: 600, color: "#1a1a2e" }}
+                                  sx={{ fontWeight: 600, color: colors.grey[900] }}
                                 >
                                   {item.name_maintenance_breakdown}
                                 </TableCell>
@@ -4779,8 +4749,8 @@ const AdminPage = () => {
                                     }
                                     sx={{
                                       mr: 1,
-                                      bgcolor: "#f5f6ff",
-                                      "&:hover": { bgcolor: "#e6e8ff" },
+                                      bgcolor: colors.grey[50],
+                                      "&:hover": { bgcolor: colors.blue.wash },
                                     }}
                                   >
                                     <Edit fontSize="small" />
@@ -4792,8 +4762,8 @@ const AdminPage = () => {
                                       handleOpenDeleteBreakdown(item)
                                     }
                                     sx={{
-                                      bgcolor: "#fff5f5",
-                                      "&:hover": { bgcolor: "#ffebeb" },
+                                      bgcolor: colors.grey[100],
+                                      "&:hover": { bgcolor: colors.red.wash },
                                     }}
                                   >
                                     <Delete fontSize="small" />
@@ -4819,13 +4789,13 @@ const AdminPage = () => {
           maxWidth="sm"
           fullWidth
           PaperProps={{
-            sx: { borderRadius: "20px" },
+            sx: { borderRadius: `${radii.lg}px` },
           }}
         >
           <DialogTitle
             sx={{
               fontWeight: 700,
-              background: "linear-gradient(45deg, #667eea, #764ba2)",
+              background: gradients.brand,
               color: "white",
               display: "flex",
               justifyContent: "space-between",
@@ -4883,9 +4853,9 @@ const AdminPage = () => {
               disabled={dialogLoading}
               variant="outlined"
               sx={{
-                borderRadius: "10px",
+                borderRadius: `${radii.md}px`,
                 color: "text.secondary",
-                borderColor: "rgba(0,0,0,0.2)",
+                borderColor: alpha(colors.black, 0.2),
               }}
             >
               Hủy bỏ
@@ -4911,13 +4881,13 @@ const AdminPage = () => {
           maxWidth="md"
           fullWidth
           PaperProps={{
-            sx: { borderRadius: "20px" },
+            sx: { borderRadius: `${radii.lg}px` },
           }}
         >
           <DialogTitle
             sx={{
               fontWeight: 700,
-              background: "linear-gradient(45deg, #667eea, #764ba2)",
+              background: gradients.brand,
               color: "white",
               display: "flex",
               justifyContent: "space-between",
@@ -5017,7 +4987,7 @@ const AdminPage = () => {
           onClose={() => setConfirmDeleteContent(null)}
           maxWidth="xs"
           fullWidth
-          PaperProps={{ sx: { borderRadius: "16px" } }}
+          PaperProps={{ sx: { borderRadius: `${radii.lg}px` } }}
         >
           <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>
             Xác nhận xoá
@@ -5047,7 +5017,7 @@ const AdminPage = () => {
             <Button
               variant="outlined"
               onClick={() => setConfirmDeleteContent(null)}
-              sx={{ borderRadius: "10px" }}
+              sx={{ borderRadius: `${radii.md}px` }}
             >
               Huỷ
             </Button>
@@ -5063,7 +5033,7 @@ const AdminPage = () => {
                   <Delete />
                 )
               }
-              sx={{ borderRadius: "10px" }}
+              sx={{ borderRadius: `${radii.md}px` }}
             >
               {deletingContentId ? "Đang xoá..." : "Xoá"}
             </Button>
@@ -5076,7 +5046,7 @@ const AdminPage = () => {
           onClose={() => !autoCreating && setAutoCreateConfirmOpen(false)}
           maxWidth="xs"
           fullWidth
-          PaperProps={{ sx: { borderRadius: "16px" } }}
+          PaperProps={{ sx: { borderRadius: `${radii.lg}px` } }}
         >
           <DialogTitle sx={{ fontWeight: 700 }}>
             Xác nhận tạo lịch bảo dưỡng tự động
@@ -5104,7 +5074,7 @@ const AdminPage = () => {
             <Button
               onClick={() => setAutoCreateConfirmOpen(false)}
               disabled={autoCreating}
-              sx={{ borderRadius: "10px", color: "text.secondary" }}
+              sx={{ borderRadius: `${radii.md}px`, color: "text.secondary" }}
             >
               Huỷ
             </Button>
@@ -5113,9 +5083,9 @@ const AdminPage = () => {
               onClick={handleAutoCreateSchedule}
               disabled={autoCreating}
               sx={{
-                borderRadius: "10px",
-                bgcolor: "#9333ea",
-                "&:hover": { bgcolor: "#7e22ce" },
+                borderRadius: `${radii.md}px`,
+                bgcolor: colors.purple.violet,
+                "&:hover": { bgcolor: muiColors.purple[600] },
                 fontWeight: 600,
               }}
             >
@@ -5130,7 +5100,7 @@ const AdminPage = () => {
           onClose={() => setAutoCreateResult(null)}
           maxWidth="md"
           fullWidth
-          PaperProps={{ sx: { borderRadius: "16px" } }}
+          PaperProps={{ sx: { borderRadius: `${radii.lg}px` } }}
         >
           <DialogTitle sx={{ fontWeight: 700 }}>
             Kết quả tạo lịch bảo dưỡng {autoCreateResult?.year}
@@ -5164,12 +5134,12 @@ const AdminPage = () => {
             </Stack>
             <Box
               sx={{
-                bgcolor: "#0f172a",
-                color: "#e2e8f0",
+                bgcolor: colors.navy.darkest,
+                color: colors.navy.wash,
                 p: 2,
-                borderRadius: "10px",
+                borderRadius: `${radii.md}px`,
                 fontFamily: "monospace",
-                fontSize: "0.8rem",
+                fontSize: fontSizes.small,
                 whiteSpace: "pre-wrap",
                 maxHeight: 480,
                 overflowY: "auto",
@@ -5195,7 +5165,7 @@ const AdminPage = () => {
             <Button
               variant="contained"
               onClick={() => setAutoCreateResult(null)}
-              sx={{ ...btnGradientStyle, borderRadius: "10px", px: 3 }}
+              sx={{ ...btnGradientStyle, borderRadius: `${radii.md}px`, px: 3 }}
             >
               Đóng
             </Button>
@@ -5209,7 +5179,7 @@ const AdminPage = () => {
           maxWidth="xs"
           fullWidth
           PaperProps={{
-            sx: { borderRadius: "20px" },
+            sx: { borderRadius: `${radii.lg}px` },
           }}
         >
           <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>
@@ -5241,7 +5211,7 @@ const AdminPage = () => {
           >
             <Button
               onClick={handleCloseBreakdownDialog}
-              sx={{ borderRadius: "10px", color: "text.secondary" }}
+              sx={{ borderRadius: `${radii.md}px`, color: "text.secondary" }}
             >
               Hủy
             </Button>
@@ -5268,7 +5238,7 @@ const AdminPage = () => {
           maxWidth="xs"
           fullWidth
           PaperProps={{
-            sx: { borderRadius: "16px" },
+            sx: { borderRadius: `${radii.lg}px` },
           }}
         >
           <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>
@@ -5277,7 +5247,7 @@ const AdminPage = () => {
           <DialogContent>
             <Typography variant="body2" color="text.secondary">
               Bạn có chắc muốn xóa lỗi{" "}
-              <strong style={{ color: "#d32f2f" }}>
+              <strong style={{ color: colors.red.dark }}>
                 "{deletingBreakdown?.name_maintenance_breakdown}"
               </strong>{" "}
               này không? Hành động này không thể hoàn tác.
@@ -5294,7 +5264,7 @@ const AdminPage = () => {
           >
             <Button
               onClick={handleCloseDeleteBreakdown}
-              sx={{ borderRadius: "10px", color: "text.secondary" }}
+              sx={{ borderRadius: `${radii.md}px`, color: "text.secondary" }}
             >
               Hủy
             </Button>
@@ -5308,7 +5278,7 @@ const AdminPage = () => {
                   <CircularProgress size={16} color="inherit" />
                 ) : null
               }
-              sx={{ borderRadius: "10px", px: 3, fontWeight: 600 }}
+              sx={{ borderRadius: `${radii.md}px`, px: 3, fontWeight: 600 }}
             >
               {savingBreakdown ? "Đang xóa..." : "Xác nhận xóa"}
             </Button>
@@ -5329,8 +5299,7 @@ const AdminPage = () => {
             variant="filled"
             sx={{
               width: "100%",
-              borderRadius: "12px",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
+              boxShadow: shadows.overlay,
               fontWeight: 500,
             }}
           >

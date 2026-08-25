@@ -2,38 +2,45 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import {
-  Container,
-  Typography,
-  Paper,
-  Box,
-  Button,
-  Stack,
-  CircularProgress,
+  accentGradient,
   Alert,
   AlertTitle,
-  Snackbar,
+  alpha,
+  Autorenew,
+  Avatar,
+  Box,
+  Button,
+  CheckCircleOutline,
+  CircularProgress,
+  Clear,
+  colors,
+  Container,
+  Divider,
+  ErrorOutline,
+  FactCheck,
+  fontSizes,
+  gradients,
   Grid,
+  muiColors,
+  PageHeader,
+  Paper,
+  radii,
+  Save,
+  shadows,
+  Snackbar,
+  Stack,
+  sx as preset,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  useTheme,
-  useMediaQuery,
-  Divider,
-  Avatar,
-} from "@mui/material";
-import NavigationBar from "../components/NavigationBar";
-import {
-  Clear,
-  FactCheck,
+  Typography,
   UploadFile,
-  Autorenew,
-  CheckCircleOutline,
-  ErrorOutline,
-  Save,
-} from "@mui/icons-material";
+  useResponsive,
+} from "../ui";
+import NavigationBar from "../components/NavigationBar";
 import { api } from "../api/api.jsx"; // Import API client
 
 // Helper: Định dạng kiểu chữ cho ô textarea
@@ -46,7 +53,7 @@ const textareaStyle = {
 
 // Component LinedTextarea (Không thay đổi)
 const LinedTextarea = ({ value, onChange, rows = 10, placeholder = "" }) => {
-  const theme = useTheme();
+  const { theme } = useResponsive();
   const [lineNumbers, setLineNumbers] = useState("1");
   const lineRef = useRef(null);
   const textRef = useRef(null);
@@ -96,7 +103,7 @@ const LinedTextarea = ({ value, onChange, rows = 10, placeholder = "" }) => {
     backgroundColor: "transparent",
     padding: paddingY,
     lineHeight: lineHeight, // Dùng line-height cố định
-    fontSize: "1rem",
+    fontSize: fontSizes.lead,
     boxSizing: "border-box",
     // Tính toán chiều cao: (số dòng * chiều cao dòng) + (padding * 2)
     height: `calc(${rows} * ${lineHeight} + 2 * ${paddingY})`,
@@ -108,12 +115,12 @@ const LinedTextarea = ({ value, onChange, rows = 10, placeholder = "" }) => {
       sx={{
         display: "flex",
         border: "1px solid",
-        borderColor: "rgba(0, 0, 0, 0.23)",
-        borderRadius: "12px", // Giữ bo góc
+        borderColor: alpha(colors.black, 0.23),
+        borderRadius: `${radii.md}px`, // Giữ bo góc
         overflow: "hidden", // Ẩn các phần thừa
         // Style khi hover
         "&:hover": {
-          borderColor: "rgba(0, 0, 0, 0.87)",
+          borderColor: alpha(colors.black, 0.87),
         },
         // Style khi focus
         "&:focus-within": {
@@ -134,7 +141,7 @@ const LinedTextarea = ({ value, onChange, rows = 10, placeholder = "" }) => {
           width: "45px", // Độ rộng cho số dòng
           textAlign: "right",
           color: theme.palette.text.secondary,
-          backgroundColor: "#f5f5f5", // Nền xám
+          backgroundColor: colors.grey[100], // Nền xám
           paddingRight: "5px",
           overflowY: "hidden", // Ẩn thanh cuộn của ô này
         }}
@@ -158,8 +165,7 @@ const LinedTextarea = ({ value, onChange, rows = 10, placeholder = "" }) => {
 };
 
 const UpdateRfidPage = () => {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const { isMobile } = useResponsive();
 
   // Dãy Serial/NFC (Input)
   const [identifierInput, setIdentifierInput] = useState("");
@@ -490,50 +496,17 @@ const UpdateRfidPage = () => {
     <>
       <NavigationBar />
       <Container maxWidth="xl" sx={{ py: 4 }}>
-        {/* Header (Giữ nguyên) */}
-        <Box sx={{ mb: 6 }}>
-          <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
-            <Avatar
-              sx={{
-                width: 60,
-                height: 60,
-                background: "linear-gradient(45deg, #667eea, #764ba2)",
-              }}
-            >
-              <UploadFile sx={{ fontSize: 30 }} />
-            </Avatar>
-            <Box>
-              <Typography
-                variant={isMobile ? "h4" : "h3"}
-                component="h1"
-                sx={{
-                  fontWeight: 700,
-                  background: "linear-gradient(45deg, #667eea, #764ba2)",
-                  backgroundClip: "text",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  textTransform: "uppercase",
-                }}
-              >
-                Cập nhật RFID Hàng Loạt
-              </Typography>
-              <Typography
-                variant={isMobile ? "body1" : "h6"}
-                color="text.secondary"
-              >
-                Kiểm tra và gán RFID mới cho máy móc.
-              </Typography>
-            </Box>
-          </Stack>
-        </Box>
+        {/* Header */}
+        <PageHeader
+          icon={<UploadFile />}
+          title="Cập nhật RFID Hàng Loạt"
+          subtitle="Kiểm tra và gán RFID mới cho máy móc."
+          titleSx={{ textTransform: "uppercase" }}
+        />
 
         <Paper
           elevation={0}
-          sx={{
-            p: { xs: 2, sm: 4 },
-            borderRadius: "20px",
-            border: "1px solid rgba(0, 0, 0, 0.05)",
-          }}
+          sx={{ ...preset.softCard, p: { xs: 2, sm: 4 } }}
         >
           <Stack direction="column" spacing={3}>
             {/* HÀNG 1: NHẬP LIỆU VÀ NÚT BẤM */}
@@ -607,12 +580,11 @@ const UpdateRfidPage = () => {
                       )
                     }
                     sx={{
-                      borderRadius: "12px",
                       py: 1.5,
-                      background: "linear-gradient(45deg, #667eea, #764ba2)",
+                      background: gradients.brand,
                       "&:hover": {
                         transform: "translateY(-2px)",
-                        boxShadow: "0 8px 25px rgba(102, 126, 234, 0.3)",
+                        boxShadow: shadows.brandLift,
                       },
                       transition: "all 0.3s ease",
                     }}
@@ -625,7 +597,7 @@ const UpdateRfidPage = () => {
                     color="error"
                     onClick={handleClear}
                     startIcon={<Clear />}
-                    sx={{ borderRadius: "12px", py: 1.5 }}
+                    sx={{ py: 1.5 }}
                   >
                     Xóa (Làm mới)
                   </Button>
@@ -658,7 +630,7 @@ const UpdateRfidPage = () => {
                       borderColor: "grey.500",
                       bgcolor:
                         filterStatus === "all"
-                          ? "rgba(0, 0, 0, 0.1)"
+                          ? alpha(colors.black, 0.1)
                           : "transparent",
                       borderWidth: filterStatus === "all" ? 2 : 1,
                       transition: "all 0.2s",
@@ -691,8 +663,8 @@ const UpdateRfidPage = () => {
                       borderColor: "primary.main",
                       bgcolor:
                         filterStatus === "diff"
-                          ? "rgba(25, 118, 210, 0.15)"
-                          : "rgba(25, 118, 210, 0.04)",
+                          ? alpha(colors.blue.main, 0.15)
+                          : alpha(colors.blue.main, 0.04),
                       borderWidth: filterStatus === "diff" ? 2 : 1,
                       transition: "all 0.2s",
                     }}
@@ -724,8 +696,8 @@ const UpdateRfidPage = () => {
                       borderColor: "success.main",
                       bgcolor:
                         filterStatus === "same"
-                          ? "rgba(46, 125, 50, 0.15)"
-                          : "rgba(46, 125, 50, 0.04)",
+                          ? alpha(colors.green.main, 0.15)
+                          : alpha(colors.green.main, 0.04),
                       borderWidth: filterStatus === "same" ? 2 : 1,
                       transition: "all 0.2s",
                     }}
@@ -757,8 +729,8 @@ const UpdateRfidPage = () => {
                       borderColor: "error.main",
                       bgcolor:
                         filterStatus === "notFound"
-                          ? "rgba(211, 47, 47, 0.15)"
-                          : "rgba(211, 47, 47, 0.04)",
+                          ? alpha(colors.red.dark, 0.15)
+                          : alpha(colors.red.dark, 0.04),
                       borderWidth: filterStatus === "notFound" ? 2 : 1,
                       transition: "all 0.2s",
                     }}
@@ -790,8 +762,8 @@ const UpdateRfidPage = () => {
                       borderColor: "warning.main",
                       bgcolor:
                         filterStatus === "duplicate"
-                          ? "rgba(237, 108, 2, 0.15)"
-                          : "rgba(237, 108, 2, 0.04)",
+                          ? alpha(colors.orange.dark, 0.15)
+                          : alpha(colors.orange.dark, 0.04),
                       borderWidth: filterStatus === "duplicate" ? 2 : 1,
                       transition: "all 0.2s",
                     }}
@@ -823,8 +795,8 @@ const UpdateRfidPage = () => {
                       borderColor: "error.main",
                       bgcolor:
                         filterStatus === "duplicateRfid"
-                          ? "rgba(211, 47, 47, 0.15)"
-                          : "rgba(211, 47, 47, 0.04)",
+                          ? alpha(colors.red.dark, 0.15)
+                          : alpha(colors.red.dark, 0.04),
                       borderWidth: filterStatus === "duplicateRfid" ? 2 : 1,
                       transition: "all 0.2s",
                     }}
@@ -850,18 +822,18 @@ const UpdateRfidPage = () => {
                   component={Paper}
                   elevation={0}
                   variant="outlined"
-                  sx={{ borderRadius: "12px", maxHeight: "60vh" }}
+                  sx={{ borderRadius: `${radii.md}px`, maxHeight: "60vh" }}
                   ref={tableContainerRef}
                 >
                   <Table stickyHeader>
                     <TableHead>
                       <TableRow
-                        sx={{ backgroundColor: "rgba(102, 126, 234, 0.05)" }}
+                        sx={{ backgroundColor: alpha(colors.brand.main, 0.05) }}
                       >
                         <TableCell
                           sx={{
                             fontWeight: 600,
-                            fontSize: "0.95rem",
+                            fontSize: fontSizes.lead,
                             padding: "10px",
                           }}
                         >
@@ -870,7 +842,7 @@ const UpdateRfidPage = () => {
                         <TableCell
                           sx={{
                             fontWeight: 600,
-                            fontSize: "0.95rem",
+                            fontSize: fontSizes.lead,
                             padding: "10px",
                           }}
                         >
@@ -879,7 +851,7 @@ const UpdateRfidPage = () => {
                         <TableCell
                           sx={{
                             fontWeight: 600,
-                            fontSize: "0.95rem",
+                            fontSize: fontSizes.lead,
                             padding: "10px",
                           }}
                         >
@@ -888,7 +860,7 @@ const UpdateRfidPage = () => {
                         <TableCell
                           sx={{
                             fontWeight: 600,
-                            fontSize: "0.95rem",
+                            fontSize: fontSizes.lead,
                             padding: "10px",
                           }}
                         >
@@ -897,7 +869,7 @@ const UpdateRfidPage = () => {
                         <TableCell
                           sx={{
                             fontWeight: 600,
-                            fontSize: "0.95rem",
+                            fontSize: fontSizes.lead,
                             padding: "10px",
                           }}
                         >
@@ -906,7 +878,7 @@ const UpdateRfidPage = () => {
                         <TableCell
                           sx={{
                             fontWeight: 600,
-                            fontSize: "0.95rem",
+                            fontSize: fontSizes.lead,
                             padding: "10px",
                             minWidth: 200,
                           }}
@@ -925,7 +897,7 @@ const UpdateRfidPage = () => {
                           statusIcon = (
                             <ErrorOutline
                               color="error"
-                              sx={{ fontSize: "1.1rem" }}
+                              sx={{ fontSize: fontSizes.title }}
                             />
                           );
                           rfidColor = "text.secondary";
@@ -934,7 +906,7 @@ const UpdateRfidPage = () => {
                           statusIcon = (
                             <ErrorOutline
                               color="error"
-                              sx={{ fontSize: "1.1rem" }}
+                              sx={{ fontSize: fontSizes.title }}
                             />
                           );
                           rfidColor = "error.main";
@@ -943,7 +915,7 @@ const UpdateRfidPage = () => {
                           statusIcon = (
                             <CheckCircleOutline
                               color="success"
-                              sx={{ fontSize: "1.1rem" }}
+                              sx={{ fontSize: fontSizes.title }}
                             />
                           );
                           rfidColor = "success.main";
@@ -952,7 +924,7 @@ const UpdateRfidPage = () => {
                           statusIcon = (
                             <Autorenew
                               color="primary"
-                              sx={{ fontSize: "1.1rem" }}
+                              sx={{ fontSize: fontSizes.title }}
                             />
                           );
                           rfidColor = "primary.main";
@@ -964,17 +936,17 @@ const UpdateRfidPage = () => {
                             sx={{
                               "&:last-child td, &:last-child th": { border: 0 },
                               backgroundColor: row.notFound
-                                ? "rgba(255, 0, 0, 0.05)" // Màu đỏ nhạt
+                                ? alpha(muiColors.red["A700"], 0.05) // Màu đỏ nhạt
                                 : row.isDuplicateRfid
-                                ? "rgba(211, 47, 47, 0.05)" // Màu đỏ nhạt cho RFID trùng
+                                ? alpha(colors.red.dark, 0.05) // Màu đỏ nhạt cho RFID trùng
                                 : "inherit",
                               transition: "all 0.2s ease",
                               "&:hover": {
                                 bgcolor: row.notFound
-                                  ? "rgba(255, 0, 0, 0.1)"
+                                  ? alpha(muiColors.red["A700"], 0.1)
                                   : row.isDuplicateRfid
-                                  ? "rgba(211, 47, 47, 0.1)"
-                                  : "rgba(102, 126, 234, 0.03)",
+                                  ? alpha(colors.red.dark, 0.1)
+                                  : alpha(colors.brand.main, 0.03),
                               },
                             }}
                           >
@@ -1069,13 +1041,12 @@ const UpdateRfidPage = () => {
                       )
                     }
                     sx={{
-                      borderRadius: "12px",
                       py: 1.5,
                       px: 5,
-                      background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                      background: accentGradient("green"),
                       "&:hover": {
                         transform: "translateY(-2px)",
-                        boxShadow: "0 8px 25px rgba(46, 125, 50, 0.3)",
+                        boxShadow: shadows.greenLift,
                       },
                       transition: "all 0.3s ease",
                     }}
@@ -1108,14 +1079,13 @@ const UpdateRfidPage = () => {
           sx={{
             width: "100%",
             minWidth: { xs: "auto", sm: "350px" },
-            boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
-            borderRadius: "12px",
+            boxShadow: shadows.overlay,
             ".MuiAlert-message": {
               whiteSpace: "pre-wrap",
             },
           }}
         >
-          <AlertTitle sx={{ fontWeight: "bold", fontSize: "1.1rem" }}>
+          <AlertTitle sx={{ fontWeight: "bold", fontSize: fontSizes.title }}>
             {notification.title}
           </AlertTitle>
           {notification.message}

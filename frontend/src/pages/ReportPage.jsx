@@ -9,18 +9,63 @@ import React, {
   useLayoutEffect,
 } from "react";
 import {
-  Container,
-  Typography,
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
+  Air,
+  Alert,
+  alpha,
+  Assessment,
+  Avatar,
+  borders,
   Box,
+  Business,
   Button,
-  Grid,
+  CalendarMonth,
   Card,
   CardContent,
-  Stack,
-  Avatar,
+  CheckCircle,
+  ChevronLeft,
+  ChevronRight,
+  Chip,
   CircularProgress,
-  Alert,
-  Tabs,
+  Close,
+  colors,
+  Container,
+  Dashboard,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  Divider,
+  ExpandMore,
+  FactCheck,
+  FileDownload,
+  fontSizes,
+  Fullscreen,
+  getTicketFlowColor,
+  getTicketFlowLabel,
+  gradients,
+  Grid,
+  HourglassEmpty,
+  IconButton,
+  KeyboardArrowDown,
+  KeyboardArrowUp,
+  LocationOn,
+  MAINT_STATUS,
+  muiColors,
+  OpenInNew,
+  PageHeader,
+  Paper,
+  PrecisionManufacturing,
+  radii,
+  Refresh,
+  ring,
+  shadow,
+  shadowRgb,
+  Speed,
+  Stack,
+  STAT_COLORS,
+  sx as preset,
   Tab,
   Table,
   TableBody,
@@ -28,50 +73,22 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
-  IconButton,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-  Chip,
-  Divider,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  useTheme,
-  useMediaQuery,
-} from "@mui/material";
-import { alpha } from "@mui/material/styles";
-import {
-  Assessment,
-  ExpandMore,
-  Receipt,
-  CalendarMonth,
-  ChevronLeft,
-  ChevronRight,
-  Refresh,
+  Tabs,
   TaskAlt,
-  HourglassEmpty,
-  CheckCircle,
-  Business,
-  FileDownload,
-  Air,
-  Speed,
-  PrecisionManufacturing,
-  LocationOn,
+  Typography,
+  useResponsive,
   WarningAmber,
-  Dashboard,
-  FactCheck,
-  OpenInNew,
-  Fullscreen,
-  KeyboardArrowUp,
-  KeyboardArrowDown,
-  Close,
-} from "@mui/icons-material";
+} from "../ui";
 import { useLocation } from "react-router-dom";
 import ExcelJS from "exceljs";
 import NavigationBar from "../components/NavigationBar";
 import { api } from "../api/api";
+
+/**
+ * Chu kỳ tự gọi lại API báo cáo. Dashboard hay được mở suốt ngày trên màn hình
+ * lớn nên phải tự cập nhật, không thể trông vào việc có người bấm nút Làm mới.
+ */
+const REPORT_REFRESH_MS = 3 * 60 * 1000;
 
 const MONTH_NAMES = [
   "Tháng 1",
@@ -88,25 +105,12 @@ const MONTH_NAMES = [
   "Tháng 12",
 ];
 
+// Nhãn + màu lấy từ theme/statusTokens.js (dùng chung với
+// MaintenanceSchedulePage). Chỉ `icon` gắn tại đây.
 const MAINT_STATUS_CONFIG = {
-  pending: {
-    label: "Chưa thực hiện",
-    color: "#e65100",
-    bg: "#fff3e0",
-    icon: HourglassEmpty,
-  },
-  completed: {
-    label: "Đã thực hiện",
-    color: "#1565c0",
-    bg: "#e3f2fd",
-    icon: TaskAlt,
-  },
-  confirm_completed: {
-    label: "Đã hoàn thành",
-    color: "#2e7d32",
-    bg: "#e8f5e9",
-    icon: CheckCircle,
-  },
+  pending: { ...MAINT_STATUS.pending, icon: HourglassEmpty },
+  completed: { ...MAINT_STATUS.completed, icon: TaskAlt },
+  confirm_completed: { ...MAINT_STATUS.confirm_completed, icon: CheckCircle },
 };
 
 // Cấu hình bảng trạng thái chi tiết (đồng bộ với trang Danh sách máy móc)
@@ -116,33 +120,27 @@ const MATRIX_COLUMNS = [
   { key: "rented", label: "Máy thuê" },
 ];
 
+// Màu lấy từ theme/statusTokens.js (color = chữ, pastel = nền ô).
+// Cùng một hàm row() với MachineListPage và LocationTrackPage.
+const row = (key, label, extra) => ({
+  key,
+  label,
+  color: STAT_COLORS[key].color,
+  bg: STAT_COLORS[key].pastel,
+  ...extra,
+});
+
 const MATRIX_ROWS = [
-  {
-    key: "available",
-    label: "Có thể sử dụng",
-    color: "#2e7d32",
-    bg: "#e8f5e9",
-  },
-  { key: "in_use", label: "Đang sử dụng", color: "#1976d2", bg: "#e3f2fd" },
-  {
-    key: "not_in_use",
-    label: "Chưa sử dụng",
-    color: "#ed6c02",
-    bg: "#fff3e0",
-    hasChildren: true,
-  },
-  {
-    key: "pending_liquidation",
-    label: "Chờ thanh lý",
-    color: "#ff5722",
-    bg: "#fbe9e7",
-  },
+  row("available", "Có thể sử dụng"),
+  row("in_use", "Đang sử dụng"),
+  row("not_in_use", "Chưa sử dụng", { hasChildren: true }),
+  row("pending_liquidation", "Chờ thanh lý"),
 ];
 
 const MATRIX_SUB_ROWS = [
-  { key: "maintenance", label: "Bảo trì", color: "#00bcd4", bg: "#e0f7fa" },
-  { key: "broken", label: "Máy hư", color: "#00bcd4", bg: "#e0f7fa" },
-  { key: "disabled", label: "Cho mượn", color: "#00bcd4", bg: "#e0f7fa" },
+  row("maintenance", "Bảo trì"),
+  row("broken", "Máy hư"),
+  row("disabled", "Cho mượn"),
 ];
 
 const MATRIX_MERGED_STATUSES = ["maintenance", "broken", "disabled"];
@@ -152,7 +150,7 @@ const MATRIX_MERGED_STATUSES = ["maintenance", "broken", "disabled"];
 const MAINT_DONE_COLOR = MAINT_STATUS_CONFIG.completed.color;
 const MAINT_PENDING_COLOR = MAINT_STATUS_CONFIG.pending.color;
 // Thanh "Tiến độ đến hiện tại" dùng màu vàng để tách khỏi cam "chưa thực hiện"
-const MAINT_TODAY_COLOR = "#f59e0b";
+const MAINT_TODAY_COLOR = colors.orange.main;
 
 const MO_MAINT_SEGMENTS = [
   { key: "done", label: "Đã thực hiện", color: MAINT_DONE_COLOR },
@@ -161,10 +159,22 @@ const MO_MAINT_SEGMENTS = [
 
 // Các phần của biểu đồ donut cơ cấu trạng thái máy (màu sáng trên nền tối)
 const MO_DONUT_SEGMENTS = [
-  { key: "in_use", label: "Đang sử dụng", color: "#1976d2" },
-  { key: "available", label: "Có thể sử dụng", color: "#2e7d32" },
-  { key: "not_in_use", label: "Chưa sử dụng", color: "#ed6c02" },
-  { key: "pending_liquidation", label: "Chờ thanh lý", color: "#ff5722" },
+  { key: "in_use", label: "Đang sử dụng", color: STAT_COLORS.in_use.color },
+  {
+    key: "available",
+    label: "Có thể sử dụng",
+    color: STAT_COLORS.available.color,
+  },
+  {
+    key: "not_in_use",
+    label: "Chưa sử dụng",
+    color: STAT_COLORS.not_in_use.color,
+  },
+  {
+    key: "pending_liquidation",
+    label: "Chờ thanh lý",
+    color: STAT_COLORS.pending_liquidation.color,
+  },
 ];
 
 const formatCount = (value) =>
@@ -173,7 +183,7 @@ const formatCount = (value) =>
 // Style hàng tiêu đề & hàng tổng cộng dùng chung cho các bảng của tab Dashboard,
 // lấy đúng theo bảng của tab Thống kê kiểm kê / Thống kê bảo dưỡng.
 // Màu nền phải đặt trên từng ô vì stickyHeader của MUI ghi đè nền của TableRow.
-const TABLE_HEAD_BG = "#f5f6f8";
+const TABLE_HEAD_BG = colors.grey[100];
 const TABLE_HEAD_CELL = { top: 0, fontWeight: 700, bgcolor: TABLE_HEAD_BG };
 
 // Gộp máy "cho mượn" vào cột nội bộ và tạo hàng gộp "Chưa sử dụng"
@@ -207,46 +217,46 @@ const matrixColTotal = (data, colKey) =>
 // Bảng màu gradient dùng chung, đồng bộ với các card ở tab Lưu lượng khí nén
 const GRADIENTS = {
   navy: {
-    bg: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
-    shadow: "0 10px 30px rgba(15,23,42,0.3)",
-    accent: "#38bdf8",
+    bg: `linear-gradient(135deg, ${colors.navy.darkest} 0%, ${colors.navy.dark} 100%)`,
+    shadow: shadow(10, 30, shadowRgb.navy, 0.3),
+    accent: colors.blue.bright,
   },
   indigo: {
-    bg: "linear-gradient(135deg, #3f51b5 0%, #5c6bc0 100%)",
+    bg: `linear-gradient(135deg, ${muiColors.indigo[500]} 0%, ${colors.brand.hover} 100%)`,
     shadow: "0 6px 20px rgba(63,81,181,0.25)",
-    accent: "#818cf8",
+    accent: muiColors.indigo["A100"],
   },
   teal: {
-    bg: "linear-gradient(135deg, #00897b 0%, #26a69a 100%)",
+    bg: `linear-gradient(135deg, ${colors.teal.main} 0%, ${colors.teal.light} 100%)`,
     shadow: "0 6px 20px rgba(0,137,123,0.25)",
-    accent: "#2dd4bf",
+    accent: muiColors.teal["A400"],
   },
   violet: {
-    bg: "linear-gradient(135deg, #5e35b1 0%, #7e57c2 100%)",
+    bg: `linear-gradient(135deg, ${colors.purple.main} 0%, ${muiColors.deepPurple[400]} 100%)`,
     shadow: "0 6px 20px rgba(94,53,177,0.25)",
-    accent: "#a78bfa",
+    accent: muiColors.deepPurple["A100"],
   },
   // 4 gradient dưới đây lấy đúng màu trạng thái của MATRIX_ROWS
   // (in_use #1976d2, available #2e7d32, not_in_use #ed6c02, pending_liquidation #ff5722)
   statusInUse: {
-    bg: "linear-gradient(135deg, #1565c0 0%, #42a5f5 100%)",
+    bg: `linear-gradient(135deg, ${colors.blue.dark} 0%, ${colors.blue.light} 100%)`,
     shadow: "0 6px 20px rgba(25,118,210,0.25)",
-    accent: "#64b5f6",
+    accent: muiColors.blue[300],
   },
   statusAvailable: {
-    bg: "linear-gradient(135deg, #1b5e20 0%, #4caf50 100%)",
+    bg: `linear-gradient(135deg, ${colors.green.dark} 0%, ${colors.green.light} 100%)`,
     shadow: "0 6px 20px rgba(46,125,50,0.25)",
-    accent: "#81c784",
+    accent: muiColors.green[300],
   },
   statusNotInUse: {
-    bg: "linear-gradient(135deg, #e65100 0%, #ffa726 100%)",
+    bg: `linear-gradient(135deg, ${colors.orange.deep} 0%, ${muiColors.orange[400]} 100%)`,
     shadow: "0 6px 20px rgba(237,108,2,0.25)",
-    accent: "#ffb74d",
+    accent: muiColors.orange[300],
   },
   statusPendingLiquidation: {
-    bg: "linear-gradient(135deg, #bf360c 0%, #ff7043 100%)",
+    bg: `linear-gradient(135deg, ${colors.orange.burnt} 0%, ${muiColors.deepOrange[400]} 100%)`,
     shadow: "0 6px 20px rgba(255,87,34,0.25)",
-    accent: "#ff8a65",
+    accent: muiColors.deepOrange[300],
   },
 };
 
@@ -266,11 +276,11 @@ const PanelCard = ({
     <Card
       elevation={0}
       sx={{
-        borderRadius: "18px",
+        borderRadius: `${radii.lg}px`,
         border: dark
-          ? "1px solid rgba(255,255,255,0.08)"
-          : "1px solid rgba(0,0,0,0.06)",
-        background: dark ? theme.bg : "#fff",
+          ? `1px solid ${alpha(colors.white, 0.08)}`
+          : `1px solid ${alpha(colors.black, 0.06)}`,
+        background: dark ? theme.bg : colors.white,
         boxShadow: dark ? theme.shadow : "0 2px 10px rgba(15,23,42,0.04)",
         height: "100%",
         display: "flex",
@@ -284,7 +294,7 @@ const PanelCard = ({
           px: 2.5,
           py: 1.5,
           background: theme.bg,
-          color: "#fff",
+          color: colors.white,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
@@ -294,12 +304,14 @@ const PanelCard = ({
         <Stack direction="row" spacing={1.5} alignItems="center">
           <Avatar
             sx={{
-              bgcolor: "rgba(255,255,255,0.2)",
+              bgcolor: alpha(colors.white, 0.2),
               width: 34,
               height: 34,
             }}
           >
-            {React.cloneElement(icon, { sx: { fontSize: 19, color: "#fff" } })}
+            {React.cloneElement(icon, {
+              sx: { fontSize: 19, color: colors.white },
+            })}
           </Avatar>
           <Box>
             <Typography
@@ -350,7 +362,7 @@ const DonutChart = ({ segments, total, centerLabel, size = 190, dark }) => {
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke={dark ? "rgba(255,255,255,0.08)" : "#eef2f6"}
+          stroke={dark ? alpha(colors.white, 0.08) : colors.brand.wash}
           strokeWidth={thickness}
         />
         {segments
@@ -387,14 +399,14 @@ const DonutChart = ({ segments, total, centerLabel, size = 190, dark }) => {
         <Typography
           variant="h4"
           fontWeight={700}
-          sx={{ color: dark ? "#f8fafc" : "#1e293b" }}
+          sx={{ color: dark ? colors.navy.lightest : colors.navy.dark }}
         >
           {formatCount(total)}
         </Typography>
         <Typography
           variant="caption"
           fontWeight={600}
-          sx={{ color: dark ? "#94a3b8" : "text.secondary" }}
+          sx={{ color: dark ? colors.navy.pale : "text.secondary" }}
         >
           {centerLabel}
         </Typography>
@@ -455,12 +467,12 @@ const MachineStatusDrilldownDialog = ({
   open,
   onClose,
   title,
-  color = "#1976d2",
+  color = colors.blue.main,
   breakdown,
   statusKeys,
   sourceKeys,
 }) => {
-  const isMobile = useMediaQuery(useTheme().breakpoints.down("sm"));
+  const { isMobile } = useResponsive();
   // Mặc định thu gọn hết để thấy ngay bức tranh theo đơn vị,
   // muốn xem vị trí cụ thể thì bấm mở từng đơn vị.
   const [expanded, setExpanded] = useState(() => new Set());
@@ -526,7 +538,7 @@ const MachineStatusDrilldownDialog = ({
       maxWidth="md"
       fullWidth
       fullScreen={isMobile}
-      PaperProps={{ sx: { borderRadius: isMobile ? 0 : "20px" } }}
+      PaperProps={{ sx: preset.dialogPaper(isMobile) }}
     >
       <DialogTitle sx={{ bgcolor: alpha(color, 0.09), py: 1.5 }}>
         <Stack
@@ -541,22 +553,27 @@ const MachineStatusDrilldownDialog = ({
                 sx={{
                   width: 11,
                   height: 11,
-                  borderRadius: "50%",
+                  borderRadius: radii.circle,
                   bgcolor: color,
                   flexShrink: 0,
                 }}
               />
               <Typography
-                variant={isMobile ? "subtitle1" : "h6"}
+                variant="h6"
                 fontWeight={800}
-                sx={{ color: "#1e293b", lineHeight: 1.3 }}
+                // <600px lùi về 1rem - bản cũ: isMobile ? "subtitle1" : "h6"
+                sx={{
+                  color: colors.navy.dark,
+                  lineHeight: 1.3,
+                  fontSize: { xs: "1rem", sm: "1.25rem" },
+                }}
               >
                 {title}
               </Typography>
             </Stack>
             <Typography
               variant="caption"
-              sx={{ display: "block", mt: 0.3, color: "#64748b" }}
+              sx={{ display: "block", mt: 0.3, color: colors.navy.muted }}
             >
               <b style={{ color }}>{formatCount(total)} máy</b> ·{" "}
               {groups.length} đơn vị · {locationCount} vị trí
@@ -565,7 +582,7 @@ const MachineStatusDrilldownDialog = ({
           <IconButton
             onClick={onClose}
             size="small"
-            sx={{ color: "#64748b", flexShrink: 0 }}
+            sx={{ color: colors.navy.muted, flexShrink: 0 }}
           >
             <Close />
           </IconButton>
@@ -663,7 +680,7 @@ const MachineStatusDrilldownDialog = ({
                               sx={{
                                 width: 60,
                                 height: 6,
-                                bgcolor: "#eee",
+                                bgcolor: colors.grey[200],
                                 borderRadius: 3,
                                 overflow: "hidden",
                               }}
@@ -686,7 +703,10 @@ const MachineStatusDrilldownDialog = ({
 
                       {isExpanded &&
                         group.locations.map((loc) => (
-                          <TableRow key={loc.id} sx={{ bgcolor: "#fafbfc" }}>
+                          <TableRow
+                            key={loc.id}
+                            sx={{ bgcolor: colors.grey[50] }}
+                          >
                             <TableCell sx={{ pl: 6, fontWeight: 600 }}>
                               {loc.name}
                             </TableCell>
@@ -728,15 +748,16 @@ const MachineStatusDrilldownDialog = ({
 };
 
 const MachineStatusMatrix = ({ data, breakdown = [] }) => {
-  const HEAD_HOVER_COLOR = useTheme().palette.primary.main;
+  const { theme } = useResponsive();
+  const HEAD_HOVER_COLOR = theme.palette.primary.main;
   const [openNotInUse, setOpenNotInUse] = useState(false);
   /** Ô đang mở drill-down; null = không mở */
   const [drill, setDrill] = useState(null);
   const openDrill = (statusKeys, sourceKeys, title, color) =>
     setDrill({ statusKeys, sourceKeys, title, color });
 
-  const TOTAL_COLOR = "#667eea";
-  const TOTAL_BG = "#ede7f6";
+  const TOTAL_COLOR = colors.brand.main;
+  const TOTAL_BG = colors.brand.wash;
 
   const grandTotal = MATRIX_ROWS.reduce(
     (sum, row) => sum + matrixRowTotal(data[row.key]),
@@ -754,7 +775,7 @@ const MachineStatusMatrix = ({ data, breakdown = [] }) => {
           className="cell-first-col"
           sx={{
             color: row.color,
-            bgcolor: "#fff",
+            bgcolor: colors.white,
             pl: isSubRow ? 4 : 2,
             "&:hover": {
               bgcolor: row.bg,
@@ -798,7 +819,7 @@ const MachineStatusMatrix = ({ data, breakdown = [] }) => {
                   : undefined
               }
               sx={{
-                color: value > 0 ? row.color : "#e0e0e0",
+                color: value > 0 ? row.color : colors.grey[300],
                 fontWeight: value > 0 ? 700 : 400,
                 ...matrixCellSx(row.color, {
                   clickable: value > 0,
@@ -830,7 +851,7 @@ const MachineStatusMatrix = ({ data, breakdown = [] }) => {
           }
           sx={{
             fontWeight: 700,
-            color: hasDataRow ? row.color : "#bdbdbd",
+            color: hasDataRow ? row.color : colors.grey[400],
             ...matrixCellSx(row.color, {
               clickable: hasDataRow,
               bgcolor: hasDataRow ? alpha(row.color, 0.08) : "transparent",
@@ -850,16 +871,16 @@ const MachineStatusMatrix = ({ data, breakdown = [] }) => {
           size="small"
           sx={{
             "& .MuiTableCell-root": {
-              borderBottom: "1px solid rgba(224, 224, 224, 0.4)",
+              borderBottom: `1px solid ${alpha(colors.grey[300], 0.4)}`,
               textAlign: "center",
-              fontSize: "0.9rem",
+              fontSize: fontSizes.body,
               transition: "all 0.2s ease-in-out",
               position: "relative",
             },
             "& .MuiTableCell-head": {
-              backgroundColor: "#f9fafb",
+              backgroundColor: colors.grey[50],
               fontWeight: 700,
-              color: "#637381",
+              color: colors.grey[600],
               py: 2,
             },
             "& .cell-first-col": {
@@ -868,7 +889,7 @@ const MachineStatusMatrix = ({ data, breakdown = [] }) => {
               position: "sticky",
               left: 0,
               zIndex: 1,
-              borderRight: "1px solid rgba(0,0,0,0.05)",
+              borderRight: borders.subtle,
             },
           }}
         >
@@ -883,7 +904,7 @@ const MachineStatusMatrix = ({ data, breakdown = [] }) => {
                   sx={{
                     "&:hover": {
                       color: HEAD_HOVER_COLOR,
-                      bgcolor: "#f0f4f8",
+                      bgcolor: colors.grey[100],
                       boxShadow: `inset 0 -3px 0 0 ${HEAD_HOVER_COLOR}`,
                     },
                   }}
@@ -915,13 +936,13 @@ const MachineStatusMatrix = ({ data, breakdown = [] }) => {
               </React.Fragment>
             ))}
 
-            <TableRow sx={{ backgroundColor: "#fafafa" }}>
+            <TableRow sx={{ backgroundColor: colors.grey[50] }}>
               <TableCell
                 className="cell-first-col"
                 sx={{
                   fontWeight: "700 !important",
                   color: `${TOTAL_COLOR} !important`,
-                  backgroundColor: "#fafafa !important",
+                  backgroundColor: `${colors.grey[50]} !important`,
                   "&:hover": {
                     backgroundColor: `${TOTAL_BG} !important`,
                     boxShadow: `inset 3px 0 0 0 ${TOTAL_COLOR}`,
@@ -953,7 +974,7 @@ const MachineStatusMatrix = ({ data, breakdown = [] }) => {
                     }
                     sx={{
                       fontWeight: 700,
-                      color: colTotal > 0 ? TOTAL_COLOR : "#bdbdbd",
+                      color: colTotal > 0 ? TOTAL_COLOR : colors.grey[400],
                       ...matrixCellSx(TOTAL_COLOR, {
                         clickable: colTotal > 0,
                         bgcolor: "transparent",
@@ -985,7 +1006,7 @@ const MachineStatusMatrix = ({ data, breakdown = [] }) => {
                   backgroundColor: `${alpha(TOTAL_COLOR, 0.15)} !important`,
                   color: `${TOTAL_COLOR} !important`,
                   fontWeight: 700,
-                  fontSize: "1.05rem !important",
+                  fontSize: `${fontSizes.title} !important`,
                   cursor: grandTotal > 0 ? "pointer" : "default",
                   ...(grandTotal > 0 && {
                     "&:hover": {
@@ -1032,14 +1053,14 @@ const INV_WORKSHOP_IDS = [2, 3, 4, 5];
  * cho nền trắng của TPM — màu neon của dashboard tối đọc không nổi trên giấy trắng.
  */
 const INV_WORKSHOP_COLORS = {
-  2: "#059669",
-  3: "#d97706",
-  4: "#db2777",
-  5: "#dc2626",
+  2: muiColors.teal[600],
+  3: muiColors.orange[800],
+  4: muiColors.pink[500],
+  5: colors.red.dark,
 };
 
 /** Màu thứ 7, đồng bộ với gradient navy accent của trang */
-const INV_SATURDAY_COLOR = "#0284c7";
+const INV_SATURDAY_COLOR = colors.blue.deep;
 
 /** 2 chỉ tiêu sai lệch được vẽ biểu đồ — sổ sách/hiện diện đi ngang nên vẽ không nói lên gì */
 const INV_TREND_METRICS = [
@@ -1047,9 +1068,111 @@ const INV_TREND_METRICS = [
   { key: "missing", title: "Số máy chưa xác định" },
 ];
 
-/** Tuần theo NGÀY: 1-7 → 1, 8-14 → 2, 15-21 → 3, 22-hết tháng → 4 (tháng nào cũng 4 tuần) */
-const INV_WEEK_COUNT = 4;
-const invWeekOfMonth = (day) => Math.min(Math.ceil(day / 7), INV_WEEK_COUNT);
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * CHIA THÁNG THÀNH TUẦN — dùng cho biểu đồ "Kết quả kiểm kê"
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Hai cách trước đều sai theo kiểu khác nhau:
+ *
+ *  1. Chia cứng theo số ngày (1-7 → tuần 1, 8-14 → 2, 15-21 → 3, 22-hết → 4).
+ *     Mốc tuần không trùng lịch, và tuần 4 gánh 8-10 ngày.
+ *
+ *  2. Tuần lịch thuần (bắt đầu Thứ Hai). Đúng lịch, nhưng tuần đầu/cuối có thể
+ *     chỉ 1-2 ngày -> biểu đồ tuần đó chỉ có 1-2 điểm, nhìn như bị lỗi.
+ *
+ * Cách hiện tại: vẫn cắt theo tuần lịch (bắt đầu THỨ HAI), nhưng nếu tuần ĐẦU
+ * quá ngắn thì GỘP vào tuần SAU, tuần CUỐI quá ngắn thì GỘP vào tuần TRƯỚC.
+ * Nhờ vậy mốc tuần bên trong tháng vẫn trùng lịch, mà không còn tuần lẻ 1-2
+ * ngày. Tuần được đánh số lại liên tục từ 1.
+ *
+ *   Tháng 8/2026 (ngày 1 là THỨ BẢY, ngày 31 là THỨ HAI):
+ *     tuần lịch thô : 01-02 · 03-09 · 10-16 · 17-23 · 24-30 · 31
+ *     sau khi gộp   : 01-09 · 10-16 · 17-23 · 24-31          -> 4 tuần
+ *
+ *   Tháng 6/2026 (ngày 1 là THỨ HAI, còn dư 29-30):
+ *     tuần lịch thô : 01-07 · 08-14 · 15-21 · 22-28 · 29-30
+ *     sau khi gộp   : 01-07 · 08-14 · 15-21 · 22-30          -> 4 tuần
+ */
+
+/** Tuần đầu/cuối có tối đa bao nhiêu ngày thì bị gộp vào tuần liền kề. */
+const INV_WEEK_MIN_DAYS = 2;
+
+/** Cache theo "năm-tháng": hàm chỉ phụ thuộc lịch nên kết quả bất biến. */
+const invWeekPlanCache = new Map();
+
+/**
+ * Kế hoạch chia tuần của một tháng.
+ * @returns {Array<{week:number, from:number, to:number}>} đã đánh số lại từ 1
+ */
+const invWeekPlan = (year, month1) => {
+  const key = `${year}-${month1}`;
+  const cached = invWeekPlanCache.get(key);
+  if (cached) return cached;
+
+  // thứ của ngày 1, quy về 0 = Thứ Hai ... 6 = Chủ Nhật
+  const firstDow = (new Date(year, month1 - 1, 1).getDay() + 6) % 7;
+  const daysInMonth = new Date(year, month1, 0).getDate();
+
+  // cắt theo tuần lịch: mỗi tuần kết thúc vào Chủ Nhật
+  const weeks = [];
+  for (let from = 1; from <= daysInMonth; ) {
+    const to = Math.min(daysInMonth, from + 6 - ((from - 1 + firstDow) % 7));
+    weeks.push({ from, to });
+    from = to + 1;
+  }
+
+  const len = (w) => w.to - w.from + 1;
+  // tuần ĐẦU quá ngắn -> gộp vào tuần sau
+  if (weeks.length > 1 && len(weeks[0]) <= INV_WEEK_MIN_DAYS) {
+    weeks[1].from = weeks[0].from;
+    weeks.shift();
+  }
+  // tuần CUỐI quá ngắn -> gộp vào tuần trước
+  const last = weeks.length - 1;
+  if (weeks.length > 1 && len(weeks[last]) <= INV_WEEK_MIN_DAYS) {
+    weeks[last - 1].to = weeks[last].to;
+    weeks.pop();
+  }
+
+  const plan = weeks.map((w, i) => ({ week: i + 1, from: w.from, to: w.to }));
+  invWeekPlanCache.set(key, plan);
+  return plan;
+};
+
+/** Ngày thuộc tuần thứ mấy (sau khi đã gộp). */
+const invWeekOfMonth = (date) => {
+  const day = date.getDate();
+  const plan = invWeekPlan(date.getFullYear(), date.getMonth() + 1);
+  const found = plan.find((w) => day >= w.from && day <= w.to);
+  return found ? found.week : plan.length;
+};
+
+/** Số tuần của một tháng sau khi gộp (thường 4-5). month1 tính từ 1. */
+const invWeeksInMonth = (year, month1) => invWeekPlan(year, month1).length;
+
+/** Khoảng ngày của một tuần, ví dụ "01-09" hoặc "24-31". */
+const invWeekRange = (year, month1, week) => {
+  const w = invWeekPlan(year, month1).find((x) => x.week === week);
+  if (!w) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return w.from === w.to ? pad(w.from) : `${pad(w.from)}-${pad(w.to)}`;
+};
+
+/**
+ * PHẠM VI xem của biểu đồ kiểm kê, tách thành HAI state độc lập:
+ *
+ *   invWeek    null   = cả tháng      |  1..N = một tuần, giãn ra từng ngày
+ *   invMonthBy "week" = mỗi tuần 1 điểm |  "day" = mỗi ngày 1 điểm
+ *
+ * `invMonthBy` chỉ có tác dụng khi `invWeek === null`, nên nó được hiện dưới
+ * dạng toggle LỒNG bên trong nút "Cả tháng" — chọn tuần cụ thể thì toggle ẩn
+ * đi vì lúc đó luôn là xem theo ngày.
+ */
+const INV_MONTH_BY = [
+  { key: "week", label: "Theo tuần" },
+  { key: "day", label: "Theo ngày" },
+];
 
 const INV_WEEKDAYS = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
 
@@ -1079,7 +1202,7 @@ const buildInventoryDays = (tickets) => {
         dateKey,
         day: d.getDate(),
         month: d.getMonth() + 1,
-        week: invWeekOfMonth(d.getDate()),
+        week: invWeekOfMonth(d),
         isSaturday: d.getDay() === 6,
         weekdayLabel: INV_WEEKDAYS[d.getDay()],
         byDepartment: {},
@@ -1275,6 +1398,16 @@ const InventoryLineChart = ({
   };
 
   /**
+   * Bước thưa nhãn trục X. Chế độ "Từng ngày" cả tháng có tới 31 điểm; nhãn
+   * `dd/MM` xoay 45° cần khoảng 30px mỗi cái, nên phải bỏ bớt kẻo chồng lên nhau
+   * thành một dải đen. Điểm và tooltip vẫn đủ 31 — chỉ ẩn CHỮ.
+   */
+  const labelStep = Math.max(
+    1,
+    Math.ceil(points.length / Math.max(1, Math.floor(plotW / 30)))
+  );
+
+  /**
    * Cắt mỗi xưởng thành từng đoạn liên tục, bỏ qua điểm null để đường ngắt đúng chỗ.
    * Tính một lần rồi dùng cho cả lớp vẽ và lớp bắt chuột.
    */
@@ -1317,7 +1450,7 @@ const InventoryLineChart = ({
       <Typography
         variant="subtitle2"
         fontWeight={700}
-        sx={{ mb: 0.5, color: "#334155" }}
+        sx={{ mb: 0.5, color: colors.navy.main }}
       >
         {title}
       </Typography>
@@ -1329,8 +1462,8 @@ const InventoryLineChart = ({
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            border: "1px dashed rgba(0,0,0,0.12)",
-            borderRadius: "12px",
+            border: `1px dashed ${alpha(colors.black, 0.12)}`,
+            borderRadius: `${radii.md}px`,
           }}
         >
           <Typography variant="body2" color="text.secondary">
@@ -1357,7 +1490,7 @@ const InventoryLineChart = ({
                   x2={W - padR}
                   y1={yAt(t)}
                   y2={yAt(t)}
-                  stroke="#e2e8f0"
+                  stroke={colors.navy.wash}
                   strokeDasharray="3 3"
                 />
                 <text
@@ -1366,7 +1499,7 @@ const InventoryLineChart = ({
                   textAnchor="end"
                   fontSize={12}
                   fontWeight={400}
-                  fill="#1e293b"
+                  fill={colors.navy.dark}
                 >
                   {t}
                 </text>
@@ -1389,19 +1522,30 @@ const InventoryLineChart = ({
               ) : null
             )}
 
-            {/* Nhãn trục X — xoay 45° cho mọi chế độ để trục không nhảy kiểu khi đổi tuần */}
-            {points.map((p, i) => (
-              <text
-                key={`x-${p.label}`}
-                transform={`translate(${xAt(i)},${padT + plotH + 14}) rotate(-45)`}
-                textAnchor="end"
-                fontSize={12}
-                fontWeight={p.isSaturday ? 700 : 400}
-                fill={p.isSaturday ? INV_SATURDAY_COLOR : "#1e293b"}
-              >
-                {p.label}
-              </text>
-            ))}
+            {/* Nhãn trục X — xoay 45° cho mọi chế độ để trục không nhảy kiểu khi đổi tuần.
+                Nhiều điểm thì thưa nhãn ra (labelStep), nhưng LUÔN giữ nhãn cuối
+                để biết trục kết thúc ở ngày nào. */}
+            {points.map((p, i) => {
+              const isLast = i === points.length - 1;
+              // bỏ nhãn nếu không đúng nhịp, và nếu nó sát nhãn cuối thì cũng bỏ
+              if (
+                !isLast &&
+                (i % labelStep !== 0 || points.length - 1 - i < labelStep)
+              )
+                return null;
+              return (
+                <text
+                  key={`x-${p.label}`}
+                  transform={`translate(${xAt(i)},${padT + plotH + 14}) rotate(-45)`}
+                  textAnchor="end"
+                  fontSize={12}
+                  fontWeight={p.isSaturday ? 700 : 400}
+                  fill={p.isSaturday ? INV_SATURDAY_COLOR : colors.navy.dark}
+                >
+                  {p.label}
+                </text>
+              );
+            })}
 
             {/* Đường gióng dọc khi hover vào điểm/ngày */}
             {hoverPointIdx !== null && (
@@ -1410,7 +1554,7 @@ const InventoryLineChart = ({
                 x2={xAt(hoverPointIdx)}
                 y1={padT}
                 y2={padT + plotH}
-                stroke="#64748b"
+                stroke={colors.navy.muted}
                 strokeWidth={1.5}
                 strokeDasharray="4 3"
               />
@@ -1420,7 +1564,7 @@ const InventoryLineChart = ({
             {drawOrder.map(({ w, segments }) => {
               const isFocused = activeId === w.id;
               const dimmed = activeId && !isFocused;
-              const color = INV_WORKSHOP_COLORS[w.id] || "#475569";
+              const color = INV_WORKSHOP_COLORS[w.id] || colors.navy.light;
 
               return (
                 <g
@@ -1451,7 +1595,7 @@ const InventoryLineChart = ({
                           cx={xAt(i)}
                           cy={yAt(v)}
                           r={isFocused ? 4.5 : 3}
-                          fill="#fff"
+                          fill={colors.white}
                           stroke={color}
                           strokeWidth={2}
                           {...hoverProps(w.id)}
@@ -1469,7 +1613,7 @@ const InventoryLineChart = ({
               workshops.map((w) => {
                 const v = points[hoverPointIdx]?.values[w.id];
                 if (v === null || v === undefined) return null;
-                const color = INV_WORKSHOP_COLORS[w.id] || "#475569";
+                const color = INV_WORKSHOP_COLORS[w.id] || colors.navy.light;
                 return (
                   <circle
                     key={`hover-pt-${w.id}`}
@@ -1477,7 +1621,7 @@ const InventoryLineChart = ({
                     cy={yAt(v)}
                     r={5.5}
                     fill={color}
-                    stroke="#fff"
+                    stroke={colors.white}
                     strokeWidth={2.5}
                   />
                 );
@@ -1515,13 +1659,13 @@ const InventoryLineChart = ({
                     ? Math.max(padL, xAt(hoverPointIdx) - 150)
                     : xAt(hoverPointIdx) + 14,
                 width: 140,
-                bgcolor: "#fff",
-                color: "#000",
+                bgcolor: colors.white,
+                color: colors.black,
                 px: 1.4,
                 py: 1.1,
-                borderRadius: "10px",
-                boxShadow: "0 10px 25px rgba(0,0,0,0.45)",
-                border: "1px solid rgba(255,255,255,0.15)",
+                borderRadius: `${radii.md}px`,
+                boxShadow: shadow(10, 25, shadowRgb.black, 0.45),
+                border: `1px solid ${alpha(colors.white, 0.15)}`,
                 pointerEvents: "none",
                 zIndex: 10,
                 backdropFilter: "blur(4px)",
@@ -1532,9 +1676,9 @@ const InventoryLineChart = ({
                 variant="subtitle2"
                 fontWeight={800}
                 sx={{
-                  color: "#000",
-                  fontSize: "0.82rem",
-                  borderBottom: "1px dashed #94a3b8",
+                  color: colors.black,
+                  fontSize: fontSizes.body,
+                  borderBottom: `1px dashed ${colors.navy.pale}`,
                   pb: 0.4,
                   mb: 0.8,
                   textAlign: "center",
@@ -1545,7 +1689,7 @@ const InventoryLineChart = ({
               <Stack spacing={0.4}>
                 {workshops.map((w) => {
                   const val = points[hoverPointIdx].values[w.id];
-                  const color = INV_WORKSHOP_COLORS[w.id] || "#94a3b8";
+                  const color = INV_WORKSHOP_COLORS[w.id] || colors.navy.pale;
                   return (
                     <Stack
                       key={w.id}
@@ -1556,14 +1700,14 @@ const InventoryLineChart = ({
                       <Typography
                         variant="caption"
                         fontWeight={700}
-                        sx={{ color: color, fontSize: "0.76rem" }}
+                        sx={{ color: color, fontSize: fontSizes.small }}
                       >
                         {w.name}:
                       </Typography>
                       <Typography
                         variant="caption"
                         fontWeight={800}
-                        sx={{ color: "#000", fontSize: "0.78rem" }}
+                        sx={{ color: colors.black, fontSize: fontSizes.small }}
                       >
                         {val ?? "-"}
                       </Typography>
@@ -1605,14 +1749,16 @@ const InventoryLineChart = ({
                 sx={{
                   width: isFocused ? 11 : 9,
                   height: isFocused ? 11 : 9,
-                  borderRadius: "50%",
-                  bgcolor: INV_WORKSHOP_COLORS[w.id] || "#475569",
+                  borderRadius: radii.circle,
+                  bgcolor: INV_WORKSHOP_COLORS[w.id] || colors.navy.light,
                 }}
               />
               <Typography
                 variant="caption"
                 fontWeight={isFocused ? 800 : 600}
-                sx={{ color: isFocused ? "#0f172a" : "#64748b" }}
+                sx={{
+                  color: isFocused ? colors.navy.darkest : colors.navy.muted,
+                }}
               >
                 {w.name}
               </Typography>
@@ -1624,40 +1770,160 @@ const InventoryLineChart = ({
   );
 };
 
-/** Nút chọn tuần dùng trong dialog (nền trắng) — nút trên header card có style riêng cho nền teal */
-const InvWeekButtons = ({ value, onChange, isEnabled }) => (
-  <Stack direction="row" spacing={0.6} flexWrap="wrap" useFlexGap>
-    {[null, ...Array.from({ length: INV_WEEK_COUNT }, (_, i) => i + 1)].map(
-      (week) => {
-        const isActive = value === week;
-        const disabled = week !== null && !isEnabled(week);
-        return (
-          <Button
-            key={week ?? "all"}
-            size="small"
-            disabled={disabled}
-            onClick={() => onChange(week)}
-            variant={isActive ? "contained" : "outlined"}
+/**
+ * Chọn phạm vi cho biểu đồ kiểm kê: "Cả tháng" (kèm toggle Tuần/Ngày LỒNG bên
+ * trong khi đang chọn) và từng tuần.
+ *
+ * Dùng ở HAI nơi có nền khác nhau nên tách `tone`:
+ *   "light"  nền trắng  — trong dialog chi tiết xưởng
+ *   "onTeal" nền teal   — trên header của card "Kết quả kiểm kê"
+ * Trước đây hai nơi này là hai khối JSX gần giống nhau, sửa một bên là quên bên
+ * kia; nay chỉ còn một chỗ.
+ */
+const InvScopePicker = ({
+  week,
+  monthBy,
+  onWeekChange,
+  onMonthByChange,
+  weekCount,
+  isEnabled,
+  tone = "light",
+}) => {
+  const onTeal = tone === "onTeal";
+  const isMonth = week === null;
+  const monthDisabled = !isEnabled(null);
+
+  /** style của một "ô bấm" — dùng cho cả nút tuần và hai nút con Tuần/Ngày */
+  const cell = (active, disabled) => ({
+    minWidth: 0,
+    px: onTeal ? 1.2 : 1.4,
+    py: onTeal ? 0.3 : 0.2,
+    borderRadius: `${radii.sm}px`,
+    textTransform: "none",
+    fontSize: fontSizes.label,
+    fontWeight: 700,
+    lineHeight: 1.6,
+    ...(onTeal
+      ? {
+          color: active ? colors.teal.dark : colors.white,
+          bgcolor: active ? colors.white : "transparent",
+          "&.Mui-disabled": { color: alpha(colors.white, 0.35) },
+          "&:hover": {
+            bgcolor: active ? colors.white : alpha(colors.white, 0.2),
+          },
+        }
+      : {
+          color: active ? colors.white : colors.navy.light,
+          bgcolor: active ? colors.teal.main : "transparent",
+          border: active ? "none" : `1px solid ${alpha(colors.black, 0.15)}`,
+          "&:hover": {
+            bgcolor: active ? colors.teal.dark : alpha(colors.black, 0.04),
+          },
+        }),
+    ...(disabled ? { pointerEvents: "none" } : null),
+  });
+
+  return (
+    <Stack
+      direction="row"
+      spacing={onTeal ? 0.5 : 0.6}
+      flexWrap="wrap"
+      useFlexGap
+      alignItems="center"
+      sx={
+        onTeal
+          ? {
+              bgcolor: alpha(colors.white, 0.15),
+              borderRadius: `${radii.md}px`,
+              p: 0.4,
+            }
+          : undefined
+      }
+    >
+      {/* ── "Cả tháng" + toggle Tuần/Ngày lồng bên trong ───────────────── */}
+      <Stack
+        direction="row"
+        alignItems="center"
+        spacing={0.4}
+        sx={{
+          px: isMonth ? 0.4 : 0,
+          py: isMonth ? 0.2 : 0,
+          borderRadius: `${radii.sm}px`,
+          // khi đang chọn, cả khối được bọc một lớp nền nhạt để thấy rõ hai
+          // nút con Tuần/Ngày thuộc về "Cả tháng" chứ không phải nút rời
+          ...(isMonth
+            ? {
+                bgcolor: onTeal
+                  ? alpha(colors.white, 0.18)
+                  : alpha(colors.teal.main, 0.1),
+                outline: `1px solid ${
+                  onTeal
+                    ? alpha(colors.white, 0.35)
+                    : alpha(colors.teal.main, 0.35)
+                }`,
+              }
+            : null),
+        }}
+      >
+        {isMonth ? (
+          // Đang chọn cả tháng: "Cả tháng:" chỉ còn là NHÃN, trạng thái chọn
+          // nằm ở hai nút con bên cạnh.
+          <Typography
+            component="span"
             sx={{
-              minWidth: 0,
-              px: 1.4,
-              py: 0.2,
-              borderRadius: "8px",
-              textTransform: "none",
-              fontSize: "0.72rem",
+              px: 0.6,
+              fontSize: fontSizes.label,
               fontWeight: 700,
-              ...(isActive
-                ? { bgcolor: "#00897b", "&:hover": { bgcolor: "#00796b" } }
-                : { color: "#475569", borderColor: "rgba(0,0,0,0.15)" }),
+              whiteSpace: "nowrap",
+              color: onTeal ? colors.white : colors.teal.dark,
             }}
           >
-            {week === null ? "Cả tháng" : `Tuần ${week}`}
+            Cả tháng:
+          </Typography>
+        ) : (
+          <Button
+            size="small"
+            disabled={monthDisabled}
+            onClick={() => onWeekChange(null)}
+            title="Xem cả tháng"
+            sx={cell(false, monthDisabled)}
+          >
+            Cả tháng
+          </Button>
+        )}
+
+        {isMonth &&
+          INV_MONTH_BY.map((m) => (
+            <Button
+              key={m.key}
+              size="small"
+              disabled={monthDisabled}
+              onClick={() => onMonthByChange(m.key)}
+              sx={cell(monthBy === m.key, monthDisabled)}
+            >
+              {m.label}
+            </Button>
+          ))}
+      </Stack>
+
+      {/* ── Từng tuần ───────────────────────────────────────────────────── */}
+      {Array.from({ length: weekCount }, (_, i) => i + 1).map((w) => {
+        const disabled = !isEnabled(w);
+        return (
+          <Button
+            key={w}
+            size="small"
+            disabled={disabled}
+            onClick={() => onWeekChange(w)}
+            sx={cell(week === w, disabled)}
+          >
+            Tuần {w}
           </Button>
         );
-      }
-    )}
-  </Stack>
-);
+      })}
+    </Stack>
+  );
+};
 
 /**
  * Dialog chi tiết 1 xưởng, mở khi bấm vào đường của xưởng đó trên biểu đồ.
@@ -1673,16 +1939,22 @@ const InventoryWorkshopDialog = ({
   days,
   chartPoints,
   week,
+  monthBy,
+  weekCount,
+  weekRangeOf,
   onWeekChange,
+  onMonthByChange,
   onSelect,
   onClose,
   isMobile,
 }) => {
   const color = workshop
-    ? INV_WORKSHOP_COLORS[workshop.id] || "#475569"
-    : "#475569";
+    ? INV_WORKSHOP_COLORS[workshop.id] || colors.navy.light
+    : colors.navy.light;
 
-  // Chỉ những ngày xưởng này thực sự kiểm kê, và theo đúng tuần đang chọn trên biểu đồ
+  // Chỉ những ngày xưởng này thực sự kiểm kê, và theo đúng phạm vi đang chọn
+  // trên biểu đồ. `week === null` là CẢ THÁNG (dù đang gộp theo tuần hay tách
+  // theo ngày) nên bảng không lọc tuần.
   const rows = workshop
     ? days.filter(
         (d) => d.byDepartment[workshop.id] && (week === null || d.week === week)
@@ -1696,12 +1968,12 @@ const InventoryWorkshopDialog = ({
       maxWidth="lg"
       fullWidth
       fullScreen={isMobile}
-      PaperProps={{ sx: { borderRadius: isMobile ? 0 : "20px" } }}
+      PaperProps={{ sx: preset.dialogPaper(isMobile) }}
     >
       {workshop && (
         <>
           <DialogTitle
-            sx={{ background: GRADIENTS.teal.bg, color: "#fff", py: 1.5 }}
+            sx={{ background: GRADIENTS.teal.bg, color: colors.white, py: 1.5 }}
           >
             <Stack
               direction="row"
@@ -1714,17 +1986,19 @@ const InventoryWorkshopDialog = ({
                   sx={{
                     width: 13,
                     height: 13,
-                    borderRadius: "50%",
+                    borderRadius: radii.circle,
                     bgcolor: color,
-                    boxShadow: "0 0 0 3px rgba(255,255,255,0.35)",
+                    boxShadow: ring(3, shadowRgb.white, 0.35),
                     flexShrink: 0,
                   }}
                 />
                 <Box>
                   <Typography
-                    variant={isMobile ? "subtitle1" : "h6"}
+                    variant="h6"
                     fontWeight={800}
                     lineHeight={1.3}
+                    // <600px lùi về 1rem - bản cũ: isMobile ? "subtitle1" : "h6"
+                    sx={{ fontSize: { xs: "1rem", sm: "1.25rem" } }}
                   >
                     Kết quả kiểm kê · {workshop.name}
                   </Typography>
@@ -1733,7 +2007,7 @@ const InventoryWorkshopDialog = ({
               <IconButton
                 onClick={onClose}
                 size="small"
-                sx={{ color: "#fff", flexShrink: 0 }}
+                sx={{ color: colors.white, flexShrink: 0 }}
               >
                 <Close />
               </IconButton>
@@ -1742,11 +2016,19 @@ const InventoryWorkshopDialog = ({
 
           <DialogContent dividers sx={{ p: 0 }}>
             <Box sx={{ px: 2.5, pt: 2 }}>
-              <InvWeekButtons
-                value={week}
-                onChange={onWeekChange}
+              <InvScopePicker
+                week={week}
+                monthBy={monthBy}
+                onWeekChange={onWeekChange}
+                onMonthByChange={onMonthByChange}
+                weekCount={weekCount}
+                rangeOf={weekRangeOf}
                 isEnabled={(w) =>
-                  days.some((d) => d.week === w && d.byDepartment[workshop.id])
+                  w === null
+                    ? days.some((d) => d.byDepartment[workshop.id])
+                    : days.some(
+                        (d) => d.week === w && d.byDepartment[workshop.id]
+                      )
                 }
               />
             </Box>
@@ -1773,7 +2055,7 @@ const InventoryWorkshopDialog = ({
               <Typography
                 variant="subtitle2"
                 fontWeight={700}
-                sx={{ color: "#334155" }}
+                sx={{ color: colors.navy.main }}
               >
                 Bảng chi tiết theo ngày · {workshop.name}
               </Typography>
@@ -1794,19 +2076,19 @@ const InventoryWorkshopDialog = ({
                     </TableCell>
                     <TableCell
                       align="center"
-                      sx={{ ...TABLE_HEAD_CELL, color: "#2e7d32" }}
+                      sx={{ ...TABLE_HEAD_CELL, color: colors.green.main }}
                     >
                       Sổ sách
                     </TableCell>
                     <TableCell
                       align="center"
-                      sx={{ ...TABLE_HEAD_CELL, color: "#ed6c02" }}
+                      sx={{ ...TABLE_HEAD_CELL, color: colors.orange.dark }}
                     >
                       KĐV
                     </TableCell>
                     <TableCell
                       align="center"
-                      sx={{ ...TABLE_HEAD_CELL, color: "#d32f2f" }}
+                      sx={{ ...TABLE_HEAD_CELL, color: colors.red.dark }}
                     >
                       Chưa XĐ
                     </TableCell>
@@ -1857,7 +2139,7 @@ const InventoryWorkshopDialog = ({
                         </TableCell>
                         <TableCell
                           align="center"
-                          sx={{ fontWeight: 600, color: "#2e7d32" }}
+                          sx={{ fontWeight: 600, color: colors.green.main }}
                         >
                           {formatCount(c.presentBook)}
                         </TableCell>
@@ -1865,7 +2147,10 @@ const InventoryWorkshopDialog = ({
                           align="center"
                           sx={{
                             fontWeight: 600,
-                            color: c.misDept > 0 ? "#ed6c02" : "text.disabled",
+                            color:
+                              c.misDept > 0
+                                ? colors.orange.dark
+                                : "text.disabled",
                           }}
                         >
                           {formatCount(c.misDept)}
@@ -1874,7 +2159,8 @@ const InventoryWorkshopDialog = ({
                           align="center"
                           sx={{
                             fontWeight: 600,
-                            color: c.missing > 0 ? "#d32f2f" : "text.disabled",
+                            color:
+                              c.missing > 0 ? colors.red.dark : "text.disabled",
                           }}
                         >
                           {formatCount(c.missing)}
@@ -1893,26 +2179,11 @@ const InventoryWorkshopDialog = ({
 };
 
 const ReportPage = () => {
-  const isMobile = useMediaQuery(useTheme().breakpoints.down("sm"));
+  const { isMobile } = useResponsive();
   const vnToday = new Date();
-  const getStatusColor = (status) =>
-    ({
-      draft: "info",
-      pending: "warning",
-      pending_confirmation: "warning",
-      pending_approval: "warning",
-      completed: "success",
-      cancelled: "error",
-    })[status] || "default";
-  const getStatusLabel = (status) =>
-    ({
-      draft: "Nháp",
-      pending: "Chờ duyệt",
-      pending_confirmation: "Chờ xác nhận",
-      pending_approval: "Chờ duyệt",
-      completed: "Đã duyệt",
-      cancelled: "Đã hủy",
-    })[status] || status;
+  // Màu Chip + nhãn cho luồng duyệt phiếu - dùng chung với TestProposalPage
+  const getStatusColor = getTicketFlowColor;
+  const getStatusLabel = getTicketFlowLabel;
   // Chế độ standalone: mở riêng ở tab mới, chỉ có nội dung dashboard
   const isStandalone = useLocation().pathname === "/reports/machine-overview";
   const [currentYear, setCurrentYear] = useState(vnToday.getFullYear());
@@ -1954,8 +2225,10 @@ const ReportPage = () => {
   });
 
   // ===== Kiểm kê theo ngày (dùng chung dữ liệu /api/reports/monthly-summary) =====
-  /** null = gộp cả tháng theo tuần; 1-4 = giãn ra từng ngày của tuần đó */
+  /** null = cả tháng; 1..N = chỉ một tuần, luôn giãn ra từng ngày */
   const [invWeek, setInvWeek] = useState(null);
+  /** Chỉ có tác dụng khi invWeek === null: "week" = mỗi tuần 1 điểm, "day" = mỗi ngày 1 điểm */
+  const [invMonthBy, setInvMonthBy] = useState("week");
   /** Xưởng đang mở dialog chi tiết (bấm vào đường trên biểu đồ); null = không mở */
   const [invFocus, setInvFocus] = useState(null);
 
@@ -1971,9 +2244,20 @@ const ReportPage = () => {
     [reportData.inventory]
   );
 
+  /** Số tuần LỊCH của tháng đang chọn (4-6). Thay cho hằng số 4 cũ. */
+  const invWeekCount = useMemo(
+    () => invWeeksInMonth(currentYear, currentMonth),
+    [currentYear, currentMonth]
+  );
+  const invWeekRangeOf = useCallback(
+    (w) => invWeekRange(currentYear, currentMonth, w),
+    [currentYear, currentMonth]
+  );
+
   /**
    * Điểm vẽ biểu đồ cho từng chỉ tiêu.
-   * `invWeek === null` → gộp cả tháng thành 4 điểm Tuần 1-4 (cộng dồn số máy lệch).
+   * `invWeek === null` → gộp cả tháng thành các điểm Tuần 1..N (N = số tuần lịch
+   *   của tháng, 4-6; chỉ tính những tuần thực sự có ngày kiểm kê).
    * Chọn 1 tuần → giãn ra từng ngày của tuần đó.
    * Trục thời gian luôn tăng dần, ngược với bảng (bảng đọc mới→cũ).
    */
@@ -1997,52 +2281,117 @@ const ReportPage = () => {
     const result = {};
     INV_TREND_METRICS.forEach((metric) => {
       result[metric.key] =
-        invWeek === null
-          ? Array.from({ length: INV_WEEK_COUNT }, (_, i) => i + 1).map((w) =>
-              pointFrom(
-                `Tuần ${w}`,
-                false,
-                ascending.filter((r) => r.week === w),
-                metric.key
-              )
-            )
-          : ascending
-              .filter((r) => r.week === invWeek)
-              .map((r) =>
+        invWeek === null && invMonthBy === "week"
+          ? // CẢ THÁNG, GỘP THEO TUẦN. Chỉ vẽ tuần CÓ ngày kiểm kê — để lại cột
+            // rỗng chỉ làm đường biểu đồ bị ngắt vô nghĩa.
+            Array.from({ length: invWeekCount }, (_, i) => i + 1)
+              .filter((w) => ascending.some((r) => r.week === w))
+              .map((w) =>
                 pointFrom(
-                  `${String(r.day).padStart(2, "0")}/${String(r.month).padStart(2, "0")}`,
-                  r.isSaturday,
-                  [r],
+                  `Tuần ${w}`,
+                  false,
+                  ascending.filter((r) => r.week === w),
                   metric.key
                 )
-              );
+              )
+          : // TỪNG NGÀY: cả tháng (invWeek === null, invMonthBy === "day")
+            // hoặc chỉ trong một tuần đang chọn.
+            (invWeek === null
+              ? ascending
+              : ascending.filter((r) => r.week === invWeek)
+            ).map((r) =>
+              pointFrom(
+                `${String(r.day).padStart(2, "0")}/${String(r.month).padStart(2, "0")}`,
+                r.isSaturday,
+                [r],
+                metric.key
+              )
+            );
     });
     return result;
-  }, [invDays, invWorkshops, invWeek]);
+  }, [invDays, invWorkshops, invWeek, invMonthBy, invWeekCount]);
 
-  const fetchReportData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await api.reports.getMonthlySummary(
-        currentYear,
-        currentMonth
-      );
-      if (res?.success) {
-        setReportData(res.data);
-      } else {
-        setError(res?.message || "Lỗi tải dữ liệu báo cáo");
+  /**
+   * Ba nguồn cùng gọi API (mở trang, hẹn giờ 3 phút, nút Làm mới) nên hai yêu
+   * cầu có thể chồng nhau. Hai bộ đếm, mỗi bộ một việc:
+   *   fetchSeqRef   yêu cầu mới nhất — chỉ nó được ghi dữ liệu, để phản hồi cũ
+   *                 (ví dụ của tháng vừa rời khỏi) về sau không đè lên số đúng
+   *   visibleSeqRef yêu cầu có spinner mới nhất — chỉ nó được tắt spinner, kẻo
+   *                 một lần gọi nền chen vào là spinner quay mãi không tắt
+   */
+  const fetchSeqRef = useRef(0);
+  const visibleSeqRef = useRef(0);
+  /** Mốc lần gọi gần nhất, để quay lại tab không gọi lại quá dày */
+  const lastFetchAtRef = useRef(0);
+
+  /**
+   * `silent` = lần gọi nền theo hẹn giờ: KHÔNG bật spinner và KHÔNG báo lỗi.
+   * Bật spinner sẽ thay sạch nội dung bằng vòng quay mỗi 3 phút, mất chỗ đang
+   * xem; còn mạng chập chờn một nhịp thì giữ số liệu cũ vẫn hơn là xoá trắng
+   * màn hình — 3 phút nữa tự thử lại.
+   */
+  const fetchReportData = useCallback(
+    async ({ silent = false } = {}) => {
+      const seq = ++fetchSeqRef.current;
+      lastFetchAtRef.current = Date.now();
+      if (!silent) {
+        visibleSeqRef.current = seq;
+        setLoading(true);
+        setError(null);
       }
-    } catch (err) {
-      console.error(err);
-      setError(err?.response?.data?.message || "Không thể kết nối đến server");
-    } finally {
-      setLoading(false);
-    }
-  }, [currentYear, currentMonth]);
+      try {
+        const res = await api.reports.getMonthlySummary(
+          currentYear,
+          currentMonth
+        );
+        if (seq !== fetchSeqRef.current) return; // đã có yêu cầu mới hơn
+        if (res?.success) {
+          setReportData(res.data);
+          setError(null); // lần gọi nền thành công thì gỡ luôn báo lỗi cũ
+        } else if (!silent) {
+          setError(res?.message || "Lỗi tải dữ liệu báo cáo");
+        }
+      } catch (err) {
+        console.error(err);
+        if (seq !== fetchSeqRef.current) return;
+        if (!silent)
+          setError(
+            err?.response?.data?.message || "Không thể kết nối đến server"
+          );
+      } finally {
+        if (!silent && visibleSeqRef.current === seq) setLoading(false);
+      }
+    },
+    [currentYear, currentMonth]
+  );
 
   useEffect(() => {
     fetchReportData();
+  }, [fetchReportData]);
+
+  /**
+   * Tự làm mới mỗi 3 phút.
+   * Tab đang ẩn thì bỏ nhịp — để mở quên qua đêm không phải là vài trăm lượt
+   * gọi API vô ích — và làm mới ngay khi quay lại tab, vì lúc đó số liệu chắc
+   * chắn đã quá hạn. Bấm qua bấm lại giữa các tab thì chỉ gọi khi thật sự quá
+   * 3 phút kể từ lần gần nhất.
+   * Đổi tháng thì hẹn giờ đặt lại theo (`fetchReportData` đổi theo tháng), nên
+   * vừa đổi tháng xong luôn có trọn 3 phút mới tới nhịp kế.
+   */
+  useEffect(() => {
+    const tick = () => {
+      if (!document.hidden) fetchReportData({ silent: true });
+    };
+    const onVisible = () => {
+      if (document.hidden) return;
+      if (Date.now() - lastFetchAtRef.current >= REPORT_REFRESH_MS) tick();
+    };
+    const timer = setInterval(tick, REPORT_REFRESH_MS);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [fetchReportData]);
 
   const handlePrevMonth = () => {
@@ -2396,9 +2745,9 @@ const ReportPage = () => {
               mb: 2.5,
               px: 3,
               py: 1.8,
-              borderRadius: "18px",
-              background: "linear-gradient(90deg, #0f172a 0%, #1e293b 100%)",
-              color: "#fff",
+              borderRadius: `${radii.lg}px`,
+              background: `linear-gradient(90deg, ${colors.navy.darkest} 0%, ${colors.navy.dark} 100%)`,
+              color: colors.white,
               display: "flex",
               flexDirection: { xs: "column", sm: "row" },
               alignItems: { xs: "flex-start", sm: "center" },
@@ -2409,8 +2758,8 @@ const ReportPage = () => {
             <Stack direction="row" spacing={1.8} alignItems="center">
               <Avatar
                 sx={{
-                  bgcolor: "rgba(56,189,248,0.2)",
-                  color: "#38bdf8",
+                  bgcolor: alpha(colors.blue.bright, 0.2),
+                  color: colors.blue.bright,
                   width: 44,
                   height: 44,
                 }}
@@ -2435,15 +2784,14 @@ const ReportPage = () => {
                   p: 0.5,
                   display: "flex",
                   alignItems: "center",
-                  borderRadius: "12px",
-                  border: "1px solid rgba(0,0,0,0.08)",
-                  bgcolor: "#fff",
+                  border: borders.subtle2,
+                  bgcolor: colors.white,
                 }}
               >
                 <IconButton
                   onClick={handlePrevMonth}
                   size="small"
-                  sx={{ color: "#764ba2" }}
+                  sx={{ color: colors.brand.alt }}
                 >
                   <ChevronLeft fontSize="large" />
                 </IconButton>
@@ -2458,14 +2806,17 @@ const ReportPage = () => {
                 <IconButton
                   onClick={handleNextMonth}
                   size="small"
-                  sx={{ color: "#764ba2" }}
+                  sx={{ color: colors.brand.alt }}
                 >
                   <ChevronRight fontSize="large" />
                 </IconButton>
                 <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
                 <IconButton
-                  onClick={fetchReportData}
-                  sx={{ color: "#667eea", bgcolor: "rgba(255,255,255,0.08)" }}
+                  onClick={() => fetchReportData()}
+                  sx={{
+                    color: colors.brand.main,
+                    bgcolor: alpha(colors.white, 0.08),
+                  }}
                 >
                   <Refresh />
                 </IconButton>
@@ -2476,7 +2827,10 @@ const ReportPage = () => {
                       ? document.exitFullscreen()
                       : document.documentElement.requestFullscreen()
                   }
-                  sx={{ color: "#667eea", bgcolor: "rgba(255,255,255,0.08)" }}
+                  sx={{
+                    color: colors.brand.main,
+                    bgcolor: alpha(colors.white, 0.08),
+                  }}
                 >
                   <Fullscreen />
                 </IconButton>
@@ -2487,68 +2841,28 @@ const ReportPage = () => {
 
         {/* Page Header */}
         {!isStandalone && (
-          <Box sx={{ mb: 4 }}>
-            <Stack
-              direction={{ xs: "column", sm: "row" }}
-              justifyContent="space-between"
-              alignItems={{ xs: "flex-start", sm: "center" }}
-              spacing={2}
-            >
-              <Stack
-                direction="row"
-                alignItems="center"
-                spacing={2}
-                sx={{ mb: 2 }}
-              >
-                <Avatar
-                  sx={{
-                    width: 60,
-                    height: 60,
-                    background: "linear-gradient(45deg, #667eea, #764ba2)",
-                  }}
-                >
-                  <Assessment sx={{ fontSize: 30 }} />
-                </Avatar>
-                <Box>
-                  <Typography
-                    variant={isMobile ? "h4" : "h3"}
-                    component="h1"
-                    sx={{
-                      fontWeight: 700,
-                      background: "linear-gradient(45deg, #667eea, #764ba2)",
-                      backgroundClip: "text",
-                      WebkitBackgroundClip: "text",
-                      WebkitTextFillColor: "transparent",
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    BÁO CÁO TỔNG HỢP
-                  </Typography>
-                  <Typography
-                    variant={isMobile ? "body1" : "h6"}
-                    color="text.secondary"
-                  >
-                    Thống kê kết quả kiểm kê và tiến độ bảo dưỡng hàng tháng
-                  </Typography>
-                </Box>
-              </Stack>
-
-              {/* Month selector widget */}
+          <PageHeader
+            icon={<Assessment />}
+            title="BÁO CÁO TỔNG HỢP"
+            subtitle="Thống kê kết quả kiểm kê và tiến độ bảo dưỡng hàng tháng"
+            titleSx={{ textTransform: "uppercase" }}
+            sx={{ mb: 4 }}
+            // Widget chọn tháng nằm bên phải tiêu đề
+            action={
               <Paper
                 elevation={0}
                 sx={{
                   p: 0.5,
                   display: "flex",
                   alignItems: "center",
-                  borderRadius: "12px",
-                  border: "1px solid rgba(0,0,0,0.08)",
-                  bgcolor: "#fff",
+                  border: borders.subtle2,
+                  bgcolor: colors.white,
                 }}
               >
                 <IconButton
                   onClick={handlePrevMonth}
                   size="small"
-                  sx={{ color: "#764ba2" }}
+                  sx={{ color: colors.brand.alt }}
                 >
                   <ChevronLeft />
                 </IconButton>
@@ -2563,25 +2877,25 @@ const ReportPage = () => {
                 <IconButton
                   onClick={handleNextMonth}
                   size="small"
-                  sx={{ color: "#764ba2" }}
+                  sx={{ color: colors.brand.alt }}
                 >
                   <ChevronRight />
                 </IconButton>
                 <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
                 <IconButton
-                  onClick={fetchReportData}
+                  onClick={() => fetchReportData()}
                   size="small"
-                  sx={{ color: "#667eea" }}
+                  sx={{ color: colors.brand.main }}
                 >
                   <Refresh />
                 </IconButton>
               </Paper>
-            </Stack>
-          </Box>
+            }
+          />
         )}
 
         {error && (
-          <Alert severity="error" sx={{ mb: 3, borderRadius: "12px" }}>
+          <Alert severity="error" sx={{ mb: 3, borderRadius: `${radii.md}px` }}>
             {error}
           </Alert>
         )}
@@ -2597,7 +2911,7 @@ const ReportPage = () => {
               },
               {
                 label: "Thống kê kiểm kê",
-                icon: <Receipt sx={{ fontSize: 20 }} />,
+                icon: <FactCheck sx={{ fontSize: 20 }} />,
                 value: 1,
               },
               {
@@ -2623,24 +2937,21 @@ const ReportPage = () => {
                       justifyContent: "flex-start",
                       py: 1.2,
                       px: 2,
-                      borderRadius: "12px",
                       fontWeight: isActive ? 700 : 600,
                       textTransform: "none",
-                      fontSize: "0.95rem",
-                      background: isActive
-                        ? "linear-gradient(45deg, #667eea, #764ba2)"
-                        : "#fff",
-                      color: isActive ? "#fff" : "#475569",
+                      fontSize: fontSizes.lead,
+                      background: isActive ? gradients.brand : colors.white,
+                      color: isActive ? colors.white : colors.navy.light,
                       borderColor: isActive
                         ? "transparent"
-                        : "rgba(0,0,0,0.12)",
+                        : alpha(colors.black, 0.12),
                       boxShadow: isActive
                         ? "0 4px 14px rgba(102,126,234,0.35)"
                         : "none",
                       "&:hover": {
                         background: isActive
-                          ? "linear-gradient(45deg, #5a67d8, #6b46c1)"
-                          : "#f8fafc",
+                          ? `linear-gradient(45deg, ${colors.brand.hover}, ${colors.purple.main})`
+                          : colors.navy.lightest,
                       },
                     }}
                   >
@@ -2663,7 +2974,7 @@ const ReportPage = () => {
               mb: 3,
               "& .MuiTab-root": {
                 fontWeight: 600,
-                fontSize: "1rem",
+                fontSize: fontSizes.lead,
                 textTransform: "none",
               },
             }}
@@ -2674,7 +2985,7 @@ const ReportPage = () => {
               label="Dashboard tổng quan"
             />
             <Tab
-              icon={<Receipt sx={{ mr: 1 }} />}
+              icon={<FactCheck sx={{ mr: 1 }} />}
               iconPosition="start"
               label="Thống kê kiểm kê"
             />
@@ -2693,7 +3004,7 @@ const ReportPage = () => {
 
         {loading ? (
           <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
-            <CircularProgress size={48} sx={{ color: "#667eea" }} />
+            <CircularProgress size={48} sx={{ color: colors.brand.main }} />
           </Box>
         ) : (
           <Box>
@@ -2706,11 +3017,11 @@ const ReportPage = () => {
                     sx={{
                       p: 6,
                       textAlign: "center",
-                      borderRadius: "16px",
-                      border: "1px dashed rgba(0,0,0,0.12)",
+                      borderRadius: `${radii.lg}px`,
+                      border: `1px dashed ${alpha(colors.black, 0.12)}`,
                     }}
                   >
-                    <Receipt
+                    <FactCheck
                       sx={{ fontSize: 48, color: "text.disabled", mb: 1.5 }}
                     />
                     <Typography variant="body1" color="text.secondary">
@@ -2726,17 +3037,15 @@ const ReportPage = () => {
                         startIcon={<FileDownload />}
                         onClick={handleExportExcel}
                         sx={{
-                          background:
-                            "linear-gradient(45deg, #2e7d32, #4caf50)",
-                          boxShadow: "0 4px 12px rgba(46,125,50,0.2)",
-                          borderRadius: "10px",
+                          background: `linear-gradient(45deg, ${colors.green.main}, ${colors.green.light})`,
+                          boxShadow: shadow(4, 12, shadowRgb.green, 0.2),
+                          borderRadius: `${radii.md}px`,
                           textTransform: "none",
                           fontWeight: 600,
                           px: 3,
                           py: 1,
                           "&:hover": {
-                            background:
-                              "linear-gradient(45deg, #1b5e20, #388e3c)",
+                            background: `linear-gradient(45deg, ${colors.green.dark}, ${muiColors.green[700]})`,
                           },
                         }}
                       >
@@ -2774,18 +3083,18 @@ const ReportPage = () => {
                           key={ticket.uuid_inventory_check}
                           elevation={0}
                           sx={{
-                            borderRadius: "16px !important",
-                            border: "1px solid rgba(0,0,0,0.08)",
+                            borderRadius: `${radii.lg}px !important`,
+                            border: borders.subtle2,
                             overflow: "hidden",
                             "&:before": { display: "none" },
-                            boxShadow: "0 4px 12px rgba(0,0,0,0.03)",
+                            boxShadow: shadow(4, 12, shadowRgb.black, 0.03),
                           }}
                         >
                           <AccordionSummary
                             expandIcon={<ExpandMore />}
                             sx={{
-                              bgcolor: "#fcfdff",
-                              borderBottom: "1px solid rgba(0,0,0,0.04)",
+                              bgcolor: colors.white,
+                              borderBottom: `1px solid ${alpha(colors.black, 0.04)}`,
                               px: 3,
                               py: 1,
                             }}
@@ -2804,13 +3113,13 @@ const ReportPage = () => {
                                 >
                                   <Avatar
                                     sx={{
-                                      bgcolor: "#e3f2fd",
-                                      color: "#1565c0",
+                                      bgcolor: colors.blue.wash,
+                                      color: colors.blue.dark,
                                       width: 40,
                                       height: 40,
                                     }}
                                   >
-                                    <Receipt fontSize="small" />
+                                    <FactCheck fontSize="small" />
                                   </Avatar>
                                   <Box>
                                     <Typography
@@ -2856,15 +3165,15 @@ const ReportPage = () => {
                                     size="small"
                                     sx={{
                                       fontWeight: 600,
-                                      borderColor: "#e0e0e0",
+                                      borderColor: colors.grey[300],
                                     }}
                                   />
                                   <Chip
                                     label={`Sổ sách: ${new Intl.NumberFormat("en-US").format(totalSystem)}`}
                                     size="small"
                                     sx={{
-                                      bgcolor: "#e3f2fd",
-                                      color: "#1565c0",
+                                      bgcolor: colors.blue.wash,
+                                      color: colors.blue.dark,
                                       fontWeight: 600,
                                     }}
                                   />
@@ -2879,7 +3188,11 @@ const ReportPage = () => {
                                           <>
                                             {" "}
                                             (
-                                            <span style={{ color: "#ed6c02" }}>
+                                            <span
+                                              style={{
+                                                color: colors.orange.dark,
+                                              }}
+                                            >
                                               Khác đơn vị:{" "}
                                               {new Intl.NumberFormat(
                                                 "en-US"
@@ -2892,8 +3205,8 @@ const ReportPage = () => {
                                     }
                                     size="small"
                                     sx={{
-                                      bgcolor: "#e8f5e9",
-                                      color: "#2e7d32",
+                                      bgcolor: colors.green.wash,
+                                      color: colors.green.main,
                                       fontWeight: 600,
                                     }}
                                   />
@@ -2901,8 +3214,8 @@ const ReportPage = () => {
                                     label={`Chưa xác định: ${new Intl.NumberFormat("en-US").format(totalMissing)}`}
                                     size="small"
                                     sx={{
-                                      bgcolor: "#ffebee",
-                                      color: "#d32f2f",
+                                      bgcolor: colors.red.wash,
+                                      color: colors.red.dark,
                                       fontWeight: 600,
                                     }}
                                   />
@@ -2919,7 +3232,7 @@ const ReportPage = () => {
                             >
                               <Table size="medium">
                                 <TableHead>
-                                  <TableRow sx={{ bgcolor: "#f5f6f8" }}>
+                                  <TableRow sx={{ bgcolor: colors.grey[100] }}>
                                     <TableCell sx={{ fontWeight: 700, pl: 3 }}>
                                       Đơn vị
                                     </TableCell>
@@ -2930,23 +3243,34 @@ const ReportPage = () => {
                                       Vị trí đã kiểm
                                     </TableCell>
                                     <TableCell
-                                      sx={{ fontWeight: 700, color: "#1565c0" }}
+                                      sx={{
+                                        fontWeight: 700,
+                                        color: colors.blue.dark,
+                                      }}
                                       align="center"
                                     >
                                       Sổ sách (Trước kiểm kê)
                                     </TableCell>
                                     <TableCell
-                                      sx={{ fontWeight: 700, color: "#2e7d32" }}
+                                      sx={{
+                                        fontWeight: 700,
+                                        color: colors.green.main,
+                                      }}
                                       align="center"
                                     >
                                       Số máy hiện diện (
-                                      <span style={{ color: "#ed6c02" }}>
+                                      <span
+                                        style={{ color: colors.orange.dark }}
+                                      >
                                         KĐV
                                       </span>
                                       )
                                     </TableCell>
                                     <TableCell
-                                      sx={{ fontWeight: 700, color: "#d32f2f" }}
+                                      sx={{
+                                        fontWeight: 700,
+                                        color: colors.red.dark,
+                                      }}
                                       align="center"
                                     >
                                       Số máy chưa xác định
@@ -2978,7 +3302,7 @@ const ReportPage = () => {
                                       <TableCell
                                         align="center"
                                         sx={{
-                                          color: "#1565c0",
+                                          color: colors.blue.dark,
                                           fontWeight: 600,
                                         }}
                                       >
@@ -2990,7 +3314,7 @@ const ReportPage = () => {
                                         <Typography
                                           variant="body2"
                                           fontWeight={600}
-                                          sx={{ color: "#2e7d32" }}
+                                          sx={{ color: colors.green.main }}
                                         >
                                           {new Intl.NumberFormat(
                                             "en-US"
@@ -3000,7 +3324,9 @@ const ReportPage = () => {
                                               {" "}
                                               (
                                               <span
-                                                style={{ color: "#ed6c02" }}
+                                                style={{
+                                                  color: colors.orange.dark,
+                                                }}
                                               >
                                                 KĐV:{" "}
                                                 {new Intl.NumberFormat(
@@ -3015,7 +3341,7 @@ const ReportPage = () => {
                                       <TableCell
                                         align="center"
                                         sx={{
-                                          color: "#d32f2f",
+                                          color: colors.red.dark,
                                           fontWeight: 600,
                                         }}
                                       >
@@ -3027,7 +3353,7 @@ const ReportPage = () => {
                                   ))}
 
                                   {/* Hàng tổng cộng */}
-                                  <TableRow sx={{ bgcolor: "#f5f6f8" }}>
+                                  <TableRow sx={{ bgcolor: colors.grey[100] }}>
                                     <TableCell
                                       sx={{ fontWeight: "bold", pl: 3 }}
                                     >
@@ -3050,7 +3376,7 @@ const ReportPage = () => {
                                     <TableCell
                                       align="center"
                                       sx={{
-                                        color: "#1565c0",
+                                        color: colors.blue.dark,
                                         fontWeight: "bold",
                                       }}
                                     >
@@ -3062,7 +3388,7 @@ const ReportPage = () => {
                                       <Typography
                                         variant="body2"
                                         fontWeight="bold"
-                                        sx={{ color: "#2e7d32" }}
+                                        sx={{ color: colors.green.main }}
                                       >
                                         {new Intl.NumberFormat("en-US").format(
                                           totalScanned
@@ -3071,7 +3397,11 @@ const ReportPage = () => {
                                           <>
                                             {" "}
                                             (
-                                            <span style={{ color: "#ed6c02" }}>
+                                            <span
+                                              style={{
+                                                color: colors.orange.dark,
+                                              }}
+                                            >
                                               KĐV:{" "}
                                               {new Intl.NumberFormat(
                                                 "en-US"
@@ -3085,7 +3415,7 @@ const ReportPage = () => {
                                     <TableCell
                                       align="center"
                                       sx={{
-                                        color: "#d32f2f",
+                                        color: colors.red.dark,
                                         fontWeight: "bold",
                                       }}
                                     >
@@ -3115,8 +3445,8 @@ const ReportPage = () => {
                     sx={{
                       p: 6,
                       textAlign: "center",
-                      borderRadius: "16px",
-                      border: "1px dashed rgba(0,0,0,0.12)",
+                      borderRadius: `${radii.lg}px`,
+                      border: `1px dashed ${alpha(colors.black, 0.12)}`,
                     }}
                   >
                     <CalendarMonth
@@ -3132,8 +3462,8 @@ const ReportPage = () => {
                     <Card
                       elevation={0}
                       sx={{
-                        borderRadius: "16px",
-                        border: "1px solid rgba(0,0,0,0.08)",
+                        borderRadius: `${radii.lg}px`,
+                        border: borders.subtle2,
                         width: "100%",
                       }}
                     >
@@ -3151,10 +3481,10 @@ const ReportPage = () => {
                             <Box
                               sx={{
                                 p: 2.5,
-                                borderRadius: "12px",
-                                bgcolor: "rgba(102,126,234,0.08)",
+                                borderRadius: `${radii.md}px`,
+                                bgcolor: alpha(colors.brand.main, 0.08),
                                 textAlign: "center",
-                                boxShadow: "0 2px 6px rgba(0,0,0,0.02)",
+                                boxShadow: shadow(2, 6, shadowRgb.black, 0.02),
                                 maxWidth: "100%",
                                 mx: "auto",
                               }}
@@ -3162,7 +3492,7 @@ const ReportPage = () => {
                               <Typography
                                 variant="h4"
                                 fontWeight={800}
-                                sx={{ color: "#667eea", mb: 0.5 }}
+                                sx={{ color: colors.brand.main, mb: 0.5 }}
                               >
                                 {new Intl.NumberFormat("en-US").format(
                                   maintTotal
@@ -3172,7 +3502,7 @@ const ReportPage = () => {
                                 variant="caption"
                                 color="text.secondary"
                                 fontWeight={700}
-                                sx={{ fontSize: "0.8rem" }}
+                                sx={{ fontSize: fontSizes.small }}
                               >
                                 Tổng số máy
                               </Typography>
@@ -3196,8 +3526,8 @@ const ReportPage = () => {
                             {
                               label: "Đã thực hiện hôm nay",
                               value: maintDoneToday,
-                              bg: "rgba(237, 108, 2, 0.08)",
-                              color: "#ed6c02",
+                              bg: alpha(colors.orange.dark, 0.08),
+                              color: colors.orange.dark,
                               total: maintTotalToday,
                             },
                           ].map((card, idx) => (
@@ -3205,10 +3535,15 @@ const ReportPage = () => {
                               <Box
                                 sx={{
                                   p: 2.5,
-                                  borderRadius: "12px",
+                                  borderRadius: `${radii.md}px`,
                                   bgcolor: card.bg,
                                   textAlign: "center",
-                                  boxShadow: "0 2px 6px rgba(0,0,0,0.02)",
+                                  boxShadow: shadow(
+                                    2,
+                                    6,
+                                    shadowRgb.black,
+                                    0.02
+                                  ),
                                   height: "100%",
                                 }}
                               >
@@ -3224,8 +3559,8 @@ const ReportPage = () => {
                                     card.total > 0 && (
                                       <span
                                         style={{
-                                          fontSize: "1.2rem",
-                                          color: "#666",
+                                          fontSize: fontSizes.title,
+                                          color: colors.grey[700],
                                           fontWeight: "normal",
                                         }}
                                       >
@@ -3241,7 +3576,7 @@ const ReportPage = () => {
                                   variant="caption"
                                   color="text.secondary"
                                   fontWeight={700}
-                                  sx={{ fontSize: "0.8rem" }}
+                                  sx={{ fontSize: fontSizes.small }}
                                 >
                                   {card.label}
                                 </Typography>
@@ -3272,7 +3607,7 @@ const ReportPage = () => {
                                 <Typography
                                   variant="caption"
                                   fontWeight={700}
-                                  sx={{ color: "#1565c0" }}
+                                  sx={{ color: colors.blue.dark }}
                                 >
                                   {pctDone}% (
                                   {new Intl.NumberFormat("en-US").format(
@@ -3289,7 +3624,7 @@ const ReportPage = () => {
                                 sx={{
                                   width: "100%",
                                   height: 10,
-                                  bgcolor: "#eee",
+                                  bgcolor: colors.grey[200],
                                   borderRadius: 5,
                                   overflow: "hidden",
                                 }}
@@ -3298,8 +3633,7 @@ const ReportPage = () => {
                                   sx={{
                                     width: `${pctDone}%`,
                                     height: "100%",
-                                    background:
-                                      "linear-gradient(90deg, #64b5f6 0%, #1565c0 100%)",
+                                    background: `linear-gradient(90deg, ${muiColors.blue[300]} 0%, ${colors.blue.dark} 100%)`,
                                     borderRadius: 5,
                                   }}
                                 />
@@ -3325,7 +3659,7 @@ const ReportPage = () => {
                                 <Typography
                                   variant="caption"
                                   fontWeight={700}
-                                  sx={{ color: "#ed6c02" }}
+                                  sx={{ color: colors.orange.dark }}
                                 >
                                   {pctDoneToday}% (
                                   {new Intl.NumberFormat("en-US").format(
@@ -3342,7 +3676,7 @@ const ReportPage = () => {
                                 sx={{
                                   width: "100%",
                                   height: 10,
-                                  bgcolor: "#eee",
+                                  bgcolor: colors.grey[200],
                                   borderRadius: 5,
                                   overflow: "hidden",
                                 }}
@@ -3351,8 +3685,7 @@ const ReportPage = () => {
                                   sx={{
                                     width: `${pctDoneToday}%`,
                                     height: "100%",
-                                    background:
-                                      "linear-gradient(90deg, #ffb74d 0%, #ed6c02 100%)",
+                                    background: `linear-gradient(90deg, ${muiColors.orange[300]} 0%, ${colors.orange.dark} 100%)`,
                                     borderRadius: 5,
                                   }}
                                 />
@@ -3367,15 +3700,15 @@ const ReportPage = () => {
                       component={Paper}
                       elevation={0}
                       sx={{
-                        borderRadius: "16px",
-                        border: "1px solid rgba(0,0,0,0.08)",
+                        borderRadius: `${radii.lg}px`,
+                        border: borders.subtle2,
                         overflowX: "auto",
                         width: "100%",
                       }}
                     >
                       <Table size="medium">
                         <TableHead>
-                          <TableRow sx={{ bgcolor: "#f5f6f8" }}>
+                          <TableRow sx={{ bgcolor: colors.grey[100] }}>
                             <TableCell
                               sx={{ fontWeight: 700, pl: 3, width: "15%" }}
                             >
@@ -3427,7 +3760,7 @@ const ReportPage = () => {
                             <TableCell
                               sx={{
                                 fontWeight: 700,
-                                color: "#ed6c02",
+                                color: colors.orange.dark,
                                 width: "15%",
                               }}
                               align="center"
@@ -3437,7 +3770,7 @@ const ReportPage = () => {
                             <TableCell
                               sx={{
                                 fontWeight: 700,
-                                color: "#ed6c02",
+                                color: colors.orange.dark,
                                 width: "15%",
                               }}
                               align="center"
@@ -3509,7 +3842,7 @@ const ReportPage = () => {
                                         sx={{
                                           width: 60,
                                           height: 6,
-                                          bgcolor: "#eee",
+                                          bgcolor: colors.grey[200],
                                           borderRadius: 3,
                                           overflow: "hidden",
                                         }}
@@ -3520,8 +3853,8 @@ const ReportPage = () => {
                                             height: "100%",
                                             bgcolor:
                                               deptPct === 100
-                                                ? "#2e7d32"
-                                                : "#1976d2",
+                                                ? colors.green.main
+                                                : colors.blue.main,
                                             borderRadius: 3,
                                           }}
                                         />
@@ -3532,7 +3865,7 @@ const ReportPage = () => {
                                         sx={{
                                           color:
                                             deptPct === 100
-                                              ? "#2e7d32"
+                                              ? colors.green.main
                                               : "inherit",
                                         }}
                                       >
@@ -3543,7 +3876,7 @@ const ReportPage = () => {
                                   <TableCell
                                     align="center"
                                     sx={{
-                                      color: "#ed6c02",
+                                      color: colors.orange.dark,
                                       fontWeight: 600,
                                     }}
                                   >
@@ -3554,8 +3887,8 @@ const ReportPage = () => {
                                         )}
                                         <span
                                           style={{
-                                            fontSize: "0.8rem",
-                                            color: "#666",
+                                            fontSize: fontSizes.small,
+                                            color: colors.grey[700],
                                             fontWeight: "normal",
                                           }}
                                         >
@@ -3582,7 +3915,7 @@ const ReportPage = () => {
                                           sx={{
                                             width: 60,
                                             height: 6,
-                                            bgcolor: "#eee",
+                                            bgcolor: colors.grey[200],
                                             borderRadius: 3,
                                             overflow: "hidden",
                                           }}
@@ -3593,8 +3926,8 @@ const ReportPage = () => {
                                               height: "100%",
                                               bgcolor:
                                                 deptPctToday === 100
-                                                  ? "#2e7d32"
-                                                  : "#ed6c02",
+                                                  ? colors.green.main
+                                                  : colors.orange.dark,
                                               borderRadius: 3,
                                             }}
                                           />
@@ -3605,8 +3938,8 @@ const ReportPage = () => {
                                           sx={{
                                             color:
                                               deptPctToday === 100
-                                                ? "#2e7d32"
-                                                : "#ed6c02",
+                                                ? colors.green.main
+                                                : colors.orange.dark,
                                           }}
                                         >
                                           {deptPctToday}%
@@ -3656,7 +3989,7 @@ const ReportPage = () => {
                                 : 0;
 
                             return (
-                              <TableRow sx={{ bgcolor: "#f5f6f8" }}>
+                              <TableRow sx={{ bgcolor: colors.grey[100] }}>
                                 <TableCell sx={{ fontWeight: "bold", pl: 3 }}>
                                   TỔNG CỘNG
                                 </TableCell>
@@ -3701,7 +4034,7 @@ const ReportPage = () => {
                                       sx={{
                                         width: 60,
                                         height: 6,
-                                        bgcolor: "#eee",
+                                        bgcolor: colors.grey[200],
                                         borderRadius: 3,
                                         overflow: "hidden",
                                       }}
@@ -3712,8 +4045,8 @@ const ReportPage = () => {
                                           height: "100%",
                                           bgcolor:
                                             totalMaintPct === 100
-                                              ? "#2e7d32"
-                                              : "#1976d2",
+                                              ? colors.green.main
+                                              : colors.blue.main,
                                           borderRadius: 3,
                                         }}
                                       />
@@ -3724,7 +4057,7 @@ const ReportPage = () => {
                                       sx={{
                                         color:
                                           totalMaintPct === 100
-                                            ? "#2e7d32"
+                                            ? colors.green.main
                                             : "inherit",
                                       }}
                                     >
@@ -3736,7 +4069,7 @@ const ReportPage = () => {
                                   align="center"
                                   sx={{
                                     fontWeight: "bold",
-                                    color: "#ed6c02",
+                                    color: colors.orange.dark,
                                   }}
                                 >
                                   {totalMaintTotalToday > 0 ? (
@@ -3746,8 +4079,8 @@ const ReportPage = () => {
                                       )}
                                       <span
                                         style={{
-                                          fontSize: "0.8rem",
-                                          color: "#666",
+                                          fontSize: fontSizes.small,
+                                          color: colors.grey[700],
                                           fontWeight: "normal",
                                         }}
                                       >
@@ -3774,7 +4107,7 @@ const ReportPage = () => {
                                         sx={{
                                           width: 60,
                                           height: 6,
-                                          bgcolor: "#eee",
+                                          bgcolor: colors.grey[200],
                                           borderRadius: 3,
                                           overflow: "hidden",
                                         }}
@@ -3785,8 +4118,8 @@ const ReportPage = () => {
                                             height: "100%",
                                             bgcolor:
                                               totalMaintPctToday === 100
-                                                ? "#2e7d32"
-                                                : "#ed6c02",
+                                                ? colors.green.main
+                                                : colors.orange.dark,
                                             borderRadius: 3,
                                           }}
                                         />
@@ -3797,8 +4130,8 @@ const ReportPage = () => {
                                         sx={{
                                           color:
                                             totalMaintPctToday === 100
-                                              ? "#2e7d32"
-                                              : "#ed6c02",
+                                              ? colors.green.main
+                                              : colors.orange.dark,
                                         }}
                                       >
                                         {totalMaintPctToday}%
@@ -3829,8 +4162,8 @@ const ReportPage = () => {
                     sx={{
                       p: 6,
                       textAlign: "center",
-                      borderRadius: "16px",
-                      border: "1px dashed rgba(0,0,0,0.12)",
+                      borderRadius: `${radii.lg}px`,
+                      border: `1px dashed ${alpha(colors.black, 0.12)}`,
                     }}
                   >
                     <Air
@@ -3850,17 +4183,16 @@ const ReportPage = () => {
                           elevation={0}
                           sx={{
                             p: 3,
-                            borderRadius: "20px",
-                            background:
-                              "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
-                            color: "#fff",
-                            boxShadow: "0 10px 30px rgba(15,23,42,0.3)",
+                            borderRadius: `${radii.lg}px`,
+                            background: `linear-gradient(135deg, ${colors.navy.darkest} 0%, ${colors.navy.dark} 100%)`,
+                            color: colors.white,
+                            boxShadow: shadow(10, 30, shadowRgb.navy, 0.3),
                             height: "100%",
                             display: "flex",
                             flexDirection: "column",
                             justifyContent: "space-between",
                             boxSizing: "border-box",
-                            border: "1px solid rgba(255,255,255,0.1)",
+                            border: `1px solid ${alpha(colors.white, 0.1)}`,
                           }}
                         >
                           <Box>
@@ -3877,8 +4209,8 @@ const ReportPage = () => {
                               >
                                 <Avatar
                                   sx={{
-                                    bgcolor: "rgba(56,189,248,0.2)",
-                                    color: "#38bdf8",
+                                    bgcolor: alpha(colors.blue.bright, 0.2),
+                                    color: colors.blue.bright,
                                     width: 44,
                                     height: 44,
                                   }}
@@ -3889,7 +4221,7 @@ const ReportPage = () => {
                                   <Typography
                                     variant="h6"
                                     sx={{
-                                      color: "#f8fafc",
+                                      color: colors.navy.lightest,
                                       textTransform: "uppercase",
                                       fontWeight: 700,
                                       letterSpacing: 0.8,
@@ -3905,21 +4237,24 @@ const ReportPage = () => {
                               sx={{
                                 my: 2,
                                 p: 2,
-                                borderRadius: "14px",
-                                bgcolor: "rgba(255,255,255,0.05)",
-                                border: "1px solid rgba(255,255,255,0.08)",
+                                borderRadius: `${radii.md}px`,
+                                bgcolor: alpha(colors.white, 0.05),
+                                border: `1px solid ${alpha(colors.white, 0.08)}`,
                               }}
                             >
                               <Typography
                                 variant="caption"
-                                sx={{ color: "#cbd5e1", fontWeight: 600 }}
+                                sx={{
+                                  color: colors.brand.line,
+                                  fontWeight: 600,
+                                }}
                               >
                                 TỔNG CÔNG SUẤT MÁY NÉN KHÍ
                               </Typography>
                               <Typography
                                 variant="h3"
                                 fontWeight={900}
-                                sx={{ color: "#38bdf8", my: 0.5 }}
+                                sx={{ color: colors.blue.bright, my: 0.5 }}
                               >
                                 20,000
                                 <Typography
@@ -3927,7 +4262,7 @@ const ReportPage = () => {
                                   variant="subtitle1"
                                   sx={{
                                     ml: 1,
-                                    color: "#94a3b8",
+                                    color: colors.navy.pale,
                                     fontWeight: 600,
                                   }}
                                 >
@@ -3940,9 +4275,9 @@ const ReportPage = () => {
                               <Box
                                 sx={{
                                   p: 1.8,
-                                  borderRadius: "12px",
-                                  bgcolor: "rgba(255,255,255,0.04)",
-                                  border: "1px solid rgba(255,255,255,0.06)",
+                                  borderRadius: `${radii.md}px`,
+                                  bgcolor: alpha(colors.white, 0.04),
+                                  border: `1px solid ${alpha(colors.white, 0.06)}`,
                                   display: "flex",
                                   justifyContent: "space-between",
                                   alignItems: "center",
@@ -3952,7 +4287,7 @@ const ReportPage = () => {
                                   <Typography
                                     variant="body2"
                                     fontWeight={700}
-                                    sx={{ color: "#f1f5f9" }}
+                                    sx={{ color: colors.navy.tint }}
                                   >
                                     Máy bơm khí nén 1
                                   </Typography>
@@ -3960,13 +4295,13 @@ const ReportPage = () => {
                                 <Typography
                                   variant="subtitle1"
                                   fontWeight={800}
-                                  sx={{ color: "#38bdf8" }}
+                                  sx={{ color: colors.blue.bright }}
                                 >
                                   10,500{" "}
                                   <Typography
                                     component="span"
                                     variant="caption"
-                                    sx={{ color: "#94a3b8" }}
+                                    sx={{ color: colors.navy.pale }}
                                   >
                                     lít/phút
                                   </Typography>
@@ -3976,9 +4311,9 @@ const ReportPage = () => {
                               <Box
                                 sx={{
                                   p: 1.8,
-                                  borderRadius: "12px",
-                                  bgcolor: "rgba(255,255,255,0.04)",
-                                  border: "1px solid rgba(255,255,255,0.06)",
+                                  borderRadius: `${radii.md}px`,
+                                  bgcolor: alpha(colors.white, 0.04),
+                                  border: `1px solid ${alpha(colors.white, 0.06)}`,
                                   display: "flex",
                                   justifyContent: "space-between",
                                   alignItems: "center",
@@ -3988,7 +4323,7 @@ const ReportPage = () => {
                                   <Typography
                                     variant="body2"
                                     fontWeight={700}
-                                    sx={{ color: "#f1f5f9" }}
+                                    sx={{ color: colors.navy.tint }}
                                   >
                                     Máy bơm khí nén 2
                                   </Typography>
@@ -3996,13 +4331,13 @@ const ReportPage = () => {
                                 <Typography
                                   variant="subtitle1"
                                   fontWeight={800}
-                                  sx={{ color: "#38bdf8" }}
+                                  sx={{ color: colors.blue.bright }}
                                 >
                                   9,500{" "}
                                   <Typography
                                     component="span"
                                     variant="caption"
-                                    sx={{ color: "#94a3b8" }}
+                                    sx={{ color: colors.navy.pale }}
                                   >
                                     lít/phút
                                   </Typography>
@@ -4042,11 +4377,15 @@ const ReportPage = () => {
                                 elevation={0}
                                 sx={{
                                   p: 2.5,
-                                  borderRadius: "18px",
-                                  background:
-                                    "linear-gradient(135deg, #f57c00 0%, #ff9800 100%)",
-                                  color: "#fff",
-                                  boxShadow: "0 6px 20px rgba(245,124,0,0.25)",
+                                  borderRadius: `${radii.lg}px`,
+                                  background: `linear-gradient(135deg, ${colors.orange.hover} 0%, ${colors.orange.main} 100%)`,
+                                  color: colors.white,
+                                  boxShadow: shadow(
+                                    6,
+                                    20,
+                                    shadowRgb.orange,
+                                    0.25
+                                  ),
                                   flex: 1,
                                   display: "flex",
                                   alignItems: "center",
@@ -4069,13 +4408,16 @@ const ReportPage = () => {
                                     >
                                       <Avatar
                                         sx={{
-                                          bgcolor: "rgba(255,255,255,0.2)",
+                                          bgcolor: alpha(colors.white, 0.2),
                                           width: 40,
                                           height: 40,
                                         }}
                                       >
                                         <Air
-                                          sx={{ fontSize: 26, color: "#fff" }}
+                                          sx={{
+                                            fontSize: 26,
+                                            color: colors.white,
+                                          }}
                                         />
                                       </Avatar>
                                       <Typography
@@ -4209,15 +4551,15 @@ const ReportPage = () => {
                                         <Box
                                           sx={{
                                             p: 1.5,
-                                            borderRadius: "14px",
+                                            borderRadius: `${radii.md}px`,
                                             bgcolor: isWarning
-                                              ? "#fef08a"
-                                              : "rgba(255,255,255,0.18)",
+                                              ? muiColors.amber["A100"]
+                                              : alpha(colors.white, 0.18),
                                             backdropFilter: "blur(6px)",
                                             textAlign: "right",
                                             border: isWarning
-                                              ? "2px solid #dc2626"
-                                              : "1px solid rgba(255,255,255,0.25)",
+                                              ? `2px solid ${colors.red.dark}`
+                                              : `1px solid ${alpha(colors.white, 0.25)}`,
                                             boxShadow: isWarning
                                               ? "0 4px 14px rgba(220,38,38,0.3)"
                                               : "none",
@@ -4232,7 +4574,7 @@ const ReportPage = () => {
                                               textTransform: "uppercase",
                                               display: "block",
                                               color: isWarning
-                                                ? "#dc2626"
+                                                ? colors.red.dark
                                                 : "inherit",
                                             }}
                                           >
@@ -4251,8 +4593,8 @@ const ReportPage = () => {
                                             {isWarning && (
                                               <WarningAmber
                                                 sx={{
-                                                  color: "#dc2626",
-                                                  fontSize: "1.8rem",
+                                                  color: colors.red.dark,
+                                                  fontSize: fontSizes.xxl,
                                                   filter:
                                                     "drop-shadow(0px 1px 2px rgba(220,38,38,0.3))",
                                                 }}
@@ -4263,7 +4605,7 @@ const ReportPage = () => {
                                               fontWeight={900}
                                               sx={{
                                                 color: isWarning
-                                                  ? "#dc2626"
+                                                  ? colors.red.dark
                                                   : "inherit",
                                               }}
                                             >
@@ -4276,8 +4618,8 @@ const ReportPage = () => {
                                               width: "100%",
                                               height: 5,
                                               bgcolor: isWarning
-                                                ? "rgba(220, 38, 38, 0.2)"
-                                                : "rgba(255,255,255,0.3)",
+                                                ? alpha(colors.red.dark, 0.2)
+                                                : alpha(colors.white, 0.3),
                                               borderRadius: 3,
                                               overflow: "hidden",
                                               my: 0.6,
@@ -4291,8 +4633,8 @@ const ReportPage = () => {
                                                 )}%`,
                                                 height: "100%",
                                                 bgcolor: isWarning
-                                                  ? "#dc2626"
-                                                  : "#fff",
+                                                  ? colors.red.dark
+                                                  : colors.white,
                                                 borderRadius: 3,
                                               }}
                                             />
@@ -4301,9 +4643,9 @@ const ReportPage = () => {
                                             variant="caption"
                                             sx={{
                                               opacity: 0.9,
-                                              fontSize: "0.72rem",
+                                              fontSize: fontSizes.label,
                                               color: isWarning
-                                                ? "#dc2626"
+                                                ? colors.red.dark
                                                 : "inherit",
                                             }}
                                           >
@@ -4329,11 +4671,15 @@ const ReportPage = () => {
                                 elevation={0}
                                 sx={{
                                   p: 2.5,
-                                  borderRadius: "18px",
-                                  background:
-                                    "linear-gradient(135deg, #3f51b5 0%, #5c6bc0 100%)",
-                                  color: "#fff",
-                                  boxShadow: "0 6px 20px rgba(63,81,181,0.25)",
+                                  borderRadius: `${radii.lg}px`,
+                                  background: `linear-gradient(135deg, ${muiColors.indigo[500]} 0%, ${colors.brand.hover} 100%)`,
+                                  color: colors.white,
+                                  boxShadow: shadow(
+                                    6,
+                                    20,
+                                    shadowRgb.indigo,
+                                    0.25
+                                  ),
                                   height: "100%",
                                   display: "flex",
                                   alignItems: "center",
@@ -4349,13 +4695,16 @@ const ReportPage = () => {
                                   >
                                     <Avatar
                                       sx={{
-                                        bgcolor: "rgba(255,255,255,0.2)",
+                                        bgcolor: alpha(colors.white, 0.2),
                                         width: 40,
                                         height: 40,
                                       }}
                                     >
                                       <PrecisionManufacturing
-                                        sx={{ fontSize: 26, color: "#fff" }}
+                                        sx={{
+                                          fontSize: 26,
+                                          color: colors.white,
+                                        }}
                                       />
                                     </Avatar>
                                     <Typography
@@ -4494,11 +4843,15 @@ const ReportPage = () => {
                                 elevation={0}
                                 sx={{
                                   p: 2.5,
-                                  borderRadius: "18px",
-                                  background:
-                                    "linear-gradient(135deg, #00897b 0%, #26a69a 100%)",
-                                  color: "#fff",
-                                  boxShadow: "0 6px 20px rgba(0,137,123,0.25)",
+                                  borderRadius: `${radii.lg}px`,
+                                  background: `linear-gradient(135deg, ${colors.teal.main} 0%, ${colors.teal.light} 100%)`,
+                                  color: colors.white,
+                                  boxShadow: shadow(
+                                    6,
+                                    20,
+                                    shadowRgb.teal,
+                                    0.25
+                                  ),
                                   height: "100%",
                                   display: "flex",
                                   alignItems: "center",
@@ -4514,13 +4867,16 @@ const ReportPage = () => {
                                   >
                                     <Avatar
                                       sx={{
-                                        bgcolor: "rgba(255,255,255,0.2)",
+                                        bgcolor: alpha(colors.white, 0.2),
                                         width: 40,
                                         height: 40,
                                       }}
                                     >
                                       <Speed
-                                        sx={{ fontSize: 26, color: "#fff" }}
+                                        sx={{
+                                          fontSize: 26,
+                                          color: colors.white,
+                                        }}
                                       />
                                     </Avatar>
                                     <Typography
@@ -4581,8 +4937,8 @@ const ReportPage = () => {
                           sx={{
                             p: 4,
                             textAlign: "center",
-                            borderRadius: "16px",
-                            border: "1px dashed rgba(0,0,0,0.12)",
+                            borderRadius: `${radii.lg}px`,
+                            border: `1px dashed ${alpha(colors.black, 0.12)}`,
                           }}
                         >
                           <Typography color="text.secondary">
@@ -4598,10 +4954,15 @@ const ReportPage = () => {
                                   key={dept.id_department || deptIdx}
                                   elevation={0}
                                   sx={{
-                                    borderRadius: "16px !important",
-                                    border: "1px solid rgba(0,0,0,0.08)",
+                                    borderRadius: `${radii.lg}px !important`,
+                                    border: borders.subtle2,
                                     overflow: "hidden",
-                                    boxShadow: "0 2px 8px rgba(0,0,0,0.02)",
+                                    boxShadow: shadow(
+                                      2,
+                                      8,
+                                      shadowRgb.black,
+                                      0.02
+                                    ),
                                     "&:before": { display: "none" },
                                   }}
                                 >
@@ -4609,11 +4970,10 @@ const ReportPage = () => {
                                   <AccordionSummary
                                     expandIcon={<ExpandMore />}
                                     sx={{
-                                      bgcolor: "#f8fafc",
+                                      bgcolor: colors.navy.lightest,
                                       px: 3,
                                       py: 1.5,
-                                      borderBottom:
-                                        "1px solid rgba(0,0,0,0.04)",
+                                      borderBottom: `1px solid ${alpha(colors.black, 0.04)}`,
                                     }}
                                   >
                                     <Grid
@@ -4631,8 +4991,8 @@ const ReportPage = () => {
                                         >
                                           <Avatar
                                             sx={{
-                                              bgcolor: "#e3f2fd",
-                                              color: "#0288d1",
+                                              bgcolor: colors.blue.wash,
+                                              color: colors.blue.deep,
                                               width: 42,
                                               height: 42,
                                               fontWeight: 700,
@@ -4644,7 +5004,9 @@ const ReportPage = () => {
                                             <Typography
                                               variant="subtitle1"
                                               fontWeight={700}
-                                              sx={{ color: "#0f172a" }}
+                                              sx={{
+                                                color: colors.navy.darkest,
+                                              }}
                                             >
                                               {dept.name_department}
                                             </Typography>
@@ -4675,7 +5037,7 @@ const ReportPage = () => {
                                         <Typography
                                           variant="subtitle1"
                                           fontWeight={800}
-                                          sx={{ color: "#0288d1" }}
+                                          sx={{ color: colors.blue.deep }}
                                         >
                                           {new Intl.NumberFormat("en-US", {
                                             maximumFractionDigits: 1,
@@ -4688,7 +5050,7 @@ const ReportPage = () => {
 
                                   {/* LEVEL 1 DETAILS: LOCATIONS UNDER DEPARTMENT */}
                                   <AccordionDetails
-                                    sx={{ p: 2, bgcolor: "#f1f5f9" }}
+                                    sx={{ p: 2, bgcolor: colors.navy.tint }}
                                   >
                                     <Stack spacing={1.5}>
                                       {dept.locations.map((loc, locIdx) => {
@@ -4697,10 +5059,9 @@ const ReportPage = () => {
                                             key={loc.id_location || locIdx}
                                             elevation={0}
                                             sx={{
-                                              borderRadius: "12px !important",
-                                              border:
-                                                "1px solid rgba(0,0,0,0.06)",
-                                              bgcolor: "#ffffff",
+                                              borderRadius: `${radii.md}px !important`,
+                                              border: `1px solid ${alpha(colors.black, 0.06)}`,
+                                              bgcolor: colors.white,
                                               overflow: "hidden",
                                               "&:before": { display: "none" },
                                             }}
@@ -4711,7 +5072,7 @@ const ReportPage = () => {
                                               sx={{
                                                 px: 2.5,
                                                 py: 1,
-                                                bgcolor: "#fafafa",
+                                                bgcolor: colors.grey[50],
                                               }}
                                             >
                                               <Grid
@@ -4729,8 +5090,9 @@ const ReportPage = () => {
                                                   >
                                                     <Avatar
                                                       sx={{
-                                                        bgcolor: "#e0f2f1",
-                                                        color: "#00897b",
+                                                        bgcolor:
+                                                          colors.green.wash,
+                                                        color: colors.teal.main,
                                                         width: 34,
                                                         height: 34,
                                                       }}
@@ -4742,7 +5104,8 @@ const ReportPage = () => {
                                                         variant="subtitle2"
                                                         fontWeight={700}
                                                         sx={{
-                                                          color: "#334155",
+                                                          color:
+                                                            colors.navy.main,
                                                         }}
                                                       >
                                                         {loc.name_location}
@@ -4772,7 +5135,9 @@ const ReportPage = () => {
                                                   <Typography
                                                     variant="body2"
                                                     fontWeight={700}
-                                                    sx={{ color: "#00897b" }}
+                                                    sx={{
+                                                      color: colors.teal.main,
+                                                    }}
                                                   >
                                                     {new Intl.NumberFormat(
                                                       "en-US",
@@ -4799,7 +5164,8 @@ const ReportPage = () => {
                                                   <TableHead>
                                                     <TableRow
                                                       sx={{
-                                                        bgcolor: "#f8fafc",
+                                                        bgcolor:
+                                                          colors.navy.lightest,
                                                       }}
                                                     >
                                                       <TableCell
@@ -4828,7 +5194,8 @@ const ReportPage = () => {
                                                         align="center"
                                                         sx={{
                                                           fontWeight: 700,
-                                                          color: "#00897b",
+                                                          color:
+                                                            colors.teal.main,
                                                         }}
                                                       >
                                                         Lưu lượng (lít/phút)
@@ -4837,7 +5204,8 @@ const ReportPage = () => {
                                                         align="center"
                                                         sx={{
                                                           fontWeight: 700,
-                                                          color: "#00897b",
+                                                          color:
+                                                            colors.teal.main,
                                                         }}
                                                       >
                                                         Tổng lưu lượng
@@ -4871,7 +5239,8 @@ const ReportPage = () => {
                                                               sx={{
                                                                 fontWeight: 700,
                                                                 color:
-                                                                  "#1e293b",
+                                                                  colors.navy
+                                                                    .dark,
                                                               }}
                                                             >
                                                               {
@@ -4891,7 +5260,8 @@ const ReportPage = () => {
                                                               sx={{
                                                                 fontWeight: 600,
                                                                 color:
-                                                                  "#00897b",
+                                                                  colors.teal
+                                                                    .main,
                                                               }}
                                                             >
                                                               {new Intl.NumberFormat(
@@ -4909,7 +5279,8 @@ const ReportPage = () => {
                                                               sx={{
                                                                 fontWeight: 700,
                                                                 color:
-                                                                  "#00897b",
+                                                                  colors.teal
+                                                                    .main,
                                                               }}
                                                             >
                                                               {new Intl.NumberFormat(
@@ -4956,8 +5327,8 @@ const ReportPage = () => {
                     sx={{
                       p: 6,
                       textAlign: "center",
-                      borderRadius: "16px",
-                      border: "1px dashed rgba(0,0,0,0.12)",
+                      borderRadius: `${radii.lg}px`,
+                      border: `1px dashed ${alpha(colors.black, 0.12)}`,
                     }}
                   >
                     <Dashboard
@@ -4983,17 +5354,15 @@ const ReportPage = () => {
                             )
                           }
                           sx={{
-                            background:
-                              "linear-gradient(90deg, #0f172a, #1e293b)",
-                            boxShadow: "0 4px 14px rgba(15,23,42,0.25)",
-                            borderRadius: "10px",
+                            background: `linear-gradient(90deg, ${colors.navy.darkest}, ${colors.navy.dark})`,
+                            boxShadow: shadow(4, 14, shadowRgb.navy, 0.25),
+                            borderRadius: `${radii.md}px`,
                             textTransform: "none",
                             fontWeight: 600,
                             px: 2.5,
                             py: 1,
                             "&:hover": {
-                              background:
-                                "linear-gradient(90deg, #1e293b, #334155)",
+                              background: `linear-gradient(90deg, ${colors.navy.dark}, ${colors.navy.main})`,
                             },
                           }}
                         >
@@ -5052,10 +5421,9 @@ const ReportPage = () => {
                                     sx={{
                                       px: 1.5,
                                       py: 1.1,
-                                      borderRadius: "12px",
-                                      bgcolor: "rgba(255,255,255,0.04)",
-                                      border:
-                                        "1px solid rgba(255,255,255,0.06)",
+                                      borderRadius: `${radii.md}px`,
+                                      bgcolor: alpha(colors.white, 0.04),
+                                      border: `1px solid ${alpha(colors.white, 0.06)}`,
                                       display: "flex",
                                       alignItems: "center",
                                       gap: 1.2,
@@ -5065,14 +5433,17 @@ const ReportPage = () => {
                                       sx={{
                                         width: 10,
                                         height: 10,
-                                        borderRadius: "50%",
+                                        borderRadius: radii.circle,
                                         bgcolor: seg.color,
                                         flexShrink: 0,
                                       }}
                                     />
                                     <Typography
                                       variant="body2"
-                                      sx={{ flexGrow: 1, color: "#e2e8f0" }}
+                                      sx={{
+                                        flexGrow: 1,
+                                        color: colors.navy.wash,
+                                      }}
                                     >
                                       {seg.label}
                                     </Typography>
@@ -5088,7 +5459,7 @@ const ReportPage = () => {
                                       sx={{
                                         minWidth: 40,
                                         textAlign: "right",
-                                        color: "#94a3b8",
+                                        color: colors.navy.pale,
                                       }}
                                     >
                                       {Math.round(pct)}%
@@ -5123,62 +5494,20 @@ const ReportPage = () => {
                           icon={<FactCheck />}
                           gradient="teal"
                           action={
-                            <Stack
-                              direction="row"
-                              spacing={0.5}
-                              sx={{
-                                bgcolor: "rgba(255,255,255,0.15)",
-                                borderRadius: "10px",
-                                p: 0.4,
-                              }}
-                            >
-                              {[
-                                null,
-                                ...Array.from(
-                                  { length: INV_WEEK_COUNT },
-                                  (_, i) => i + 1
-                                ),
-                              ].map((week) => {
-                                const isActive = invWeek === week;
-                                const noData =
-                                  week !== null &&
-                                  !invDays.some((d) => d.week === week);
-                                return (
-                                  <Button
-                                    key={week ?? "all"}
-                                    size="small"
-                                    disabled={noData}
-                                    onClick={() => setInvWeek(week)}
-                                    sx={{
-                                      minWidth: 0,
-                                      px: 1.2,
-                                      py: 0.3,
-                                      borderRadius: "8px",
-                                      textTransform: "none",
-                                      fontSize: "0.72rem",
-                                      fontWeight: 700,
-                                      lineHeight: 1.6,
-                                      color: isActive ? "#00796b" : "#fff",
-                                      bgcolor: isActive
-                                        ? "#fff"
-                                        : "transparent",
-                                      "&.Mui-disabled": {
-                                        color: "rgba(255,255,255,0.35)",
-                                      },
-                                      "&:hover": {
-                                        bgcolor: isActive
-                                          ? "#fff"
-                                          : "rgba(255,255,255,0.2)",
-                                      },
-                                    }}
-                                  >
-                                    {week === null
-                                      ? "Cả tháng"
-                                      : `Tuần ${week}`}
-                                  </Button>
-                                );
-                              })}
-                            </Stack>
+                            <InvScopePicker
+                              tone="onTeal"
+                              week={invWeek}
+                              monthBy={invMonthBy}
+                              onWeekChange={setInvWeek}
+                              onMonthByChange={setInvMonthBy}
+                              weekCount={invWeekCount}
+                              rangeOf={invWeekRangeOf}
+                              isEnabled={(w) =>
+                                w === null
+                                  ? invDays.length > 0
+                                  : invDays.some((d) => d.week === w)
+                              }
+                            />
                           }
                         >
                           {/* Hai biểu đồ sai lệch, dùng chung bộ chọn tuần.
@@ -5222,7 +5551,11 @@ const ReportPage = () => {
                           days={invDays}
                           chartPoints={invChartPoints}
                           week={invWeek}
+                          monthBy={invMonthBy}
+                          weekCount={invWeekCount}
+                          weekRangeOf={invWeekRangeOf}
                           onWeekChange={setInvWeek}
+                          onMonthByChange={setInvMonthBy}
                           onSelect={setInvFocus}
                           onClose={() => setInvFocus(null)}
                           isMobile={isMobile}
@@ -5251,13 +5584,16 @@ const ReportPage = () => {
                               <CalendarMonth
                                 sx={{
                                   fontSize: 42,
-                                  color: "rgba(255,255,255,0.25)",
+                                  color: alpha(colors.white, 0.25),
                                   mb: 1,
                                 }}
                               />
                               <Typography
                                 variant="body2"
-                                sx={{ color: "#94a3b8", textAlign: "center" }}
+                                sx={{
+                                  color: colors.navy.pale,
+                                  textAlign: "center",
+                                }}
                               >
                                 Không có lịch bảo dưỡng trong{" "}
                                 {MONTH_NAMES[currentMonth - 1].toLowerCase()} /{" "}
@@ -5326,10 +5662,9 @@ const ReportPage = () => {
                                           minWidth: 0,
                                           px: 1.5,
                                           py: 1,
-                                          borderRadius: "12px",
-                                          bgcolor: "rgba(255,255,255,0.04)",
-                                          border:
-                                            "1px solid rgba(255,255,255,0.06)",
+                                          borderRadius: `${radii.md}px`,
+                                          bgcolor: alpha(colors.white, 0.04),
+                                          border: `1px solid ${alpha(colors.white, 0.06)}`,
                                           display: "flex",
                                           alignItems: "center",
                                           gap: 1,
@@ -5339,7 +5674,7 @@ const ReportPage = () => {
                                           sx={{
                                             width: 10,
                                             height: 10,
-                                            borderRadius: "50%",
+                                            borderRadius: radii.circle,
                                             bgcolor: seg.color,
                                             flexShrink: 0,
                                           }}
@@ -5348,7 +5683,7 @@ const ReportPage = () => {
                                           variant="body2"
                                           sx={{
                                             flexGrow: 1,
-                                            color: "#e2e8f0",
+                                            color: colors.navy.wash,
                                             whiteSpace: "nowrap",
                                           }}
                                         >
@@ -5366,7 +5701,7 @@ const ReportPage = () => {
                                           sx={{
                                             minWidth: 38,
                                             textAlign: "right",
-                                            color: "#94a3b8",
+                                            color: colors.navy.pale,
                                           }}
                                         >
                                           {pct}%
@@ -5414,7 +5749,7 @@ const ReportPage = () => {
                                         <Typography
                                           variant="caption"
                                           fontWeight={600}
-                                          sx={{ color: "#94a3b8" }}
+                                          sx={{ color: colors.navy.pale }}
                                         >
                                           {bar.label}
                                         </Typography>
@@ -5425,9 +5760,9 @@ const ReportPage = () => {
                                             whiteSpace: "nowrap",
                                             color:
                                               bar.total === 0
-                                                ? "#64748b"
+                                                ? colors.navy.muted
                                                 : full
-                                                  ? "#4caf50"
+                                                  ? colors.green.light
                                                   : bar.color,
                                           }}
                                         >
@@ -5440,7 +5775,7 @@ const ReportPage = () => {
                                         sx={{
                                           width: "100%",
                                           height: 8,
-                                          bgcolor: "rgba(255,255,255,0.08)",
+                                          bgcolor: alpha(colors.white, 0.08),
                                           borderRadius: 4,
                                           overflow: "hidden",
                                         }}
@@ -5450,7 +5785,7 @@ const ReportPage = () => {
                                             width: `${Math.min(100, bar.pct)}%`,
                                             height: "100%",
                                             bgcolor: full
-                                              ? "#4caf50"
+                                              ? colors.green.light
                                               : bar.color,
                                             borderRadius: 4,
                                           }}
@@ -5471,7 +5806,7 @@ const ReportPage = () => {
                                   sx={{
                                     display: "block",
                                     mb: 1,
-                                    color: "#94a3b8",
+                                    color: colors.navy.pale,
                                     textTransform: "uppercase",
                                     letterSpacing: 0.4,
                                   }}
@@ -5512,10 +5847,12 @@ const ReportPage = () => {
                                             sx={{
                                               px: 1.5,
                                               py: 1,
-                                              borderRadius: "12px",
-                                              bgcolor: "rgba(255,255,255,0.04)",
-                                              border:
-                                                "1px solid rgba(255,255,255,0.06)",
+                                              borderRadius: `${radii.md}px`,
+                                              bgcolor: alpha(
+                                                colors.white,
+                                                0.04
+                                              ),
+                                              border: `1px solid ${alpha(colors.white, 0.06)}`,
                                             }}
                                           >
                                             <Stack
@@ -5530,7 +5867,7 @@ const ReportPage = () => {
                                                 sx={{
                                                   flexGrow: 1,
                                                   minWidth: 0,
-                                                  color: "#e2e8f0",
+                                                  color: colors.navy.wash,
                                                   overflow: "hidden",
                                                   textOverflow: "ellipsis",
                                                   whiteSpace: "nowrap",
@@ -5545,7 +5882,7 @@ const ReportPage = () => {
                                                 sx={{
                                                   whiteSpace: "nowrap",
                                                   color: full
-                                                    ? "#4caf50"
+                                                    ? colors.green.light
                                                     : MAINT_DONE_COLOR,
                                                 }}
                                               >
@@ -5553,7 +5890,9 @@ const ReportPage = () => {
                                                 <Typography
                                                   component="span"
                                                   variant="caption"
-                                                  sx={{ color: "#64748b" }}
+                                                  sx={{
+                                                    color: colors.navy.muted,
+                                                  }}
                                                 >
                                                   {" "}
                                                   / {formatCount(dept.total)}
@@ -5566,8 +5905,8 @@ const ReportPage = () => {
                                                   minWidth: 38,
                                                   textAlign: "right",
                                                   color: full
-                                                    ? "#4caf50"
-                                                    : "#94a3b8",
+                                                    ? colors.green.light
+                                                    : colors.navy.pale,
                                                 }}
                                               >
                                                 {dept.pct}%
@@ -5577,8 +5916,10 @@ const ReportPage = () => {
                                               sx={{
                                                 width: "100%",
                                                 height: 6,
-                                                bgcolor:
-                                                  "rgba(255,255,255,0.08)",
+                                                bgcolor: alpha(
+                                                  colors.white,
+                                                  0.08
+                                                ),
                                                 borderRadius: 3,
                                                 overflow: "hidden",
                                               }}
@@ -5588,7 +5929,7 @@ const ReportPage = () => {
                                                   width: `${Math.min(100, dept.pct)}%`,
                                                   height: "100%",
                                                   bgcolor: full
-                                                    ? "#4caf50"
+                                                    ? colors.green.light
                                                     : MAINT_DONE_COLOR,
                                                   borderRadius: 3,
                                                 }}
@@ -5605,7 +5946,7 @@ const ReportPage = () => {
                                   <Typography
                                     variant="body2"
                                     sx={{
-                                      color: "#64748b",
+                                      color: colors.navy.muted,
                                       textAlign: "center",
                                       py: 3,
                                     }}

@@ -1,6 +1,15 @@
 import React from "react";
-import { Alert, Typography, Box, CircularProgress } from "@mui/material";
-import { HourglassEmpty } from "@mui/icons-material";
+import {
+  Alert,
+  alpha,
+  Box,
+  CircularProgress,
+  colors,
+  fontSizes,
+  HourglassEmpty,
+  radii,
+  Typography,
+} from "../../ui";
 import { RFID_LOOKUP_LENGTH } from "./rfidCodeUtils";
 import { RFID_DIALOG_RADIUS } from "./rfidDialogTheme";
 import {
@@ -46,7 +55,7 @@ export const RfidLookupPanelBody = ({
       <Alert
         severity="error"
         onClose={() => setError(null)}
-        sx={{ borderRadius: RFID_DIALOG_RADIUS.alert, fontSize: "0.82rem" }}
+        sx={{ borderRadius: RFID_DIALOG_RADIUS.alert, fontSize: fontSizes.body }}
       >
         {error}
       </Alert>
@@ -59,7 +68,7 @@ export const RfidLookupPanelBody = ({
         onClose={() => setWarning(null)}
         sx={{
           borderRadius: RFID_DIALOG_RADIUS.alert,
-          fontSize: "0.82rem",
+          fontSize: fontSizes.body,
           "& .MuiAlert-message": { width: "100%" },
         }}
       >
@@ -76,9 +85,9 @@ export const RfidLookupPanelBody = ({
             sx={{
               mt: 1,
               p: 1,
-              bgcolor: "rgba(255,152,0,0.08)",
-              borderRadius: "8px",
-              border: "1px dashed rgba(255,152,0,0.4)",
+              bgcolor: alpha(colors.orange.main, 0.08),
+              borderRadius: `${radii.sm}px`,
+              border: `1px dashed ${alpha(colors.orange.main, 0.4)}`,
             }}
           >
             <Typography variant="caption" fontWeight={600} display="block">

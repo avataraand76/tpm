@@ -2,13 +2,65 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
-  Container,
-  Typography,
+  Add,
+  Alert,
+  AlertTitle,
+  alpha,
+  Autocomplete,
+  Autorenew,
+  Avatar,
+  borders,
   Box,
+  buildStatusConfig,
+  Button,
   Card,
   CardContent,
-  Button,
-  Tabs,
+  Checkbox,
+  CheckCircleOutline,
+  Chip,
+  CircularProgress,
+  Close,
+  colors,
+  Container,
+  Delete,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
+  ErrorOutline,
+  FileDownload,
+  FileUpload,
+  fontSizes,
+  FormControl,
+  gradients,
+  grayFallback,
+  Grid,
+  hexA,
+  IconButton,
+  InputAdornment,
+  InputLabel,
+  Link,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  MenuItem,
+  PageHeader,
+  Pagination,
+  Paper,
+  QrCode2,
+  radii,
+  Receipt,
+  Refresh,
+  Save,
+  Search,
+  Select,
+  shadows,
+  Snackbar,
+  Stack,
+  STATUS_LABELS_LOWER,
+  sx as preset,
   Tab,
   Table,
   TableBody,
@@ -16,55 +68,14 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
-  Chip,
-  IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
+  Tabs,
   TextField,
-  MenuItem,
-  Stack,
-  Avatar,
+  TICKET_STATUS,
   Tooltip,
-  Alert,
-  Snackbar,
-  CircularProgress,
-  Pagination,
-  InputAdornment,
-  Grid,
-  AlertTitle,
-  Checkbox,
-  Autocomplete,
-  useTheme,
-  useMediaQuery,
-  Divider,
-  FormControl,
-  InputLabel,
-  Select,
-  Link,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-} from "@mui/material";
-import {
-  Add,
-  Autorenew,
-  Search,
-  FileDownload,
-  FileUpload,
-  Receipt,
-  Delete,
-  QrCode2,
+  Typography,
+  useResponsive,
   WifiTethering,
-  Refresh,
-  Close,
-  Save,
-  CheckCircleOutline,
-  ErrorOutline,
-} from "@mui/icons-material";
+} from "../ui";
 import * as XLSX from "xlsx-js-style";
 import ExcelJS from "exceljs";
 import NavigationBar from "../components/NavigationBar";
@@ -122,9 +133,17 @@ const parseDecimalValue = (value) => {
 };
 
 
+// Bảng trạng thái dựng từ nguồn chung theme/statusTokens.js.
+// Trang này dùng nhãn "Đã trả (máy ...)" viết thường, và gọi `disabled` là
+// "Vô hiệu hóa" (các trang khác gọi "Chưa sử dụng") - nên phải ghi đè nhãn.
+// Ba trạng thái phiếu (Chờ xử lý / Đã duyệt / Đã hủy) gộp thêm vào cuối.
+const STATUS_CONFIG = {
+  ...buildStatusConfig({ ...STATUS_LABELS_LOWER, disabled: "Vô hiệu hóa" }),
+  ...TICKET_STATUS,
+};
+
 const TicketManagementPage = () => {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const { isMobile, dialogFullScreen } = useResponsive();
   const { user, permissions } = useAuth();
   const isAdmin = permissions.includes("admin");
   const canEdit = permissions.includes("edit");
@@ -236,59 +255,12 @@ const TicketManagementPage = () => {
   const searchTimeoutRef = useRef(null);
   const searchInputRef = useRef(null);
 
-  // Config statuses
-  const STATUS_CONFIG = {
-    available: { bg: "#2e7d3222", color: "#2e7d32", label: "Có thể sử dụng" },
-    in_use: { bg: "#667eea22", color: "#667eea", label: "Đang sử dụng" },
-    maintenance: { bg: "#ff980022", color: "#ff9800", label: "Bảo trì" },
-    broken: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Máy hư" },
-    rented: { bg: "#673ab722", color: "#673ab7", label: "Máy thuê" },
-    rented_return: {
-      bg: "#673ab722",
-      color: "#673ab7",
-      label: "Đã trả (máy thuê)",
-    },
-    borrowed: { bg: "#03a9f422", color: "#03a9f4", label: "Máy mượn" },
-    borrowed_return: {
-      bg: "#03a9f422",
-      color: "#03a9f4",
-      label: "Đã trả (máy mượn)",
-    },
-    borrowed_out: { bg: "#00bcd422", color: "#00bcd4", label: "Cho mượn" },
-    liquidation: { bg: "#f4433622", color: "#f44336", label: "Thanh lý" },
-    pending_liquidation: {
-      bg: "#ff572222",
-      color: "#ff5722",
-      label: "Chờ thanh lý",
-    },
-    disabled: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Vô hiệu hóa" },
-    pending: { bg: "#ff980022", color: "#ff9800", label: "Chờ xử lý" },
-    completed: { bg: "#2e7d3222", color: "#2e7d32", label: "Đã duyệt" },
-    cancelled: { bg: "#f4433622", color: "#f44336", label: "Đã hủy" },
-  };
-
-  // Common style for disabled/view fields
-  const DISABLED_VIEW_SX = {
-    "& .MuiInputBase-root.Mui-disabled": {
-      backgroundColor: "#fffbe5",
-      "& fieldset": { borderColor: "#f44336 !important" },
-      "& .MuiInputBase-input": {
-        color: "#f44336",
-        WebkitTextFillColor: "#f44336 !important",
-        fontWeight: 600,
-      },
-      "& .MuiFormLabel-root": { color: "#f44336 !important" },
-    },
-    "& .MuiOutlinedInput-root.Mui-disabled": { backgroundColor: "#fffbe5" },
-  };
+  // Ô nhập tô sáng (nền vàng, chữ đỏ). Định nghĩa ở theme/presets.js.
+  const DISABLED_VIEW_SX = preset.fieldHighlight;
 
   // Helper functions
   const getStatusInfo = (statusKey) =>
-    STATUS_CONFIG[statusKey] || {
-      bg: "#9e9e9e22",
-      color: "#9e9e9e",
-      label: statusKey,
-    };
+    STATUS_CONFIG[statusKey] || grayFallback(statusKey);
   const showNotification = useCallback(
     (severity, title, message) =>
       setNotification({ open: true, severity, title, message }),
@@ -1698,46 +1670,18 @@ const TicketManagementPage = () => {
       <NavigationBar />
       <Container maxWidth="xl" sx={{ py: 4 }}>
         {/* Header */}
-        <Box sx={{ mb: 4 }}>
-          <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
-            <Avatar
-              sx={{
-                width: 60,
-                height: 60,
-                background: "linear-gradient(45deg, #667eea, #764ba2)",
-              }}
-            >
-              <Receipt sx={{ fontSize: 30 }} />
-            </Avatar>
-            <Box>
-              <Typography
-                variant={isMobile ? "h4" : "h3"}
-                component="h1"
-                sx={{
-                  fontWeight: 700,
-                  background: "linear-gradient(45deg, #667eea, #764ba2)",
-                  backgroundClip: "text",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  textTransform: "uppercase",
-                }}
-              >
-                Quản lý phiếu 🐧🐧🐧
-              </Typography>
-              <Typography
-                variant={isMobile ? "body1" : "h6"}
-                color="text.secondary"
-              >
-                Tạo và quản lý phiếu nhập xuất, điều chuyển máy móc
-              </Typography>
-            </Box>
-          </Stack>
-        </Box>
+        <PageHeader
+          icon={<Receipt />}
+          title="Quản lý phiếu 🐧🐧🐧"
+          subtitle="Tạo và quản lý phiếu nhập xuất, điều chuyển máy móc"
+          titleSx={{ textTransform: "uppercase" }}
+          sx={{ mb: 4 }}
+        />
 
         {/* Main Card */}
         <Card
           elevation={0}
-          sx={{ borderRadius: "20px", border: "1px solid rgba(0, 0, 0, 0.05)" }}
+          sx={{ borderRadius: `${radii.lg}px`, border: borders.subtle }}
         >
           <CardContent sx={{ p: 4 }}>
             {/* Tabs and Actions */}
@@ -1764,9 +1708,8 @@ const TicketManagementPage = () => {
                         sx={{
                           minHeight: "80px",
                           py: 2,
-                          borderRadius: "12px",
                           fontWeight: 600,
-                          fontSize: "0.9rem",
+                          fontSize: fontSizes.body,
                           textTransform: "none",
                           display: "flex",
                           flexDirection: "column",
@@ -1780,19 +1723,19 @@ const TicketManagementPage = () => {
                           ...(activeTab === 0
                             ? {
                                 background:
-                                  "linear-gradient(45deg, #667eea, #764ba2)",
+                                  gradients.brand,
                                 color: "white",
                                 "&:hover": {
                                   background:
-                                    "linear-gradient(45deg, #5568d3, #6a3f8f)",
+                                    `linear-gradient(45deg, ${colors.brand.hover}, ${colors.brand.altHover})`,
                                 },
                               }
                             : {
-                                borderColor: "#667eea",
-                                color: "#667eea",
+                                borderColor: colors.brand.main,
+                                color: colors.brand.main,
                                 "&:hover": {
-                                  borderColor: "#5568d3",
-                                  background: "rgba(102, 126, 234, 0.05)",
+                                  borderColor: colors.brand.hover,
+                                  background: alpha(colors.brand.main, 0.05),
                                 },
                               }),
                           transition: "all 0.3s ease",
@@ -1812,9 +1755,8 @@ const TicketManagementPage = () => {
                         sx={{
                           minHeight: "80px",
                           py: 2,
-                          borderRadius: "12px",
                           fontWeight: 600,
-                          fontSize: "0.9rem",
+                          fontSize: fontSizes.body,
                           textTransform: "none",
                           display: "flex",
                           flexDirection: "column",
@@ -1828,19 +1770,19 @@ const TicketManagementPage = () => {
                           ...(activeTab === 1
                             ? {
                                 background:
-                                  "linear-gradient(45deg, #667eea, #764ba2)",
+                                  gradients.brand,
                                 color: "white",
                                 "&:hover": {
                                   background:
-                                    "linear-gradient(45deg, #5568d3, #6a3f8f)",
+                                    `linear-gradient(45deg, ${colors.brand.hover}, ${colors.brand.altHover})`,
                                 },
                               }
                             : {
-                                borderColor: "#667eea",
-                                color: "#667eea",
+                                borderColor: colors.brand.main,
+                                color: colors.brand.main,
                                 "&:hover": {
-                                  borderColor: "#5568d3",
-                                  background: "rgba(102, 126, 234, 0.05)",
+                                  borderColor: colors.brand.hover,
+                                  background: alpha(colors.brand.main, 0.05),
                                 },
                               }),
                           transition: "all 0.3s ease",
@@ -1864,9 +1806,8 @@ const TicketManagementPage = () => {
                       sx={{
                         minHeight: "80px",
                         py: 2,
-                        borderRadius: "12px",
                         fontWeight: 600,
-                        fontSize: "0.9rem",
+                        fontSize: fontSizes.body,
                         textTransform: "none",
                         display: "flex",
                         flexDirection: "column",
@@ -1880,19 +1821,19 @@ const TicketManagementPage = () => {
                         ...(activeTab === 2
                           ? {
                               background:
-                                "linear-gradient(45deg, #667eea, #764ba2)",
+                                gradients.brand,
                               color: "white",
                               "&:hover": {
                                 background:
-                                  "linear-gradient(45deg, #5568d3, #6a3f8f)",
+                                  `linear-gradient(45deg, ${colors.brand.hover}, ${colors.brand.altHover})`,
                               },
                             }
                           : {
-                              borderColor: "#667eea",
-                              color: "#667eea",
+                              borderColor: colors.brand.main,
+                              color: colors.brand.main,
                               "&:hover": {
-                                borderColor: "#5568d3",
-                                background: "rgba(102, 126, 234, 0.05)",
+                                borderColor: colors.brand.hover,
+                                background: alpha(colors.brand.main, 0.05),
                               },
                             }),
                         transition: "all 0.3s ease",
@@ -1912,14 +1853,14 @@ const TicketManagementPage = () => {
                     width: { xs: "100%", md: "auto" },
                     "& .MuiTab-root": {
                       fontWeight: 600,
-                      fontSize: "1rem",
+                      fontSize: fontSizes.lead,
                       minWidth: 140,
-                      borderRadius: "12px",
+                      borderRadius: `${radii.md}px`,
                       margin: "0 4px",
                       transition: "all 0.3s ease",
                       "&.Mui-selected": {
-                        color: "#667eea",
-                        background: "rgba(102, 126, 234, 0.1)",
+                        color: colors.brand.main,
+                        background: alpha(colors.brand.main, 0.1),
                       },
                     },
                     "& .MuiTabs-indicator": { display: "none" },
@@ -1959,13 +1900,12 @@ const TicketManagementPage = () => {
                       startIcon={<Add />}
                       onClick={() => handleOpenDialog("create", "internal")}
                       sx={{
-                        borderRadius: "12px",
-                        background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                        background: `linear-gradient(45deg, ${colors.green.main}, ${colors.green.light})`,
                         px: 4,
                         py: 1.5,
                         "&:hover": {
                           transform: "translateY(-2px)",
-                          boxShadow: "0 8px 25px rgba(46, 125, 50, 0.3)",
+                          boxShadow: shadows.greenLift,
                         },
                         transition: "all 0.3s ease",
                         width: { xs: "100%", sm: "auto" },
@@ -1983,13 +1923,12 @@ const TicketManagementPage = () => {
                       fetchStatistics();
                     }}
                     sx={{
-                      borderRadius: "12px",
-                      background: "linear-gradient(45deg, #667eea, #764ba2)",
+                      background: gradients.brand,
                       px: 3,
                       py: 1.5,
                       "&:hover": {
                         transform: "translateY(-2px)",
-                        boxShadow: "0 8px 25px rgba(102, 126, 234, 0.3)",
+                        boxShadow: shadows.brandLift,
                       },
                       transition: "all 0.3s ease",
                       width: { xs: "100%", sm: "auto" },
@@ -2016,13 +1955,12 @@ const TicketManagementPage = () => {
                         )
                       }
                       sx={{
-                        borderRadius: "12px",
-                        background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                        background: `linear-gradient(45deg, ${colors.green.main}, ${colors.green.light})`,
                         px: 4,
                         py: 1.5,
                         "&:hover": {
                           transform: "translateY(-2px)",
-                          boxShadow: "0 8px 25px rgba(46, 125, 50, 0.3)",
+                          boxShadow: shadows.greenLift,
                         },
                         transition: "all 0.3s ease",
                         width: { xs: "100%", sm: "auto" },
@@ -2039,13 +1977,12 @@ const TicketManagementPage = () => {
                       fetchStatistics();
                     }}
                     sx={{
-                      borderRadius: "12px",
-                      background: "linear-gradient(45deg, #667eea, #764ba2)",
+                      background: gradients.brand,
                       px: 3,
                       py: 1.5,
                       "&:hover": {
                         transform: "translateY(-2px)",
-                        boxShadow: "0 8px 25px rgba(102, 126, 234, 0.3)",
+                        boxShadow: shadows.brandLift,
                       },
                       transition: "all 0.3s ease",
                       width: { xs: "100%", sm: "auto" },
@@ -2064,110 +2001,94 @@ const TicketManagementPage = () => {
                   <Box
                     sx={{
                       p: 2,
-                      borderRadius: "12px",
-                      bgcolor: "#f5f5f5",
-                      border: "1px solid #e0e0e0",
+                      borderRadius: `${radii.md}px`,
+                      bgcolor: colors.grey[100],
+                      border: borders.light,
                     }}
                   >
                     <Typography
                       variant="subtitle2"
-                      sx={{ fontWeight: 600, mb: 1.5, color: "#667eea" }}
+                      sx={{ fontWeight: 600, mb: 1.5, color: colors.brand.main }}
                     >
                       Thống kê phiếu nhập
                     </Typography>
                     {/* Hàng 1: Trạng thái */}
-                    <Grid container spacing={2} sx={{ mb: 2 }}>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Chờ duyệt: ${
-                            importStats.byStatus?.pending || 0
-                          }`}
-                          color="warning"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Đã duyệt: ${
-                            importStats.byStatus?.completed || 0
-                          }`}
-                          color="success"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Đã hủy: ${
-                            importStats.byStatus?.cancelled || 0
-                          }`}
-                          color="error"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                    </Grid>
+                    <Box sx={{ ...preset.chipRow, mb: 2 }}>
+                      <Chip
+                        label={`Chờ duyệt: ${
+                          importStats.byStatus?.pending || 0
+                        }`}
+                        color="warning"
+                        sx={{ fontWeight: 600 }}
+                      />
+                      <Chip
+                        label={`Đã duyệt: ${
+                          importStats.byStatus?.completed || 0
+                        }`}
+                        color="success"
+                        sx={{ fontWeight: 600 }}
+                      />
+                      <Chip
+                        label={`Đã hủy: ${
+                          importStats.byStatus?.cancelled || 0
+                        }`}
+                        color="error"
+                        sx={{ fontWeight: 600 }}
+                      />
+                    </Box>
                     {/* Hàng 2: Loại phiếu */}
-                    <Grid container spacing={2}>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Nhập mua mới: ${
-                            importStats.byType?.purchased || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: "#1976d211",
-                            color: "#1976d2",
-                          }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Sau bảo trì: ${
-                            importStats.byType?.maintenance_return || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: "#ff980011",
-                            color: "#ff9800",
-                          }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Nhập thuê máy: ${
-                            importStats.byType?.rented || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: "#673ab711",
-                            color: "#673ab7",
-                          }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Nhập mượn máy: ${
-                            importStats.byType?.borrowed || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: "#03a9f411",
-                            color: "#03a9f4",
-                          }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Trả (máy cho mượn): ${
-                            importStats.byType?.borrowed_out_return || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: "#00bcd411",
-                            color: "#00bcd4",
-                          }}
-                        />
-                      </Grid>
-                    </Grid>
+                    <Box sx={preset.chipRow}>
+                      <Chip
+                        label={`Nhập mua mới: ${
+                          importStats.byType?.purchased || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.blue.main, "11"),
+                          color: colors.blue.main,
+                        }}
+                      />
+                      <Chip
+                        label={`Sau bảo trì: ${
+                          importStats.byType?.maintenance_return || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.orange.main, "11"),
+                          color: colors.orange.main,
+                        }}
+                      />
+                      <Chip
+                        label={`Nhập thuê máy: ${
+                          importStats.byType?.rented || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.purple.main, "11"),
+                          color: colors.purple.main,
+                        }}
+                      />
+                      <Chip
+                        label={`Nhập mượn máy: ${
+                          importStats.byType?.borrowed || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.blue.sky, "11"),
+                          color: colors.blue.sky,
+                        }}
+                      />
+                      <Chip
+                        label={`Trả (máy cho mượn): ${
+                          importStats.byType?.borrowed_out_return || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.cyan.main, "11"),
+                          color: colors.cyan.main,
+                        }}
+                      />
+                    </Box>
                   </Box>
                 )}
 
@@ -2175,110 +2096,94 @@ const TicketManagementPage = () => {
                   <Box
                     sx={{
                       p: 2,
-                      borderRadius: "12px",
-                      bgcolor: "#f5f5f5",
-                      border: "1px solid #e0e0e0",
+                      borderRadius: `${radii.md}px`,
+                      bgcolor: colors.grey[100],
+                      border: borders.light,
                     }}
                   >
                     <Typography
                       variant="subtitle2"
-                      sx={{ fontWeight: 600, mb: 1.5, color: "#667eea" }}
+                      sx={{ fontWeight: 600, mb: 1.5, color: colors.brand.main }}
                     >
                       Thống kê phiếu xuất
                     </Typography>
                     {/* Hàng 1: Trạng thái */}
-                    <Grid container spacing={2} sx={{ mb: 2 }}>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Chờ duyệt: ${
-                            exportStats.byStatus?.pending || 0
-                          }`}
-                          color="warning"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Đã duyệt: ${
-                            exportStats.byStatus?.completed || 0
-                          }`}
-                          color="success"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Đã hủy: ${
-                            exportStats.byStatus?.cancelled || 0
-                          }`}
-                          color="error"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                    </Grid>
+                    <Box sx={{ ...preset.chipRow, mb: 2 }}>
+                      <Chip
+                        label={`Chờ duyệt: ${
+                          exportStats.byStatus?.pending || 0
+                        }`}
+                        color="warning"
+                        sx={{ fontWeight: 600 }}
+                      />
+                      <Chip
+                        label={`Đã duyệt: ${
+                          exportStats.byStatus?.completed || 0
+                        }`}
+                        color="success"
+                        sx={{ fontWeight: 600 }}
+                      />
+                      <Chip
+                        label={`Đã hủy: ${
+                          exportStats.byStatus?.cancelled || 0
+                        }`}
+                        color="error"
+                        sx={{ fontWeight: 600 }}
+                      />
+                    </Box>
                     {/* Hàng 2: Loại phiếu */}
-                    <Grid container spacing={2}>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Xuất thanh lý: ${
-                            exportStats.byType?.liquidation || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: "#f4433611",
-                            color: "#f44336",
-                          }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Bảo trì: ${
-                            exportStats.byType?.maintenance || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: "#ff980011",
-                            color: "#ff9800",
-                          }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Cho mượn máy: ${
-                            exportStats.byType?.borrowed_out || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: "#00bcd411",
-                            color: "#00bcd4",
-                          }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Trả (máy thuê): ${
-                            exportStats.byType?.rented_return || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: "#673ab711",
-                            color: "#673ab7",
-                          }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Trả (máy mượn): ${
-                            exportStats.byType?.borrowed_return || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: "#03a9f411",
-                            color: "#03a9f4",
-                          }}
-                        />
-                      </Grid>
-                    </Grid>
+                    <Box sx={preset.chipRow}>
+                      <Chip
+                        label={`Xuất thanh lý: ${
+                          exportStats.byType?.liquidation || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.red.main, "11"),
+                          color: colors.red.main,
+                        }}
+                      />
+                      <Chip
+                        label={`Bảo trì: ${
+                          exportStats.byType?.maintenance || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.orange.main, "11"),
+                          color: colors.orange.main,
+                        }}
+                      />
+                      <Chip
+                        label={`Cho mượn máy: ${
+                          exportStats.byType?.borrowed_out || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.cyan.main, "11"),
+                          color: colors.cyan.main,
+                        }}
+                      />
+                      <Chip
+                        label={`Trả (máy thuê): ${
+                          exportStats.byType?.rented_return || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.purple.main, "11"),
+                          color: colors.purple.main,
+                        }}
+                      />
+                      <Chip
+                        label={`Trả (máy mượn): ${
+                          exportStats.byType?.borrowed_return || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.blue.sky, "11"),
+                          color: colors.blue.sky,
+                        }}
+                      />
+                    </Box>
                   </Box>
                 )}
 
@@ -2286,51 +2191,43 @@ const TicketManagementPage = () => {
                   <Box
                     sx={{
                       p: 2,
-                      borderRadius: "12px",
-                      bgcolor: "#f5f5f5",
-                      border: "1px solid #e0e0e0",
+                      borderRadius: `${radii.md}px`,
+                      bgcolor: colors.grey[100],
+                      border: borders.light,
                     }}
                   >
                     <Typography
                       variant="subtitle2"
-                      sx={{ fontWeight: 600, mb: 1.5, color: "#667eea" }}
+                      sx={{ fontWeight: 600, mb: 1.5, color: colors.brand.main }}
                     >
                       Thống kê phiếu điều chuyển
                     </Typography>
-                    <Grid container spacing={2}>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Chờ xác nhận: ${
-                            transferStats.pending_confirmation || 0
-                          }`}
-                          color="warning"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Chờ duyệt: ${
-                            transferStats.pending_approval || 0
-                          }`}
-                          color="warning"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Đã duyệt: ${transferStats.completed || 0}`}
-                          color="success"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Đã hủy: ${transferStats.cancelled || 0}`}
-                          color="error"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                    </Grid>
+                    <Box sx={preset.chipRow}>
+                      <Chip
+                        label={`Chờ xác nhận: ${
+                          transferStats.pending_confirmation || 0
+                        }`}
+                        color="warning"
+                        sx={{ fontWeight: 600 }}
+                      />
+                      <Chip
+                        label={`Chờ duyệt: ${
+                          transferStats.pending_approval || 0
+                        }`}
+                        color="warning"
+                        sx={{ fontWeight: 600 }}
+                      />
+                      <Chip
+                        label={`Đã duyệt: ${transferStats.completed || 0}`}
+                        color="success"
+                        sx={{ fontWeight: 600 }}
+                      />
+                      <Chip
+                        label={`Đã hủy: ${transferStats.cancelled || 0}`}
+                        color="error"
+                        sx={{ fontWeight: 600 }}
+                      />
+                    </Box>
                   </Box>
                 )}
               </Box>
@@ -2346,7 +2243,7 @@ const TicketManagementPage = () => {
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
                   sx={{
-                    "& .MuiOutlinedInput-root": { borderRadius: "12px" },
+                    "& .MuiOutlinedInput-root": { borderRadius: `${radii.md}px` },
                   }}
                 >
                   <MenuItem value="">Tất cả</MenuItem>
@@ -2394,7 +2291,7 @@ const TicketManagementPage = () => {
                     value={locationFilter}
                     onChange={(e) => setLocationFilter(e.target.value)}
                     sx={{
-                      "& .MuiOutlinedInput-root": { borderRadius: "12px" },
+                      "& .MuiOutlinedInput-root": { borderRadius: `${radii.md}px` },
                     }}
                   >
                     <MenuItem value="">Tất cả</MenuItem>
@@ -2418,7 +2315,7 @@ const TicketManagementPage = () => {
                     value={typeFilter}
                     onChange={(e) => setTypeFilter(e.target.value)}
                     sx={{
-                      "& .MuiOutlinedInput-root": { borderRadius: "12px" },
+                      "& .MuiOutlinedInput-root": { borderRadius: `${radii.md}px` },
                     }}
                   >
                     <MenuItem value="">Tất cả</MenuItem>
@@ -2481,7 +2378,7 @@ const TicketManagementPage = () => {
                     shrink: true,
                   }}
                   sx={{
-                    "& .MuiOutlinedInput-root": { borderRadius: "12px" },
+                    "& .MuiOutlinedInput-root": { borderRadius: `${radii.md}px` },
                   }}
                 />
               </Grid>
@@ -2496,7 +2393,7 @@ const TicketManagementPage = () => {
                     shrink: true,
                   }}
                   sx={{
-                    "& .MuiOutlinedInput-root": { borderRadius: "12px" },
+                    "& .MuiOutlinedInput-root": { borderRadius: `${radii.md}px` },
                   }}
                 />
               </Grid>
@@ -2505,14 +2402,14 @@ const TicketManagementPage = () => {
               component={Paper}
               elevation={0}
               sx={{
-                borderRadius: "20px",
-                border: "1px solid rgba(0, 0, 0, 0.05)",
+                borderRadius: `${radii.lg}px`,
+                border: borders.subtle,
               }}
             >
               <Table>
                 <TableHead>
                   <TableRow
-                    sx={{ backgroundColor: "rgba(102, 126, 234, 0.05)" }}
+                    sx={{ backgroundColor: alpha(colors.brand.main, 0.05) }}
                   >
                     <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
                       Ngày Tạo Phiếu
@@ -2559,7 +2456,7 @@ const TicketManagementPage = () => {
                 onChange={(e, value) => setPage(value)}
                 color="primary"
                 sx={{
-                  "& .MuiPaginationItem-root": { borderRadius: "8px" },
+                  "& .MuiPaginationItem-root": { borderRadius: `${radii.sm}px` },
                 }}
               />
             </Box>
@@ -2571,13 +2468,13 @@ const TicketManagementPage = () => {
           open={openDialog}
           onClose={handleCloseDialog}
           maxWidth="lg"
-          fullScreen={isMobile}
+          fullScreen={dialogFullScreen}
           fullWidth
-          PaperProps={{ sx: { borderRadius: isMobile ? 0 : "20px" } }}
+          PaperProps={{ sx: preset.dialogPaper(dialogFullScreen) }}
         >
           <DialogTitle
             sx={{
-              background: "linear-gradient(45deg, #667eea, #764ba2)",
+              background: gradients.brand,
               color: "white",
               fontWeight: 700,
               display: "flex",
@@ -2588,7 +2485,7 @@ const TicketManagementPage = () => {
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
               <Typography
                 component="span"
-                variant={isMobile ? "h6" : "h5"}
+                variant="h5"
                 sx={{ fontWeight: 700 }}
               >
                 {dialogMode === "create"
@@ -2708,7 +2605,7 @@ const TicketManagementPage = () => {
                       {["borrowed", "rented", "borrowed_out"].includes(
                         formData.type
                       ) && (
-                        <Card variant="outlined" sx={{ borderRadius: "12px" }}>
+                        <Card variant="outlined" sx={{ borderRadius: `${radii.md}px` }}>
                           <CardContent>
                             <Typography variant="h6" gutterBottom>
                               Thông tin bổ sung
@@ -2863,11 +2760,6 @@ const TicketManagementPage = () => {
                                   : "Đến vị trí"
                             }
                             required
-                            sx={{
-                              "& .MuiOutlinedInput-root": {
-                                borderRadius: "12px",
-                              },
-                            }}
                             InputProps={{
                               ...params.InputProps,
                               endAdornment: (
@@ -2917,9 +2809,9 @@ const TicketManagementPage = () => {
                             sx={{
                               mt: 2,
                               p: 2,
-                              borderRadius: "12px",
-                              border: "1px dashed #bdbdbd",
-                              backgroundColor: "#fafafa",
+                              borderRadius: `${radii.md}px`,
+                              border: `1px dashed ${colors.grey[400]}`,
+                              backgroundColor: colors.grey[50],
                             }}
                           >
                             <Typography
@@ -2981,7 +2873,7 @@ const TicketManagementPage = () => {
                                     disabled={dialogMode === "view"}
                                     sx={{
                                       flex: 1,
-                                      borderRadius: "10px",
+                                      borderRadius: `${radii.md}px`,
                                       textTransform: "none",
                                       fontWeight: isSelected ? 700 : 500,
                                       transition: "all 0.3s ease",
@@ -2990,7 +2882,7 @@ const TicketManagementPage = () => {
                                       ...(isSelected && {
                                         backgroundColor:
                                           option.color + " !important",
-                                        color: "#fff",
+                                        color: colors.white,
                                         boxShadow: `0 4px 12px ${option.color}66`,
                                         border: `1px solid ${option.color}`,
                                         transform: "translateY(-2px)",
@@ -2998,9 +2890,9 @@ const TicketManagementPage = () => {
 
                                       // --- TRẠNG THÁI KHÔNG CHỌN ---
                                       ...(!isSelected && {
-                                        borderColor: "#e0e0e0",
+                                        borderColor: colors.grey[300],
                                         color: "text.secondary",
-                                        backgroundColor: "#fff",
+                                        backgroundColor: colors.white,
                                         "&:hover": {
                                           borderColor: option.color,
                                           color: option.color,
@@ -3037,7 +2929,7 @@ const TicketManagementPage = () => {
                         )}
 
                       {dialogMode === "create" && (
-                        <Card variant="outlined" sx={{ borderRadius: "12px" }}>
+                        <Card variant="outlined" sx={{ borderRadius: `${radii.md}px` }}>
                           <CardContent>
                             <Typography variant="h6" gutterBottom>
                               Chọn máy móc ({formData.machines.length})
@@ -3055,13 +2947,12 @@ const TicketManagementPage = () => {
                                   onClick={() => setOpenScanDialog(true)}
                                   disabled={isFormDisabled}
                                   sx={{
-                                    borderRadius: "12px",
                                     py: 1,
-                                    borderColor: "#2e7d32",
-                                    color: "#2e7d32",
+                                    borderColor: colors.green.main,
+                                    color: colors.green.main,
                                     "&:hover": {
-                                      borderColor: "#4caf50",
-                                      bgcolor: "#2e7d3211",
+                                      borderColor: colors.green.light,
+                                      bgcolor: hexA(colors.green.main, "11"),
                                     },
                                   }}
                                 >
@@ -3073,13 +2964,12 @@ const TicketManagementPage = () => {
                                   onClick={() => setOpenRfidDialog(true)}
                                   disabled={isFormDisabled}
                                   sx={{
-                                    borderRadius: "12px",
                                     py: 1,
-                                    borderColor: "#2e7d32",
-                                    color: "#2e7d32",
+                                    borderColor: colors.green.main,
+                                    color: colors.green.main,
                                     "&:hover": {
-                                      borderColor: "#4caf50",
-                                      bgcolor: "#2e7d3211",
+                                      borderColor: colors.green.light,
+                                      bgcolor: hexA(colors.green.main, "11"),
                                     },
                                   }}
                                 >
@@ -3091,13 +2981,12 @@ const TicketManagementPage = () => {
                                   onClick={handleOpenCreateMachineDialog}
                                   disabled={isFormDisabled}
                                   sx={{
-                                    borderRadius: "12px",
                                     py: 1,
-                                    borderColor: "#2e7d32",
-                                    color: "#2e7d32",
+                                    borderColor: colors.green.main,
+                                    color: colors.green.main,
                                     "&:hover": {
-                                      borderColor: "#4caf50",
-                                      bgcolor: "#2e7d3211",
+                                      borderColor: colors.green.light,
+                                      bgcolor: hexA(colors.green.main, "11"),
                                     },
                                   }}
                                 >
@@ -3109,13 +2998,12 @@ const TicketManagementPage = () => {
                                   onClick={handleOpenImportDialog}
                                   disabled={isFormDisabled}
                                   sx={{
-                                    borderRadius: "12px",
                                     py: 1,
-                                    borderColor: "#2e7d32",
-                                    color: "#2e7d32",
+                                    borderColor: colors.green.main,
+                                    color: colors.green.main,
                                     "&:hover": {
-                                      borderColor: "#4caf50",
-                                      bgcolor: "#2e7d3211",
+                                      borderColor: colors.green.light,
+                                      bgcolor: hexA(colors.green.main, "11"),
                                     },
                                   }}
                                 >
@@ -3134,13 +3022,12 @@ const TicketManagementPage = () => {
                                   onClick={() => setOpenScanDialog(true)}
                                   disabled={isFormDisabled}
                                   sx={{
-                                    borderRadius: "12px",
                                     py: 1,
-                                    borderColor: "#2e7d32",
-                                    color: "#2e7d32",
+                                    borderColor: colors.green.main,
+                                    color: colors.green.main,
                                     "&:hover": {
-                                      borderColor: "#4caf50",
-                                      bgcolor: "#2e7d3211",
+                                      borderColor: colors.green.light,
+                                      bgcolor: hexA(colors.green.main, "11"),
                                     },
                                   }}
                                 >
@@ -3152,13 +3039,12 @@ const TicketManagementPage = () => {
                                   onClick={() => setOpenRfidDialog(true)}
                                   disabled={isFormDisabled}
                                   sx={{
-                                    borderRadius: "12px",
                                     py: 1,
-                                    borderColor: "#2e7d32",
-                                    color: "#2e7d32",
+                                    borderColor: colors.green.main,
+                                    color: colors.green.main,
                                     "&:hover": {
-                                      borderColor: "#4caf50",
-                                      bgcolor: "#2e7d3211",
+                                      borderColor: colors.green.light,
+                                      bgcolor: hexA(colors.green.main, "11"),
                                     },
                                   }}
                                 >
@@ -3183,7 +3069,7 @@ const TicketManagementPage = () => {
                                     style={{
                                       margin: 0,
                                       paddingLeft: "1.2rem",
-                                      fontSize: "0.85rem",
+                                      fontSize: fontSizes.body,
                                       lineHeight: "1.5",
                                     }}
                                   >
@@ -3225,9 +3111,6 @@ const TicketManagementPage = () => {
                                 disabled={isFormDisabled}
                                 sx={{
                                   mb: 2,
-                                  "& .MuiOutlinedInput-root": {
-                                    borderRadius: "12px",
-                                  },
                                 }}
                                 InputProps={{
                                   startAdornment: (
@@ -3304,7 +3187,7 @@ const TicketManagementPage = () => {
                                             sx={{
                                               cursor: "pointer",
                                               backgroundColor: isSelected
-                                                ? "rgba(102, 126, 234, 0.1)"
+                                                ? alpha(colors.brand.main, 0.1)
                                                 : "inherit",
                                             }}
                                           >
@@ -3347,7 +3230,7 @@ const TicketManagementPage = () => {
                                                     sx={{
                                                       ml: 1,
                                                       height: 20,
-                                                      fontSize: "0.75rem",
+                                                      fontSize: fontSizes.small,
                                                       background: getStatusInfo(
                                                         machine.current_status
                                                       ).bg,
@@ -3355,7 +3238,7 @@ const TicketManagementPage = () => {
                                                         machine.current_status
                                                       ).color,
                                                       fontWeight: 600,
-                                                      borderRadius: "8px",
+                                                      borderRadius: `${radii.sm}px`,
                                                     }}
                                                   />
                                                   {machine.is_borrowed_or_rented_or_borrowed_out && (
@@ -3365,7 +3248,7 @@ const TicketManagementPage = () => {
                                                       sx={{
                                                         ml: 0.5,
                                                         height: 20,
-                                                        fontSize: "0.75rem",
+                                                        fontSize: fontSizes.small,
                                                         background:
                                                           getStatusInfo(
                                                             machine.is_borrowed_or_rented_or_borrowed_out
@@ -3374,7 +3257,7 @@ const TicketManagementPage = () => {
                                                           machine.is_borrowed_or_rented_or_borrowed_out
                                                         ).color,
                                                         fontWeight: 600,
-                                                        borderRadius: "8px",
+                                                        borderRadius: `${radii.sm}px`,
                                                       }}
                                                     />
                                                   )}
@@ -3452,7 +3335,7 @@ const TicketManagementPage = () => {
                                       <Paper
                                         key={machine.uuid_machine}
                                         variant="outlined"
-                                        sx={{ p: 2, borderRadius: "12px" }}
+                                        sx={{ p: 2 }}
                                       >
                                         <Stack
                                           direction="row"
@@ -3484,7 +3367,7 @@ const TicketManagementPage = () => {
                                                   sx={{
                                                     ml: 1,
                                                     height: 20,
-                                                    fontSize: "0.75rem",
+                                                    fontSize: fontSizes.small,
                                                     background: getStatusInfo(
                                                       machine.current_status
                                                     ).bg,
@@ -3492,7 +3375,7 @@ const TicketManagementPage = () => {
                                                       machine.current_status
                                                     ).color,
                                                     fontWeight: 600,
-                                                    borderRadius: "8px",
+                                                    borderRadius: `${radii.sm}px`,
                                                   }}
                                                 />
                                                 {machine.is_borrowed_or_rented_or_borrowed_out && (
@@ -3502,7 +3385,7 @@ const TicketManagementPage = () => {
                                                     sx={{
                                                       ml: 0.5,
                                                       height: 20,
-                                                      fontSize: "0.75rem",
+                                                      fontSize: fontSizes.small,
                                                       background: getStatusInfo(
                                                         machine.is_borrowed_or_rented_or_borrowed_out
                                                       ).bg,
@@ -3510,7 +3393,7 @@ const TicketManagementPage = () => {
                                                         machine.is_borrowed_or_rented_or_borrowed_out
                                                       ).color,
                                                       fontWeight: 600,
-                                                      borderRadius: "8px",
+                                                      borderRadius: `${radii.sm}px`,
                                                     }}
                                                   />
                                                 )}
@@ -3585,7 +3468,6 @@ const TicketManagementPage = () => {
                         formData.machines.length > 0 && (
                           <Card
                             variant="outlined"
-                            sx={{ borderRadius: "12px" }}
                           >
                             <CardContent>
                               <Typography
@@ -3721,7 +3603,7 @@ const TicketManagementPage = () => {
                                                 machine.current_status
                                               ).color,
                                               fontWeight: 600,
-                                              borderRadius: "8px",
+                                              borderRadius: `${radii.sm}px`,
                                             }}
                                           />
                                         </TableCell>
@@ -3740,7 +3622,7 @@ const TicketManagementPage = () => {
                                                   machine.is_borrowed_or_rented_or_borrowed_out
                                                 ).color,
                                                 fontWeight: 600,
-                                                borderRadius: "8px",
+                                                borderRadius: `${radii.sm}px`,
                                               }}
                                             />
                                           ) : (
@@ -3759,7 +3641,7 @@ const TicketManagementPage = () => {
                           </Card>
                         )}
                       {dialogMode === "view" && selectedTicket && (
-                        <Alert severity="info" sx={{ borderRadius: "12px" }}>
+                        <Alert severity="info" sx={{ borderRadius: `${radii.md}px` }}>
                           <Typography variant="body2">
                             <strong>Người tạo:</strong>{" "}
                             {formData.machines.length > 0 &&
@@ -3826,7 +3708,6 @@ const TicketManagementPage = () => {
                       }
                       disabled={loading}
                       sx={{
-                        borderRadius: "12px",
                         px: 3,
                         width: { xs: "100%", sm: "auto" },
                       }}
@@ -3849,7 +3730,6 @@ const TicketManagementPage = () => {
                         }
                         disabled={loading}
                         sx={{
-                          borderRadius: "12px",
                           px: 3,
                           width: { xs: "100%", sm: "auto" },
                         }}
@@ -3876,7 +3756,6 @@ const TicketManagementPage = () => {
                       }
                       disabled={loading}
                       sx={{
-                        borderRadius: "12px",
                         px: 3,
                         width: { xs: "100%", sm: "auto" },
                       }}
@@ -3899,7 +3778,6 @@ const TicketManagementPage = () => {
                         }
                         disabled={loading}
                         sx={{
-                          borderRadius: "12px",
                           px: 3,
                           width: { xs: "100%", sm: "auto" },
                         }}
@@ -3948,7 +3826,6 @@ const TicketManagementPage = () => {
                             onClick={() => handleConfirmTicket(uuid)}
                             disabled={loading}
                             sx={{
-                              borderRadius: "12px",
                               px: 3,
                               width: { xs: "100%", sm: "auto" },
                             }}
@@ -3969,7 +3846,6 @@ const TicketManagementPage = () => {
                             onClick={() => handleApproveTicket(uuid)}
                             disabled={loading}
                             sx={{
-                              borderRadius: "12px",
                               px: 3,
                               width: { xs: "100%", sm: "auto" },
                             }}
@@ -3992,7 +3868,6 @@ const TicketManagementPage = () => {
                             }
                             disabled={loading}
                             sx={{
-                              borderRadius: "12px",
                               px: 3,
                               width: { xs: "100%", sm: "auto" },
                             }}
@@ -4025,7 +3900,6 @@ const TicketManagementPage = () => {
                 variant="outlined"
                 onClick={handleCloseDialog}
                 sx={{
-                  borderRadius: "12px",
                   px: 3,
                   width: { xs: "100%", sm: "auto" },
                 }}
@@ -4038,8 +3912,7 @@ const TicketManagementPage = () => {
                   onClick={handleSubmit}
                   disabled={loading}
                   sx={{
-                    borderRadius: "12px",
-                    background: "linear-gradient(45deg, #667eea, #764ba2)",
+                    background: gradients.brand,
                     px: 3,
                     width: { xs: "100%", sm: "auto" },
                   }}
@@ -4056,14 +3929,14 @@ const TicketManagementPage = () => {
           open={openCreateMachineDialog}
           onClose={handleCloseCreateMachineDialog}
           maxWidth="md"
-          fullScreen={isMobile}
+          fullScreen={dialogFullScreen}
           fullWidth
-          PaperProps={{ sx: { borderRadius: isMobile ? 0 : "20px" } }}
+          PaperProps={{ sx: preset.dialogPaper(dialogFullScreen) }}
         >
           <DialogTitle
             sx={{
               pb: 1,
-              background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+              background: `linear-gradient(45deg, ${colors.green.main}, ${colors.green.light})`,
               color: "white",
               fontWeight: 700,
             }}
@@ -4075,7 +3948,7 @@ const TicketManagementPage = () => {
             >
               <Typography
                 component="span"
-                variant={isMobile ? "h6" : "h5"}
+                variant="h5"
                 fontWeight="bold"
               >
                 Thêm máy móc mới
@@ -4483,7 +4356,7 @@ const TicketManagementPage = () => {
               onClick={handleCloseCreateMachineDialog}
               variant="outlined"
               color="inherit"
-              sx={{ borderRadius: "12px", width: { xs: "100%", sm: "auto" } }}
+              sx={{ width: { xs: "100%", sm: "auto" } }}
             >
               Đóng
             </Button>
@@ -4493,8 +4366,7 @@ const TicketManagementPage = () => {
                 variant="contained"
                 startIcon={<Save />}
                 sx={{
-                  borderRadius: "12px",
-                  background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                  background: `linear-gradient(45deg, ${colors.green.main}, ${colors.green.light})`,
                   width: { xs: "100%", sm: "auto" },
                 }}
               >
@@ -4509,18 +4381,14 @@ const TicketManagementPage = () => {
           open={openImportDialog}
           onClose={handleCloseImportDialog}
           maxWidth="md"
-          fullScreen={isMobile}
+          fullScreen={dialogFullScreen}
           fullWidth
-          PaperProps={{
-            sx: {
-              borderRadius: isMobile ? 0 : "20px",
-            },
-          }}
+          PaperProps={{ sx: preset.dialogPaper(dialogFullScreen) }}
         >
           <DialogTitle
             sx={{
               pb: 1,
-              background: "linear-gradient(45deg, #667eea, #764ba2)",
+              background: gradients.brand,
               color: "white",
               fontWeight: 700,
             }}
@@ -4532,7 +4400,7 @@ const TicketManagementPage = () => {
             >
               <Typography
                 component="span"
-                variant={isMobile ? "h6" : "h5"}
+                variant="h5"
                 fontWeight="bold"
               >
                 Nhập máy móc từ file Excel
@@ -4556,7 +4424,7 @@ const TicketManagementPage = () => {
               pb: 1,
             }}
           >
-            <Alert severity="info" sx={{ borderRadius: "12px" }}>
+            <Alert severity="info" sx={{ borderRadius: `${radii.md}px` }}>
               <AlertTitle>Hướng dẫn</AlertTitle>
               <Typography variant="body2" gutterBottom>
                 1. Chuẩn bị file Excel (.xlsx hoặc .xls) với các cột dữ liệu
@@ -4597,8 +4465,7 @@ const TicketManagementPage = () => {
                 component="label"
                 startIcon={<FileUpload />}
                 sx={{
-                  borderRadius: "12px",
-                  background: "linear-gradient(45deg, #667eea, #764ba2)",
+                  background: gradients.brand,
                 }}
               >
                 Chọn file Excel
@@ -4625,7 +4492,7 @@ const TicketManagementPage = () => {
                   severity={
                     importResults.errorCount > 0 ? "warning" : "success"
                   }
-                  sx={{ borderRadius: "12px", mb: 2 }}
+                  sx={{ mb: 2 }}
                 >
                   <AlertTitle>Nhập Excel hoàn tất</AlertTitle>
                   Đã thêm thành công:{" "}
@@ -4644,7 +4511,6 @@ const TicketManagementPage = () => {
                       sx={{
                         maxHeight: 300,
                         overflow: "auto",
-                        borderRadius: "12px",
                       }}
                     >
                       <List dense>
@@ -4680,7 +4546,6 @@ const TicketManagementPage = () => {
                       sx={{
                         maxHeight: 300,
                         overflow: "auto",
-                        borderRadius: "12px",
                       }}
                     >
                       <List dense>
@@ -4735,7 +4600,7 @@ const TicketManagementPage = () => {
               onClick={handleCloseImportDialog}
               variant="outlined"
               color="inherit"
-              sx={{ borderRadius: "12px", width: { xs: "100%", sm: "auto" } }}
+              sx={{ width: { xs: "100%", sm: "auto" } }}
               disabled={isImporting}
             >
               Đóng
@@ -4745,8 +4610,7 @@ const TicketManagementPage = () => {
               variant="contained"
               startIcon={<Save />}
               sx={{
-                borderRadius: "12px",
-                background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                background: `linear-gradient(45deg, ${colors.green.main}, ${colors.green.light})`,
                 width: { xs: "100%", sm: "auto" },
               }}
               disabled={!importFile || isImporting}
@@ -4807,11 +4671,10 @@ const TicketManagementPage = () => {
             sx={{
               width: "100%",
               minWidth: { xs: "auto", sm: "350px" },
-              boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
-              borderRadius: "12px",
+              boxShadow: shadows.overlay,
             }}
           >
-            <AlertTitle sx={{ fontWeight: "bold", fontSize: "1.1rem" }}>
+            <AlertTitle sx={{ fontWeight: "bold", fontSize: fontSizes.title }}>
               {notification.title}
             </AlertTitle>
             {notification.message}

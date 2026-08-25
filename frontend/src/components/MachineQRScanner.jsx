@@ -4,19 +4,23 @@
 import React, { useRef, useEffect, useState, useCallback } from "react";
 import QrScanner from "qr-scanner";
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  Box,
-  Typography,
-  CircularProgress,
   Alert,
-  Stack,
+  alpha,
+  Box,
+  Cameraswitch,
+  CircularProgress,
+  Close,
+  colors,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  Error,
   IconButton,
-} from "@mui/material";
-import { useTheme } from "@mui/material/styles";
-import useMediaQuery from "@mui/material/useMediaQuery";
-import { Close, QrCodeScanner, Cameraswitch, Error } from "@mui/icons-material";
+  QrCodeScanner,
+  Stack,
+  Typography,
+  useResponsive,
+} from "../ui";
 import { api } from "../api/api";
 
 // --- CUSTOM HOOK (Dựa trên code mẫu của bạn, đã sửa) ---
@@ -217,8 +221,8 @@ const MachineQRScanner = ({
 }) => {
   const videoRef = useRef(null);
   const resumeScanningRef = useRef(null); // Ref để lưu hàm resumeScanning
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+  // Ngưỡng md (< 900px), không phải sm - xem hooks/useResponsive.js
+  const { belowMd: isMobile } = useResponsive();
 
   // State thông báo lỗi/loading (hiển thị đè lên video)
   const [overlayState, setOverlayState] = useState({
@@ -373,7 +377,7 @@ const MachineQRScanner = ({
     >
       <DialogTitle
         sx={{
-          background: "#2e7d32",
+          background: colors.green.main,
           color: "white",
           fontWeight: 700,
           py: { xs: 1.5, md: 2 },
@@ -456,7 +460,7 @@ const MachineQRScanner = ({
               backgroundColor:
                 logic.isScanningActive && overlayState.status === "idle"
                   ? "transparent" // Trong suốt khi đang quét
-                  : "rgba(0, 0, 0, 0.7)", // Mờ khi có thông báo
+                  : alpha(colors.black, 0.7), // Mờ khi có thông báo
               transition: "background-color 0.3s ease",
             }}
           >
@@ -504,9 +508,9 @@ const MachineQRScanner = ({
                 position: "absolute",
                 bottom: 16,
                 right: 16,
-                bgcolor: "rgba(0,0,0,0.5)",
+                bgcolor: alpha(colors.black, 0.5),
                 color: "white",
-                "&:hover": { bgcolor: "rgba(0,0,0,0.7)" },
+                "&:hover": { bgcolor: alpha(colors.black, 0.7) },
               }}
             >
               <Cameraswitch />

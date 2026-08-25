@@ -3,22 +3,31 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
-  Container,
-  Paper,
-  TextField,
-  Button,
-  Typography,
-  Box,
   Alert,
-  CircularProgress,
+  alpha,
   Avatar,
-  Stack,
+  Box,
+  Button,
+  CircularProgress,
+  colors,
+  Container,
+  fontSizes,
+  gradients,
   IconButton,
   InputAdornment,
-  useTheme,
-  useMediaQuery,
-} from "@mui/material";
-import { Visibility, VisibilityOff, Warning } from "@mui/icons-material";
+  Paper,
+  radii,
+  shadow,
+  shadowRgb,
+  shadows,
+  Stack,
+  sx as preset,
+  TextField,
+  Typography,
+  Visibility,
+  VisibilityOff,
+  Warning,
+} from "../ui";
 import { useAuth } from "../hooks/useAuth";
 
 const LoginPage = () => {
@@ -30,8 +39,6 @@ const LoginPage = () => {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [capsLockOn, setCapsLockOn] = useState(false);
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -102,8 +109,8 @@ const LoginPage = () => {
   return (
     <Box
       sx={{
-        minHeight: "100vh",
-        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+        minHeight: "100dvh",
+        background: gradients.brandDeep,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -115,11 +122,11 @@ const LoginPage = () => {
           elevation={0}
           sx={{
             padding: { xs: 3, sm: 6 },
-            borderRadius: "24px",
-            background: "rgba(255, 255, 255, 0.95)",
+            borderRadius: `${radii.lg}px`,
+            background: alpha(colors.white, 0.95),
             backdropFilter: "blur(20px)",
-            border: "1px solid rgba(255, 255, 255, 0.3)",
-            boxShadow: "0 20px 40px rgba(0, 0, 0, 0.1)",
+            border: `1px solid ${alpha(colors.white, 0.3)}`,
+            boxShadow: shadow(20, 40, shadowRgb.black, 0.1),
           }}
         >
           <Stack spacing={3} alignItems="center" textAlign="center">
@@ -127,7 +134,7 @@ const LoginPage = () => {
               sx={{
                 width: 80,
                 height: 80,
-                background: "linear-gradient(45deg, #667eea, #764ba2)",
+                background: gradients.brand,
                 mb: 2,
               }}
             >
@@ -137,21 +144,16 @@ const LoginPage = () => {
             <Box>
               <Typography
                 component="h1"
-                variant={isMobile ? "h4" : "h3"}
-                sx={{
-                  fontWeight: 700,
-                  background: "linear-gradient(45deg, #667eea, #764ba2)",
-                  backgroundClip: "text",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  mb: 1,
-                }}
+                variant="h3"
+                sx={{ fontWeight: 700, ...preset.gradientText(), mb: 1 }}
               >
                 TPM System
               </Typography>
               <Typography
-                variant={isMobile ? "body1" : "h6"}
+                variant="h6"
                 color="text.secondary"
+                // <600px lùi về 1rem - bản cũ: variant={isMobile ? "body1" : "h6"}
+                sx={{ fontSize: { xs: "1rem", sm: "1.25rem" } }}
               >
                 Đăng nhập để truy cập hệ thống
               </Typography>
@@ -162,9 +164,8 @@ const LoginPage = () => {
                 severity="error"
                 sx={{
                   width: "100%",
-                  borderRadius: "12px",
-                  background: "rgba(244, 67, 54, 0.1)",
-                  border: "1px solid rgba(244, 67, 54, 0.2)",
+                  background: alpha(colors.red.main, 0.1),
+                  border: `1px solid ${alpha(colors.red.main, 0.2)}`,
                   mb: 2,
                   textTransform: "uppercase",
                 }}
@@ -179,9 +180,8 @@ const LoginPage = () => {
                 icon={<Warning />}
                 sx={{
                   width: "100%",
-                  borderRadius: "12px",
-                  background: "rgba(255, 152, 0, 0.1)",
-                  border: "1px solid rgba(255, 152, 0, 0.2)",
+                  background: alpha(colors.orange.main, 0.1),
+                  border: `1px solid ${alpha(colors.orange.main, 0.2)}`,
                   mb: 2,
                   textTransform: "uppercase",
                 }}
@@ -209,17 +209,17 @@ const LoginPage = () => {
                   disabled={loading}
                   sx={{
                     "& .MuiOutlinedInput-root": {
-                      borderRadius: "16px",
-                      background: "rgba(255, 255, 255, 0.8)",
+                      borderRadius: `${radii.lg}px`,
+                      background: alpha(colors.white, 0.8),
                       backdropFilter: "blur(10px)",
                       "& fieldset": {
-                        borderColor: "rgba(102, 126, 234, 0.3)",
+                        borderColor: alpha(colors.brand.main, 0.3),
                       },
                       "&:hover fieldset": {
-                        borderColor: "rgba(102, 126, 234, 0.5)",
+                        borderColor: alpha(colors.brand.main, 0.5),
                       },
                       "&.Mui-focused fieldset": {
-                        borderColor: "#667eea",
+                        borderColor: colors.brand.main,
                       },
                     },
                   }}
@@ -248,10 +248,10 @@ const LoginPage = () => {
                           disabled={loading}
                           sx={{
                             color: showPassword
-                              ? "#667eea"
-                              : "rgba(0, 0, 0, 0.54)",
+                              ? colors.brand.main
+                              : alpha(colors.black, 0.54),
                             "&:hover": {
-                              backgroundColor: "rgba(102, 126, 234, 0.1)",
+                              backgroundColor: alpha(colors.brand.main, 0.1),
                             },
                           }}
                         >
@@ -262,21 +262,21 @@ const LoginPage = () => {
                   }}
                   sx={{
                     "& .MuiOutlinedInput-root": {
-                      borderRadius: "16px",
-                      background: "rgba(255, 255, 255, 0.8)",
+                      borderRadius: `${radii.lg}px`,
+                      background: alpha(colors.white, 0.8),
                       backdropFilter: "blur(10px)",
                       "& fieldset": {
                         borderColor: capsLockOn
-                          ? "rgba(255, 152, 0, 0.5)"
-                          : "rgba(102, 126, 234, 0.3)",
+                          ? alpha(colors.orange.main, 0.5)
+                          : alpha(colors.brand.main, 0.3),
                       },
                       "&:hover fieldset": {
                         borderColor: capsLockOn
-                          ? "rgba(255, 152, 0, 0.7)"
-                          : "rgba(102, 126, 234, 0.5)",
+                          ? alpha(colors.orange.main, 0.7)
+                          : alpha(colors.brand.main, 0.5),
                       },
                       "&.Mui-focused fieldset": {
-                        borderColor: capsLockOn ? "#ff9800" : "#667eea",
+                        borderColor: capsLockOn ? colors.orange.main : colors.brand.main,
                       },
                     },
                   }}
@@ -290,18 +290,18 @@ const LoginPage = () => {
                   sx={{
                     mt: 2,
                     py: 2,
-                    borderRadius: "16px",
-                    background: "linear-gradient(45deg, #667eea, #764ba2)",
-                    fontSize: "1.1rem",
+                    borderRadius: `${radii.lg}px`,
+                    background: gradients.brand,
+                    fontSize: fontSizes.title,
                     fontWeight: 600,
                     textTransform: "none",
-                    boxShadow: "0 8px 25px rgba(102, 126, 234, 0.3)",
+                    boxShadow: shadows.brandLift,
                     "&:hover": {
                       transform: "translateY(-2px)",
-                      boxShadow: "0 12px 35px rgba(102, 126, 234, 0.4)",
+                      boxShadow: shadow(12, 35, shadowRgb.brand, 0.4),
                     },
                     "&:disabled": {
-                      background: "rgba(102, 126, 234, 0.5)",
+                      background: alpha(colors.brand.main, 0.5),
                     },
                     transition: "all 0.3s ease",
                   }}

@@ -2,51 +2,62 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
-  Container,
-  Typography,
-  Box,
-  Card,
-  Stack,
+  Alert,
+  alpha,
+  ArrowForward,
+  Autocomplete,
+  autoGrid,
   Avatar,
+  borders,
+  Box,
+  Business,
+  Button,
+  Card,
+  CardContent,
+  Chip,
   CircularProgress,
+  colors,
+  Container,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  fontSizes,
+  getStatusInfo as statusInfo,
+  gradients,
+  Grid,
+  hexA,
+  IconButton,
+  KeyboardArrowDown,
+  KeyboardArrowUp,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  LocationOn,
+  muiColors,
+  PageHeader,
+  Pagination,
   Paper,
+  radii,
+  Refresh,
+  shadows,
+  Stack,
+  STAT_COLORS,
+  StatCard,
+  Switch,
+  sx as preset,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  Chip,
-  Grid,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  Alert,
-  Pagination,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  CardContent,
-  useTheme,
-  useMediaQuery,
-  IconButton,
-  Autocomplete,
   TextField,
-  Switch,
-} from "@mui/material";
-import {
-  LocationOn,
-  ArrowForward,
-  Business,
-  Refresh,
-  KeyboardArrowDown,
-  KeyboardArrowUp,
-} from "@mui/icons-material";
-import { alpha } from "@mui/material/styles";
+  Typography,
+  useResponsive,
+} from "../ui";
 import NavigationBar from "../components/NavigationBar";
 import { api } from "../api/api";
 
@@ -56,7 +67,7 @@ const formatNumber = (num) => {
 };
 
 const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
-  const theme = useTheme();
+  const { theme } = useResponsive();
   const [openNotInUse, setOpenNotInUse] = useState(false);
 
   // 1. Cấu hình cột
@@ -67,34 +78,27 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
   ];
 
   // 2. Cấu hình hàng chính
+  // Màu lấy từ theme/statusTokens.js (color = chữ, pastel = nền ô)
+  const row = (key, label, extra) => ({
+    key,
+    label,
+    color: STAT_COLORS[key].color,
+    bg: STAT_COLORS[key].pastel,
+    ...extra,
+  });
+
   const rowConfig = [
-    {
-      key: "available",
-      label: "Có thể sử dụng",
-      color: "#2e7d32",
-      bg: "#e8f5e9",
-    },
-    { key: "in_use", label: "Đang sử dụng", color: "#1976d2", bg: "#e3f2fd" },
-    {
-      key: "not_in_use",
-      label: "Chưa sử dụng",
-      color: "#ed6c02",
-      bg: "#fff3e0",
-      hasChildren: true,
-    },
-    {
-      key: "pending_liquidation",
-      label: "Chờ thanh lý",
-      color: "#ff5722",
-      bg: "#fbe9e7",
-    },
+    row("available", "Có thể sử dụng"),
+    row("in_use", "Đang sử dụng"),
+    row("not_in_use", "Chưa sử dụng", { hasChildren: true }),
+    row("pending_liquidation", "Chờ thanh lý"),
   ];
 
   // 3. Cấu hình hàng con: ĐỒNG BỘ MÀU CAM CHO TẤT CẢ
   const subRowConfig = [
-    { key: "maintenance", label: "Bảo trì", color: "#00bcd4", bg: "#e0f7fa" },
-    { key: "broken", label: "Máy hư", color: "#00bcd4", bg: "#e0f7fa" },
-    { key: "disabled", label: "Cho mượn", color: "#00bcd4", bg: "#e0f7fa" },
+    row("maintenance", "Bảo trì"),
+    row("broken", "Máy hư"),
+    row("disabled", "Cho mượn"),
   ];
 
   // 4. Xử lý dữ liệu (Giữ nguyên logic cũ của bạn)
@@ -201,10 +205,10 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
   };
 
   // --- CẤU HÌNH MÀU TÍM CHO TỔNG (Giống MachineListPage) ---
-  const TOTAL_COL_COLOR = "#667eea";
-  const TOTAL_COL_BG = "#ede7f6";
-  const TOTAL_ROW_COLOR = "#667eea";
-  const TOTAL_ROW_BG = "#ede7f6";
+  const TOTAL_COL_COLOR = colors.brand.main;
+  const TOTAL_COL_BG = colors.brand.wash;
+  const TOTAL_ROW_COLOR = colors.brand.main;
+  const TOTAL_ROW_BG = colors.brand.wash;
 
   if (loading) {
     return (
@@ -227,7 +231,7 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
           sx={{
             cursor: "default",
             color: row.color,
-            bgcolor: rowActive ? row.bg : "#fff",
+            bgcolor: rowActive ? row.bg : colors.white,
             boxShadow: rowActive ? `inset 3px 0 0 0 ${row.color}` : "none",
             pl: isSubRow ? 4 : 2,
             "&:hover": {
@@ -272,7 +276,7 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
                   : hasDataCell
                     ? row.bg
                     : "transparent",
-                color: hasDataCell || cellSelected ? row.color : "#e0e0e0",
+                color: hasDataCell || cellSelected ? row.color : colors.grey[300],
                 fontWeight: hasDataCell || cellSelected ? "bold" : "normal",
                 boxShadow: cellSelected
                   ? `inset 0 0 0 2px ${row.color}`
@@ -281,9 +285,9 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
                   bgcolor:
                     hasDataCell || cellSelected
                       ? alpha(row.color, 0.25)
-                      : "#f5f5f5",
+                      : colors.grey[100],
                   boxShadow: `inset 0 0 0 2px ${row.color}`,
-                  color: hasDataCell || cellSelected ? row.color : "#757575",
+                  color: hasDataCell || cellSelected ? row.color : colors.grey[600],
                 },
               }}
             >
@@ -300,7 +304,7 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
               sx={{
                 cursor: "pointer",
                 fontWeight: "bold",
-                color: hasDataRow || cellSelected ? row.color : "#bdbdbd",
+                color: hasDataRow || cellSelected ? row.color : colors.grey[400],
                 backgroundColor: cellSelected
                   ? alpha(row.color, 0.2)
                   : hasDataRow
@@ -327,15 +331,14 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
     <Card
       elevation={0}
       sx={{
-        borderRadius: "20px",
-        border: "1px solid rgba(0, 0, 0, 0.05)",
+        ...preset.softCard,
         overflow: "hidden",
         height: "100%",
         transition: "all 0.2s ease",
-        "&:hover": { boxShadow: "0 4px 12px rgba(0,0,0,0.05)" },
+        "&:hover": { boxShadow: shadows.hover },
       }}
     >
-      <Box sx={{ p: 2, borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
+      <Box sx={{ p: 2, borderBottom: borders.subtle }}>
         <Typography variant="h6" fontWeight="bold">
           Trạng thái chi tiết
         </Typography>
@@ -345,16 +348,16 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
           size="small"
           sx={{
             "& .MuiTableCell-root": {
-              borderBottom: "1px solid rgba(224, 224, 224, 0.4)",
+              borderBottom: `1px solid ${alpha(colors.grey[300], 0.4)}`,
               textAlign: "center",
-              fontSize: "0.9rem",
+              fontSize: fontSizes.body,
               transition: "all 0.2s ease-in-out",
               position: "relative",
             },
             "& .MuiTableCell-head": {
-              backgroundColor: "#f9fafb",
+              backgroundColor: colors.grey[50],
               fontWeight: 700,
-              color: "#637381",
+              color: colors.grey[600],
               py: 2,
             },
             "& .cell-first-col": {
@@ -363,7 +366,7 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
               position: "sticky",
               left: 0,
               zIndex: 1,
-              borderRight: "1px solid rgba(0,0,0,0.05)",
+              borderRight: borders.subtle,
             },
           }}
         >
@@ -380,13 +383,13 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
                     sx={{
                       cursor: "default",
                       color: active ? theme.palette.primary.main : "inherit",
-                      bgcolor: active ? "#f0f4f8" : "inherit",
+                      bgcolor: active ? colors.grey[100] : "inherit",
                       boxShadow: active
                         ? `inset 0 -3px 0 0 ${theme.palette.primary.main}`
                         : "none",
                       "&:hover": {
                         color: theme.palette.primary.main,
-                        bgcolor: "#f0f4f8",
+                        bgcolor: colors.grey[100],
                         boxShadow: `inset 0 -3px 0 0 ${theme.palette.primary.main}`,
                       },
                     }}
@@ -407,7 +410,7 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
                         : `${TOTAL_COL_COLOR} !important`,
                       backgroundColor: active
                         ? `${TOTAL_COL_BG} !important`
-                        : "#f9fafb !important",
+                        : `${colors.grey[50]} !important`,
                       boxShadow: active
                         ? `inset 0 -3px 0 0 ${TOTAL_COL_COLOR}`
                         : "none",
@@ -434,7 +437,7 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
             ))}
 
             {/* --- CẬP NHẬT HÀNG TỔNG (MÀU TÍM) --- */}
-            <TableRow sx={{ backgroundColor: "#fafafa" }}>
+            <TableRow sx={{ backgroundColor: colors.grey[50] }}>
               {(() => {
                 const active = isRowActive("ALL");
                 return (
@@ -448,7 +451,7 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
                         : `${TOTAL_ROW_COLOR} !important`,
                       backgroundColor: active
                         ? `${TOTAL_ROW_BG} !important`
-                        : "#fafafa !important",
+                        : `${colors.grey[50]} !important`,
                       boxShadow: active
                         ? `inset 3px 0 0 0 ${TOTAL_ROW_COLOR}`
                         : "none",
@@ -475,7 +478,7 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
                       color:
                         colTotal > 0 || cellSelected
                           ? TOTAL_ROW_COLOR
-                          : "#bdbdbd",
+                          : colors.grey[400],
                       bgcolor: cellSelected ? TOTAL_ROW_BG : "transparent",
                       boxShadow: cellSelected
                         ? `inset 0 0 0 2px ${TOTAL_ROW_COLOR}`
@@ -498,7 +501,7 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
                   backgroundColor: `${alpha(TOTAL_ROW_COLOR, 0.15)} !important`,
                   color: `${TOTAL_ROW_COLOR} !important`,
                   fontWeight: "bold",
-                  fontSize: "1.1rem !important",
+                  fontSize: `${fontSizes.title} !important`,
                   cursor: "pointer",
                   boxShadow: isSelected("ALL", "ALL")
                     ? `inset 0 0 0 2px ${TOTAL_ROW_COLOR}`
@@ -522,8 +525,7 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
 };
 
 const LocationTrackPage = () => {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const { dialogFullScreen } = useResponsive();
   const [departments, setDepartments] = useState([]);
   const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [loadingDepartments, setLoadingDepartments] = useState(false);
@@ -588,43 +590,13 @@ const LocationTrackPage = () => {
     has_air_volume: false,
   });
 
-  // ĐỊNH NGHĨA CONFIG TRẠNG THÁI (ĐỒNG BỘ VỚI TicketManagementPage.jsx)
-  const STATUS_CONFIG = {
-    available: { bg: "#2e7d3222", color: "#2e7d32", label: "Có thể sử dụng" },
-    in_use: { bg: "#667eea22", color: "#667eea", label: "Đang sử dụng" },
-    maintenance: { bg: "#ff980022", color: "#ff9800", label: "Bảo trì" },
-    rented: { bg: "#673ab722", color: "#673ab7", label: "Máy thuê" },
-    rented_return: {
-      bg: "#673ab722",
-      color: "#673ab7",
-      label: "Đã trả (Máy Thuê)",
-    },
-    borrowed: { bg: "#03a9f422", color: "#03a9f4", label: "Máy mượn" },
-    borrowed_return: {
-      bg: "#03a9f422",
-      color: "#03a9f4",
-      label: "Đã trả (Máy Mượn)",
-    },
-    borrowed_out: { bg: "#00bcd422", color: "#00bcd4", label: "Cho mượn" },
-    liquidation: { bg: "#f4433622", color: "#f44336", label: "Thanh lý" },
-    pending_liquidation: {
-      bg: "#ff572222",
-      color: "#ff5722",
-      label: "Chờ thanh lý",
-    },
-    disabled: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Chưa sử dụng" },
-    broken: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Máy hư" },
-  };
-
-  const getStatusInfo = (statusKey) => {
-    return (
-      STATUS_CONFIG[statusKey] || {
-        bg: "#9e9e9e22",
-        color: "#9e9e9e",
-        label: statusKey,
-      }
-    );
-  };
+  // Màu + nhãn trạng thái lấy từ theme/statusTokens.js (nguồn duy nhất).
+  // Trang này có fallback riêng: giữ nguyên - trả về màu xám kèm chính tên
+  // trạng thái, thay vì dấu "-" như MachineListPage.
+  const getStatusInfo = (statusKey) =>
+    statusInfo(statusKey, {
+      fallback: (k) => ({ bg: hexA(colors.grey[500], "22"), color: colors.grey[500], label: k }),
+    });
 
   const formatDate = (dateString) => {
     if (!dateString) return "-";
@@ -1050,24 +1022,6 @@ const LocationTrackPage = () => {
     );
   };
 
-  // Định nghĩa style cho thẻ active/inactive
-  const activeCardSx = {
-    cursor: "pointer",
-    border: `3px solid ${theme.palette.primary.main}`, // Viền màu tím
-    boxShadow: "0 8px 25px rgba(102, 126, 234, 0.3)", // Đổ bóng
-    transform: "translateY(-4px)", // Nâng lên
-    transition: "all 0.2s ease",
-  };
-  const inactiveCardSx = {
-    cursor: "pointer",
-    border: "1px solid rgba(0, 0, 0, 0.05)",
-    transition: "all 0.2s ease",
-    "&:hover": {
-      transform: "translateY(-2px)",
-      boxShadow: "0 4px 12px rgba(0,0,0,0.05)", // Bóng mờ khi hover
-    },
-  };
-
   const fetchMatrixStats = useCallback(async (locationUuid, departmentUuid) => {
     setMatrixLoading(true);
     try {
@@ -1214,7 +1168,7 @@ const LocationTrackPage = () => {
 
     if (!selectedDepartment) {
       return (
-        <Alert severity="info" sx={{ borderRadius: "12px", mt: 1 }}>
+        <Alert severity="info" sx={{ borderRadius: `${radii.md}px`, mt: 1 }}>
           <Typography variant="body1" sx={{ fontWeight: 500 }}>
             Vui lòng chọn một Đơn vị ở bước 1.
           </Typography>
@@ -1228,402 +1182,160 @@ const LocationTrackPage = () => {
       (stats.liquidation || 0) -
       (stats.borrowed_return || 0) -
       (stats.rented_return || 0);
+    // -----------------------------------------------------------------------
+    // CÁC THẺ SỐ LIỆU khai báo bằng DỮ LIỆU thay vì JSX.
+    // Trước đây 12 thẻ chiếm 400 dòng JSX (8 thẻ trong số đó bị comment lại).
+    // Bật/tắt một thẻ giờ chỉ là đổi `enabled`.
+    // -----------------------------------------------------------------------
+    const statCards = [
+      {
+        enabled: true,
+        label: "Có thể sử dụng",
+        value: stats.available || 0,
+        key: "available",
+        statuses: ["available"],
+        borrow: [],
+      },
+      {
+        enabled: true,
+        label: "Đang sử dụng",
+        value: stats.in_use || 0,
+        key: "in_use",
+        statuses: ["in_use"],
+        borrow: [],
+      },
+      {
+        enabled: true,
+        label: "Chưa sử dụng",
+        // Gộp: Bảo trì + Máy hư + Cho mượn
+        value:
+          (Number(stats.maintenance) || 0) +
+          (Number(stats.broken) || 0) +
+          (Number(stats.borrowed_out) || 0),
+        key: "not_in_use",
+        statuses: ["maintenance", "broken", "disabled"],
+        borrow: [],
+      },
+      {
+        enabled: true,
+        label: "Chờ thanh lý",
+        value: stats.pending_liquidation || 0,
+        key: "pending_liquidation",
+        statuses: ["pending_liquidation"],
+        borrow: [],
+      },
+
+      // --- Các thẻ đang TẮT (trước đây là 8 khối JSX bị comment) ---
+      {
+        enabled: false,
+        label: "Bảo trì",
+        value: stats.maintenance || 0,
+        color: colors.orange.main,
+        background: hexA(colors.orange.main, "11"),
+        statuses: ["maintenance"],
+        borrow: [],
+      },
+      {
+        enabled: false,
+        label: "Thanh lý",
+        value: stats.liquidation || 0,
+        color: colors.red.main,
+        background: hexA(colors.red.main, "11"),
+        statuses: ["liquidation"],
+        borrow: [],
+      },
+      {
+        enabled: false,
+        label: "Máy hư",
+        value: stats.broken || 0,
+        color: colors.grey[500],
+        background: hexA(colors.grey[500], "11"),
+        statuses: ["broken"],
+        borrow: [],
+      },
+      {
+        enabled: false,
+        label: "Thuê",
+        value: stats.rented || 0,
+        color: colors.purple.main,
+        background: hexA(colors.purple.main, "11"),
+        statuses: [],
+        borrow: ["rented"],
+      },
+      {
+        enabled: false,
+        label: "Đã trả (Máy thuê)",
+        value: stats.rented_return || 0,
+        color: colors.purple.main,
+        background: hexA(colors.purple.main, "11"),
+        statuses: ["disabled"],
+        borrow: ["rented_return"],
+      },
+      {
+        enabled: false,
+        label: "Mượn",
+        value: stats.borrowed || 0,
+        color: colors.blue.sky,
+        background: hexA(colors.blue.sky, "11"),
+        statuses: [],
+        borrow: ["borrowed"],
+      },
+      {
+        enabled: false,
+        label: "Đã trả (Máy mượn)",
+        value: stats.borrowed_return || 0,
+        color: colors.blue.sky,
+        background: hexA(colors.blue.sky, "11"),
+        statuses: ["disabled"],
+        borrow: ["borrowed_return"],
+      },
+      {
+        enabled: false,
+        label: "Cho mượn",
+        value: stats.borrowed_out || 0,
+        color: colors.cyan.main,
+        background: hexA(colors.cyan.main, "11"),
+        statuses: ["disabled"],
+        borrow: ["borrowed_out"],
+      },
+    ];
+
     const renderStatsCards = () => (
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        {/* Tổng số máy (Thẻ Lớn) */}
+        {/* Thẻ tổng - cột riêng vì bố cục lệch (3/9) */}
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Card
-            elevation={0}
+          <StatCard
+            size="heroMd"
+            label="Tổng số máy"
+            value={formatNumber(displayTotal || 0)}
+            color={STAT_COLORS.total.color}
+            background={gradients.brandWash2}
+            active={isStatusFilterActive([], [])}
             onClick={() => handleStatusFilterClick([], [])}
-            sx={{
-              borderRadius: "20px",
-              background:
-                "linear-gradient(135deg, #667eea22 0%, #764ba222 100%)",
-              border: "1px solid rgba(0, 0, 0, 0.05)",
-              height: "100%",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "center",
-              ...(isStatusFilterActive([], []) ? activeCardSx : inactiveCardSx),
-            }}
-          >
-            <CardContent sx={{ textAlign: "center", p: 3 }}>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                Tổng số máy
-              </Typography>
-              <Typography
-                variant={isMobile ? "h4" : "h3"}
-                fontWeight="bold"
-                color="#667eea"
-              >
-                {formatNumber(displayTotal || 0)}
-              </Typography>
-            </CardContent>
-          </Card>
+          />
         </Grid>
 
-        {/* Các thẻ nhỏ */}
+        {/* Các thẻ trạng thái - lưới tự tính số cột.
+            Đổi số 2 cuối trong autoGrid(110, 2, 2) thành 3 là 3 thẻ mỗi hàng. */}
         <Grid size={{ xs: 12, sm: 6, md: 9 }}>
-          <Grid container spacing={2}>
-            {/* --- HÀNG 1 --- */}
-            {/* 1. Có thể sử dụng */}
-            <Grid size={{ xs: 6 }}>
-              <Card
-                elevation={0}
-                onClick={() => handleStatusFilterClick(["available"], [])}
-                sx={{
-                  borderRadius: "20px",
-                  background: "#2e7d3211",
-                  ...(isStatusFilterActive(["available"], [])
-                    ? activeCardSx
-                    : inactiveCardSx),
-                }}
-              >
-                <CardContent sx={{ textAlign: "center", p: 2 }}>
-                  <Typography
-                    variant={isMobile ? "h6" : "h5"}
-                    fontWeight="bold"
-                    color="#2e7d32"
-                  >
-                    {formatNumber(stats.available || 0)}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Có thể sử dụng
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-
-            {/* 2. Đang sử dụng */}
-            <Grid size={{ xs: 6 }}>
-              <Card
-                elevation={0}
-                onClick={() => handleStatusFilterClick(["in_use"], [])}
-                sx={{
-                  borderRadius: "20px",
-                  background: "#1976d211",
-                  ...(isStatusFilterActive(["in_use"], [])
-                    ? activeCardSx
-                    : inactiveCardSx),
-                }}
-              >
-                <CardContent sx={{ textAlign: "center", p: 2 }}>
-                  <Typography
-                    variant={isMobile ? "h6" : "h5"}
-                    fontWeight="bold"
-                    color="#1976d2"
-                  >
-                    {formatNumber(stats.in_use || 0)}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Đang sử dụng
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            {/* <Grid size={{ xs: 6, md: 2.4 }}>
-              <Card
-                elevation={0}
-                onClick={() => handleStatusFilterClick(["maintenance"], [])}
-                sx={{
-                  borderRadius: "20px",
-                  background: "#ff980011",
-                  ...(isStatusFilterActive(["maintenance"], [])
-                    ? activeCardSx
-                    : inactiveCardSx),
-                }}
-              >
-                <CardContent sx={{ textAlign: "center", p: 2 }}>
-                  <Typography
-                    variant={isMobile ? "h6" : "h5"}
-                    fontWeight="bold"
-                    color="#ff9800"
-                  >
-                    {stats.maintenance || 0}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Bảo trì
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid size={{ xs: 6, md: 2.4 }}>
-              <Card
-                elevation={0}
-                onClick={() => handleStatusFilterClick(["liquidation"], [])}
-                sx={{
-                  borderRadius: "20px",
-                  background: "#f4433611",
-                  ...(isStatusFilterActive(["liquidation"], [])
-                    ? activeCardSx
-                    : inactiveCardSx),
-                }}
-              >
-                <CardContent sx={{ textAlign: "center", p: 2 }}>
-                  <Typography
-                    variant={isMobile ? "h6" : "h5"}
-                    fontWeight="bold"
-                    color="#f44336"
-                  >
-                    {stats.liquidation || 0}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Thanh lý
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid size={{ xs: 6, md: 2.4 }}>
-              <Card
-                elevation={0}
-                onClick={() =>
-                  handleStatusFilterClick(
-                    [
-                      // "disabled",
-                      "broken",
-                    ],
-                    []
-                  )
-                }
-                sx={{
-                  borderRadius: "20px",
-                  background: "#9e9e9e11",
-                  ...(isStatusFilterActive(
-                    [
-                      // "disabled",
-                      "broken",
-                    ],
-                    []
-                  )
-                    ? activeCardSx
-                    : inactiveCardSx),
-                }}
-              >
-                <CardContent sx={{ textAlign: "center", p: 2 }}>
-                  <Typography
-                    variant={isMobile ? "h6" : "h5"}
-                    fontWeight="bold"
-                    color="#9e9e9e"
-                  > */}
-            {/* {stats.disabled || 0}/ */}
-            {/* {stats.broken || 0}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary"> */}
-            {/* Chưa sử dụng/ */}
-            {/* Máy hư
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid> */}
-
-            {/* --- HÀNG 2 --- */}
-            {/* 3. Chưa sử dụng (Bảo trì + Hư + Chưa sử dụng/Cho mượn) */}
-            <Grid size={{ xs: 6 }}>
-              <Card
-                elevation={0}
-                onClick={() =>
-                  handleStatusFilterClick(
-                    ["maintenance", "broken", "disabled"],
-                    []
-                  )
-                }
-                sx={{
-                  borderRadius: "20px",
-                  background: "#ff980011",
-                  ...(isStatusFilterActive(
-                    ["maintenance", "broken", "disabled"],
-                    []
-                  )
-                    ? activeCardSx
-                    : inactiveCardSx),
-                }}
-              >
-                <CardContent sx={{ textAlign: "center", p: 2 }}>
-                  <Typography
-                    variant={isMobile ? "h6" : "h5"}
-                    fontWeight="bold"
-                    color="#ed6c02"
-                  >
-                    {/* Tổng hợp số lượng */}
-                    {formatNumber(
-                      (Number(stats.maintenance) || 0) +
-                        (Number(stats.broken) || 0) +
-                        (Number(stats.borrowed_out) || 0)
-                    )}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Chưa sử dụng
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-
-            {/* 4. Chờ thanh lý */}
-            <Grid size={{ xs: 6 }}>
-              <Card
-                elevation={0}
-                onClick={() =>
-                  handleStatusFilterClick(["pending_liquidation"], [])
-                }
-                sx={{
-                  borderRadius: "20px",
-                  background: "#ff572211",
-                  ...(isStatusFilterActive(["pending_liquidation"], [])
-                    ? activeCardSx
-                    : inactiveCardSx),
-                }}
-              >
-                <CardContent sx={{ textAlign: "center", p: 2 }}>
-                  <Typography
-                    variant={isMobile ? "h6" : "h5"}
-                    fontWeight="bold"
-                    color="#ff5722"
-                  >
-                    {formatNumber(stats.pending_liquidation || 0)}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Chờ thanh lý
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            {/* <Grid size={{ xs: 6, md: 2.4 }}>
-              <Card
-                elevation={0}
-                onClick={() => handleStatusFilterClick([], ["rented"])}
-                sx={{
-                  borderRadius: "20px",
-                  background: "#673ab711",
-                  ...(isStatusFilterActive([], ["rented"])
-                    ? activeCardSx
-                    : inactiveCardSx),
-                }}
-              >
-                <CardContent sx={{ textAlign: "center", p: 2 }}>
-                  <Typography
-                    variant={isMobile ? "h6" : "h5"}
-                    fontWeight="bold"
-                    color="#673ab7"
-                  >
-                    {stats.rented || 0}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Thuê
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid size={{ xs: 6, md: 2.4 }}>
-              <Card
-                elevation={0}
-                onClick={() =>
-                  handleStatusFilterClick(["disabled"], ["rented_return"])
-                }
-                sx={{
-                  borderRadius: "20px",
-                  background: "#673ab711",
-                  ...(isStatusFilterActive(["disabled"], ["rented_return"])
-                    ? activeCardSx
-                    : inactiveCardSx),
-                }}
-              >
-                <CardContent sx={{ textAlign: "center", p: 2 }}>
-                  <Typography
-                    variant={isMobile ? "h6" : "h5"}
-                    fontWeight="bold"
-                    color="#673ab7"
-                  >
-                    {stats.rented_return || 0}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Đã trả (Thuê)
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid size={{ xs: 6, md: 2.4 }}>
-              <Card
-                elevation={0}
-                onClick={() => handleStatusFilterClick([], ["borrowed"])}
-                sx={{
-                  borderRadius: "20px",
-                  background: "#03a9f411",
-                  ...(isStatusFilterActive([], ["borrowed"])
-                    ? activeCardSx
-                    : inactiveCardSx),
-                }}
-              >
-                <CardContent sx={{ textAlign: "center", p: 2 }}>
-                  <Typography
-                    variant={isMobile ? "h6" : "h5"}
-                    fontWeight="bold"
-                    color="#03a9f4"
-                  >
-                    {stats.borrowed || 0}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Mượn
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid size={{ xs: 6, md: 2.4 }}>
-              <Card
-                elevation={0}
-                onClick={() =>
-                  handleStatusFilterClick(["disabled"], ["borrowed_return"])
-                }
-                sx={{
-                  borderRadius: "20px",
-                  background: "#03a9f411",
-                  ...(isStatusFilterActive(["disabled"], ["borrowed_return"])
-                    ? activeCardSx
-                    : inactiveCardSx),
-                }}
-              >
-                <CardContent sx={{ textAlign: "center", p: 2 }}>
-                  <Typography
-                    variant={isMobile ? "h6" : "h5"}
-                    fontWeight="bold"
-                    color="#03a9f4"
-                  >
-                    {stats.borrowed_return || 0}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Đã trả (Mượn)
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid size={{ xs: 6, md: 2.4 }}>
-              <Card
-                elevation={0}
-                onClick={() =>
-                  handleStatusFilterClick(["disabled"], ["borrowed_out"])
-                }
-                sx={{
-                  borderRadius: "20px",
-                  background: "#00bcd411",
-                  ...(isStatusFilterActive(["disabled"], ["borrowed_out"])
-                    ? activeCardSx
-                    : inactiveCardSx),
-                }}
-              >
-                <CardContent sx={{ textAlign: "center", p: 2 }}>
-                  <Typography
-                    variant={isMobile ? "h6" : "h5"}
-                    fontWeight="bold"
-                    color="#00bcd4"
-                  >
-                    {stats.borrowed_out || 0}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Cho mượn
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid> */}
-          </Grid>
+          <Box sx={autoGrid(110, 2, 2)}>
+            {statCards
+              .filter((card) => card.enabled)
+              .map((card) => (
+                <StatCard
+                  key={card.label}
+                  size="sm"
+                  label={card.label}
+                  value={formatNumber(card.value)}
+                  color={card.color ?? STAT_COLORS[card.key].color}
+                  background={card.background ?? STAT_COLORS[card.key].soft}
+                  active={isStatusFilterActive(card.statuses, card.borrow)}
+                  onClick={() =>
+                    handleStatusFilterClick(card.statuses, card.borrow)
+                  }
+                />
+              ))}
+          </Box>
         </Grid>
       </Grid>
     );
@@ -1651,11 +1363,7 @@ const LocationTrackPage = () => {
           <Grid size={12} sx={{ mt: 3, mb: 3 }}>
             <Card
               elevation={0}
-              sx={{
-                borderRadius: "20px",
-                background: "#f5f5f5",
-                border: "1px solid rgba(0, 0, 0, 0.05)",
-              }}
+              sx={{ ...preset.softCard, background: colors.grey[100] }}
             >
               <CardContent>
                 <Typography variant="h6" fontWeight="bold" gutterBottom>
@@ -1669,7 +1377,7 @@ const LocationTrackPage = () => {
                         key={typeStat.type_machine}
                         disableGutters
                         sx={{
-                          borderBottom: "1px dashed #e0e0e0",
+                          borderBottom: borders.dashed,
                           py: 0.5,
                         }}
                       >
@@ -1695,7 +1403,7 @@ const LocationTrackPage = () => {
                                 component="span"
                                 variant="body1"
                                 fontWeight="bold"
-                                color="#333"
+                                color={colors.grey[800]}
                                 sx={{ flexShrink: 0 }}
                               >
                                 {typeStat.count} máy
@@ -1715,7 +1423,6 @@ const LocationTrackPage = () => {
                         )
                       }
                       size="small"
-                      sx={{ borderRadius: "12px" }}
                     >
                       {isMachineTypeStatsExpanded ? "Thu gọn" : "Xem thêm"}
                     </Button>
@@ -1730,11 +1437,7 @@ const LocationTrackPage = () => {
         <Card
           ref={filterCardRef} // Đổi ref về đây
           elevation={0}
-          sx={{
-            mb: 3,
-            borderRadius: "20px",
-            border: "1px solid rgba(0, 0, 0, 0.05)",
-          }}
+          sx={{ ...preset.softCard, mb: 3 }}
         >
           <CardContent sx={{ p: 3, "&:last-child": { pb: 3 } }}>
             <Typography
@@ -1765,15 +1468,7 @@ const LocationTrackPage = () => {
                     ))
                   }
                   renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Loại máy"
-                      sx={{
-                        "& .MuiOutlinedInput-root": {
-                          borderRadius: "12px",
-                        },
-                      }}
-                    />
+                    <TextField {...params} label="Loại máy" />
                   )}
                   ListboxProps={{
                     style: { maxHeight: 300 },
@@ -1803,15 +1498,7 @@ const LocationTrackPage = () => {
                     ))
                   }
                   renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Đặc tính"
-                      sx={{
-                        "& .MuiOutlinedInput-root": {
-                          borderRadius: "12px",
-                        },
-                      }}
-                    />
+                    <TextField {...params} label="Đặc tính" />
                   )}
                   ListboxProps={{
                     style: { maxHeight: 300 },
@@ -1839,15 +1526,7 @@ const LocationTrackPage = () => {
                     ))
                   }
                   renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Model"
-                      sx={{
-                        "& .MuiOutlinedInput-root": {
-                          borderRadius: "12px",
-                        },
-                      }}
-                    />
+                    <TextField {...params} label="Model" />
                   )}
                   ListboxProps={{
                     style: { maxHeight: 300 },
@@ -1875,15 +1554,7 @@ const LocationTrackPage = () => {
                     ))
                   }
                   renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Hãng SX"
-                      sx={{
-                        "& .MuiOutlinedInput-root": {
-                          borderRadius: "12px",
-                        },
-                      }}
-                    />
+                    <TextField {...params} label="Hãng SX" />
                   )}
                   ListboxProps={{
                     style: { maxHeight: 300 },
@@ -1911,15 +1582,7 @@ const LocationTrackPage = () => {
                     ))
                   }
                   renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Nhà cung cấp"
-                      sx={{
-                        "& .MuiOutlinedInput-root": {
-                          borderRadius: "12px",
-                        },
-                      }}
-                    />
+                    <TextField {...params} label="Nhà cung cấp" />
                   )}
                   ListboxProps={{
                     style: { maxHeight: 300 },
@@ -1948,15 +1611,7 @@ const LocationTrackPage = () => {
                       ))
                     }
                     renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        label="Vị trí (trong ĐV)"
-                        sx={{
-                          "& .MuiOutlinedInput-root": {
-                            borderRadius: "12px",
-                          },
-                        }}
-                      />
+                      <TextField {...params} label="Vị trí (trong ĐV)" />
                     )}
                     ListboxProps={{
                       style: { maxHeight: 300 },
@@ -1980,24 +1635,23 @@ const LocationTrackPage = () => {
                     alignItems: "center",
                     justifyContent: "space-between",
                     px: 1.5,
-                    borderRadius: "12px",
+                    borderRadius: `${radii.md}px`,
                     border: "1px solid",
-                    borderColor: "rgba(0, 0, 0, 0.23)",
+                    borderColor: alpha(colors.black, 0.23),
                     backgroundColor: "transparent",
                     cursor: "pointer",
                     userSelect: "none",
                     boxSizing: "border-box",
                     transition: "all 0.2s ease-in-out",
                     "&:hover": {
-                      borderColor: "rgba(0, 0, 0, 0.87)",
+                      borderColor: alpha(colors.black, 0.87),
                     },
                   }}
                 >
                   <Typography
                     variant="body2"
                     sx={{
-                      fontSize: "1rem",
-                      fontWeight: 500,
+                      fontSize: fontSizes.lead,
                       color: "text.secondary",
                       whiteSpace: "nowrap",
                       overflow: "hidden",
@@ -2038,17 +1692,17 @@ const LocationTrackPage = () => {
             <TableContainer
               ref={tableCardRef}
               component={Paper}
-              elevation={1}
+              variant="outlined"
               sx={{
-                borderRadius: "12px",
-                border: "1px solid rgba(0, 0, 0, 0.05)",
+                borderRadius: `${radii.md}px`,
+                border: borders.subtle,
                 mb: 2,
               }}
             >
               <Table size="small">
                 <TableHead>
                   <TableRow
-                    sx={{ backgroundColor: "rgba(102, 126, 234, 0.05)" }}
+                    sx={{ backgroundColor: alpha(colors.brand.main, 0.05) }}
                   >
                     {/* <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
                       Mã máy
@@ -2145,7 +1799,7 @@ const LocationTrackPage = () => {
                               background: statusInfo.bg,
                               color: statusInfo.color,
                               fontWeight: 600,
-                              borderRadius: "8px",
+                              borderRadius: `${radii.sm}px`,
                             }}
                           />
                         </TableCell>
@@ -2158,7 +1812,7 @@ const LocationTrackPage = () => {
                                 background: borrowStatusInfo.bg,
                                 color: borrowStatusInfo.color,
                                 fontWeight: 600,
-                                borderRadius: "8px",
+                                borderRadius: `${radii.sm}px`,
                               }}
                             />
                           ) : (
@@ -2182,7 +1836,7 @@ const LocationTrackPage = () => {
                   color="primary"
                   sx={{
                     "& .MuiPaginationItem-root": {
-                      borderRadius: "8px",
+                      borderRadius: `${radii.sm}px`,
                     },
                   }}
                 />
@@ -2199,52 +1853,17 @@ const LocationTrackPage = () => {
       <NavigationBar />
       <Container maxWidth="xl" sx={{ py: 4 }}>
         {/* Header */}
-        <Box sx={{ mb: 4 }}>
-          <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
-            <Avatar
-              sx={{
-                width: 60,
-                height: 60,
-                background: "linear-gradient(45deg, #667eea, #764ba2)",
-              }}
-            >
-              <LocationOn sx={{ fontSize: 30 }} />
-            </Avatar>
-            <Box>
-              <Typography
-                variant={isMobile ? "h4" : "h3"}
-                component="h1"
-                sx={{
-                  fontWeight: 700,
-                  background: "linear-gradient(45deg, #667eea, #764ba2)",
-                  backgroundClip: "text",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  textTransform: "uppercase",
-                }}
-              >
-                Theo dõi vị trí
-              </Typography>
-              <Typography
-                variant={isMobile ? "body1" : "h6"}
-                color="text.secondary"
-              >
-                Kiểm tra máy móc tại một vị trí và xem lịch sử điều chuyển
-              </Typography>
-            </Box>
-          </Stack>
-        </Box>
+        <PageHeader
+          icon={<LocationOn />}
+          title="Theo dõi vị trí"
+          subtitle="Kiểm tra máy móc tại một vị trí và xem lịch sử điều chuyển"
+          titleSx={{ textTransform: "uppercase" }}
+          sx={{ mb: 4 }}
+        />
 
         {/* Main Card */}
-        <Card
-          elevation={0}
-          sx={{
-            borderRadius: "20px",
-            border: "1px solid rgba(0, 0, 0, 0.05)",
-            p: { xs: 2, sm: 4 },
-          }}
-        >
-          <Grid container spacing={isMobile ? 2 : 4}>
+        <Card elevation={0} sx={{ ...preset.softCard, p: { xs: 2, sm: 4 } }}>
+          <Grid container spacing={{ xs: 2, sm: 4 }}>
             {/* HÀNG 1: CHỌN ĐƠN VỊ (NÚT) */}
             <Grid size={{ xs: 12 }}>
               <Box>
@@ -2255,14 +1874,20 @@ const LocationTrackPage = () => {
                   variant="outlined"
                   sx={{
                     p: 2,
-                    display: "flex",
-                    flexDirection: "row", // Xếp các nút theo hàng ngang
-                    flexWrap: "wrap", // Tự động xuống hàng nếu hết chỗ
+                    // ĐIỆN THOẠI (<600px): 1 cột, mọi nút rộng bằng nhau.
+                    //   Khung chỉ rộng ~262px mà nhãn dài nhất ("Kho nguyên phụ
+                    //   liệu (32)") cần ~226px, nên 2 cột là không thể. Xếp ngang
+                    //   ở bề rộng này cho ra 11 dòng lởm chởm, mỗi nút một độ dài.
+                    // TỪ 600px: xếp ngang tự xuống dòng - tận dụng bề rộng tốt hơn
+                    //   lưới cột đều (ở 1536px: 2 dòng thay vì 3).
+                    display: { xs: "grid", sm: "flex" },
+                    gridTemplateColumns: "1fr",
+                    flexDirection: "row",
+                    flexWrap: "wrap",
                     gap: 1.5, // Khoảng cách giữa các nút
-                    borderRadius: "12px",
                     minHeight: "80px", // Chiều cao tối thiểu để chứa loading
                     alignItems: "flex-start",
-                    border: "1px solid rgba(0, 0, 0, 0.1)",
+                    border: `1px solid ${alpha(colors.black, 0.1)}`,
                   }}
                 >
                   {loadingDepartments ? (
@@ -2290,9 +1915,12 @@ const LocationTrackPage = () => {
                         onClick={() => handleDepartmentChange(dept)}
                         startIcon={<Business />}
                         sx={{
-                          borderRadius: "8px",
+                          borderRadius: `${radii.sm}px`,
                           textTransform: "none", // Không viết hoa
                           fontWeight: 600,
+                          // Trên điện thoại nút chiếm cả dòng -> canh trái để icon
+                          // và chữ thẳng cột, thay vì mỗi dòng lệch một kiểu.
+                          justifyContent: { xs: "flex-start", sm: "center" },
                         }}
                       >
                         {dept.name_department} ({dept.machine_count || 0})
@@ -2312,16 +1940,15 @@ const LocationTrackPage = () => {
                 <Paper
                   variant="outlined"
                   sx={{
-                    borderRadius: "12px",
                     minHeight: 200, // Chiều cao tối thiểu
                     overflow: "auto",
                     p: 1, // Padding cho List
-                    border: "1px solid rgba(0, 0, 0, 0.1)",
+                    border: `1px solid ${alpha(colors.black, 0.1)}`,
                   }}
                 >
                   {!selectedDepartment ? (
                     // Hiển thị khi chưa chọn đơn vị
-                    <Alert severity="info" sx={{ m: 1, borderRadius: "8px" }}>
+                    <Alert severity="info" sx={{ m: 1, borderRadius: `${radii.sm}px` }}>
                       Vui lòng chọn đơn vị ở bước 1.
                     </Alert>
                   ) : loadingLocations ? (
@@ -2339,7 +1966,7 @@ const LocationTrackPage = () => {
                     // Hiển thị khi không có vị trí
                     <Alert
                       severity="warning"
-                      sx={{ m: 1, borderRadius: "8px" }}
+                      sx={{ m: 1, borderRadius: `${radii.sm}px` }}
                     >
                       Không có vị trí nào trong đơn vị này.
                     </Alert>
@@ -2356,13 +1983,13 @@ const LocationTrackPage = () => {
                             selected={isSelected}
                             onClick={() => handleLocationChange(loc)}
                             sx={{
-                              borderRadius: "8px",
+                              borderRadius: `${radii.sm}px`,
                               mb: 0.5,
                               // Ghi đè style khi được chọn
                               "&.Mui-selected": {
-                                backgroundColor: "rgba(102, 126, 234, 0.15)", // Nền tím nhạt
+                                backgroundColor: alpha(colors.brand.main, 0.15), // Nền tím nhạt
                                 "&:hover": {
-                                  backgroundColor: "rgba(102, 126, 234, 0.2)", // Đậm hơn khi hover
+                                  backgroundColor: alpha(colors.brand.main, 0.2), // Đậm hơn khi hover
                                 },
                               },
                             }}
@@ -2426,14 +2053,13 @@ const LocationTrackPage = () => {
                   onClick={handleRefresh}
                   sx={{
                     width: { xs: "100%", sm: "auto" },
-                    borderRadius: "12px",
-                    background: "linear-gradient(45deg, #667eea, #764ba2)",
+                    background: gradients.brand,
                     px: 3,
                     py: 1, // Giảm padding cho nút nhỏ hơn
                     transition: "all 0.3s ease",
                     // Style khi bị vô hiệu hóa
                     "&.Mui-disabled": {
-                      background: "#e0e0e0",
+                      background: colors.grey[300],
                     },
                   }}
                 >
@@ -2451,26 +2077,18 @@ const LocationTrackPage = () => {
           open={openHistoryDialog}
           onClose={handleCloseHistoryDialog}
           maxWidth="md"
-          fullScreen={isMobile}
+          fullScreen={dialogFullScreen}
           fullWidth
-          PaperProps={{
-            sx: {
-              borderRadius: isMobile ? 0 : "20px",
-            },
-          }}
+          PaperProps={{ sx: preset.dialogPaper(dialogFullScreen) }}
         >
           <DialogTitle
             sx={{
-              background: "linear-gradient(45deg, #2e7d32, #66bb6a)",
+              background: `linear-gradient(45deg, ${colors.green.main}, ${muiColors.green[400]})`,
               color: "white",
               fontWeight: 700,
             }}
           >
-            <Typography
-              component="span"
-              variant={isMobile ? "h6" : "h5"}
-              sx={{ fontWeight: 700 }}
-            >
+            <Typography component="span" variant="h5" sx={{ fontWeight: 700 }}>
               Lịch sử điều chuyển: {selectedMachine?.type_machine}{" "}
               {selectedMachine?.attribute_machine} -{" "}
               {selectedMachine?.model_machine}
@@ -2494,7 +2112,7 @@ const LocationTrackPage = () => {
                   <Table size="small">
                     <TableHead>
                       <TableRow
-                        sx={{ backgroundColor: "rgba(102, 126, 234, 0.05)" }}
+                        sx={{ backgroundColor: alpha(colors.brand.main, 0.05) }}
                       >
                         <TableCell
                           sx={{ fontWeight: 600, whiteSpace: "nowrap" }}
@@ -2563,11 +2181,7 @@ const LocationTrackPage = () => {
               },
             }}
           >
-            <Button
-              variant="outlined"
-              onClick={handleCloseHistoryDialog}
-              sx={{ borderRadius: "12px" }}
-            >
+            <Button variant="outlined" onClick={handleCloseHistoryDialog}>
               Đóng
             </Button>
           </DialogActions>

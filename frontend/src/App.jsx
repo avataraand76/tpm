@@ -6,7 +6,7 @@ import {
   Navigate,
   useLocation,
 } from "react-router-dom";
-import { ThemeProvider, createTheme } from "@mui/material/styles";
+import { ThemeProvider } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
 import { AuthProvider } from "./contexts/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -21,73 +21,8 @@ import AdminPage from "./pages/AdminPage";
 import MaintenanceSchedulePage from "./pages/MaintenanceSchedulePage";
 import ReportPage from "./pages/ReportPage";
 import { useAuth } from "./hooks/useAuth";
+import theme, { sx } from "./theme";
 import { Box, CircularProgress } from "@mui/material";
-
-// Create MUI theme
-const theme = createTheme({
-  palette: {
-    primary: {
-      main: "#1976d2",
-      light: "#42a5f5",
-      dark: "#1565c0",
-    },
-    secondary: {
-      main: "#dc004e",
-      light: "#f50057",
-      dark: "#c51162",
-    },
-    success: {
-      main: "#2e7d32",
-      light: "#4caf50",
-      dark: "#1b5e20",
-    },
-    background: {
-      default: "#f5f5f5",
-      paper: "#ffffff",
-    },
-  },
-  typography: {
-    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
-    h4: {
-      fontWeight: 600,
-    },
-    h5: {
-      fontWeight: 500,
-    },
-    h6: {
-      fontWeight: 500,
-    },
-  },
-  shape: {
-    borderRadius: 8,
-  },
-  components: {
-    MuiButton: {
-      styleOverrides: {
-        root: {
-          textTransform: "none",
-          borderRadius: 8,
-          fontWeight: 500,
-        },
-      },
-    },
-    MuiCard: {
-      styleOverrides: {
-        root: {
-          borderRadius: 12,
-          boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-        },
-      },
-    },
-    MuiPaper: {
-      styleOverrides: {
-        root: {
-          borderRadius: 12,
-        },
-      },
-    },
-  },
-});
 
 const AdminPCDRoute = ({ children }) => {
   const { user, permissions, isAuthenticated, loading } = useAuth();
@@ -107,14 +42,7 @@ const AdminPCDRoute = ({ children }) => {
   if (loading) {
     // Hiển thị loading trong khi AuthContext đang kiểm tra
     return (
-      <Box
-        sx={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          height: "100vh",
-        }}
-      >
+      <Box sx={sx.centerFull}>
         <CircularProgress />
       </Box>
     );
@@ -144,14 +72,7 @@ const AdminRoute = ({ children }) => {
 
   if (loading) {
     return (
-      <Box
-        sx={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          height: "100vh",
-        }}
-      >
+      <Box sx={sx.centerFull}>
         <CircularProgress />
       </Box>
     );

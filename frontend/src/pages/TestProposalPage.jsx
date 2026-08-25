@@ -8,13 +8,85 @@ import React, {
   useMemo,
 } from "react";
 import {
-  Container,
-  Typography,
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
+  Add,
+  Alert,
+  AlertTitle,
+  alpha,
+  ArrowBack,
+  ArrowForward,
+  Assessment,
+  Autocomplete,
+  Autorenew,
+  Avatar,
+  borders,
   Box,
+  buildStatusConfig,
+  Button,
   Card,
   CardContent,
-  Button,
-  Tabs,
+  Checkbox,
+  CheckCircleOutline,
+  Chip,
+  CircularProgress,
+  Close,
+  colors,
+  Container,
+  Delete,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
+  EditNote,
+  ErrorOutline,
+  ExpandMore,
+  FactCheck,
+  FileDownload,
+  FileUpload,
+  fontSizes,
+  FormControl,
+  FormControlLabel,
+  getTicketFlowColor,
+  getTicketFlowLabel,
+  gradients,
+  grayFallback,
+  Grid,
+  hexA,
+  IconButton,
+  InputAdornment,
+  InputLabel,
+  Link,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  MenuItem,
+  muiColors,
+  PageHeader,
+  Pagination,
+  Paper,
+  PlaylistAddCheck,
+  Popover,
+  QrCode2,
+  radii,
+  Receipt,
+  Refresh,
+  Route,
+  Save,
+  Search,
+  Select,
+  shadow,
+  shadowRgb,
+  shadows,
+  Snackbar,
+  Stack,
+  STATUS_LABELS_LOWER,
+  SwapHoriz,
+  Switch,
+  sx as preset,
   Tab,
   Table,
   TableBody,
@@ -22,70 +94,14 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
-  Chip,
-  IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
+  Tabs,
   TextField,
-  MenuItem,
-  Stack,
-  Avatar,
+  TICKET_STATUS,
   Tooltip,
-  Popover,
-  Alert,
-  Snackbar,
-  CircularProgress,
-  Pagination,
-  InputAdornment,
-  Grid,
-  AlertTitle,
-  Checkbox,
-  Autocomplete,
-  useTheme,
-  useMediaQuery,
-  Divider,
-  FormControl,
-  InputLabel,
-  Select,
-  Link,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-  Switch,
-  FormControlLabel,
-} from "@mui/material";
-import {
-  Add,
-  Autorenew,
-  Search,
-  FileDownload,
-  FileUpload,
-  Receipt,
-  Delete,
-  QrCode2,
+  Typography,
+  useResponsive,
   WifiTethering,
-  Route,
-  Refresh,
-  Close,
-  Save,
-  CheckCircleOutline,
-  ErrorOutline,
-  FactCheck,
-  PlaylistAddCheck,
-  Assessment,
-  ExpandMore,
-  EditNote,
-  ArrowForward,
-  ArrowBack,
-  SwapHoriz,
-} from "@mui/icons-material";
+} from "../ui";
 import * as XLSX from "xlsx-js-style";
 import ExcelJS from "exceljs";
 import NavigationBar from "../components/NavigationBar";
@@ -157,10 +173,10 @@ const InventoryLocationItem = ({ location, snapshotCount }) => {
     <Accordion
       defaultExpanded
       sx={{
-        borderRadius: "12px",
+        borderRadius: `${radii.md}px`,
         overflow: "hidden",
         mb: 2,
-        border: "1px solid #e0e0e0",
+        border: borders.light,
       }}
       elevation={0}
     >
@@ -186,10 +202,10 @@ const InventoryLocationItem = ({ location, snapshotCount }) => {
                 label={`Sổ sách: ${countSystem}`}
                 size="small"
                 sx={{
-                  bgcolor: "#e3f2fd",
-                  color: "#1565c0",
+                  bgcolor: colors.blue.wash,
+                  color: colors.blue.dark,
                   fontWeight: 600,
-                  border: "1px solid #bbdefb",
+                  border: `1px solid ${muiColors.blue[100]}`,
                 }}
               />
             </Tooltip>
@@ -199,10 +215,10 @@ const InventoryLocationItem = ({ location, snapshotCount }) => {
                 label={`Cùng ĐV: ${countSame}`}
                 size="small"
                 sx={{
-                  bgcolor: "#e8f5e9",
-                  color: "#2e7d32",
+                  bgcolor: colors.green.wash,
+                  color: colors.green.main,
                   fontWeight: 600,
-                  border: "1px solid #c8e6c9",
+                  border: `1px solid ${muiColors.green[100]}`,
                 }}
               />
             </Tooltip>
@@ -212,10 +228,10 @@ const InventoryLocationItem = ({ location, snapshotCount }) => {
                 label={`Khác ĐV: ${countDiff}`}
                 size="small"
                 sx={{
-                  bgcolor: "#fff3e0",
-                  color: "#ed6c02",
+                  bgcolor: colors.orange.wash,
+                  color: colors.orange.dark,
                   fontWeight: 600,
-                  border: "1px solid #ffe0b2",
+                  border: `1px solid ${muiColors.orange[100]}`,
                 }}
               />
             </Tooltip>
@@ -225,10 +241,10 @@ const InventoryLocationItem = ({ location, snapshotCount }) => {
                 label={`Chênh lệch: ${countGap}`}
                 size="small"
                 sx={{
-                  bgcolor: "#ffebee",
-                  color: "#d32f2f",
+                  bgcolor: colors.red.wash,
+                  color: colors.red.dark,
                   fontWeight: 600,
-                  border: "1px solid #ffcdd2",
+                  border: `1px solid ${muiColors.red[100]}`,
                 }}
               />
             </Tooltip>
@@ -242,10 +258,10 @@ const InventoryLocationItem = ({ location, snapshotCount }) => {
                     label={`Sai vị trí: ${countWrongLocation}`}
                     size="small"
                     sx={{
-                      bgcolor: "#fce4ec",
-                      color: "#c2185b",
+                      bgcolor: colors.red.wash,
+                      color: colors.purple.pink,
                       fontWeight: 700,
-                      border: "2px solid #f48fb1",
+                      border: `2px solid ${muiColors.pink[200]}`,
                     }}
                   />
                 </Tooltip>
@@ -256,10 +272,10 @@ const InventoryLocationItem = ({ location, snapshotCount }) => {
                       label={`Cùng ĐV: ${countWrongLocationSameDept}`}
                       size="small"
                       sx={{
-                        bgcolor: "#fff9c4",
-                        color: "#f57f17",
+                        bgcolor: muiColors.yellow[100],
+                        color: colors.orange.amber,
                         fontWeight: 600,
-                        border: "1px solid #fff59d",
+                        border: `1px solid ${muiColors.yellow[200]}`,
                       }}
                     />
                   </Tooltip>
@@ -271,10 +287,10 @@ const InventoryLocationItem = ({ location, snapshotCount }) => {
                       label={`Khác ĐV: ${countWrongLocationDiffDept}`}
                       size="small"
                       sx={{
-                        bgcolor: "#ffccbc",
-                        color: "#bf360c",
+                        bgcolor: muiColors.deepOrange[100],
+                        color: colors.orange.burnt,
                         fontWeight: 600,
-                        border: "1px solid #ff8a65",
+                        border: `1px solid ${muiColors.deepOrange[300]}`,
                       }}
                     />
                   </Tooltip>
@@ -285,7 +301,7 @@ const InventoryLocationItem = ({ location, snapshotCount }) => {
         </Stack>
       </AccordionSummary>
 
-      <AccordionDetails sx={{ bgcolor: "#fafafa", p: 2 }}>
+      <AccordionDetails sx={{ bgcolor: colors.grey[50], p: 2 }}>
         {/* Bộ lọc */}
         <Stack spacing={1} sx={{ mb: 2 }}>
           {/* Dòng 1: Lọc theo đơn vị */}
@@ -295,14 +311,14 @@ const InventoryLocationItem = ({ location, snapshotCount }) => {
               variant={filter === "all" ? "contained" : "outlined"}
               onClick={() => setFilter("all")}
               sx={{
-                borderRadius: "8px",
+                borderRadius: `${radii.sm}px`,
                 textTransform: "none",
-                borderColor: filter === "all" ? "#1976d2" : "#e0e0e0",
-                bgcolor: filter === "all" ? "#1976d2" : "transparent",
-                color: filter === "all" ? "#fff" : "#666",
+                borderColor: filter === "all" ? colors.blue.main : colors.grey[300],
+                bgcolor: filter === "all" ? colors.blue.main : "transparent",
+                color: filter === "all" ? colors.white : colors.grey[700],
                 "&:hover": {
-                  bgcolor: filter === "all" ? "#1565c0" : "rgba(0, 0, 0, 0.04)",
-                  borderColor: filter === "all" ? "#1565c0" : "#bdbdbd",
+                  bgcolor: filter === "all" ? colors.blue.dark : alpha(colors.black, 0.04),
+                  borderColor: filter === "all" ? colors.blue.dark : colors.grey[400],
                 },
               }}
             >
@@ -313,15 +329,15 @@ const InventoryLocationItem = ({ location, snapshotCount }) => {
               variant={filter === "same" ? "contained" : "outlined"}
               onClick={() => setFilter("same")}
               sx={{
-                borderRadius: "8px",
+                borderRadius: `${radii.sm}px`,
                 textTransform: "none",
-                borderColor: filter === "same" ? "#2e7d32" : "#c8e6c9",
-                bgcolor: filter === "same" ? "#2e7d32" : "transparent",
-                color: filter === "same" ? "#fff" : "#2e7d32",
+                borderColor: filter === "same" ? colors.green.main : muiColors.green[100],
+                bgcolor: filter === "same" ? colors.green.main : "transparent",
+                color: filter === "same" ? colors.white : colors.green.main,
                 "&:hover": {
                   bgcolor:
-                    filter === "same" ? "#1b5e20" : "rgba(46, 125, 50, 0.08)",
-                  borderColor: filter === "same" ? "#1b5e20" : "#2e7d32",
+                    filter === "same" ? colors.green.dark : alpha(colors.green.main, 0.08),
+                  borderColor: filter === "same" ? colors.green.dark : colors.green.main,
                 },
               }}
             >
@@ -332,15 +348,15 @@ const InventoryLocationItem = ({ location, snapshotCount }) => {
               variant={filter === "diff" ? "contained" : "outlined"}
               onClick={() => setFilter("diff")}
               sx={{
-                borderRadius: "8px",
+                borderRadius: `${radii.sm}px`,
                 textTransform: "none",
-                borderColor: filter === "diff" ? "#ed6c02" : "#ffe0b2",
-                bgcolor: filter === "diff" ? "#ed6c02" : "transparent",
-                color: filter === "diff" ? "#fff" : "#ed6c02",
+                borderColor: filter === "diff" ? colors.orange.dark : muiColors.orange[100],
+                bgcolor: filter === "diff" ? colors.orange.dark : "transparent",
+                color: filter === "diff" ? colors.white : colors.orange.dark,
                 "&:hover": {
                   bgcolor:
-                    filter === "diff" ? "#e65100" : "rgba(237, 108, 2, 0.08)",
-                  borderColor: filter === "diff" ? "#e65100" : "#ed6c02",
+                    filter === "diff" ? colors.orange.deep : alpha(colors.orange.dark, 0.08),
+                  borderColor: filter === "diff" ? colors.orange.deep : colors.orange.dark,
                 },
               }}
             >
@@ -356,21 +372,21 @@ const InventoryLocationItem = ({ location, snapshotCount }) => {
                 variant={filter === "wrong_location" ? "contained" : "outlined"}
                 onClick={() => setFilter("wrong_location")}
                 sx={{
-                  borderRadius: "8px",
+                  borderRadius: `${radii.sm}px`,
                   textTransform: "none",
                   borderColor:
-                    filter === "wrong_location" ? "#c2185b" : "#f48fb1",
+                    filter === "wrong_location" ? colors.purple.pink : muiColors.pink[200],
                   bgcolor:
-                    filter === "wrong_location" ? "#c2185b" : "transparent",
-                  color: filter === "wrong_location" ? "#fff" : "#c2185b",
+                    filter === "wrong_location" ? colors.purple.pink : "transparent",
+                  color: filter === "wrong_location" ? colors.white : colors.purple.pink,
                   fontWeight: 700,
                   "&:hover": {
                     bgcolor:
                       filter === "wrong_location"
-                        ? "#880e4f"
-                        : "rgba(194, 24, 91, 0.08)",
+                        ? muiColors.pink[900]
+                        : alpha(colors.purple.pink, 0.08),
                     borderColor:
-                      filter === "wrong_location" ? "#880e4f" : "#c2185b",
+                      filter === "wrong_location" ? muiColors.pink[900] : colors.purple.pink,
                   },
                 }}
               >
@@ -381,20 +397,20 @@ const InventoryLocationItem = ({ location, snapshotCount }) => {
                   size="small"
                   variant={filter === "wrong_same" ? "contained" : "outlined"}
                   sx={{
-                    borderRadius: "8px",
+                    borderRadius: `${radii.sm}px`,
                     textTransform: "none",
                     borderColor:
-                      filter === "wrong_same" ? "#f57f17" : "#fff59d",
-                    color: filter === "wrong_same" ? "#fff" : "#f57f17",
+                      filter === "wrong_same" ? colors.orange.amber : muiColors.yellow[200],
+                    color: filter === "wrong_same" ? colors.white : colors.orange.amber,
                     bgcolor:
-                      filter === "wrong_same" ? "#f57f17" : "transparent",
+                      filter === "wrong_same" ? colors.orange.amber : "transparent",
                     "&:hover": {
                       bgcolor:
                         filter === "wrong_same"
-                          ? "#e65100"
-                          : "rgba(245, 127, 23, 0.08)",
+                          ? colors.orange.deep
+                          : alpha(colors.orange.amber, 0.08),
                       borderColor:
-                        filter === "wrong_same" ? "#e65100" : "#f57f17",
+                        filter === "wrong_same" ? colors.orange.deep : colors.orange.amber,
                     },
                   }}
                   onClick={() => setFilter("wrong_same")}
@@ -407,20 +423,20 @@ const InventoryLocationItem = ({ location, snapshotCount }) => {
                   size="small"
                   variant={filter === "wrong_diff" ? "contained" : "outlined"}
                   sx={{
-                    borderRadius: "8px",
+                    borderRadius: `${radii.sm}px`,
                     textTransform: "none",
                     borderColor:
-                      filter === "wrong_diff" ? "#bf360c" : "#ff8a65",
-                    color: filter === "wrong_diff" ? "#fff" : "#bf360c",
+                      filter === "wrong_diff" ? colors.orange.burnt : muiColors.deepOrange[300],
+                    color: filter === "wrong_diff" ? colors.white : colors.orange.burnt,
                     bgcolor:
-                      filter === "wrong_diff" ? "#bf360c" : "transparent",
+                      filter === "wrong_diff" ? colors.orange.burnt : "transparent",
                     "&:hover": {
                       bgcolor:
                         filter === "wrong_diff"
-                          ? "#870000"
-                          : "rgba(191, 54, 12, 0.08)",
+                          ? muiColors.red[900]
+                          : alpha(colors.orange.burnt, 0.08),
                       borderColor:
-                        filter === "wrong_diff" ? "#870000" : "#bf360c",
+                        filter === "wrong_diff" ? muiColors.red[900] : colors.orange.burnt,
                     },
                   }}
                   onClick={() => setFilter("wrong_diff")}
@@ -436,7 +452,7 @@ const InventoryLocationItem = ({ location, snapshotCount }) => {
         <TableContainer
           component={Paper}
           elevation={0}
-          sx={{ border: "1px solid #e0e0e0", maxHeight: 300 }}
+          sx={{ border: borders.light, maxHeight: 300 }}
         >
           <Table size="small" stickyHeader>
             <TableHead>
@@ -555,9 +571,16 @@ const parseDecimalValue = (value) => {
 };
 
 
+// Bảng trạng thái dựng từ nguồn chung theme/statusTokens.js.
+// Trang này dùng nhãn "Đã trả (máy ...)" viết thường; ba trạng thái phiếu
+// (Chờ xử lý / Đã duyệt / Đã hủy) gộp thêm vào cuối.
+const STATUS_CONFIG = {
+  ...buildStatusConfig(STATUS_LABELS_LOWER),
+  ...TICKET_STATUS,
+};
+
 const TestProposalPage = () => {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const { isMobile, dialogFullScreen } = useResponsive();
   const { user, permissions } = useAuth();
   const isAdmin = permissions.includes("admin");
   const canEdit = permissions.includes("edit");
@@ -790,59 +813,12 @@ const TestProposalPage = () => {
   const [batchScanPreSelectedLocation, setBatchScanPreSelectedLocation] =
     useState(null);
 
-  // Config statuses
-  const STATUS_CONFIG = {
-    available: { bg: "#2e7d3222", color: "#2e7d32", label: "Có thể sử dụng" },
-    in_use: { bg: "#667eea22", color: "#667eea", label: "Đang sử dụng" },
-    maintenance: { bg: "#ff980022", color: "#ff9800", label: "Bảo trì" },
-    broken: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Máy hư" },
-    rented: { bg: "#673ab722", color: "#673ab7", label: "Máy thuê" },
-    rented_return: {
-      bg: "#673ab722",
-      color: "#673ab7",
-      label: "Đã trả (máy thuê)",
-    },
-    borrowed: { bg: "#03a9f422", color: "#03a9f4", label: "Máy mượn" },
-    borrowed_return: {
-      bg: "#03a9f422",
-      color: "#03a9f4",
-      label: "Đã trả (máy mượn)",
-    },
-    borrowed_out: { bg: "#00bcd422", color: "#00bcd4", label: "Cho mượn" },
-    liquidation: { bg: "#f4433622", color: "#f44336", label: "Thanh lý" },
-    pending_liquidation: {
-      bg: "#ff572222",
-      color: "#ff5722",
-      label: "Chờ thanh lý",
-    },
-    disabled: { bg: "#9e9e9e22", color: "#9e9e9e", label: "Chưa sử dụng" },
-    pending: { bg: "#ff980022", color: "#ff9800", label: "Chờ xử lý" },
-    completed: { bg: "#2e7d3222", color: "#2e7d32", label: "Đã duyệt" },
-    cancelled: { bg: "#f4433622", color: "#f44336", label: "Đã hủy" },
-  };
-
-  // Common style for disabled/view fields
-  const DISABLED_VIEW_SX = {
-    "& .MuiInputBase-root.Mui-disabled": {
-      backgroundColor: "#fffbe5",
-      "& fieldset": { borderColor: "#f44336 !important" },
-      "& .MuiInputBase-input": {
-        color: "#f44336",
-        WebkitTextFillColor: "#f44336 !important",
-        fontWeight: 600,
-      },
-      "& .MuiFormLabel-root": { color: "#f44336 !important" },
-    },
-    "& .MuiOutlinedInput-root.Mui-disabled": { backgroundColor: "#fffbe5" },
-  };
+  // Ô nhập tô sáng (nền vàng, chữ đỏ). Định nghĩa ở theme/presets.js.
+  const DISABLED_VIEW_SX = preset.fieldHighlight;
 
   // Helper functions
   const getStatusInfo = (statusKey) =>
-    STATUS_CONFIG[statusKey] || {
-      bg: "#9e9e9e22",
-      color: "#9e9e9e",
-      label: statusKey,
-    };
+    STATUS_CONFIG[statusKey] || grayFallback(statusKey);
 
   const areAllMissingMachinesConfirmed = useCallback(() => {
     const details = formData.inventoryDetails || [];
@@ -4097,24 +4073,9 @@ const TestProposalPage = () => {
   };
 
   // --- Render Helpers ---
-  const getStatusColor = (status) =>
-    ({
-      draft: "info",
-      pending: "warning",
-      pending_confirmation: "warning",
-      pending_approval: "warning",
-      completed: "success",
-      cancelled: "error",
-    })[status] || "default";
-  const getStatusLabel = (status) =>
-    ({
-      draft: "Nháp",
-      pending: "Chờ duyệt",
-      pending_confirmation: "Chờ xác nhận",
-      pending_approval: "Chờ duyệt",
-      completed: "Đã duyệt",
-      cancelled: "Đã hủy",
-    })[status] || status;
+  // Màu Chip + nhãn cho luồng duyệt phiếu - dùng chung với ReportPage
+  const getStatusColor = getTicketFlowColor;
+  const getStatusLabel = getTicketFlowLabel;
 
   const getExportGateConfirmChip = (ticket) => {
     if (!ticket || ticket.status !== "completed") return null;
@@ -4222,23 +4183,23 @@ const TestProposalPage = () => {
 
                   const isSkipped = statusLower.includes("đồng cấp");
 
-                  let statusColor = "#ff9800";
-                  let bgColor = "#fff3e0";
-                  let borderColor = "#ffcc80";
+                  let statusColor = colors.orange.main;
+                  let bgColor = colors.orange.wash;
+                  let borderColor = muiColors.orange[200];
                   let opacity = 1;
 
                   if (isApproved) {
-                    statusColor = "#2e7d32";
-                    bgColor = "#e8f5e9";
-                    borderColor = "#a5d6a7";
+                    statusColor = colors.green.main;
+                    bgColor = colors.green.wash;
+                    borderColor = colors.green.pale;
                   } else if (isRejected) {
-                    statusColor = "#d32f2f";
-                    bgColor = "#ffebee";
-                    borderColor = "#ef9a9a";
+                    statusColor = colors.red.dark;
+                    bgColor = colors.red.wash;
+                    borderColor = colors.red.pale;
                   } else if (isSkipped) {
-                    statusColor = "#9e9e9e";
-                    bgColor = "#f5f5f5";
-                    borderColor = "#e0e0e0";
+                    statusColor = colors.grey[500];
+                    bgColor = colors.grey[100];
+                    borderColor = colors.grey[300];
                     opacity = 0.7;
                   }
 
@@ -4258,10 +4219,10 @@ const TestProposalPage = () => {
                           gap: 1.5,
                           px: 2,
                           py: 0.5,
-                          borderRadius: "20px",
+                          borderRadius: `${radii.lg}px`,
                           backgroundColor: bgColor,
                           border: `1px solid ${
-                            step.isFinalFlow ? "#FFD700" : borderColor
+                            step.isFinalFlow ? muiColors.yellow["A700"] : borderColor
                           }`,
                           boxShadow: step.isFinalFlow
                             ? "0 0 5px rgba(255, 215, 0, 0.5)"
@@ -4273,9 +4234,9 @@ const TestProposalPage = () => {
                           sx={{
                             width: 22,
                             height: 22,
-                            fontSize: "0.7rem",
+                            fontSize: fontSizes.label,
                             bgcolor: statusColor,
-                            color: "#fff",
+                            color: colors.white,
                             fontWeight: "bold",
                           }}
                         >
@@ -4293,7 +4254,7 @@ const TestProposalPage = () => {
                               variant="body2"
                               sx={{
                                 fontWeight: 600,
-                                fontSize: "0.85rem",
+                                fontSize: fontSizes.body,
                                 color: isSkipped
                                   ? "text.secondary"
                                   : "text.primary",
@@ -4308,10 +4269,10 @@ const TestProposalPage = () => {
                                 variant="outlined"
                                 sx={{
                                   height: 16,
-                                  fontSize: "0.8rem",
-                                  borderColor: "#9e9e9e",
-                                  color: "#fd3333",
-                                  backgroundColor: "#ffffff80",
+                                  fontSize: fontSizes.small,
+                                  borderColor: colors.grey[500],
+                                  color: colors.red.main,
+                                  backgroundColor: hexA(colors.white, "80"),
                                 }}
                               />
                             )}
@@ -4348,7 +4309,7 @@ const TestProposalPage = () => {
                     mx: 0.5,
                     width: 20,
                     height: 2,
-                    bgcolor: "#bdbdbd",
+                    bgcolor: colors.grey[400],
                     flexShrink: 0,
                   }}
                 />
@@ -4366,7 +4327,7 @@ const TestProposalPage = () => {
                   mx: 0.5,
                   width: 20,
                   height: 2,
-                  bgcolor: "#ef9a9a",
+                  bgcolor: colors.red.pale,
                   flexShrink: 0,
                 }}
               />
@@ -4378,9 +4339,9 @@ const TestProposalPage = () => {
                 gap: 1.5,
                 px: 2,
                 py: 0.5,
-                borderRadius: "20px",
-                backgroundColor: "#ffebee",
-                border: "1.5px dashed #ef5350",
+                borderRadius: `${radii.lg}px`,
+                backgroundColor: colors.red.wash,
+                border: `1.5px dashed ${muiColors.red[400]}`,
                 minWidth: "200px",
               }}
             >
@@ -4388,9 +4349,9 @@ const TestProposalPage = () => {
                 sx={{
                   width: 22,
                   height: 22,
-                  fontSize: "0.75rem",
-                  bgcolor: "#d32f2f",
-                  color: "#fff",
+                  fontSize: fontSizes.small,
+                  bgcolor: colors.red.dark,
+                  color: colors.white,
                   fontWeight: "bold",
                 }}
               >
@@ -4401,8 +4362,8 @@ const TestProposalPage = () => {
                   variant="body2"
                   sx={{
                     fontWeight: 700,
-                    fontSize: "0.85rem",
-                    color: "#b71c1c",
+                    fontSize: fontSizes.body,
+                    color: colors.red.deepest,
                   }}
                 >
                   {systemStep.ten_nv}
@@ -4412,7 +4373,7 @@ const TestProposalPage = () => {
                   sx={{
                     display: "block",
                     lineHeight: 1,
-                    color: "#d32f2f",
+                    color: colors.red.dark,
                     fontStyle: "italic",
                     fontWeight: "bold",
                   }}
@@ -4431,32 +4392,32 @@ const TestProposalPage = () => {
     if (tab === 0) {
       switch (type) {
         case "purchased":
-          return { bgcolor: "#1976d211", color: "#1976d2" };
+          return { bgcolor: hexA(colors.blue.main, "11"), color: colors.blue.main };
         case "maintenance_return":
-          return { bgcolor: "#ff980011", color: "#ff9800" };
+          return { bgcolor: hexA(colors.orange.main, "11"), color: colors.orange.main };
         case "rented":
-          return { bgcolor: "#673ab711", color: "#673ab7" };
+          return { bgcolor: hexA(colors.purple.main, "11"), color: colors.purple.main };
         case "borrowed":
-          return { bgcolor: "#03a9f411", color: "#03a9f4" };
+          return { bgcolor: hexA(colors.blue.sky, "11"), color: colors.blue.sky };
         case "borrowed_out_return":
-          return { bgcolor: "#00bcd411", color: "#00bcd4" };
+          return { bgcolor: hexA(colors.cyan.main, "11"), color: colors.cyan.main };
       }
     }
     if (tab === 1) {
       switch (type) {
         case "liquidation":
-          return { bgcolor: "#f4433611", color: "#f44336" };
+          return { bgcolor: hexA(colors.red.main, "11"), color: colors.red.main };
         case "maintenance":
-          return { bgcolor: "#ff980011", color: "#ff9800" };
+          return { bgcolor: hexA(colors.orange.main, "11"), color: colors.orange.main };
         case "borrowed_out":
-          return { bgcolor: "#00bcd411", color: "#00bcd4" };
+          return { bgcolor: hexA(colors.cyan.main, "11"), color: colors.cyan.main };
         case "rented_return":
-          return { bgcolor: "#673ab711", color: "#673ab7" };
+          return { bgcolor: hexA(colors.purple.main, "11"), color: colors.purple.main };
         case "borrowed_return":
-          return { bgcolor: "#03a9f411", color: "#03a9f4" };
+          return { bgcolor: hexA(colors.blue.sky, "11"), color: colors.blue.sky };
       }
     }
-    return { bgcolor: "rgba(102, 126, 234, 0.1)", color: "#667eea" };
+    return { bgcolor: alpha(colors.brand.main, 0.1), color: colors.brand.main };
   };
 
   // Render Card Content for Tabs 0, 1, 2, 3
@@ -4489,9 +4450,9 @@ const TestProposalPage = () => {
           sx={{
             p: 6,
             textAlign: "center",
-            borderRadius: "16px",
-            bgcolor: "#f8f9fa",
-            border: "1px solid rgba(0, 0, 0, 0.06)",
+            borderRadius: `${radii.lg}px`,
+            bgcolor: colors.grey[50],
+            border: `1px solid ${alpha(colors.black, 0.06)}`,
           }}
         >
           <Typography variant="body1" color="text.secondary">
@@ -4510,15 +4471,15 @@ const TestProposalPage = () => {
             onClick={() => handleOpenDialog("view", "inventory", item)}
             sx={{
               p: 2.5,
-              borderRadius: "16px",
-              border: "1px solid rgba(0, 0, 0, 0.08)",
-              bgcolor: "#ffffff",
+              borderRadius: `${radii.lg}px`,
+              border: borders.subtle2,
+              bgcolor: colors.white,
               transition: "all 0.2s ease-in-out",
               cursor: "pointer",
               "&:hover": {
                 transform: "translateY(-2px)",
-                boxShadow: "0 8px 24px rgba(102, 126, 234, 0.12)",
-                borderColor: "#667eea",
+                boxShadow: shadow(8, 24, shadowRgb.brand, 0.12),
+                borderColor: colors.brand.main,
               },
             }}
           >
@@ -4545,10 +4506,10 @@ const TestProposalPage = () => {
                   label="Kiểm kê định kỳ"
                   size="small"
                   sx={{
-                    bgcolor: "rgba(102, 126, 234, 0.1)",
-                    color: "#667eea",
+                    bgcolor: alpha(colors.brand.main, 0.1),
+                    color: colors.brand.main,
                     fontWeight: 700,
-                    borderRadius: "8px",
+                    borderRadius: `${radii.sm}px`,
                   }}
                 />
                 <Typography
@@ -4589,7 +4550,7 @@ const TestProposalPage = () => {
                     sx={{
                       width: 140,
                       height: 8,
-                      bgcolor: "#e0e0e0",
+                      bgcolor: colors.grey[300],
                       borderRadius: 2,
                       overflow: "hidden",
                     }}
@@ -4604,7 +4565,7 @@ const TestProposalPage = () => {
                             : 0
                         }%`,
                         height: "100%",
-                        bgcolor: "#2e7d32",
+                        bgcolor: colors.green.main,
                         transition: "width 0.3s ease",
                       }}
                     />
@@ -4636,7 +4597,7 @@ const TestProposalPage = () => {
             </Grid>
 
             {/* Footer: Approval Flow */}
-            <Divider sx={{ my: 1.5, borderColor: "rgba(0, 0, 0, 0.06)" }} />
+            <Divider sx={{ my: 1.5, borderColor: alpha(colors.black, 0.06) }} />
             <Box sx={{ pt: 0.5 }}>{renderDetailedFlow(item.approval_flow)}</Box>
           </Paper>
         );
@@ -4674,15 +4635,15 @@ const TestProposalPage = () => {
           }
           sx={{
             p: 2.5,
-            borderRadius: "16px",
-            border: "1px solid rgba(0, 0, 0, 0.08)",
-            bgcolor: "#ffffff",
+            borderRadius: `${radii.lg}px`,
+            border: borders.subtle2,
+            bgcolor: colors.white,
             transition: "all 0.2s ease-in-out",
             cursor: "pointer",
             "&:hover": {
               transform: "translateY(-2px)",
-              boxShadow: "0 8px 24px rgba(102, 126, 234, 0.12)",
-              borderColor: "#667eea",
+              boxShadow: shadow(8, 24, shadowRgb.brand, 0.12),
+              borderColor: colors.brand.main,
             },
           }}
         >
@@ -4717,7 +4678,7 @@ const TestProposalPage = () => {
                 sx={{
                   ...getTypeChipColors(type, activeTab),
                   fontWeight: 700,
-                  borderRadius: "8px",
+                  borderRadius: `${radii.sm}px`,
                 }}
               />
               <Typography
@@ -4771,7 +4732,7 @@ const TestProposalPage = () => {
               </Typography>
               <Typography
                 variant="body1"
-                sx={{ fontWeight: 600, color: "#2c3e50" }}
+                sx={{ fontWeight: 600, color: muiColors.blueGrey[800] }}
               >
                 {item.to_location_name || "-"}
               </Typography>
@@ -4786,7 +4747,7 @@ const TestProposalPage = () => {
               </Typography>
               <Typography
                 variant="body1"
-                sx={{ fontWeight: 700, color: "#667eea" }}
+                sx={{ fontWeight: 700, color: colors.brand.main }}
               >
                 {item.quantity_display ??
                   item.quantity ??
@@ -4815,7 +4776,7 @@ const TestProposalPage = () => {
           </Grid>
 
           {/* Footer: Approval Flow */}
-          <Divider sx={{ my: 1.5, borderColor: "rgba(0, 0, 0, 0.06)" }} />
+          <Divider sx={{ my: 1.5, borderColor: alpha(colors.black, 0.06) }} />
           <Box sx={{ pt: 0.5 }}>{renderDetailedFlow(item.approval_flow)}</Box>
         </Paper>
       );
@@ -4827,46 +4788,18 @@ const TestProposalPage = () => {
       <NavigationBar />
       <Container maxWidth="xl" sx={{ py: 4 }}>
         {/* Header */}
-        <Box sx={{ mb: 4 }}>
-          <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
-            <Avatar
-              sx={{
-                width: 60,
-                height: 60,
-                background: "linear-gradient(45deg, #667eea, #764ba2)",
-              }}
-            >
-              <Receipt sx={{ fontSize: 30 }} />
-            </Avatar>
-            <Box>
-              <Typography
-                variant={isMobile ? "h4" : "h3"}
-                component="h1"
-                sx={{
-                  fontWeight: 700,
-                  background: "linear-gradient(45deg, #667eea, #764ba2)",
-                  backgroundClip: "text",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  textTransform: "uppercase",
-                }}
-              >
-                Quản lý phiếu
-              </Typography>
-              <Typography
-                variant={isMobile ? "body1" : "h6"}
-                color="text.secondary"
-              >
-                Tạo và quản lý phiếu nhập xuất, điều chuyển máy móc
-              </Typography>
-            </Box>
-          </Stack>
-        </Box>
+        <PageHeader
+          icon={<Receipt />}
+          title="Quản lý phiếu"
+          subtitle="Tạo và quản lý phiếu nhập xuất, điều chuyển máy móc"
+          titleSx={{ textTransform: "uppercase" }}
+          sx={{ mb: 4 }}
+        />
 
         {/* Main Card */}
         <Card
           elevation={0}
-          sx={{ borderRadius: "20px", border: "1px solid rgba(0, 0, 0, 0.05)" }}
+          sx={preset.softCard}
         >
           <CardContent sx={{ p: 4 }}>
             {/* Tabs and Actions */}
@@ -4893,9 +4826,8 @@ const TestProposalPage = () => {
                         sx={{
                           minHeight: "80px",
                           py: 2,
-                          borderRadius: "12px",
                           fontWeight: 600,
-                          fontSize: "0.9rem",
+                          fontSize: fontSizes.body,
                           textTransform: "none",
                           display: "flex",
                           flexDirection: "column",
@@ -4909,19 +4841,19 @@ const TestProposalPage = () => {
                           ...(activeTab === 0
                             ? {
                                 background:
-                                  "linear-gradient(45deg, #667eea, #764ba2)",
+                                  gradients.brand,
                                 color: "white",
                                 "&:hover": {
                                   background:
-                                    "linear-gradient(45deg, #5568d3, #6a3f8f)",
+                                    `linear-gradient(45deg, ${colors.brand.hover}, ${colors.brand.altHover})`,
                                 },
                               }
                             : {
-                                borderColor: "#667eea",
-                                color: "#667eea",
+                                borderColor: colors.brand.main,
+                                color: colors.brand.main,
                                 "&:hover": {
-                                  borderColor: "#5568d3",
-                                  background: "rgba(102, 126, 234, 0.05)",
+                                  borderColor: colors.brand.hover,
+                                  background: alpha(colors.brand.main, 0.05),
                                 },
                               }),
                           transition: "all 0.3s ease",
@@ -4941,9 +4873,8 @@ const TestProposalPage = () => {
                         sx={{
                           minHeight: "80px",
                           py: 2,
-                          borderRadius: "12px",
                           fontWeight: 600,
-                          fontSize: "0.9rem",
+                          fontSize: fontSizes.body,
                           textTransform: "none",
                           display: "flex",
                           flexDirection: "column",
@@ -4957,19 +4888,19 @@ const TestProposalPage = () => {
                           ...(activeTab === 1
                             ? {
                                 background:
-                                  "linear-gradient(45deg, #667eea, #764ba2)",
+                                  gradients.brand,
                                 color: "white",
                                 "&:hover": {
                                   background:
-                                    "linear-gradient(45deg, #5568d3, #6a3f8f)",
+                                    `linear-gradient(45deg, ${colors.brand.hover}, ${colors.brand.altHover})`,
                                 },
                               }
                             : {
-                                borderColor: "#667eea",
-                                color: "#667eea",
+                                borderColor: colors.brand.main,
+                                color: colors.brand.main,
                                 "&:hover": {
-                                  borderColor: "#5568d3",
-                                  background: "rgba(102, 126, 234, 0.05)",
+                                  borderColor: colors.brand.hover,
+                                  background: alpha(colors.brand.main, 0.05),
                                 },
                               }),
                           transition: "all 0.3s ease",
@@ -4991,9 +4922,8 @@ const TestProposalPage = () => {
                         sx={{
                           minHeight: "80px",
                           py: 2,
-                          borderRadius: "12px",
                           fontWeight: 600,
-                          fontSize: "0.9rem",
+                          fontSize: fontSizes.body,
                           textTransform: "none",
                           display: "flex",
                           flexDirection: "column",
@@ -5007,19 +4937,19 @@ const TestProposalPage = () => {
                           ...(activeTab === 2
                             ? {
                                 background:
-                                  "linear-gradient(45deg, #667eea, #764ba2)",
+                                  gradients.brand,
                                 color: "white",
                                 "&:hover": {
                                   background:
-                                    "linear-gradient(45deg, #5568d3, #6a3f8f)",
+                                    `linear-gradient(45deg, ${colors.brand.hover}, ${colors.brand.altHover})`,
                                 },
                               }
                             : {
-                                borderColor: "#667eea",
-                                color: "#667eea",
+                                borderColor: colors.brand.main,
+                                color: colors.brand.main,
                                 "&:hover": {
-                                  borderColor: "#5568d3",
-                                  background: "rgba(102, 126, 234, 0.05)",
+                                  borderColor: colors.brand.hover,
+                                  background: alpha(colors.brand.main, 0.05),
                                 },
                               }),
                           transition: "all 0.3s ease",
@@ -5041,9 +4971,8 @@ const TestProposalPage = () => {
                         sx={{
                           minHeight: "80px",
                           py: 2,
-                          borderRadius: "12px",
                           fontWeight: 600,
-                          fontSize: "0.9rem",
+                          fontSize: fontSizes.body,
                           textTransform: "none",
                           display: "flex",
                           flexDirection: "column",
@@ -5057,19 +4986,19 @@ const TestProposalPage = () => {
                           ...(activeTab === 3
                             ? {
                                 background:
-                                  "linear-gradient(45deg, #667eea, #764ba2)",
+                                  gradients.brand,
                                 color: "white",
                                 "&:hover": {
                                   background:
-                                    "linear-gradient(45deg, #5568d3, #6a3f8f)",
+                                    `linear-gradient(45deg, ${colors.brand.hover}, ${colors.brand.altHover})`,
                                 },
                               }
                             : {
-                                borderColor: "#667eea",
-                                color: "#667eea",
+                                borderColor: colors.brand.main,
+                                color: colors.brand.main,
                                 "&:hover": {
-                                  borderColor: "#5568d3",
-                                  background: "rgba(102, 126, 234, 0.05)",
+                                  borderColor: colors.brand.hover,
+                                  background: alpha(colors.brand.main, 0.05),
                                 },
                               }),
                           transition: "all 0.3s ease",
@@ -5090,14 +5019,14 @@ const TestProposalPage = () => {
                     width: { xs: "100%", md: "auto" },
                     "& .MuiTab-root": {
                       fontWeight: 600,
-                      fontSize: "1rem",
+                      fontSize: fontSizes.lead,
                       minWidth: 140,
-                      borderRadius: "12px",
+                      borderRadius: `${radii.md}px`,
                       margin: "0 4px",
                       transition: "all 0.3s ease",
                       "&.Mui-selected": {
-                        color: "#667eea",
-                        background: "rgba(102, 126, 234, 0.1)",
+                        color: colors.brand.main,
+                        background: alpha(colors.brand.main, 0.1),
                       },
                     },
                     "& .MuiTabs-indicator": { display: "none" },
@@ -5147,13 +5076,12 @@ const TestProposalPage = () => {
                       startIcon={<Add />}
                       onClick={() => handleOpenDialog("create", "inventory")}
                       sx={{
-                        borderRadius: "12px",
-                        background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                        background: `linear-gradient(45deg, ${colors.green.main}, ${colors.green.light})`,
                         px: 4,
                         py: 1.5,
                         "&:hover": {
                           transform: "translateY(-2px)",
-                          boxShadow: "0 8px 25px rgba(46, 125, 50, 0.3)",
+                          boxShadow: shadows.greenLift,
                         },
                         transition: "all 0.3s ease",
                         width: { xs: "100%", sm: "auto" },
@@ -5170,13 +5098,12 @@ const TestProposalPage = () => {
                       fetchStatistics();
                     }}
                     sx={{
-                      borderRadius: "12px",
-                      background: "linear-gradient(45deg, #667eea, #764ba2)",
+                      background: gradients.brand,
                       px: 3,
                       py: 1.5,
                       "&:hover": {
                         transform: "translateY(-2px)",
-                        boxShadow: "0 8px 25px rgba(102, 126, 234, 0.3)",
+                        boxShadow: shadows.brandLift,
                       },
                       transition: "all 0.3s ease",
                       width: { xs: "100%", sm: "auto" },
@@ -5197,13 +5124,12 @@ const TestProposalPage = () => {
                       startIcon={<Add />}
                       onClick={() => handleOpenDialog("create", "internal")}
                       sx={{
-                        borderRadius: "12px",
-                        background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                        background: `linear-gradient(45deg, ${colors.green.main}, ${colors.green.light})`,
                         px: 4,
                         py: 1.5,
                         "&:hover": {
                           transform: "translateY(-2px)",
-                          boxShadow: "0 8px 25px rgba(46, 125, 50, 0.3)",
+                          boxShadow: shadows.greenLift,
                         },
                         transition: "all 0.3s ease",
                         width: { xs: "100%", sm: "auto" },
@@ -5221,13 +5147,12 @@ const TestProposalPage = () => {
                       fetchStatistics();
                     }}
                     sx={{
-                      borderRadius: "12px",
-                      background: "linear-gradient(45deg, #667eea, #764ba2)",
+                      background: gradients.brand,
                       px: 3,
                       py: 1.5,
                       "&:hover": {
                         transform: "translateY(-2px)",
-                        boxShadow: "0 8px 25px rgba(102, 126, 234, 0.3)",
+                        boxShadow: shadows.brandLift,
                       },
                       transition: "all 0.3s ease",
                       width: { xs: "100%", sm: "auto" },
@@ -5256,13 +5181,12 @@ const TestProposalPage = () => {
                         );
                       }}
                       sx={{
-                        borderRadius: "12px",
-                        background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                        background: `linear-gradient(45deg, ${colors.green.main}, ${colors.green.light})`,
                         px: 4,
                         py: 1.5,
                         "&:hover": {
                           transform: "translateY(-2px)",
-                          boxShadow: "0 8px 25px rgba(46, 125, 50, 0.3)",
+                          boxShadow: shadows.greenLift,
                         },
                         transition: "all 0.3s ease",
                         width: { xs: "100%", sm: "auto" },
@@ -5279,13 +5203,12 @@ const TestProposalPage = () => {
                       fetchStatistics();
                     }}
                     sx={{
-                      borderRadius: "12px",
-                      background: "linear-gradient(45deg, #667eea, #764ba2)",
+                      background: gradients.brand,
                       px: 3,
                       py: 1.5,
                       "&:hover": {
                         transform: "translateY(-2px)",
-                        boxShadow: "0 8px 25px rgba(102, 126, 234, 0.3)",
+                        boxShadow: shadows.brandLift,
                       },
                       transition: "all 0.3s ease",
                       width: { xs: "100%", sm: "auto" },
@@ -5304,117 +5227,99 @@ const TestProposalPage = () => {
                   <Box
                     sx={{
                       p: 2,
-                      borderRadius: "12px",
-                      bgcolor: "#f5f5f5",
-                      border: "1px solid #e0e0e0",
+                      borderRadius: `${radii.md}px`,
+                      bgcolor: colors.grey[100],
+                      border: borders.light,
                     }}
                   >
                     <Typography
                       variant="subtitle2"
-                      sx={{ fontWeight: 600, mb: 1.5, color: "#667eea" }}
+                      sx={{ fontWeight: 600, mb: 1.5, color: colors.brand.main }}
                     >
                       Thống kê phiếu nhập
                     </Typography>
                     {/* Hàng 1: Trạng thái */}
-                    <Grid container spacing={2} sx={{ mb: 2 }}>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Nháp: ${importStats.byStatus?.draft || 0}`}
-                          color="info"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Chờ duyệt: ${
-                            importStats.byStatus?.pending || 0
-                          }`}
-                          color="warning"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Đã duyệt: ${
-                            importStats.byStatus?.completed || 0
-                          }`}
-                          color="success"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Đã hủy: ${
-                            importStats.byStatus?.cancelled || 0
-                          }`}
-                          color="error"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                    </Grid>
+                    <Box sx={{ ...preset.chipRow, mb: 2 }}>
+                      <Chip
+                        label={`Nháp: ${importStats.byStatus?.draft || 0}`}
+                        color="info"
+                        sx={{ fontWeight: 600 }}
+                      />
+                      <Chip
+                        label={`Chờ duyệt: ${
+                          importStats.byStatus?.pending || 0
+                        }`}
+                        color="warning"
+                        sx={{ fontWeight: 600 }}
+                      />
+                      <Chip
+                        label={`Đã duyệt: ${
+                          importStats.byStatus?.completed || 0
+                        }`}
+                        color="success"
+                        sx={{ fontWeight: 600 }}
+                      />
+                      <Chip
+                        label={`Đã hủy: ${
+                          importStats.byStatus?.cancelled || 0
+                        }`}
+                        color="error"
+                        sx={{ fontWeight: 600 }}
+                      />
+                    </Box>
                     {/* Hàng 2: Loại phiếu */}
-                    <Grid container spacing={2}>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Nhập mua mới: ${
-                            importStats.byType?.purchased || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: "#1976d211",
-                            color: "#1976d2",
-                          }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Sau bảo trì: ${
-                            importStats.byType?.maintenance_return || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: "#ff980011",
-                            color: "#ff9800",
-                          }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Nhập thuê máy: ${
-                            importStats.byType?.rented || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: "#673ab711",
-                            color: "#673ab7",
-                          }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Nhập mượn máy: ${
-                            importStats.byType?.borrowed || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: "#03a9f411",
-                            color: "#03a9f4",
-                          }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Trả (máy cho mượn): ${
-                            importStats.byType?.borrowed_out_return || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: "#00bcd411",
-                            color: "#00bcd4",
-                          }}
-                        />
-                      </Grid>
-                    </Grid>
+                    <Box sx={preset.chipRow}>
+                      <Chip
+                        label={`Nhập mua mới: ${
+                          importStats.byType?.purchased || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.blue.main, "11"),
+                          color: colors.blue.main,
+                        }}
+                      />
+                      <Chip
+                        label={`Sau bảo trì: ${
+                          importStats.byType?.maintenance_return || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.orange.main, "11"),
+                          color: colors.orange.main,
+                        }}
+                      />
+                      <Chip
+                        label={`Nhập thuê máy: ${
+                          importStats.byType?.rented || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.purple.main, "11"),
+                          color: colors.purple.main,
+                        }}
+                      />
+                      <Chip
+                        label={`Nhập mượn máy: ${
+                          importStats.byType?.borrowed || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.blue.sky, "11"),
+                          color: colors.blue.sky,
+                        }}
+                      />
+                      <Chip
+                        label={`Trả (máy cho mượn): ${
+                          importStats.byType?.borrowed_out_return || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.cyan.main, "11"),
+                          color: colors.cyan.main,
+                        }}
+                      />
+                    </Box>
                   </Box>
                 )}
 
@@ -5422,110 +5327,94 @@ const TestProposalPage = () => {
                   <Box
                     sx={{
                       p: 2,
-                      borderRadius: "12px",
-                      bgcolor: "#f5f5f5",
-                      border: "1px solid #e0e0e0",
+                      borderRadius: `${radii.md}px`,
+                      bgcolor: colors.grey[100],
+                      border: borders.light,
                     }}
                   >
                     <Typography
                       variant="subtitle2"
-                      sx={{ fontWeight: 600, mb: 1.5, color: "#667eea" }}
+                      sx={{ fontWeight: 600, mb: 1.5, color: colors.brand.main }}
                     >
                       Thống kê phiếu xuất
                     </Typography>
                     {/* Hàng 1: Trạng thái */}
-                    <Grid container spacing={2} sx={{ mb: 2 }}>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Chờ duyệt: ${
-                            exportStats.byStatus?.pending || 0
-                          }`}
-                          color="warning"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Đã duyệt: ${
-                            exportStats.byStatus?.completed || 0
-                          }`}
-                          color="success"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Đã hủy: ${
-                            exportStats.byStatus?.cancelled || 0
-                          }`}
-                          color="error"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                    </Grid>
+                    <Box sx={{ ...preset.chipRow, mb: 2 }}>
+                      <Chip
+                        label={`Chờ duyệt: ${
+                          exportStats.byStatus?.pending || 0
+                        }`}
+                        color="warning"
+                        sx={{ fontWeight: 600 }}
+                      />
+                      <Chip
+                        label={`Đã duyệt: ${
+                          exportStats.byStatus?.completed || 0
+                        }`}
+                        color="success"
+                        sx={{ fontWeight: 600 }}
+                      />
+                      <Chip
+                        label={`Đã hủy: ${
+                          exportStats.byStatus?.cancelled || 0
+                        }`}
+                        color="error"
+                        sx={{ fontWeight: 600 }}
+                      />
+                    </Box>
                     {/* Hàng 2: Loại phiếu */}
-                    <Grid container spacing={2}>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Xuất thanh lý: ${
-                            exportStats.byType?.liquidation || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: "#f4433611",
-                            color: "#f44336",
-                          }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Bảo trì: ${
-                            exportStats.byType?.maintenance || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: "#ff980011",
-                            color: "#ff9800",
-                          }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Cho mượn máy: ${
-                            exportStats.byType?.borrowed_out || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: "#00bcd411",
-                            color: "#00bcd4",
-                          }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Trả (máy thuê): ${
-                            exportStats.byType?.rented_return || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: "#673ab711",
-                            color: "#673ab7",
-                          }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Trả (máy mượn): ${
-                            exportStats.byType?.borrowed_return || 0
-                          }`}
-                          sx={{
-                            fontWeight: 600,
-                            bgcolor: "#03a9f411",
-                            color: "#03a9f4",
-                          }}
-                        />
-                      </Grid>
-                    </Grid>
+                    <Box sx={preset.chipRow}>
+                      <Chip
+                        label={`Xuất thanh lý: ${
+                          exportStats.byType?.liquidation || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.red.main, "11"),
+                          color: colors.red.main,
+                        }}
+                      />
+                      <Chip
+                        label={`Bảo trì: ${
+                          exportStats.byType?.maintenance || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.orange.main, "11"),
+                          color: colors.orange.main,
+                        }}
+                      />
+                      <Chip
+                        label={`Cho mượn máy: ${
+                          exportStats.byType?.borrowed_out || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.cyan.main, "11"),
+                          color: colors.cyan.main,
+                        }}
+                      />
+                      <Chip
+                        label={`Trả (máy thuê): ${
+                          exportStats.byType?.rented_return || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.purple.main, "11"),
+                          color: colors.purple.main,
+                        }}
+                      />
+                      <Chip
+                        label={`Trả (máy mượn): ${
+                          exportStats.byType?.borrowed_return || 0
+                        }`}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: hexA(colors.blue.sky, "11"),
+                          color: colors.blue.sky,
+                        }}
+                      />
+                    </Box>
                   </Box>
                 )}
 
@@ -5533,51 +5422,43 @@ const TestProposalPage = () => {
                   <Box
                     sx={{
                       p: 2,
-                      borderRadius: "12px",
-                      bgcolor: "#f5f5f5",
-                      border: "1px solid #e0e0e0",
+                      borderRadius: `${radii.md}px`,
+                      bgcolor: colors.grey[100],
+                      border: borders.light,
                     }}
                   >
                     <Typography
                       variant="subtitle2"
-                      sx={{ fontWeight: 600, mb: 1.5, color: "#667eea" }}
+                      sx={{ fontWeight: 600, mb: 1.5, color: colors.brand.main }}
                     >
                       Thống kê phiếu điều chuyển
                     </Typography>
-                    <Grid container spacing={2}>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Chờ xác nhận: ${
-                            transferStats.pending_confirmation || 0
-                          }`}
-                          color="warning"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Chờ duyệt: ${
-                            transferStats.pending_approval || 0
-                          }`}
-                          color="warning"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Đã duyệt: ${transferStats.completed || 0}`}
-                          color="success"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Đã hủy: ${transferStats.cancelled || 0}`}
-                          color="error"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                    </Grid>
+                    <Box sx={preset.chipRow}>
+                      <Chip
+                        label={`Chờ xác nhận: ${
+                          transferStats.pending_confirmation || 0
+                        }`}
+                        color="warning"
+                        sx={{ fontWeight: 600 }}
+                      />
+                      <Chip
+                        label={`Chờ duyệt: ${
+                          transferStats.pending_approval || 0
+                        }`}
+                        color="warning"
+                        sx={{ fontWeight: 600 }}
+                      />
+                      <Chip
+                        label={`Đã duyệt: ${transferStats.completed || 0}`}
+                        color="success"
+                        sx={{ fontWeight: 600 }}
+                      />
+                      <Chip
+                        label={`Đã hủy: ${transferStats.cancelled || 0}`}
+                        color="error"
+                        sx={{ fontWeight: 600 }}
+                      />
+                    </Box>
                   </Box>
                 )}
 
@@ -5585,47 +5466,39 @@ const TestProposalPage = () => {
                   <Box
                     sx={{
                       p: 2,
-                      borderRadius: "12px",
-                      bgcolor: "#f5f5f5",
-                      border: "1px solid #e0e0e0",
+                      borderRadius: `${radii.md}px`,
+                      bgcolor: colors.grey[100],
+                      border: borders.light,
                     }}
                   >
                     <Typography
                       variant="subtitle2"
-                      sx={{ fontWeight: 600, mb: 1.5, color: "#667eea" }}
+                      sx={{ fontWeight: 600, mb: 1.5, color: colors.brand.main }}
                     >
                       Thống kê phiếu kiểm kê
                     </Typography>
-                    <Grid container spacing={2}>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Nháp: ${inventoryStats.draft || 0}`}
-                          color="info"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Chờ duyệt: ${inventoryStats.pending || 0}`}
-                          color="warning"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Đã duyệt: ${inventoryStats.completed || 0}`}
-                          color="success"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                        <Chip
-                          label={`Đã hủy: ${inventoryStats.cancelled || 0}`}
-                          color="error"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Grid>
-                    </Grid>
+                    <Box sx={preset.chipRow}>
+                      <Chip
+                        label={`Nháp: ${inventoryStats.draft || 0}`}
+                        color="info"
+                        sx={{ fontWeight: 600 }}
+                      />
+                      <Chip
+                        label={`Chờ duyệt: ${inventoryStats.pending || 0}`}
+                        color="warning"
+                        sx={{ fontWeight: 600 }}
+                      />
+                      <Chip
+                        label={`Đã duyệt: ${inventoryStats.completed || 0}`}
+                        color="success"
+                        sx={{ fontWeight: 600 }}
+                      />
+                      <Chip
+                        label={`Đã hủy: ${inventoryStats.cancelled || 0}`}
+                        color="error"
+                        sx={{ fontWeight: 600 }}
+                      />
+                    </Box>
                   </Box>
                 )}
 
@@ -5639,15 +5512,15 @@ const TestProposalPage = () => {
                     elevation={0}
                     sx={{
                       mt: 2,
-                      borderRadius: "12px !important",
-                      bgcolor: "#fff8e1",
-                      border: "1px solid #ffe082",
+                      borderRadius: `${radii.md}px !important`,
+                      bgcolor: colors.orange.wash,
+                      border: `1px solid ${muiColors.amber[200]}`,
                       "&:before": { display: "none" },
                       overflow: "hidden",
                     }}
                   >
                     <AccordionSummary
-                      expandIcon={<ExpandMore sx={{ color: "#f57c00" }} />}
+                      expandIcon={<ExpandMore sx={{ color: colors.orange.hover }} />}
                       sx={{
                         minHeight: 48,
                         "& .MuiAccordionSummary-content": { my: 1 },
@@ -5655,7 +5528,7 @@ const TestProposalPage = () => {
                     >
                       <Typography
                         variant="subtitle2"
-                        sx={{ fontWeight: 600, color: "#f57c00" }}
+                        sx={{ fontWeight: 600, color: colors.orange.hover }}
                       >
                         Thống kê máy quét sót/chưa xác định liên tiếp (≥ 3 lần)
                       </Typography>
@@ -5681,11 +5554,6 @@ const TestProposalPage = () => {
                               setRecurringMissFrom(e.target.value)
                             }
                             InputLabelProps={{ shrink: true }}
-                            sx={{
-                              "& .MuiOutlinedInput-root": {
-                                borderRadius: "12px",
-                              },
-                            }}
                           />
                         </Grid>
                         <Grid size={{ xs: 12, sm: 6, md: 4 }}>
@@ -5696,11 +5564,6 @@ const TestProposalPage = () => {
                             value={recurringMissTo}
                             onChange={(e) => setRecurringMissTo(e.target.value)}
                             InputLabelProps={{ shrink: true }}
-                            sx={{
-                              "& .MuiOutlinedInput-root": {
-                                borderRadius: "12px",
-                              },
-                            }}
                           />
                         </Grid>
                         <Grid
@@ -5725,7 +5588,7 @@ const TestProposalPage = () => {
                               label={
                                 <Typography
                                   variant="caption"
-                                  sx={{ fontWeight: 600, color: "#666" }}
+                                  sx={{ fontWeight: 600, color: colors.grey[700] }}
                                 >
                                   Chỉ hiện máy còn bị sót
                                 </Typography>
@@ -5737,9 +5600,8 @@ const TestProposalPage = () => {
                             onClick={fetchRecurringMissedStats}
                             disabled={recurringMissLoading}
                             sx={{
-                              borderRadius: "12px",
-                              bgcolor: "#f57c00",
-                              "&:hover": { bgcolor: "#ef6c00" },
+                              bgcolor: colors.orange.hover,
+                              "&:hover": { bgcolor: colors.orange.dark },
                             }}
                           >
                             {recurringMissLoading ? (
@@ -5772,13 +5634,12 @@ const TestProposalPage = () => {
                             onClick={() => setOpenRecurringMissRfidDialog(true)}
                             sx={{
                               mb: 2,
-                              borderRadius: "12px",
-                              borderColor: "#f57c00",
-                              color: "#f57c00",
+                              borderColor: colors.orange.hover,
+                              color: colors.orange.hover,
                               fontWeight: 600,
                               "&:hover": {
-                                borderColor: "#ef6c00",
-                                bgcolor: "rgba(245, 124, 0, 0.06)",
+                                borderColor: colors.orange.dark,
+                                bgcolor: alpha(colors.orange.hover, 0.06),
                               },
                             }}
                           >
@@ -5803,11 +5664,11 @@ const TestProposalPage = () => {
                         <TableContainer
                           component={Paper}
                           elevation={0}
-                          sx={{ border: "1px solid #ffe082", borderRadius: 2 }}
+                          sx={{ border: `1px solid ${muiColors.amber[200]}`, borderRadius: 2 }}
                         >
                           <Table size="small">
                             <TableHead>
-                              <TableRow sx={{ bgcolor: "#fff3e0" }}>
+                              <TableRow sx={{ bgcolor: colors.orange.wash }}>
                                 <TableCell sx={{ fontWeight: "bold" }}>
                                   STT
                                 </TableCell>
@@ -5825,7 +5686,7 @@ const TestProposalPage = () => {
                                 </TableCell>
                                 <TableCell
                                   align="center"
-                                  sx={{ fontWeight: "bold", color: "#d32f2f" }}
+                                  sx={{ fontWeight: "bold", color: colors.red.dark }}
                                 >
                                   Số lần sót/chưa xác định liên tiếp
                                 </TableCell>
@@ -5838,7 +5699,7 @@ const TestProposalPage = () => {
                                   hover
                                   sx={{
                                     "&:hover": {
-                                      bgcolor: "rgba(245, 124, 0, 0.06)",
+                                      bgcolor: alpha(colors.orange.hover, 0.06),
                                     },
                                   }}
                                 >
@@ -5862,7 +5723,7 @@ const TestProposalPage = () => {
                                       <Typography
                                         component="span"
                                         sx={{
-                                          fontSize: "0.89rem",
+                                          fontSize: fontSizes.body,
                                         }}
                                       >
                                         {machine.RFID_machine || "-"}
@@ -5945,7 +5806,7 @@ const TestProposalPage = () => {
                   <Box sx={{ p: 2, maxWidth: 360 }}>
                     <Typography
                       variant="caption"
-                      sx={{ fontWeight: 600, mb: 1, color: "#2e7d32" }}
+                      sx={{ fontWeight: 600, mb: 1, color: colors.green.main }}
                     >
                       RFID mới
                     </Typography>
@@ -5977,12 +5838,12 @@ const TestProposalPage = () => {
                   onClose={handleCloseDirectRfidReplace}
                   maxWidth="sm"
                   fullWidth
-                  PaperProps={{ sx: { borderRadius: "20px" } }}
+                  PaperProps={{ sx: { borderRadius: `${radii.lg}px` } }}
                 >
                   <DialogTitle
                     sx={{
                       background:
-                        "linear-gradient(135deg, #ff9800 0%, #f57c00 100%)",
+                        `linear-gradient(135deg, ${colors.orange.main} 0%, ${colors.orange.hover} 100%)`,
                       color: "white",
                       fontWeight: 700,
                       display: "flex",
@@ -6000,15 +5861,15 @@ const TestProposalPage = () => {
                       </Typography>
                     </Box>
                   </DialogTitle>
-                  <DialogContent sx={{ pt: 3, bgcolor: "#f8f9fc" }}>
+                  <DialogContent sx={{ pt: 3, bgcolor: colors.grey[50] }}>
                     {directRfidReplaceMachine && (
                       <Stack spacing={2.5} sx={{ pt: 2 }}>
                         <Box
                           sx={{
                             p: 2,
-                            bgcolor: "#fff8e1",
-                            borderRadius: "14px",
-                            border: "1px solid #ffe082",
+                            bgcolor: colors.orange.wash,
+                            borderRadius: `${radii.md}px`,
+                            border: `1px solid ${muiColors.amber[200]}`,
                           }}
                         >
                           <Typography variant="h6" fontWeight={700}>
@@ -6047,7 +5908,7 @@ const TestProposalPage = () => {
                             <Typography
                               variant="caption"
                               fontWeight={600}
-                              color="#2e7d32"
+                              color={colors.green.main}
                               display="block"
                             >
                               RFID hiện trên hệ thống
@@ -6085,7 +5946,7 @@ const TestProposalPage = () => {
                           inputProps={{ maxLength: RFID_LOOKUP_LENGTH }}
                         />
                         {directRfidError ? (
-                          <Alert severity="error" sx={{ borderRadius: "12px" }}>
+                          <Alert severity="error" sx={{ borderRadius: `${radii.md}px` }}>
                             {directRfidError}
                           </Alert>
                         ) : null}
@@ -6096,8 +5957,8 @@ const TestProposalPage = () => {
                     sx={{
                       p: 2,
                       gap: 1,
-                      bgcolor: "#f8f9fc",
-                      borderTop: "1px solid rgba(0,0,0,0.06)",
+                      bgcolor: colors.grey[50],
+                      borderTop: `1px solid ${alpha(colors.black, 0.06)}`,
                       "& > :not(style) + :not(style)": {
                         marginLeft: {
                           xs: "0px !important",
@@ -6110,7 +5971,6 @@ const TestProposalPage = () => {
                       variant="outlined"
                       onClick={handleCloseDirectRfidReplace}
                       disabled={directRfidSaving}
-                      sx={{ borderRadius: "12px" }}
                     >
                       Bỏ qua
                     </Button>
@@ -6126,9 +5986,8 @@ const TestProposalPage = () => {
                         )
                       }
                       sx={{
-                        borderRadius: "12px",
-                        bgcolor: "#f57c00",
-                        "&:hover": { bgcolor: "#ef6c00" },
+                        bgcolor: colors.orange.hover,
+                        "&:hover": { bgcolor: colors.orange.dark },
                       }}
                     >
                       {directRfidSaving ? "Đang lưu..." : "Xác nhận cập nhật"}
@@ -6148,7 +6007,7 @@ const TestProposalPage = () => {
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
                   sx={{
-                    "& .MuiOutlinedInput-root": { borderRadius: "12px" },
+                    "& .MuiOutlinedInput-root": { borderRadius: `${radii.md}px` },
                   }}
                 >
                   <MenuItem value="">Tất cả</MenuItem>
@@ -6217,7 +6076,7 @@ const TestProposalPage = () => {
                     value={locationFilter}
                     onChange={(e) => setLocationFilter(e.target.value)}
                     sx={{
-                      "& .MuiOutlinedInput-root": { borderRadius: "12px" },
+                      "& .MuiOutlinedInput-root": { borderRadius: `${radii.md}px` },
                     }}
                   >
                     <MenuItem value="">Tất cả</MenuItem>
@@ -6241,7 +6100,7 @@ const TestProposalPage = () => {
                     value={typeFilter}
                     onChange={(e) => setTypeFilter(e.target.value)}
                     sx={{
-                      "& .MuiOutlinedInput-root": { borderRadius: "12px" },
+                      "& .MuiOutlinedInput-root": { borderRadius: `${radii.md}px` },
                     }}
                   >
                     <MenuItem value="">Tất cả</MenuItem>
@@ -6304,7 +6163,7 @@ const TestProposalPage = () => {
                     shrink: true,
                   }}
                   sx={{
-                    "& .MuiOutlinedInput-root": { borderRadius: "12px" },
+                    "& .MuiOutlinedInput-root": { borderRadius: `${radii.md}px` },
                   }}
                 />
               </Grid>
@@ -6319,7 +6178,7 @@ const TestProposalPage = () => {
                     shrink: true,
                   }}
                   sx={{
-                    "& .MuiOutlinedInput-root": { borderRadius: "12px" },
+                    "& .MuiOutlinedInput-root": { borderRadius: `${radii.md}px` },
                   }}
                 />
               </Grid>
@@ -6335,7 +6194,7 @@ const TestProposalPage = () => {
                 onChange={(e, value) => setPage(value)}
                 color="primary"
                 sx={{
-                  "& .MuiPaginationItem-root": { borderRadius: "8px" },
+                  "& .MuiPaginationItem-root": { borderRadius: `${radii.sm}px` },
                 }}
               />
             </Box>
@@ -6347,13 +6206,13 @@ const TestProposalPage = () => {
           open={openDialog}
           onClose={handleCloseDialog}
           maxWidth="lg"
-          fullScreen={isMobile}
+          fullScreen={dialogFullScreen}
           fullWidth
-          PaperProps={{ sx: { borderRadius: isMobile ? 0 : "20px" } }}
+          PaperProps={{ sx: preset.dialogPaper(dialogFullScreen) }}
         >
           <DialogTitle
             sx={{
-              background: "linear-gradient(45deg, #667eea, #764ba2)",
+              background: gradients.brand,
               color: "white",
               fontWeight: 700,
               display: "flex",
@@ -6364,7 +6223,7 @@ const TestProposalPage = () => {
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
               <Typography
                 component="span"
-                variant={isMobile ? "h6" : "h5"}
+                variant="h5"
                 sx={{ fontWeight: 700 }}
               >
                 {dialogMode === "create"
@@ -6435,11 +6294,6 @@ const TestProposalPage = () => {
                             }
                             required
                             InputLabelProps={{ shrink: true }}
-                            sx={{
-                              "& .MuiOutlinedInput-root": {
-                                borderRadius: "12px",
-                              },
-                            }}
                           />
                           <TextField
                             fullWidth
@@ -6451,11 +6305,6 @@ const TestProposalPage = () => {
                             }
                             required
                             inputProps={{ min: 1, step: 1 }}
-                            sx={{
-                              "& .MuiOutlinedInput-root": {
-                                borderRadius: "12px",
-                              },
-                            }}
                           />
                           <FileUploadComponent
                             onFilesChange={setFilesToUpload}
@@ -6501,7 +6350,7 @@ const TestProposalPage = () => {
                                     });
                                   }}
                                   sx={{
-                                    borderRadius: "8px",
+                                    borderRadius: `${radii.sm}px`,
                                     textTransform: "none",
                                   }}
                                 >
@@ -6517,7 +6366,7 @@ const TestProposalPage = () => {
                                     });
                                   }}
                                   sx={{
-                                    borderRadius: "8px",
+                                    borderRadius: `${radii.sm}px`,
                                     textTransform: "none",
                                   }}
                                 >
@@ -6551,11 +6400,6 @@ const TestProposalPage = () => {
                                     {...params}
                                     label="Chọn các đơn vị kiểm kê"
                                     required
-                                    sx={{
-                                      "& .MuiOutlinedInput-root": {
-                                        borderRadius: "12px",
-                                      },
-                                    }}
                                     InputProps={{
                                       ...params.InputProps,
                                       endAdornment: (
@@ -6581,7 +6425,7 @@ const TestProposalPage = () => {
                             formData.inventoryDetails.length > 0 && (
                               <Card
                                 variant="outlined"
-                                sx={{ borderRadius: "12px", mt: 2 }}
+                                sx={{ mt: 2 }}
                               >
                                 <CardContent>
                                   <Stack
@@ -6640,7 +6484,6 @@ const TestProposalPage = () => {
                                             }));
                                           }}
                                           sx={{
-                                            borderRadius: "12px",
                                             textTransform: "none",
                                           }}
                                         >
@@ -6703,14 +6546,14 @@ const TestProposalPage = () => {
                                             variant="outlined"
                                             sx={{
                                               p: 2,
-                                              borderRadius: "14px",
-                                              bgcolor: "#fff",
+                                              borderRadius: `${radii.md}px`,
+                                              bgcolor: colors.white,
                                               border:
-                                                "1px solid rgba(0, 0, 0, 0.08)",
+                                                borders.subtle2,
                                               transition:
                                                 "all 0.2s ease-in-out",
                                               "&:hover": {
-                                                borderColor: "#1976d2",
+                                                borderColor: colors.blue.main,
                                                 boxShadow:
                                                   "0 4px 16px rgba(25, 118, 210, 0.1)",
                                               },
@@ -6729,7 +6572,7 @@ const TestProposalPage = () => {
                                                 variant="subtitle1"
                                                 sx={{
                                                   fontWeight: 700,
-                                                  color: "#2c3e50",
+                                                  color: muiColors.blueGrey[800],
                                                 }}
                                               >
                                                 {dept.name_department}
@@ -6784,7 +6627,7 @@ const TestProposalPage = () => {
                                                 sx={{
                                                   width: "100%",
                                                   height: 6,
-                                                  bgcolor: "#e0e0e0",
+                                                  bgcolor: colors.grey[300],
                                                   borderRadius: 3,
                                                   overflow: "hidden",
                                                 }}
@@ -6795,8 +6638,8 @@ const TestProposalPage = () => {
                                                     height: "100%",
                                                     bgcolor:
                                                       progressPercent === 100
-                                                        ? "#2e7d32"
-                                                        : "#1976d2",
+                                                        ? colors.green.main
+                                                        : colors.blue.main,
                                                     transition:
                                                       "width 0.3s ease",
                                                   }}
@@ -6821,7 +6664,7 @@ const TestProposalPage = () => {
                                                   )
                                                 }
                                                 sx={{
-                                                  borderRadius: "10px",
+                                                  borderRadius: `${radii.md}px`,
                                                   textTransform: "none",
                                                   fontWeight: 600,
                                                   px: 2,
@@ -6845,10 +6688,9 @@ const TestProposalPage = () => {
                               <Card
                                 variant="outlined"
                                 sx={{
-                                  borderRadius: "12px",
                                   mt: 2,
-                                  border: "1px solid #e0e0e0",
-                                  backgroundColor: "#f8f9fa",
+                                  border: borders.light,
+                                  backgroundColor: colors.grey[50],
                                 }}
                               >
                                 <CardContent>
@@ -6863,7 +6705,7 @@ const TestProposalPage = () => {
                                         width: 40,
                                         height: 40,
                                         background:
-                                          "linear-gradient(45deg, #ff9800, #ff5722)",
+                                          `linear-gradient(45deg, ${colors.orange.main}, ${colors.orange.red})`,
                                       }}
                                     >
                                       <Assessment sx={{ fontSize: 24 }} />
@@ -6873,7 +6715,7 @@ const TestProposalPage = () => {
                                         variant="h6"
                                         sx={{
                                           fontWeight: 700,
-                                          color: "#ff5722",
+                                          color: colors.orange.red,
                                         }}
                                       >
                                         Thống kê kết quả kiểm kê
@@ -6883,16 +6725,16 @@ const TestProposalPage = () => {
                                         color="text.secondary"
                                       >
                                         Thông số trong đợt kiểm kê (
-                                        <span style={{ color: "#1565c0" }}>
+                                        <span style={{ color: colors.blue.dark }}>
                                           Sổ sách,{" "}
                                         </span>
-                                        <span style={{ color: "#2e7d32" }}>
+                                        <span style={{ color: colors.green.main }}>
                                           Số máy hiện diện,{" "}
                                         </span>
-                                        <span style={{ color: "#ed6c02" }}>
+                                        <span style={{ color: colors.orange.dark }}>
                                           Số máy khác đơn vị,{" "}
                                         </span>
-                                        <span style={{ color: "#d32f2f" }}>
+                                        <span style={{ color: colors.red.dark }}>
                                           Số máy chưa xác định
                                         </span>
                                         )
@@ -6904,13 +6746,13 @@ const TestProposalPage = () => {
                                     component={Paper}
                                     elevation={0}
                                     sx={{
-                                      border: "1px solid #e0e0e0",
-                                      borderRadius: "8px",
+                                      border: borders.light,
+                                      borderRadius: `${radii.sm}px`,
                                     }}
                                   >
                                     <Table size="small">
                                       <TableHead>
-                                        <TableRow sx={{ bgcolor: "#eeeeee" }}>
+                                        <TableRow sx={{ bgcolor: colors.grey[200] }}>
                                           <TableCell
                                             sx={{ fontWeight: "bold" }}
                                           >
@@ -6925,7 +6767,7 @@ const TestProposalPage = () => {
                                           <TableCell
                                             sx={{
                                               fontWeight: "bold",
-                                              color: "#1565c0",
+                                              color: colors.blue.dark,
                                             }}
                                             align="center"
                                           >
@@ -6935,12 +6777,12 @@ const TestProposalPage = () => {
                                           <TableCell
                                             sx={{
                                               fontWeight: "bold",
-                                              color: "#2e7d32",
+                                              color: colors.green.main,
                                             }}
                                             align="center"
                                           >
                                             Số máy hiện diện (
-                                            <span style={{ color: "#ed6c02" }}>
+                                            <span style={{ color: colors.orange.dark }}>
                                               KĐV
                                             </span>
                                             )
@@ -6949,7 +6791,7 @@ const TestProposalPage = () => {
                                           <TableCell
                                             sx={{
                                               fontWeight: "bold",
-                                              color: "#d32f2f",
+                                              color: colors.red.dark,
                                             }}
                                             align="center"
                                           >
@@ -7183,7 +7025,7 @@ const TestProposalPage = () => {
                                                   <TableCell
                                                     sx={{
                                                       fontWeight: 600,
-                                                      color: "#333",
+                                                      color: colors.grey[800],
                                                     }}
                                                   >
                                                     {row.name}
@@ -7194,8 +7036,8 @@ const TestProposalPage = () => {
                                                     sx={{
                                                       fontWeight: 600,
                                                       color: row.isFull
-                                                        ? "#2e7d32"
-                                                        : "#ed6c02",
+                                                        ? colors.green.main
+                                                        : colors.orange.dark,
                                                     }}
                                                   >
                                                     {row.progress}
@@ -7205,7 +7047,7 @@ const TestProposalPage = () => {
                                                     align="center"
                                                     sx={{
                                                       fontWeight: 600,
-                                                      color: "#1565c0",
+                                                      color: colors.blue.dark,
                                                     }}
                                                   >
                                                     {new Intl.NumberFormat(
@@ -7216,7 +7058,7 @@ const TestProposalPage = () => {
                                                   <TableCell
                                                     align="center"
                                                     sx={{
-                                                      color: "#2e7d32",
+                                                      color: colors.green.main,
                                                       fontWeight: 600,
                                                     }}
                                                   >
@@ -7231,7 +7073,7 @@ const TestProposalPage = () => {
                                                             sx={{
                                                               fontSize:
                                                                 "0.85rem",
-                                                              color: "#2e7d32",
+                                                              color: colors.green.main,
                                                               ml: 0.5,
                                                               fontWeight: 600,
                                                             }}
@@ -7240,7 +7082,7 @@ const TestProposalPage = () => {
                                                             <span
                                                               style={{
                                                                 color:
-                                                                  "#ed6c02",
+                                                                  colors.orange.dark,
                                                               }}
                                                             >
                                                               KĐV:{" "}
@@ -7262,7 +7104,7 @@ const TestProposalPage = () => {
                                                   <TableCell
                                                     align="center"
                                                     sx={{
-                                                      color: "#d32f2f",
+                                                      color: colors.red.dark,
                                                       fontWeight: 600,
                                                     }}
                                                   >
@@ -7305,9 +7147,9 @@ const TestProposalPage = () => {
                                               {/* --- HÀNG TỔNG CỘNG --- */}
                                               <TableRow
                                                 sx={{
-                                                  bgcolor: "#e3f2fd",
+                                                  bgcolor: colors.blue.wash,
                                                   borderTop:
-                                                    "2px solid #90caf9",
+                                                    `2px solid ${muiColors.blue[200]}`,
                                                 }}
                                               >
                                                 <TableCell
@@ -7329,8 +7171,8 @@ const TestProposalPage = () => {
                                                   align="center"
                                                   sx={{
                                                     fontWeight: "bold",
-                                                    color: "#1565c0",
-                                                    fontSize: "1rem",
+                                                    color: colors.blue.dark,
+                                                    fontSize: fontSizes.lead,
                                                   }}
                                                 >
                                                   {new Intl.NumberFormat(
@@ -7342,8 +7184,8 @@ const TestProposalPage = () => {
                                                   align="center"
                                                   sx={{
                                                     fontWeight: "bold",
-                                                    color: "#2e7d32",
-                                                    fontSize: "1rem",
+                                                    color: colors.green.main,
+                                                    fontSize: fontSizes.lead,
                                                   }}
                                                 >
                                                   {grandTotalScanned > 0 ? (
@@ -7358,8 +7200,8 @@ const TestProposalPage = () => {
                                                         <Typography
                                                           component="span"
                                                           sx={{
-                                                            fontSize: "0.9rem",
-                                                            color: "#2e7d32",
+                                                            fontSize: fontSizes.body,
+                                                            color: colors.green.main,
                                                             ml: 0.5,
                                                             fontWeight: 600,
                                                           }}
@@ -7367,7 +7209,7 @@ const TestProposalPage = () => {
                                                           (
                                                           <span
                                                             style={{
-                                                              color: "#ed6c02",
+                                                              color: colors.orange.dark,
                                                             }}
                                                           >
                                                             KĐV:{" "}
@@ -7390,8 +7232,8 @@ const TestProposalPage = () => {
                                                   align="center"
                                                   sx={{
                                                     fontWeight: "bold",
-                                                    color: "#d32f2f",
-                                                    fontSize: "1rem",
+                                                    color: colors.red.dark,
+                                                    fontSize: fontSizes.lead,
                                                   }}
                                                 >
                                                   {grandTotalMissing > 0 ? (
@@ -7489,9 +7331,8 @@ const TestProposalPage = () => {
                                 <Card
                                   variant="outlined"
                                   sx={{
-                                    borderRadius: "12px",
                                     mt: 2,
-                                    border: "2px solid rgba(255, 87, 34, 0.3)",
+                                    border: `2px solid ${alpha(colors.orange.red, 0.3)}`,
                                   }}
                                 >
                                   <CardContent>
@@ -7506,7 +7347,7 @@ const TestProposalPage = () => {
                                           width: 40,
                                           height: 40,
                                           background:
-                                            "linear-gradient(45deg, #ff9800, #ff5722)",
+                                            `linear-gradient(45deg, ${colors.orange.main}, ${colors.orange.red})`,
                                         }}
                                       >
                                         <ErrorOutline sx={{ fontSize: 24 }} />
@@ -7516,7 +7357,7 @@ const TestProposalPage = () => {
                                           variant="h6"
                                           sx={{
                                             fontWeight: 700,
-                                            color: "#ff5722",
+                                            color: colors.orange.red,
                                           }}
                                         >
                                           Máy sai vị trí (
@@ -7536,9 +7377,9 @@ const TestProposalPage = () => {
                                       component={Paper}
                                       elevation={0}
                                       sx={{
-                                        borderRadius: "12px",
+                                        borderRadius: `${radii.md}px`,
                                         border:
-                                          "1px solid rgba(255, 87, 34, 0.2)",
+                                          `1px solid ${alpha(colors.orange.red, 0.2)}`,
                                         maxHeight: 400,
                                       }}
                                     >
@@ -7547,7 +7388,7 @@ const TestProposalPage = () => {
                                           <TableRow
                                             sx={{
                                               backgroundColor:
-                                                "rgba(255, 87, 34, 0.05)",
+                                                alpha(colors.orange.red, 0.05),
                                             }}
                                           >
                                             {/* <TableCell
@@ -7607,10 +7448,10 @@ const TestProposalPage = () => {
                                                 key={index}
                                                 sx={{
                                                   backgroundColor:
-                                                    "rgba(255, 152, 0, 0.05)",
+                                                    alpha(colors.orange.main, 0.05),
                                                   "&:hover": {
                                                     backgroundColor:
-                                                      "rgba(255, 152, 0, 0.1)",
+                                                      alpha(colors.orange.main, 0.1),
                                                   },
                                                 }}
                                               >
@@ -7634,8 +7475,8 @@ const TestProposalPage = () => {
                                                     size="small"
                                                     sx={{
                                                       backgroundColor:
-                                                        "#e3f2fd",
-                                                      color: "#1976d2",
+                                                        colors.blue.wash,
+                                                      color: colors.blue.main,
                                                       fontWeight: 600,
                                                     }}
                                                   />
@@ -7759,7 +7600,7 @@ const TestProposalPage = () => {
                       {["borrowed", "rented", "borrowed_out"].includes(
                         formData.type
                       ) && (
-                        <Card variant="outlined" sx={{ borderRadius: "12px" }}>
+                        <Card variant="outlined" sx={{ borderRadius: `${radii.md}px` }}>
                           <CardContent>
                             <Typography variant="h6" gutterBottom>
                               Thông tin đơn vị (mượn/thuê/cho mượn)
@@ -7867,7 +7708,7 @@ const TestProposalPage = () => {
                       {dialogType === "export" && (
                         <Card
                           variant="outlined"
-                          sx={{ borderRadius: "12px", mb: 2 }}
+                          sx={{ mb: 2 }}
                         >
                           <CardContent>
                             <Typography variant="h6" gutterBottom>
@@ -8009,11 +7850,6 @@ const TestProposalPage = () => {
                                         : "Đến vị trí"
                                   }
                                   required
-                                  sx={{
-                                    "& .MuiOutlinedInput-root": {
-                                      borderRadius: "12px",
-                                    },
-                                  }}
                                   InputProps={{
                                     ...params.InputProps,
                                     endAdornment: (
@@ -8066,9 +7902,9 @@ const TestProposalPage = () => {
                             sx={{
                               mt: 2,
                               p: 2,
-                              borderRadius: "12px",
-                              border: "1px dashed #bdbdbd",
-                              backgroundColor: "#fafafa",
+                              borderRadius: `${radii.md}px`,
+                              border: `1px dashed ${colors.grey[400]}`,
+                              backgroundColor: colors.grey[50],
                             }}
                           >
                             <Typography
@@ -8130,7 +7966,7 @@ const TestProposalPage = () => {
                                     disabled={dialogMode === "view"}
                                     sx={{
                                       flex: 1,
-                                      borderRadius: "10px",
+                                      borderRadius: `${radii.md}px`,
                                       textTransform: "none",
                                       fontWeight: isSelected ? 700 : 500,
                                       transition: "all 0.3s ease",
@@ -8139,7 +7975,7 @@ const TestProposalPage = () => {
                                       ...(isSelected && {
                                         backgroundColor:
                                           option.color + " !important", // Màu nền đậm
-                                        color: "#fff",
+                                        color: colors.white,
                                         boxShadow: `0 4px 12px ${option.color}66`, // Hiệu ứng phát sáng (Glow)
                                         border: `1px solid ${option.color}`,
                                         transform: "translateY(-2px)", // Nhảy lên 1 chút
@@ -8147,9 +7983,9 @@ const TestProposalPage = () => {
 
                                       // --- TRẠNG THÁI KHÔNG CHỌN ---
                                       ...(!isSelected && {
-                                        borderColor: "#e0e0e0",
+                                        borderColor: colors.grey[300],
                                         color: "text.secondary",
-                                        backgroundColor: "#fff",
+                                        backgroundColor: colors.white,
                                         "&:hover": {
                                           borderColor: option.color,
                                           color: option.color,
@@ -8192,7 +8028,6 @@ const TestProposalPage = () => {
                         !isSecurityCreateImport && (
                           <Card
                             variant="outlined"
-                            sx={{ borderRadius: "12px" }}
                           >
                             <CardContent>
                               <Typography variant="h6" gutterBottom>
@@ -8211,13 +8046,13 @@ const TestProposalPage = () => {
                                     onClick={() => setOpenScanDialog(true)}
                                     disabled={isFormDisabled}
                                     sx={{
-                                      borderRadius: "12px",
+                                      borderRadius: `${radii.md}px`,
                                       py: 1,
-                                      borderColor: "#2e7d32",
-                                      color: "#2e7d32",
+                                      borderColor: colors.green.main,
+                                      color: colors.green.main,
                                       "&:hover": {
-                                        borderColor: "#4caf50",
-                                        bgcolor: "#2e7d3211",
+                                        borderColor: colors.green.light,
+                                        bgcolor: hexA(colors.green.main, "11"),
                                       },
                                     }}
                                   >
@@ -8229,13 +8064,12 @@ const TestProposalPage = () => {
                                     onClick={() => setOpenRfidDialog(true)}
                                     disabled={isFormDisabled}
                                     sx={{
-                                      borderRadius: "12px",
                                       py: 1,
-                                      borderColor: "#2e7d32",
-                                      color: "#2e7d32",
+                                      borderColor: colors.green.main,
+                                      color: colors.green.main,
                                       "&:hover": {
-                                        borderColor: "#4caf50",
-                                        bgcolor: "#2e7d3211",
+                                        borderColor: colors.green.light,
+                                        bgcolor: hexA(colors.green.main, "11"),
                                       },
                                     }}
                                   >
@@ -8247,13 +8081,12 @@ const TestProposalPage = () => {
                                     onClick={handleOpenCreateMachineDialog}
                                     disabled={isFormDisabled}
                                     sx={{
-                                      borderRadius: "12px",
                                       py: 1,
-                                      borderColor: "#2e7d32",
-                                      color: "#2e7d32",
+                                      borderColor: colors.green.main,
+                                      color: colors.green.main,
                                       "&:hover": {
-                                        borderColor: "#4caf50",
-                                        bgcolor: "#2e7d3211",
+                                        borderColor: colors.green.light,
+                                        bgcolor: hexA(colors.green.main, "11"),
                                       },
                                     }}
                                   >
@@ -8265,13 +8098,12 @@ const TestProposalPage = () => {
                                     onClick={handleOpenImportDialog}
                                     disabled={isFormDisabled}
                                     sx={{
-                                      borderRadius: "12px",
                                       py: 1,
-                                      borderColor: "#2e7d32",
-                                      color: "#2e7d32",
+                                      borderColor: colors.green.main,
+                                      color: colors.green.main,
                                       "&:hover": {
-                                        borderColor: "#4caf50",
-                                        bgcolor: "#2e7d3211",
+                                        borderColor: colors.green.light,
+                                        bgcolor: hexA(colors.green.main, "11"),
                                       },
                                     }}
                                   >
@@ -8290,13 +8122,13 @@ const TestProposalPage = () => {
                                     onClick={() => setOpenScanDialog(true)}
                                     disabled={isFormDisabled}
                                     sx={{
-                                      borderRadius: "12px",
+                                      borderRadius: `${radii.md}px`,
                                       py: 1,
-                                      borderColor: "#2e7d32",
-                                      color: "#2e7d32",
+                                      borderColor: colors.green.main,
+                                      color: colors.green.main,
                                       "&:hover": {
-                                        borderColor: "#4caf50",
-                                        bgcolor: "#2e7d3211",
+                                        borderColor: colors.green.light,
+                                        bgcolor: hexA(colors.green.main, "11"),
                                       },
                                     }}
                                   >
@@ -8308,13 +8140,12 @@ const TestProposalPage = () => {
                                     onClick={() => setOpenRfidDialog(true)}
                                     disabled={isFormDisabled}
                                     sx={{
-                                      borderRadius: "12px",
                                       py: 1,
-                                      borderColor: "#2e7d32",
-                                      color: "#2e7d32",
+                                      borderColor: colors.green.main,
+                                      color: colors.green.main,
                                       "&:hover": {
-                                        borderColor: "#4caf50",
-                                        bgcolor: "#2e7d3211",
+                                        borderColor: colors.green.light,
+                                        bgcolor: hexA(colors.green.main, "11"),
                                       },
                                     }}
                                   >
@@ -8341,7 +8172,7 @@ const TestProposalPage = () => {
                                           style={{
                                             margin: 0,
                                             paddingLeft: "1.2rem",
-                                            fontSize: "0.85rem",
+                                            fontSize: fontSizes.body,
                                             lineHeight: "1.5",
                                           }}
                                         >
@@ -8386,9 +8217,6 @@ const TestProposalPage = () => {
                                       disabled={isFormDisabled}
                                       sx={{
                                         mb: 2,
-                                        "& .MuiOutlinedInput-root": {
-                                          borderRadius: "12px",
-                                        },
                                       }}
                                       InputProps={{
                                         startAdornment: (
@@ -8469,7 +8297,7 @@ const TestProposalPage = () => {
                                                   sx={{
                                                     cursor: "pointer",
                                                     backgroundColor: isSelected
-                                                      ? "rgba(102, 126, 234, 0.1)"
+                                                      ? alpha(colors.brand.main, 0.1)
                                                       : "inherit",
                                                   }}
                                                 >
@@ -8520,7 +8348,7 @@ const TestProposalPage = () => {
                                                           sx={{
                                                             ml: 1,
                                                             height: 20,
-                                                            fontSize: "0.75rem",
+                                                            fontSize: fontSizes.small,
                                                             background:
                                                               getStatusInfo(
                                                                 machine.current_status
@@ -8530,7 +8358,7 @@ const TestProposalPage = () => {
                                                                 machine.current_status
                                                               ).color,
                                                             fontWeight: 600,
-                                                            borderRadius: "8px",
+                                                            borderRadius: `${radii.sm}px`,
                                                           }}
                                                         />
                                                         {machine.is_borrowed_or_rented_or_borrowed_out && (
@@ -8632,7 +8460,7 @@ const TestProposalPage = () => {
                                         <Paper
                                           key={machine.uuid_machine}
                                           variant="outlined"
-                                          sx={{ p: 2, borderRadius: "12px" }}
+                                          sx={{ p: 2 }}
                                         >
                                           <Stack
                                             direction="row"
@@ -8664,7 +8492,7 @@ const TestProposalPage = () => {
                                                     sx={{
                                                       ml: 1,
                                                       height: 20,
-                                                      fontSize: "0.75rem",
+                                                      fontSize: fontSizes.small,
                                                       background: getStatusInfo(
                                                         machine.current_status
                                                       ).bg,
@@ -8672,7 +8500,7 @@ const TestProposalPage = () => {
                                                         machine.current_status
                                                       ).color,
                                                       fontWeight: 600,
-                                                      borderRadius: "8px",
+                                                      borderRadius: `${radii.sm}px`,
                                                     }}
                                                   />
                                                   {machine.is_borrowed_or_rented_or_borrowed_out && (
@@ -8682,7 +8510,7 @@ const TestProposalPage = () => {
                                                       sx={{
                                                         ml: 0.5,
                                                         height: 20,
-                                                        fontSize: "0.75rem",
+                                                        fontSize: fontSizes.small,
                                                         background:
                                                           getStatusInfo(
                                                             machine.is_borrowed_or_rented_or_borrowed_out
@@ -8691,7 +8519,7 @@ const TestProposalPage = () => {
                                                           machine.is_borrowed_or_rented_or_borrowed_out
                                                         ).color,
                                                         fontWeight: 600,
-                                                        borderRadius: "8px",
+                                                        borderRadius: `${radii.sm}px`,
                                                       }}
                                                     />
                                                   )}
@@ -8778,7 +8606,6 @@ const TestProposalPage = () => {
                         formData.machines.length > 0 && (
                           <Card
                             variant="outlined"
-                            sx={{ borderRadius: "12px" }}
                           >
                             <CardContent>
                               <Typography
@@ -8914,7 +8741,7 @@ const TestProposalPage = () => {
                                                 machine.current_status
                                               ).color,
                                               fontWeight: 600,
-                                              borderRadius: "8px",
+                                              borderRadius: `${radii.sm}px`,
                                             }}
                                           />
                                         </TableCell>
@@ -8933,7 +8760,7 @@ const TestProposalPage = () => {
                                                   machine.is_borrowed_or_rented_or_borrowed_out
                                                 ).color,
                                                 fontWeight: 600,
-                                                borderRadius: "8px",
+                                                borderRadius: `${radii.sm}px`,
                                               }}
                                             />
                                           ) : (
@@ -8955,7 +8782,7 @@ const TestProposalPage = () => {
                       {/* --- THÔNG TIN NGƯỜI TẠO & LUỒNG DUYỆT (HIỂN THỊ CHUNG) --- */}
                       {/* Giữ lại cho tất cả các loại phiếu để xem trạng thái */}
                       {dialogMode === "view" && selectedTicket && (
-                        <Alert severity="info" sx={{ borderRadius: "12px" }}>
+                        <Alert severity="info" sx={{ borderRadius: `${radii.md}px` }}>
                           <Typography variant="body2">
                             <strong>Người tạo:</strong>{" "}
                             {selectedTicket.creator_ma_nv &&
@@ -8985,7 +8812,7 @@ const TestProposalPage = () => {
                         selectedTicket.approval_flow.length > 0 && (
                           <Card
                             variant="outlined"
-                            sx={{ borderRadius: "12px", mt: 2, mb: 2 }}
+                            sx={{ mt: 2, mb: 2 }}
                           >
                             <CardContent>
                               <Typography
@@ -9092,26 +8919,26 @@ const TestProposalPage = () => {
                                                     );
 
                                                   // Màu mặc định (Chờ duyệt - Cam)
-                                                  let statusColor = "#ff9800";
-                                                  let bgColor = "#fff3e0";
-                                                  let borderColor = "#ffcc80";
+                                                  let statusColor = colors.orange.main;
+                                                  let bgColor = colors.orange.wash;
+                                                  let borderColor = muiColors.orange[200];
                                                   let opacity = 1;
 
                                                   if (isApproved) {
                                                     // Xanh lá
-                                                    statusColor = "#2e7d32";
-                                                    bgColor = "#e8f5e9";
-                                                    borderColor = "#a5d6a7";
+                                                    statusColor = colors.green.main;
+                                                    bgColor = colors.green.wash;
+                                                    borderColor = colors.green.pale;
                                                   } else if (isRejected) {
                                                     // Đỏ
-                                                    statusColor = "#d32f2f";
-                                                    bgColor = "#ffebee";
-                                                    borderColor = "#ef9a9a";
+                                                    statusColor = colors.red.dark;
+                                                    bgColor = colors.red.wash;
+                                                    borderColor = colors.red.pale;
                                                   } else if (isSkipped) {
                                                     // Xám (Đồng cấp đã duyệt)
-                                                    statusColor = "#757575";
-                                                    bgColor = "#f5f5f5";
-                                                    borderColor = "#e0e0e0";
+                                                    statusColor = colors.grey[600];
+                                                    bgColor = colors.grey[100];
+                                                    borderColor = colors.grey[300];
                                                     opacity = 0.7;
                                                   }
 
@@ -9131,12 +8958,12 @@ const TestProposalPage = () => {
                                                           gap: 1.5,
                                                           px: 2.5,
                                                           py: 1,
-                                                          borderRadius: "24px",
+                                                          borderRadius: `${radii.lg}px`,
                                                           backgroundColor:
                                                             bgColor,
                                                           border: `1px solid ${
                                                             step.isFinalFlow
-                                                              ? "#FFD700"
+                                                              ? muiColors.yellow["A700"]
                                                               : borderColor
                                                           }`,
                                                           boxShadow:
@@ -9158,10 +8985,10 @@ const TestProposalPage = () => {
                                                           sx={{
                                                             width: 30,
                                                             height: 30,
-                                                            fontSize: "0.9rem",
+                                                            fontSize: fontSizes.body,
                                                             bgcolor:
                                                               statusColor,
-                                                            color: "#fff",
+                                                            color: colors.white,
                                                             fontWeight: "bold",
                                                           }}
                                                         >
@@ -9203,11 +9030,11 @@ const TestProposalPage = () => {
                                                                   fontSize:
                                                                     "0.8rem",
                                                                   borderColor:
-                                                                    "#9e9e9e",
+                                                                    colors.grey[500],
                                                                   color:
-                                                                    "#fd3333",
+                                                                    colors.red.main,
                                                                   backgroundColor:
-                                                                    "#ffffff80",
+                                                                    hexA(colors.white, "80"),
                                                                 }}
                                                               />
                                                             )}
@@ -9253,7 +9080,7 @@ const TestProposalPage = () => {
                                                     mx: 1,
                                                     minWidth: 20,
                                                     height: 2,
-                                                    bgcolor: "#bdbdbd",
+                                                    bgcolor: colors.grey[400],
                                                     flexShrink: 0,
                                                   }}
                                                 />
@@ -9272,7 +9099,7 @@ const TestProposalPage = () => {
                                                 mx: 1,
                                                 minWidth: 20,
                                                 height: 2,
-                                                bgcolor: "#ef9a9a",
+                                                bgcolor: colors.red.pale,
                                                 flexShrink: 0,
                                               }}
                                             />
@@ -9284,9 +9111,9 @@ const TestProposalPage = () => {
                                               gap: 1.5,
                                               px: 2.5,
                                               py: 1,
-                                              borderRadius: "24px",
-                                              backgroundColor: "#ffebee",
-                                              border: "2px dashed #ef5350",
+                                              borderRadius: `${radii.lg}px`,
+                                              backgroundColor: colors.red.wash,
+                                              border: `2px dashed ${muiColors.red[400]}`,
                                               minWidth: "240px",
                                               transition: "transform 0.2s",
                                               "&:hover": {
@@ -9298,8 +9125,8 @@ const TestProposalPage = () => {
                                               sx={{
                                                 width: 30,
                                                 height: 30,
-                                                bgcolor: "#d32f2f",
-                                                color: "#fff",
+                                                bgcolor: colors.red.dark,
+                                                color: colors.white,
                                               }}
                                             >
                                               <Autorenew
@@ -9318,8 +9145,8 @@ const TestProposalPage = () => {
                                                   variant="body2"
                                                   sx={{
                                                     fontWeight: 700,
-                                                    fontSize: "0.95rem",
-                                                    color: "#b71c1c",
+                                                    fontSize: fontSizes.lead,
+                                                    color: colors.red.deepest,
                                                   }}
                                                 >
                                                   {dlgSystemStep.ten_nv}
@@ -9329,11 +9156,11 @@ const TestProposalPage = () => {
                                                   size="small"
                                                   sx={{
                                                     height: 20,
-                                                    fontSize: "0.75rem",
-                                                    bgcolor: "#ffcdd2",
-                                                    color: "#b71c1c",
+                                                    fontSize: fontSizes.small,
+                                                    bgcolor: muiColors.red[100],
+                                                    color: colors.red.deepest,
                                                     fontWeight: 700,
-                                                    border: "1px solid #ef9a9a",
+                                                    border: `1px solid ${colors.red.pale}`,
                                                   }}
                                                 />
                                               </Box>
@@ -9342,9 +9169,9 @@ const TestProposalPage = () => {
                                                 sx={{
                                                   display: "block",
                                                   lineHeight: 1.2,
-                                                  fontSize: "0.8rem",
+                                                  fontSize: fontSizes.small,
                                                   mt: 0.5,
-                                                  color: "#d32f2f",
+                                                  color: colors.red.dark,
                                                   fontStyle: "italic",
                                                   fontWeight: "bold",
                                                 }}
@@ -9394,7 +9221,6 @@ const TestProposalPage = () => {
                 variant="outlined"
                 onClick={handleCloseDialog}
                 sx={{
-                  borderRadius: "12px",
                   px: 3,
                   width: { xs: "100%", sm: "auto" },
                 }}
@@ -9409,7 +9235,6 @@ const TestProposalPage = () => {
                     disabled={loading}
                     startIcon={<Save />}
                     sx={{
-                      borderRadius: "12px",
                       px: 3,
                       width: { xs: "100%", sm: "auto" },
                     }}
@@ -9422,8 +9247,7 @@ const TestProposalPage = () => {
                     disabled={loading}
                     startIcon={<CheckCircleOutline />}
                     sx={{
-                      borderRadius: "12px",
-                      background: "linear-gradient(45deg, #667eea, #764ba2)",
+                      background: gradients.brand,
                       px: 3,
                       width: { xs: "100%", sm: "auto" },
                     }}
@@ -9443,8 +9267,7 @@ const TestProposalPage = () => {
                   disabled={loading}
                   startIcon={<FactCheck />}
                   sx={{
-                    borderRadius: "12px",
-                    background: "linear-gradient(45deg, #667eea, #764ba2)",
+                    background: gradients.brand,
                     px: 3,
                     width: { xs: "100%", sm: "auto" },
                   }}
@@ -9462,8 +9285,7 @@ const TestProposalPage = () => {
                   onClick={handleSubmit}
                   disabled={loading}
                   sx={{
-                    borderRadius: "12px",
-                    background: "linear-gradient(45deg, #667eea, #764ba2)",
+                    background: gradients.brand,
                     px: 3,
                     width: { xs: "100%", sm: "auto" },
                   }}
@@ -9488,8 +9310,7 @@ const TestProposalPage = () => {
                     disabled={loading || confirmingExportGate}
                     startIcon={<CheckCircleOutline />}
                     sx={{
-                      borderRadius: "12px",
-                      background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                      background: `linear-gradient(45deg, ${colors.green.main}, ${colors.green.light})`,
                       px: 3,
                       width: { xs: "100%", sm: "auto" },
                     }}
@@ -9515,8 +9336,7 @@ const TestProposalPage = () => {
                     disabled={loading}
                     startIcon={<PlaylistAddCheck />}
                     sx={{
-                      borderRadius: "12px",
-                      background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                      background: `linear-gradient(45deg, ${colors.green.main}, ${colors.green.light})`,
                       px: 3,
                       width: { xs: "100%", sm: "auto" },
                     }}
@@ -9537,14 +9357,14 @@ const TestProposalPage = () => {
           open={openCreateMachineDialog}
           onClose={handleCloseCreateMachineDialog}
           maxWidth="md"
-          fullScreen={isMobile}
+          fullScreen={dialogFullScreen}
           fullWidth
-          PaperProps={{ sx: { borderRadius: isMobile ? 0 : "20px" } }}
+          PaperProps={{ sx: preset.dialogPaper(dialogFullScreen) }}
         >
           <DialogTitle
             sx={{
               pb: 1,
-              background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+              background: `linear-gradient(45deg, ${colors.green.main}, ${colors.green.light})`,
               color: "white",
               fontWeight: 700,
             }}
@@ -9556,7 +9376,7 @@ const TestProposalPage = () => {
             >
               <Typography
                 component="span"
-                variant={isMobile ? "h6" : "h5"}
+                variant="h5"
                 fontWeight="bold"
               >
                 Thêm máy móc mới
@@ -9964,7 +9784,7 @@ const TestProposalPage = () => {
               onClick={handleCloseCreateMachineDialog}
               variant="outlined"
               color="inherit"
-              sx={{ borderRadius: "12px", width: { xs: "100%", sm: "auto" } }}
+              sx={{ width: { xs: "100%", sm: "auto" } }}
             >
               Đóng
             </Button>
@@ -9974,8 +9794,7 @@ const TestProposalPage = () => {
                 variant="contained"
                 startIcon={<Save />}
                 sx={{
-                  borderRadius: "12px",
-                  background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                  background: `linear-gradient(45deg, ${colors.green.main}, ${colors.green.light})`,
                   width: { xs: "100%", sm: "auto" },
                 }}
               >
@@ -9990,18 +9809,14 @@ const TestProposalPage = () => {
           open={openImportDialog}
           onClose={handleCloseImportDialog}
           maxWidth="md"
-          fullScreen={isMobile}
+          fullScreen={dialogFullScreen}
           fullWidth
-          PaperProps={{
-            sx: {
-              borderRadius: isMobile ? 0 : "20px",
-            },
-          }}
+          PaperProps={{ sx: preset.dialogPaper(dialogFullScreen) }}
         >
           <DialogTitle
             sx={{
               pb: 1,
-              background: "linear-gradient(45deg, #667eea, #764ba2)",
+              background: gradients.brand,
               color: "white",
               fontWeight: 700,
             }}
@@ -10013,7 +9828,7 @@ const TestProposalPage = () => {
             >
               <Typography
                 component="span"
-                variant={isMobile ? "h6" : "h5"}
+                variant="h5"
                 fontWeight="bold"
               >
                 Nhập máy móc từ file Excel
@@ -10037,7 +9852,7 @@ const TestProposalPage = () => {
               pb: 1,
             }}
           >
-            <Alert severity="info" sx={{ borderRadius: "12px" }}>
+            <Alert severity="info" sx={{ borderRadius: `${radii.md}px` }}>
               <AlertTitle>Hướng dẫn</AlertTitle>
               <Typography variant="body2" gutterBottom>
                 1. Chuẩn bị file Excel (.xlsx hoặc .xls) với các cột dữ liệu
@@ -10078,8 +9893,7 @@ const TestProposalPage = () => {
                 component="label"
                 startIcon={<FileUpload />}
                 sx={{
-                  borderRadius: "12px",
-                  background: "linear-gradient(45deg, #667eea, #764ba2)",
+                  background: gradients.brand,
                 }}
               >
                 Chọn file Excel
@@ -10106,7 +9920,7 @@ const TestProposalPage = () => {
                   severity={
                     importResults.errorCount > 0 ? "warning" : "success"
                   }
-                  sx={{ borderRadius: "12px", mb: 2 }}
+                  sx={{ mb: 2 }}
                 >
                   <AlertTitle>Nhập Excel hoàn tất</AlertTitle>
                   Đã thêm thành công:{" "}
@@ -10125,7 +9939,6 @@ const TestProposalPage = () => {
                       sx={{
                         maxHeight: 300,
                         overflow: "auto",
-                        borderRadius: "12px",
                       }}
                     >
                       <List dense>
@@ -10161,7 +9974,6 @@ const TestProposalPage = () => {
                       sx={{
                         maxHeight: 300,
                         overflow: "auto",
-                        borderRadius: "12px",
                       }}
                     >
                       <List dense>
@@ -10216,7 +10028,7 @@ const TestProposalPage = () => {
               onClick={handleCloseImportDialog}
               variant="outlined"
               color="inherit"
-              sx={{ borderRadius: "12px", width: { xs: "100%", sm: "auto" } }}
+              sx={{ width: { xs: "100%", sm: "auto" } }}
               disabled={isImporting}
             >
               Đóng
@@ -10226,8 +10038,7 @@ const TestProposalPage = () => {
               variant="contained"
               startIcon={<Save />}
               sx={{
-                borderRadius: "12px",
-                background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                background: `linear-gradient(45deg, ${colors.green.main}, ${colors.green.light})`,
                 width: { xs: "100%", sm: "auto" },
               }}
               disabled={!importFile || isImporting}
@@ -10340,12 +10151,12 @@ const TestProposalPage = () => {
           onClose={() => setOpenMissingMachinesDialog(false)}
           maxWidth="md"
           fullWidth
-          fullScreen={isMobile}
-          PaperProps={{ sx: { borderRadius: isMobile ? 0 : "20px" } }}
+          fullScreen={dialogFullScreen}
+          PaperProps={{ sx: preset.dialogPaper(dialogFullScreen) }}
         >
           <DialogTitle
             sx={{
-              background: "linear-gradient(45deg, #d32f2f, #f44336)",
+              background: `linear-gradient(45deg, ${colors.red.dark}, ${colors.red.main})`,
               color: "white",
               fontWeight: 700,
               display: "flex",
@@ -10356,7 +10167,7 @@ const TestProposalPage = () => {
             <Box>
               <Typography
                 component="span"
-                variant={isMobile ? "h6" : "h5"}
+                variant="h5"
                 sx={{ fontWeight: 700 }}
               >
                 Danh sách máy chưa xác định
@@ -10390,7 +10201,7 @@ const TestProposalPage = () => {
               <TableContainer component={Paper} elevation={0}>
                 <Table size="small">
                   <TableHead>
-                    <TableRow sx={{ bgcolor: "#f5f5f5" }}>
+                    <TableRow sx={{ bgcolor: colors.grey[100] }}>
                       <TableCell sx={{ fontWeight: "bold" }}>STT</TableCell>
                       <TableCell sx={{ fontWeight: "bold" }}>
                         Tên thiết bị
@@ -10489,7 +10300,7 @@ const TestProposalPage = () => {
               const placeholderSx = {
                 width: "100%",
                 minHeight: 44,
-                borderRadius: "8px",
+                borderRadius: `${radii.sm}px`,
                 visibility: "hidden",
               };
               const commonBtnSx = {
@@ -10514,12 +10325,12 @@ const TestProposalPage = () => {
                         sx={{
                           ...commonBtnSx,
                           background:
-                            "linear-gradient(45deg, #2e7d32, #4caf50)",
+                            `linear-gradient(45deg, ${colors.green.main}, ${colors.green.light})`,
                           "&:hover": {
                             background:
-                              "linear-gradient(45deg, #1b5e20, #388e3c)",
+                              `linear-gradient(45deg, ${colors.green.dark}, ${muiColors.green[700]})`,
                           },
-                          borderRadius: "8px",
+                          borderRadius: `${radii.sm}px`,
                           fontWeight: 800,
                           gridColumn: "1 / -1",
                         }}
@@ -10542,12 +10353,12 @@ const TestProposalPage = () => {
                         sx={{
                           ...commonBtnSx,
                           background:
-                            "linear-gradient(45deg, #ff9800, #ff5722)",
+                            `linear-gradient(45deg, ${colors.orange.main}, ${colors.orange.red})`,
                           "&:hover": {
                             background:
-                              "linear-gradient(45deg, #f57c00, #e64a19)",
+                              `linear-gradient(45deg, ${colors.orange.hover}, ${muiColors.deepOrange[700]})`,
                           },
-                          borderRadius: "8px",
+                          borderRadius: `${radii.sm}px`,
                           fontWeight: 700,
                         }}
                       >
@@ -10563,9 +10374,9 @@ const TestProposalPage = () => {
                         variant="contained"
                         sx={{
                           ...commonBtnSx,
-                          bgcolor: "#1976d2",
-                          "&:hover": { bgcolor: "#1565c0" },
-                          borderRadius: "8px",
+                          bgcolor: colors.blue.main,
+                          "&:hover": { bgcolor: colors.blue.dark },
+                          borderRadius: `${radii.sm}px`,
                         }}
                       >
                         Dò tìm RFID máy chưa quét (
@@ -10585,8 +10396,8 @@ const TestProposalPage = () => {
                       variant="contained"
                       sx={{
                         ...commonBtnSx,
-                        bgcolor: "#d32f2f",
-                        "&:hover": { bgcolor: "#b71c1c" },
+                        bgcolor: colors.red.dark,
+                        "&:hover": { bgcolor: colors.red.deepest },
                       }}
                     >
                       Đóng
@@ -10604,12 +10415,12 @@ const TestProposalPage = () => {
                       variant="contained"
                       disabled={confirmingMissingAll}
                       sx={{
-                        background: "linear-gradient(45deg, #2e7d32, #4caf50)",
+                        background: `linear-gradient(45deg, ${colors.green.main}, ${colors.green.light})`,
                         "&:hover": {
                           background:
-                            "linear-gradient(45deg, #1b5e20, #388e3c)",
+                            `linear-gradient(45deg, ${colors.green.dark}, ${muiColors.green[700]})`,
                         },
-                        borderRadius: "8px",
+                        borderRadius: `${radii.sm}px`,
                         fontWeight: 800,
                       }}
                     >
@@ -10625,12 +10436,12 @@ const TestProposalPage = () => {
                       variant="contained"
                       startIcon={<WifiTethering />}
                       sx={{
-                        background: "linear-gradient(45deg, #ff9800, #ff5722)",
+                        background: `linear-gradient(45deg, ${colors.orange.main}, ${colors.orange.red})`,
                         "&:hover": {
                           background:
-                            "linear-gradient(45deg, #f57c00, #e64a19)",
+                            `linear-gradient(45deg, ${colors.orange.hover}, ${muiColors.deepOrange[700]})`,
                         },
-                        borderRadius: "8px",
+                        borderRadius: `${radii.sm}px`,
                         fontWeight: 700,
                       }}
                     >
@@ -10644,9 +10455,9 @@ const TestProposalPage = () => {
                       variant="contained"
                       startIcon={<WifiTethering />}
                       sx={{
-                        bgcolor: "#1976d2",
-                        "&:hover": { bgcolor: "#1565c0" },
-                        borderRadius: "8px",
+                        bgcolor: colors.blue.main,
+                        "&:hover": { bgcolor: colors.blue.dark },
+                        borderRadius: `${radii.sm}px`,
                       }}
                     >
                       Dò tìm RFID máy chưa quét (
@@ -10663,8 +10474,8 @@ const TestProposalPage = () => {
                     onClick={() => setOpenMissingMachinesDialog(false)}
                     variant="contained"
                     sx={{
-                      bgcolor: "#d32f2f",
-                      "&:hover": { bgcolor: "#b71c1c" },
+                      bgcolor: colors.red.dark,
+                      "&:hover": { bgcolor: colors.red.deepest },
                     }}
                   >
                     Đóng
@@ -10681,11 +10492,11 @@ const TestProposalPage = () => {
           onClose={() => setOpenBatchScanPicker(false)}
           maxWidth="sm"
           fullWidth
-          PaperProps={{ sx: { borderRadius: "20px" } }}
+          PaperProps={{ sx: { borderRadius: `${radii.lg}px` } }}
         >
           <DialogTitle
             sx={{
-              background: "linear-gradient(45deg, #ff9800, #ff5722)",
+              background: `linear-gradient(45deg, ${colors.orange.main}, ${colors.orange.red})`,
               color: "white",
               fontWeight: 700,
               display: "flex",
@@ -10747,12 +10558,11 @@ const TestProposalPage = () => {
                       sx={{
                         p: 2,
                         cursor: "pointer",
-                        borderRadius: "12px",
-                        borderColor: "rgba(255,152,0,0.3)",
+                        borderColor: alpha(colors.orange.main, 0.3),
                         transition: "all 0.2s",
                         "&:hover": {
-                          borderColor: "#ff9800",
-                          bgcolor: "rgba(255,152,0,0.05)",
+                          borderColor: colors.orange.main,
+                          bgcolor: alpha(colors.orange.main, 0.05),
                           transform: "translateX(4px)",
                         },
                       }}
@@ -10767,7 +10577,7 @@ const TestProposalPage = () => {
                         <Typography fontWeight={600}>
                           {dept.name_department}
                         </Typography>
-                        <ArrowForward sx={{ color: "#ff9800", fontSize: 20 }} />
+                        <ArrowForward sx={{ color: colors.orange.main, fontSize: 20 }} />
                       </Box>
                     </Card>
                   ))}
@@ -10785,7 +10595,7 @@ const TestProposalPage = () => {
                   máy vào:
                 </Typography>
                 {batchPickerLocations.length === 0 ? (
-                  <Alert severity="warning" sx={{ borderRadius: "12px" }}>
+                  <Alert severity="warning" sx={{ borderRadius: `${radii.md}px` }}>
                     Đơn vị này chưa có vị trí nào.
                   </Alert>
                 ) : (
@@ -10797,21 +10607,20 @@ const TestProposalPage = () => {
                       sx={{
                         p: 2,
                         cursor: "pointer",
-                        borderRadius: "12px",
                         borderColor:
                           batchPickerLocation?.uuid_location ===
                           loc.uuid_location
-                            ? "#ff9800"
-                            : "rgba(0,0,0,0.12)",
+                            ? colors.orange.main
+                            : alpha(colors.black, 0.12),
                         bgcolor:
                           batchPickerLocation?.uuid_location ===
                           loc.uuid_location
-                            ? "rgba(255,152,0,0.08)"
+                            ? alpha(colors.orange.main, 0.08)
                             : "transparent",
                         transition: "all 0.2s",
                         "&:hover": {
-                          borderColor: "#ff9800",
-                          bgcolor: "rgba(255,152,0,0.05)",
+                          borderColor: colors.orange.main,
+                          bgcolor: alpha(colors.orange.main, 0.05),
                         },
                       }}
                     >
@@ -10860,7 +10669,7 @@ const TestProposalPage = () => {
                 variant="outlined"
                 color="inherit"
                 startIcon={<ArrowBack />}
-                sx={{ borderRadius: "10px" }}
+                sx={{ borderRadius: `${radii.md}px` }}
               >
                 Quay lại
               </Button>
@@ -10870,7 +10679,7 @@ const TestProposalPage = () => {
               onClick={() => setOpenBatchScanPicker(false)}
               variant="outlined"
               color="inherit"
-              sx={{ borderRadius: "10px" }}
+              sx={{ borderRadius: `${radii.md}px` }}
             >
               Hủy
             </Button>
@@ -10880,8 +10689,8 @@ const TestProposalPage = () => {
                 variant="contained"
                 disabled={!batchPickerLocation}
                 sx={{
-                  background: "linear-gradient(45deg, #ff9800, #ff5722)",
-                  borderRadius: "10px",
+                  background: `linear-gradient(45deg, ${colors.orange.main}, ${colors.orange.red})`,
+                  borderRadius: `${radii.md}px`,
                   fontWeight: 700,
                   px: 3,
                 }}
@@ -10898,12 +10707,12 @@ const TestProposalPage = () => {
           onClose={handleCloseInventoryScan}
           maxWidth="lg"
           fullWidth
-          fullScreen={isMobile}
-          PaperProps={{ sx: { borderRadius: isMobile ? 0 : "20px" } }}
+          fullScreen={dialogFullScreen}
+          PaperProps={{ sx: preset.dialogPaper(dialogFullScreen) }}
         >
           <DialogTitle
             sx={{
-              background: "linear-gradient(45deg, #ff9800, #ff5722)",
+              background: `linear-gradient(45deg, ${colors.orange.main}, ${colors.orange.red})`,
               color: "white",
               fontWeight: 700,
               display: "flex",
@@ -10914,7 +10723,7 @@ const TestProposalPage = () => {
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
               <Typography
                 component="span"
-                variant={isMobile ? "h6" : "h5"}
+                variant="h5"
                 sx={{ fontWeight: 700 }}
               >
                 Kiểm kê: {currentDepartment?.name_department}
@@ -10934,7 +10743,7 @@ const TestProposalPage = () => {
                 canEditInventoryDepartment(currentDepartment) && (
                   <Card
                     variant="outlined"
-                    sx={{ p: 2, bgcolor: "#f5f5f5", borderRadius: "12px" }}
+                    sx={{ p: 2, bgcolor: colors.grey[100] }}
                   >
                     <Typography
                       variant="h6"
@@ -10944,7 +10753,7 @@ const TestProposalPage = () => {
                       Thêm vị trí kiểm kê
                     </Typography>
                     <Stack
-                      direction={isMobile ? "column" : "row"}
+                      direction={{ xs: "column", sm: "row" }}
                       spacing={2}
                       alignItems="center"
                     >
@@ -10973,7 +10782,7 @@ const TestProposalPage = () => {
                         startIcon={<QrCode2 />}
                         onClick={() => setOpenScanDialog(true)}
                         disabled={!selectedLocationForScan}
-                        sx={{ borderRadius: "12px", minWidth: "120px" }}
+                        sx={{ borderRadius: `${radii.md}px`, minWidth: "120px" }}
                       >
                         Quét Mã QR
                       </Button> */}
@@ -10982,7 +10791,7 @@ const TestProposalPage = () => {
                         startIcon={<WifiTethering />}
                         onClick={() => setOpenRfidDialog(true)}
                         disabled={!selectedLocationForScan}
-                        sx={{ borderRadius: "12px", minWidth: "120px" }}
+                        sx={{ minWidth: "120px" }}
                       >
                         Quét RFID/NFC
                       </Button>
@@ -11008,7 +10817,7 @@ const TestProposalPage = () => {
                             onClick={handleOpenInventoryRfidSearch}
                             sx={{
                               textTransform: "none",
-                              borderRadius: "999px",
+                              borderRadius: `${radii.pill}px`,
                               px: 2,
                             }}
                           >
@@ -11075,9 +10884,9 @@ const TestProposalPage = () => {
                                       cursor: "pointer",
                                       mb: 1,
                                       p: 1,
-                                      borderRadius: "8px",
+                                      borderRadius: `${radii.sm}px`,
                                       "&:hover": {
-                                        bgcolor: "rgba(0, 0, 0, 0.04)",
+                                        bgcolor: alpha(colors.black, 0.04),
                                       },
                                     }}
                                     onClick={() => {
@@ -11109,7 +10918,7 @@ const TestProposalPage = () => {
                                         size="small"
                                         sx={{
                                           bgcolor: groupColor,
-                                          color: "#fff",
+                                          color: colors.white,
                                           fontWeight: 600,
                                         }}
                                       />
@@ -11132,7 +10941,7 @@ const TestProposalPage = () => {
                                       component={Paper}
                                       variant="outlined"
                                       sx={{
-                                        borderRadius: "12px",
+                                        borderRadius: `${radii.md}px`,
                                       }}
                                     >
                                       <Table size="small">
@@ -11190,11 +10999,11 @@ const TestProposalPage = () => {
                                                 key={index}
                                                 sx={{
                                                   backgroundColor: isDuplicate
-                                                    ? "#ffebee"
+                                                    ? colors.red.wash
                                                     : isMislocation
-                                                      ? "#fff3e0"
+                                                      ? colors.orange.wash
                                                       : isNotFound
-                                                        ? "#e3f2fd"
+                                                        ? colors.blue.wash
                                                         : "inherit",
                                                 }}
                                               >
@@ -11257,7 +11066,7 @@ const TestProposalPage = () => {
                                                     <Typography
                                                       variant="caption"
                                                       sx={{
-                                                        color: "#2e7d32",
+                                                        color: colors.green.main,
                                                         fontWeight: 600,
                                                       }}
                                                     >
@@ -11294,9 +11103,9 @@ const TestProposalPage = () => {
                                                           }
                                                         }}
                                                         sx={{
-                                                          color: "#2e7d32",
+                                                          color: colors.green.main,
                                                           "&.Mui-checked": {
-                                                            color: "#2e7d32",
+                                                            color: colors.green.main,
                                                           },
                                                         }}
                                                       />
@@ -11330,22 +11139,22 @@ const TestProposalPage = () => {
                                 {renderMachineGroup(
                                   "Đúng vị trí",
                                   correctLocation,
-                                  "#2e7d32"
+                                  colors.green.main
                                 )}
                                 {renderMachineGroup(
                                   "Sai vị trí",
                                   wrongLocation,
-                                  "#ed6c02"
+                                  colors.orange.dark
                                 )}
                                 {renderMachineGroup(
                                   "Không tìm thấy trong hệ thống",
                                   notFound,
-                                  "#0288d1"
+                                  colors.blue.deep
                                 )}
                                 {renderMachineGroup(
                                   "Đã quét ở vị trí khác",
                                   alreadyScanned,
-                                  "#d32f2f"
+                                  colors.red.dark
                                 )}
                               </Box>
                             );
@@ -11357,7 +11166,6 @@ const TestProposalPage = () => {
                           color="success"
                           startIcon={<Save />}
                           disabled={loading}
-                          sx={{ borderRadius: "12px" }}
                         >
                           {loading ? (
                             <CircularProgress size={24} />
@@ -11374,16 +11182,15 @@ const TestProposalPage = () => {
                 <Card
                   variant="outlined"
                   sx={{
-                    borderRadius: "12px",
-                    bgcolor: "#fff",
-                    border: "1px solid #e0e0e0", // Viền giống bên ngoài
+                    bgcolor: colors.white,
+                    border: borders.light, // Viền giống bên ngoài
                   }}
                 >
                   <Box
                     sx={{
                       p: 2,
-                      borderBottom: "1px solid #e0e0e0",
-                      bgcolor: "#f8f9fa",
+                      borderBottom: borders.light,
+                      bgcolor: colors.grey[50],
                     }}
                   >
                     <Stack
@@ -11398,7 +11205,7 @@ const TestProposalPage = () => {
                             width: 40,
                             height: 40,
                             background:
-                              "linear-gradient(45deg, #ff9800, #ff5722)",
+                              `linear-gradient(45deg, ${colors.orange.main}, ${colors.orange.red})`,
                           }}
                         >
                           <Assessment sx={{ fontSize: 24 }} />
@@ -11406,20 +11213,20 @@ const TestProposalPage = () => {
                         <Box>
                           <Typography
                             variant="h6"
-                            sx={{ fontWeight: 700, color: "#ff5722" }}
+                            sx={{ fontWeight: 700, color: colors.orange.red }}
                           >
                             Thống kê theo vị trí
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
                             Chi tiết từng vị trí trong đơn vị (
-                            <span style={{ color: "#1565c0" }}>Sổ sách, </span>
-                            <span style={{ color: "#2e7d32" }}>
+                            <span style={{ color: colors.blue.dark }}>Sổ sách, </span>
+                            <span style={{ color: colors.green.main }}>
                               Số máy hiện diện,{" "}
                             </span>
-                            <span style={{ color: "#ed6c02" }}>
+                            <span style={{ color: colors.orange.dark }}>
                               Số máy khác đơn vị,{" "}
                             </span>
-                            <span style={{ color: "#d32f2f" }}>
+                            <span style={{ color: colors.red.dark }}>
                               Số máy chưa xác định
                             </span>
                             )
@@ -11430,16 +11237,16 @@ const TestProposalPage = () => {
                         onClick={handleRefreshInventoryDepartment}
                         disabled={detailLoading}
                         sx={{
-                          color: "#ff5722",
+                          color: colors.orange.red,
                           "&:hover": {
-                            bgcolor: "rgba(255, 87, 34, 0.08)",
+                            bgcolor: alpha(colors.orange.red, 0.08),
                           },
                         }}
                       >
                         {detailLoading ? (
                           <CircularProgress
                             size={24}
-                            sx={{ color: "#ff5722" }}
+                            sx={{ color: colors.orange.red }}
                           />
                         ) : (
                           <Refresh />
@@ -11459,15 +11266,15 @@ const TestProposalPage = () => {
                     <Table size="small" stickyHeader>
                       <TableHead>
                         {/* HEADER: CHIA RÕ 2 CỘT THỰC TẾ, KHÔNG MERGE */}
-                        <TableRow sx={{ bgcolor: "#eeeeee" }}>
+                        <TableRow sx={{ bgcolor: colors.grey[200] }}>
                           <TableCell
-                            sx={{ fontWeight: "bold", bgcolor: "#eeeeee" }}
+                            sx={{ fontWeight: "bold", bgcolor: colors.grey[200] }}
                           >
                             Vị trí
                           </TableCell>
                           <TableCell
                             align="center"
-                            sx={{ fontWeight: "bold", bgcolor: "#eeeeee" }}
+                            sx={{ fontWeight: "bold", bgcolor: colors.grey[200] }}
                           >
                             Trạng thái
                           </TableCell>
@@ -11475,8 +11282,8 @@ const TestProposalPage = () => {
                             align="center"
                             sx={{
                               fontWeight: "bold",
-                              bgcolor: "#eeeeee",
-                              color: "#1565c0",
+                              bgcolor: colors.grey[200],
+                              color: colors.blue.dark,
                             }}
                           >
                             Sổ sách (Trước kiểm kê)
@@ -11486,20 +11293,20 @@ const TestProposalPage = () => {
                             align="center"
                             sx={{
                               fontWeight: "bold",
-                              bgcolor: "#eeeeee",
-                              color: "#2e7d32",
+                              bgcolor: colors.grey[200],
+                              color: colors.green.main,
                             }}
                           >
                             Số máy hiện diện (
-                            <span style={{ color: "#ed6c02" }}>KĐV</span>)
+                            <span style={{ color: colors.orange.dark }}>KĐV</span>)
                           </TableCell>
 
                           <TableCell
                             align="center"
                             sx={{
                               fontWeight: "bold",
-                              bgcolor: "#eeeeee",
-                              color: "#d32f2f",
+                              bgcolor: colors.grey[200],
+                              color: colors.red.dark,
                             }}
                           >
                             Số máy chưa xác định
@@ -11663,7 +11470,7 @@ const TestProposalPage = () => {
                               {rows.map((row, idx) => (
                                 <TableRow key={idx} hover>
                                   <TableCell
-                                    sx={{ fontWeight: 600, color: "#333" }}
+                                    sx={{ fontWeight: 600, color: colors.grey[800] }}
                                   >
                                     {row.name}
                                   </TableCell>
@@ -11673,7 +11480,7 @@ const TestProposalPage = () => {
                                       <Typography
                                         variant="caption"
                                         sx={{
-                                          color: "#2e7d32",
+                                          color: colors.green.main,
                                           fontWeight: "bold",
                                         }}
                                       >
@@ -11683,7 +11490,7 @@ const TestProposalPage = () => {
                                       <Typography
                                         variant="caption"
                                         sx={{
-                                          color: "#ed6c02",
+                                          color: colors.orange.dark,
                                           fontWeight: "bold",
                                         }}
                                       >
@@ -11694,7 +11501,7 @@ const TestProposalPage = () => {
 
                                   <TableCell
                                     align="center"
-                                    sx={{ color: "#1565c0", fontWeight: 600 }}
+                                    sx={{ color: colors.blue.dark, fontWeight: 600 }}
                                   >
                                     {new Intl.NumberFormat("en-US").format(
                                       row.system
@@ -11703,7 +11510,7 @@ const TestProposalPage = () => {
 
                                   <TableCell
                                     align="center"
-                                    sx={{ color: "#2e7d32", fontWeight: 600 }}
+                                    sx={{ color: colors.green.main, fontWeight: 600 }}
                                   >
                                     {row.isScanned && row.scanned > 0 ? (
                                       <>
@@ -11714,8 +11521,8 @@ const TestProposalPage = () => {
                                           <Typography
                                             component="span"
                                             sx={{
-                                              fontSize: "0.85rem",
-                                              color: "#2e7d32",
+                                              fontSize: fontSizes.body,
+                                              color: colors.green.main,
                                               ml: 0.5,
                                               fontWeight: 600,
                                             }}
@@ -11723,7 +11530,7 @@ const TestProposalPage = () => {
                                             (
                                             <span
                                               style={{
-                                                color: "#ed6c02",
+                                                color: colors.orange.dark,
                                               }}
                                             >
                                               KĐV:{" "}
@@ -11743,7 +11550,7 @@ const TestProposalPage = () => {
                                   <TableCell
                                     align="center"
                                     sx={{
-                                      color: "#d32f2f",
+                                      color: colors.red.dark,
                                       fontWeight: 600,
                                     }}
                                   >
@@ -11785,8 +11592,8 @@ const TestProposalPage = () => {
                               {/* HÀNG TỔNG CỘNG */}
                               <TableRow
                                 sx={{
-                                  bgcolor: "#e3f2fd",
-                                  borderTop: "2px solid #90caf9",
+                                  bgcolor: colors.blue.wash,
+                                  borderTop: `2px solid ${muiColors.blue[200]}`,
                                 }}
                               >
                                 <TableCell
@@ -11807,8 +11614,8 @@ const TestProposalPage = () => {
                                   align="center"
                                   sx={{
                                     fontWeight: "bold",
-                                    color: "#1565c0",
-                                    fontSize: "1rem",
+                                    color: colors.blue.dark,
+                                    fontSize: fontSizes.lead,
                                   }}
                                 >
                                   {new Intl.NumberFormat("en-US").format(
@@ -11819,8 +11626,8 @@ const TestProposalPage = () => {
                                   align="center"
                                   sx={{
                                     fontWeight: "bold",
-                                    color: "#2e7d32",
-                                    fontSize: "1rem",
+                                    color: colors.green.main,
+                                    fontSize: fontSizes.lead,
                                   }}
                                 >
                                   {grandTotalScanned > 0 ? (
@@ -11832,8 +11639,8 @@ const TestProposalPage = () => {
                                         <Typography
                                           component="span"
                                           sx={{
-                                            fontSize: "0.9rem",
-                                            color: "#2e7d32",
+                                            fontSize: fontSizes.body,
+                                            color: colors.green.main,
                                             ml: 0.5,
                                             fontWeight: 600,
                                           }}
@@ -11841,7 +11648,7 @@ const TestProposalPage = () => {
                                           (
                                           <span
                                             style={{
-                                              color: "#ed6c02",
+                                              color: colors.orange.dark,
                                             }}
                                           >
                                             KĐV:{" "}
@@ -11861,8 +11668,8 @@ const TestProposalPage = () => {
                                   align="center"
                                   sx={{
                                     fontWeight: "bold",
-                                    color: "#d32f2f",
-                                    fontSize: "1rem",
+                                    color: colors.red.dark,
+                                    fontSize: fontSizes.lead,
                                   }}
                                 >
                                   {grandTotalMissing > 0 ? (
@@ -11948,16 +11755,16 @@ const TestProposalPage = () => {
                         onClick={handleRefreshInventoryDepartment}
                         disabled={detailLoading}
                         sx={{
-                          color: "#ff5722",
+                          color: colors.orange.red,
                           "&:hover": {
-                            bgcolor: "rgba(255, 87, 34, 0.08)",
+                            bgcolor: alpha(colors.orange.red, 0.08),
                           },
                         }}
                       >
                         {detailLoading ? (
                           <CircularProgress
                             size={24}
-                            sx={{ color: "#ff5722" }}
+                            sx={{ color: colors.orange.red }}
                           />
                         ) : (
                           <Refresh />
@@ -11966,7 +11773,7 @@ const TestProposalPage = () => {
                     </Stack>
 
                     {locationsWithMachines.length === 0 ? (
-                      <Alert severity="info" sx={{ borderRadius: "12px" }}>
+                      <Alert severity="info" sx={{ borderRadius: `${radii.md}px` }}>
                         Chưa có vị trí nào được kiểm kê trong đơn vị này.
                       </Alert>
                     ) : (
@@ -12002,7 +11809,7 @@ const TestProposalPage = () => {
             {/* <Button
               onClick={handleCloseInventoryScan}
               variant="outlined"
-              sx={{ borderRadius: "12px", px: 3 }}
+              sx={{ borderRadius: `${radii.md}px`, px: 3 }}
             >
               Đóng
             </Button> */}
@@ -12022,11 +11829,11 @@ const TestProposalPage = () => {
           }
           maxWidth="sm"
           fullWidth
-          PaperProps={{ sx: { borderRadius: "20px" } }}
+          PaperProps={{ sx: { borderRadius: `${radii.lg}px` } }}
         >
           <DialogTitle
             sx={{
-              background: "linear-gradient(45deg, #ff9800, #ff5722)",
+              background: `linear-gradient(45deg, ${colors.orange.main}, ${colors.orange.red})`,
               color: "white",
               fontWeight: 700,
             }}
@@ -12056,7 +11863,7 @@ const TestProposalPage = () => {
           </DialogTitle>
           <DialogContent sx={{ mt: 3 }}>
             <Stack spacing={2}>
-              <Alert severity="info" sx={{ borderRadius: "12px" }}>
+              <Alert severity="info" sx={{ borderRadius: `${radii.md}px` }}>
                 Chọn các đơn vị bạn muốn thêm vào phiếu kiểm kê này.
               </Alert>
               <Stack
@@ -12077,7 +11884,7 @@ const TestProposalPage = () => {
                     }));
                   }}
                   sx={{
-                    borderRadius: "8px",
+                    borderRadius: `${radii.sm}px`,
                     textTransform: "none",
                   }}
                 >
@@ -12093,7 +11900,7 @@ const TestProposalPage = () => {
                     }));
                   }}
                   sx={{
-                    borderRadius: "8px",
+                    borderRadius: `${radii.sm}px`,
                     textTransform: "none",
                   }}
                 >
@@ -12126,11 +11933,6 @@ const TestProposalPage = () => {
                   <TextField
                     {...params}
                     label="Chọn đơn vị"
-                    sx={{
-                      "& .MuiOutlinedInput-root": {
-                        borderRadius: "12px",
-                      },
-                    }}
                     InputProps={{
                       ...params.InputProps,
                       endAdornment: (
@@ -12166,7 +11968,6 @@ const TestProposalPage = () => {
                   availableDepartments: [],
                 }))
               }
-              sx={{ borderRadius: "12px" }}
             >
               Hủy
             </Button>
@@ -12180,8 +11981,7 @@ const TestProposalPage = () => {
                 formData.selectedNewDepartments.length === 0
               }
               sx={{
-                borderRadius: "12px",
-                background: "linear-gradient(45deg, #ff9800, #ff5722)",
+                background: `linear-gradient(45deg, ${colors.orange.main}, ${colors.orange.red})`,
               }}
             >
               {loading ? <CircularProgress size={24} /> : "Thêm đơn vị"}
@@ -12208,11 +12008,10 @@ const TestProposalPage = () => {
             sx={{
               width: "100%",
               minWidth: { xs: "auto", sm: "350px" },
-              boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
-              borderRadius: "12px",
+              boxShadow: shadows.overlay,
             }}
           >
-            <AlertTitle sx={{ fontWeight: "bold", fontSize: "1.1rem" }}>
+            <AlertTitle sx={{ fontWeight: "bold", fontSize: fontSizes.title }}>
               {notification.title}
             </AlertTitle>
             {notification.message}

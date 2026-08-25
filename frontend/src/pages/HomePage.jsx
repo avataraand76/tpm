@@ -3,102 +3,148 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Container,
-  Typography,
-  Box,
-  Grid,
-  Card,
-  CardContent,
-  Chip,
-  Button,
-  Stack,
+  AdminPanelSettings,
+  Assessment,
+  autoGrid,
   Avatar,
-  useTheme,
-  useMediaQuery,
-} from "@mui/material";
-import {
+  Box,
+  CalendarMonth,
+  Card,
+  Container,
   Dashboard,
-  ArrowForward,
+  gradients,
+  LocationOn,
+  NavCard,
+  PageHeader,
   PrecisionManufacturing,
   Receipt,
-  LocationOn,
-  CalendarMonth,
-  Assessment,
-  AdminPanelSettings,
-} from "@mui/icons-material";
+  sx as preset,
+  Typography,
+} from "../ui";
 import NavigationBar from "../components/NavigationBar";
 import { useAuth } from "../hooks/useAuth";
 
+// ---------------------------------------------------------------------------
+// Toàn bộ nội dung điều hướng khai báo bằng DỮ LIỆU, không phải JSX.
+// Thêm một trang mới = thêm một dòng ở đây.
+// `requires` để trống nghĩa là ai cũng thấy.
+// ---------------------------------------------------------------------------
+const NAV_ITEMS = [
+  {
+    accent: "red",
+    icon: <Receipt />,
+    title: "📋 Phiếu xuất nhập",
+    description: (
+      <>
+        Tạo và quản lý phiếu nhập xuất
+        <br />
+        máy móc thiết bị
+      </>
+    ),
+    actionLabel: "Quản lý phiếu",
+    path: "/tickets2",
+  },
+  {
+    accent: "green",
+    icon: <PrecisionManufacturing />,
+    title: "🔧 Danh sách máy móc",
+    description: (
+      <>
+        Quản lý và xem thông tin chi tiết
+        <br />
+        máy móc thiết bị
+      </>
+    ),
+    actionLabel: "Xem danh sách",
+    path: "/machines",
+  },
+  {
+    accent: "cyan",
+    icon: <LocationOn />,
+    title: "🗺️ Theo dõi vị trí",
+    description: "Kiểm tra máy móc tại một vị trí và xem lịch sử điều chuyển",
+    actionLabel: "Truy cập",
+    path: "/location-track",
+  },
+  {
+    accent: "amber",
+    icon: <CalendarMonth />,
+    title: "🛠️ Lịch bảo dưỡng",
+    description: (
+      <>
+        Theo dõi và quản lý lịch bảo trì
+        <br />
+        máy móc theo ngày/tháng
+      </>
+    ),
+    actionLabel: "Xem lịch",
+    path: "/maintenance-schedule",
+  },
+  {
+    accent: "purple",
+    icon: <Assessment />,
+    title: "📊 Báo cáo thống kê",
+    description: (
+      <>
+        Xem báo cáo tổng hợp, thống kê
+        <br />
+        kiểm kê và lịch sử bảo trì bảo dưỡng
+      </>
+    ),
+    actionLabel: "Xem báo cáo",
+    path: "/reports",
+  },
+  {
+    accent: "slate",
+    icon: <AdminPanelSettings />,
+    title: "🛡️ ADMIN",
+    description: (
+      <>
+        Quản lý tài khoản, phân quyền
+        <br />
+        và cấu hình dữ liệu hệ thống
+      </>
+    ),
+    actionLabel: "Truy cập",
+    path: "/admin",
+    requires: "admin",
+  },
+];
+
 const HomePage = () => {
   const navigate = useNavigate();
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const { permissions = [] } = useAuth() || {};
-  // const canEdit = permissions.includes("edit");
-  const isAdmin = permissions.includes("admin");
-  const handleNavigate = (path) => {
-    navigate(path);
-  };
+
+  const visibleItems = NAV_ITEMS.filter(
+    (item) => !item.requires || permissions.includes(item.requires)
+  );
 
   return (
     <>
       <NavigationBar />
       <Container maxWidth="xl" sx={{ py: 4 }}>
-        {/* Header */}
-        <Box sx={{ mb: 6 }}>
-          <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
-            <Avatar
-              sx={{
-                width: 60,
-                height: 60,
-                background: "linear-gradient(45deg, #667eea, #764ba2)",
-              }}
-            >
-              <Dashboard sx={{ fontSize: 30 }} />
-            </Avatar>
-            <Box>
-              <Typography
-                variant={isMobile ? "h4" : "h3"}
-                component="h1"
-                sx={{
-                  fontWeight: 700,
-                  background: "linear-gradient(45deg, #667eea, #764ba2)",
-                  backgroundClip: "text",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                }}
-              >
-                TPM
-              </Typography>
-              <Typography
-                variant={isMobile ? "body1" : "h6"}
-                color="text.secondary"
-              >
-                Hệ thống quản lý máy móc thiết bị TPM
-              </Typography>
-            </Box>
-          </Stack>
-        </Box>
+        <PageHeader
+          icon={<Dashboard />}
+          title="TPM"
+          subtitle="Hệ thống quản lý máy móc thiết bị TPM"
+        />
 
-        {/* Welcome Message */}
+        {/* Khối chào mừng */}
         <Card
           elevation={0}
           sx={{
+            ...preset.softCard,
             p: { xs: 3, sm: 6 },
-            mt: 6,
-            mb: 6,
+            my: 6,
             textAlign: "center",
-            borderRadius: "20px",
-            background:
-              "linear-gradient(135deg, #667eea11 0%, #764ba211 50%, #2e7d3211 100%)",
-            border: "1px solid rgba(0, 0, 0, 0.05)",
+            background: gradients.brandWash,
           }}
         >
           <Avatar
             sx={{
               width: 80,
               height: 80,
-              background: "linear-gradient(45deg, #667eea, #764ba2)",
+              background: gradients.brand,
               mx: "auto",
               mb: 3,
             }}
@@ -106,482 +152,52 @@ const HomePage = () => {
             <Dashboard sx={{ fontSize: 40 }} />
           </Avatar>
           <Typography
-            variant={isMobile ? "h4" : "h3"}
+            variant="h3"
             fontWeight="bold"
             gutterBottom
-            sx={{
-              background: "linear-gradient(45deg, #667eea, #764ba2)",
-              backgroundClip: "text",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-            }}
+            sx={preset.gradientText()}
           >
             🎉 Chào mừng đến với TPM System!
           </Typography>
           <Typography
-            variant={isMobile ? "body1" : "h6"}
+            variant="h6"
             color="text.secondary"
-            sx={{ mb: 4 }}
+            // <600px lùi về 1rem - bản cũ: variant={isMobile ? "body1" : "h6"}
+            sx={{ mb: 4, fontSize: { xs: "1rem", sm: "1.25rem" } }}
           >
             Hệ thống quản lý, bảo trì máy móc thiết bị sản xuất
           </Typography>
-          {/* <Stack
-            direction="row"
-            spacing={2}
-            justifyContent="center"
-            flexWrap="wrap"
-            useFlexGap
-          >
-            <Chip
-              label="✅ [placeholder]"
-              sx={{
-                background: "linear-gradient(45deg, #2e7d3222, #4caf5044)",
-                color: "#2e7d32",
-                fontWeight: 600,
-                px: 2,
-                py: 1,
-              }}
-            />
-            <Chip
-              label="🔒 [placeholder]"
-              sx={{
-                background: "linear-gradient(45deg, #667eea22, #764ba244)",
-                color: "#667eea",
-                fontWeight: 600,
-                px: 2,
-                py: 1,
-              }}
-            />
-            <Chip
-              label="⚡ [placeholder]"
-              sx={{
-                background: "linear-gradient(45deg, #dc004e22, #f5005744)",
-                color: "#dc004e",
-                fontWeight: 600,
-                px: 2,
-                py: 1,
-              }}
-            />
-          </Stack> */}
         </Card>
 
-        {/* Quick Navigation Cards */}
+        {/* Điều hướng nhanh */}
         <Box sx={{ mb: 6 }}>
           <Typography
-            variant={isMobile ? "h5" : "h4"}
+            variant="h4"
             gutterBottom
             sx={{
               mb: 4,
               fontWeight: 600,
               textAlign: "center",
-              background: "linear-gradient(45deg, #667eea, #764ba2)",
-              backgroundClip: "text",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
+              ...preset.gradientText(),
             }}
           >
             🚀 Điều hướng nhanh
           </Typography>
-          <Grid container spacing={3}>
-            {/* Phiếu xuất nhập */}
-            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-              <Card
-                elevation={0}
-                sx={{
-                  height: "100%",
-                  borderRadius: "20px",
-                  border: "1px solid rgba(0, 0, 0, 0.05)",
-                  background:
-                    "linear-gradient(135deg, #ff6b6b22 0%, #ee5a6f22 100%)",
-                  transition: "all 0.3s ease",
-                  "&:hover": {
-                    transform: "translateY(-8px)",
-                    boxShadow: "0 20px 40px rgba(255, 107, 107, 0.2)",
-                  },
-                }}
-              >
-                <CardContent sx={{ p: 4, textAlign: "center" }}>
-                  <Avatar
-                    sx={{
-                      width: 70,
-                      height: 70,
-                      background: "linear-gradient(45deg, #ff6b6b, #ee5a6f)",
-                      mx: "auto",
-                      mb: 3,
-                    }}
-                  >
-                    <Receipt sx={{ fontSize: 35 }} />
-                  </Avatar>
-                  <Typography variant="h5" fontWeight="bold" gutterBottom>
-                    📋 Phiếu xuất nhập
-                  </Typography>
-                  <Typography
-                    variant="body1"
-                    color="text.secondary"
-                    sx={{ mb: 3 }}
-                  >
-                    Tạo và quản lý phiếu nhập xuất
-                    <br />
-                    máy móc thiết bị
-                  </Typography>
-                  <Button
-                    variant="contained"
-                    size="large"
-                    endIcon={<ArrowForward />}
-                    onClick={() => handleNavigate("/tickets2")}
-                    sx={{
-                      borderRadius: "12px",
-                      background: "linear-gradient(45deg, #ff6b6b, #ee5a6f)",
-                      px: 4,
-                      py: 1.5,
-                      "&:hover": {
-                        transform: "translateY(-2px)",
-                        boxShadow: "0 8px 25px rgba(255, 107, 107, 0.3)",
-                      },
-                      transition: "all 0.3s ease",
-                    }}
-                  >
-                    Quản lý phiếu
-                  </Button>
-                </CardContent>
-              </Card>
-            </Grid>
 
-            {/* Danh sách máy móc */}
-            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-              <Card
-                elevation={0}
-                sx={{
-                  height: "100%",
-                  borderRadius: "20px",
-                  border: "1px solid rgba(0, 0, 0, 0.05)",
-                  background:
-                    "linear-gradient(135deg, #2e7d3222 0%, #4caf5022 100%)",
-                  transition: "all 0.3s ease",
-                  "&:hover": {
-                    transform: "translateY(-8px)",
-                    boxShadow: "0 20px 40px rgba(46, 125, 50, 0.2)",
-                  },
-                }}
-              >
-                <CardContent sx={{ p: 4, textAlign: "center" }}>
-                  <Avatar
-                    sx={{
-                      width: 70,
-                      height: 70,
-                      background: "linear-gradient(45deg, #2e7d32, #4caf50)",
-                      mx: "auto",
-                      mb: 3,
-                    }}
-                  >
-                    <PrecisionManufacturing sx={{ fontSize: 35 }} />
-                  </Avatar>
-                  <Typography variant="h5" fontWeight="bold" gutterBottom>
-                    🔧 Danh sách máy móc
-                  </Typography>
-                  <Typography
-                    variant="body1"
-                    color="text.secondary"
-                    sx={{ mb: 3 }}
-                  >
-                    Quản lý và xem thông tin chi tiết
-                    <br />
-                    máy móc thiết bị
-                  </Typography>
-                  <Button
-                    variant="contained"
-                    size="large"
-                    endIcon={<ArrowForward />}
-                    onClick={() => handleNavigate("/machines")}
-                    sx={{
-                      borderRadius: "12px",
-                      background: "linear-gradient(45deg, #2e7d32, #4caf50)",
-                      px: 4,
-                      py: 1.5,
-                      "&:hover": {
-                        transform: "translateY(-2px)",
-                        boxShadow: "0 8px 25px rgba(46, 125, 50, 0.3)",
-                      },
-                      transition: "all 0.3s ease",
-                    }}
-                  >
-                    Xem danh sách
-                  </Button>
-                </CardContent>
-              </Card>
-            </Grid>
-
-            {/* Theo dõi vị trí (CARD MỚI) */}
-            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-              <Card
-                elevation={0}
-                sx={{
-                  height: "100%",
-                  borderRadius: "20px",
-                  border: "1px solid rgba(0, 0, 0, 0.05)",
-                  background:
-                    "linear-gradient(135deg, #03a9f422 0%, #00bcd422 100%)",
-                  transition: "all 0.3s ease",
-                  "&:hover": {
-                    transform: "translateY(-8px)",
-                    boxShadow: "0 20px 40px rgba(3, 169, 244, 0.2)",
-                  },
-                }}
-              >
-                <CardContent sx={{ p: 4, textAlign: "center" }}>
-                  <Avatar
-                    sx={{
-                      width: 70,
-                      height: 70,
-                      background: "linear-gradient(45deg, #03a9f4, #00bcd4)",
-                      mx: "auto",
-                      mb: 3,
-                    }}
-                  >
-                    <LocationOn sx={{ fontSize: 35 }} />
-                  </Avatar>
-                  <Typography variant="h5" fontWeight="bold" gutterBottom>
-                    🗺️ Theo dõi vị trí
-                  </Typography>
-                  <Typography
-                    variant="body1"
-                    color="text.secondary"
-                    sx={{ mb: 3 }}
-                  >
-                    Kiểm tra máy móc tại một vị trí và xem lịch sử điều chuyển
-                  </Typography>
-                  <Button
-                    variant="contained"
-                    size="large"
-                    endIcon={<ArrowForward />}
-                    onClick={() => handleNavigate("/location-track")}
-                    sx={{
-                      borderRadius: "12px",
-                      background: "linear-gradient(45deg, #03a9f4, #00bcd4)",
-                      px: 4,
-                      py: 1.5,
-                      "&:hover": {
-                        transform: "translateY(-2px)",
-                        boxShadow: "0 8px 25px rgba(3, 169, 244, 0.3)",
-                      },
-                      transition: "all 0.3s ease",
-                    }}
-                  >
-                    Truy cập
-                  </Button>
-                </CardContent>
-              </Card>
-            </Grid>
-
-            {/* Lịch bảo dưỡng */}
-            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-              <Card
-                elevation={0}
-                sx={{
-                  height: "100%",
-                  borderRadius: "20px",
-                  border: "1px solid rgba(0, 0, 0, 0.05)",
-                  background:
-                    "linear-gradient(135deg, #ffa72622 0%, #fb8c0022 100%)",
-                  transition: "all 0.3s ease",
-                  "&:hover": {
-                    transform: "translateY(-8px)",
-                    boxShadow: "0 20px 40px rgba(255, 167, 38, 0.2)",
-                  },
-                }}
-              >
-                <CardContent sx={{ p: 4, textAlign: "center" }}>
-                  <Avatar
-                    sx={{
-                      width: 70,
-                      height: 70,
-                      background: "linear-gradient(45deg, #ffa726, #fb8c00)",
-                      mx: "auto",
-                      mb: 3,
-                    }}
-                  >
-                    <CalendarMonth sx={{ fontSize: 35 }} />
-                  </Avatar>
-
-                  <Typography variant="h5" fontWeight="bold" gutterBottom>
-                    🛠️ Lịch bảo dưỡng
-                  </Typography>
-
-                  <Typography
-                    variant="body1"
-                    color="text.secondary"
-                    sx={{ mb: 3 }}
-                  >
-                    Theo dõi và quản lý lịch bảo trì
-                    <br />
-                    máy móc theo ngày/tháng
-                  </Typography>
-
-                  <Button
-                    variant="contained"
-                    size="large"
-                    endIcon={<ArrowForward />}
-                    onClick={() => handleNavigate("/maintenance-schedule")}
-                    sx={{
-                      borderRadius: "12px",
-                      background: "linear-gradient(45deg, #ffa726, #fb8c00)",
-                      px: 4,
-                      py: 1.5,
-                      "&:hover": {
-                        transform: "translateY(-2px)",
-                        boxShadow: "0 8px 25px rgba(255, 167, 38, 0.3)",
-                      },
-                      transition: "all 0.3s ease",
-                    }}
-                  >
-                    Xem lịch
-                  </Button>
-                </CardContent>
-              </Card>
-            </Grid>
-
-            {/* Báo cáo thống kê */}
-            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-              <Card
-                elevation={0}
-                sx={{
-                  height: "100%",
-                  borderRadius: "20px",
-                  border: "1px solid rgba(0, 0, 0, 0.05)",
-                  background:
-                    "linear-gradient(135deg, #9c27b022 0%, #e91e6322 100%)",
-                  transition: "all 0.3s ease",
-                  "&:hover": {
-                    transform: "translateY(-8px)",
-                    boxShadow: "0 20px 40px rgba(156, 39, 176, 0.2)",
-                  },
-                }}
-              >
-                <CardContent sx={{ p: 4, textAlign: "center" }}>
-                  <Avatar
-                    sx={{
-                      width: 70,
-                      height: 70,
-                      background: "linear-gradient(45deg, #9c27b0, #e91e63)",
-                      mx: "auto",
-                      mb: 3,
-                    }}
-                  >
-                    <Assessment sx={{ fontSize: 35 }} />
-                  </Avatar>
-
-                  <Typography variant="h5" fontWeight="bold" gutterBottom>
-                    📊 Báo cáo thống kê
-                  </Typography>
-
-                  <Typography
-                    variant="body1"
-                    color="text.secondary"
-                    sx={{ mb: 3 }}
-                  >
-                    Xem báo cáo tổng hợp, thống kê
-                    <br />
-                    kiểm kê và lịch sử bảo trì bảo dưỡng
-                  </Typography>
-
-                  <Button
-                    variant="contained"
-                    size="large"
-                    endIcon={<ArrowForward />}
-                    onClick={() => handleNavigate("/reports")}
-                    sx={{
-                      borderRadius: "12px",
-                      background: "linear-gradient(45deg, #9c27b0, #e91e63)",
-                      px: 4,
-                      py: 1.5,
-                      "&:hover": {
-                        transform: "translateY(-2px)",
-                        boxShadow: "0 8px 25px rgba(156, 39, 176, 0.3)",
-                      },
-                      transition: "all 0.3s ease",
-                    }}
-                  >
-                    Xem báo cáo
-                  </Button>
-                </CardContent>
-              </Card>
-            </Grid>
-
-            {/* Quản trị hệ thống */}
-            {isAdmin && (
-              <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-                <Card
-                  elevation={0}
-                  sx={{
-                    height: "100%",
-                    borderRadius: "20px",
-                    border: "1px solid rgba(0, 0, 0, 0.05)",
-                    background:
-                      "linear-gradient(135deg, #607d8b22 0%, #455a6422 100%)",
-                    transition: "all 0.3s ease",
-                    "&:hover": {
-                      transform: "translateY(-8px)",
-                      boxShadow: "0 20px 40px rgba(96, 125, 139, 0.2)",
-                    },
-                  }}
-                >
-                  <CardContent sx={{ p: 4, textAlign: "center" }}>
-                    <Avatar
-                      sx={{
-                        width: 70,
-                        height: 70,
-                        background: "linear-gradient(45deg, #607d8b, #455a64)",
-                        mx: "auto",
-                        mb: 3,
-                      }}
-                    >
-                      <AdminPanelSettings sx={{ fontSize: 35 }} />
-                    </Avatar>
-
-                    <Typography variant="h5" fontWeight="bold" gutterBottom>
-                      🛡️ ADMIN
-                    </Typography>
-
-                    <Typography
-                      variant="body1"
-                      color="text.secondary"
-                      sx={{ mb: 3 }}
-                    >
-                      Quản lý tài khoản, phân quyền
-                      <br />
-                      và cấu hình dữ liệu hệ thống
-                    </Typography>
-
-                    <Button
-                      variant="contained"
-                      size="large"
-                      endIcon={<ArrowForward />}
-                      onClick={() => handleNavigate("/admin")}
-                      sx={{
-                        borderRadius: "12px",
-                        background: "linear-gradient(45deg, #607d8b, #455a64)",
-                        px: 4,
-                        py: 1.5,
-                        "&:hover": {
-                          transform: "translateY(-2px)",
-                          boxShadow: "0 8px 25px rgba(96, 125, 139, 0.3)",
-                        },
-                        transition: "all 0.3s ease",
-                      }}
-                    >
-                      Truy cập
-                    </Button>
-                  </CardContent>
-                </Card>
-              </Grid>
-            )}
-          </Grid>
-
-          {/* <div style={{ marginTop: "50px" }}>
-            {isAdmin && <>chỉ người có quyền ADMIN mới thấy</>}
-            {canEdit && <>chỉ người có quyền EDIT mới thấy</>}
-            {!canEdit && !isAdmin && <>chỉ người có quyền VIEW mới thấy</>}
-          </div> */}
+          {/* Lưới tự tính số cột theo bề rộng thật, không dán cứng breakpoint */}
+          <Box sx={autoGrid(250, 3, 3)}>
+            {visibleItems.map((item) => (
+              <NavCard
+                key={item.path}
+                accent={item.accent}
+                icon={item.icon}
+                title={item.title}
+                description={item.description}
+                actionLabel={item.actionLabel}
+                onAction={() => navigate(item.path)}
+              />
+            ))}
+          </Box>
         </Box>
       </Container>
     </>

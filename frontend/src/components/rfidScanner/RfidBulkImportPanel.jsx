@@ -1,6 +1,8 @@
 import React from "react";
-import { CircularProgress } from "@mui/material";
-import { useTheme, useMediaQuery } from "@mui/material";
+import {
+  CircularProgress,
+  useResponsive,
+} from "../../ui";
 import {
   RfidPanelBody,
   RfidInfoAlert,
@@ -16,8 +18,7 @@ export const RfidBulkImportPanelBody = ({
   inputRef,
   onClear,
 }) => {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const { isMobile } = useResponsive();
 
   return (
     <RfidPanelBody>
