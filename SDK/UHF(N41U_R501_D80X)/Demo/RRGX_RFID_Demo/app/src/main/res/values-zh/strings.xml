@@ -1,0 +1,380 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <drawable name="clr_normal">#666666</drawable>
+    <drawable name="clr_pressed">#333333</drawable>
+    <drawable name="list_normal">#00000000</drawable>
+    <drawable name="list_pressed">#FF333333</drawable>
+    <string name="app_name">UHF</string>
+    <string name="menu_settings">Settings</string>
+    <string name="action_settings">Settings</string>
+    <string name="hello_world">Hello world!</string>
+    <string name="version">版本号:</string>
+    <string name="dmin">最小频点:</string>
+    <string name="band">频段:</string>
+    <string name="dmax">最大频点:</string>
+    <string name="power">功率:</string>
+    <string name="scantime">询查最大时间:</string>
+    <string name="Connect">立即连接</string>
+    <string name="SerialPort">串口:</string>
+    <string name="BaudRate">波特率:</string>
+    <string name="idno">ID</string>
+    <string name="epcid">标签ID:</string>
+    <string name="times">次数</string>
+    <string name="rssi">RSSI</string>
+    <string name="ant1">天线1</string>
+    <string name="ant2">天线2</string>
+    <string name="ant3">天线3</string>
+    <string name="ant4">天线4</string>
+    <string name="ant5">天线5</string>
+    <string name="ant6">天线6</string>
+    <string name="ant7">天线7</string>
+    <string name="ant8">天线8</string>
+    <string name="number">张数:</string>
+    <string name="ttime">时间:</string>
+    <string name="speed">速度:</string>
+    <string name="btscan">存盘</string>
+    <string name="btscan_in">导出Excel</string>
+    <string name="btstop">停止</string>
+    <string name="basicparam">基本参数</string>
+    <string name="scanparam">询查参数</string>
+    <string name="qvalue">Q:</string>
+    <string name="session">Session:</string>
+    <string name="tidptr">TID地址:</string>
+    <string name="tidlen">TID长度:</string>
+    <string name="beepstr">蜂鸣器:</string>
+    <string name="getstr">读取</string>
+    <string name="setstr">设置</string>
+    <string name="btn_getstr">读取</string>
+    <string name="btn_setstr">设置</string>
+    <string name="txtepc">标签ID:</string>
+    <string name="bankid">存储区:</string>
+    <string name="memptr">地     址:</string>
+    <string name="memlen">长     度:</string>
+    <string name="pwdstr">密     码:</string>
+    <string name="readstr">读数据:</string>
+    <string name="writestr">写数据:</string>
+    <string name="butnread">读</string>
+    <string name="butnwrite">写</string>
+    <string name="butnwriteepc">写EPC号</string>
+    <string name="tab_scan">读EPC</string>
+    <string name="tab_rw">读写</string>
+    <string name="tab_param">设置</string>
+    <string name="power_error">功率设置失败</string>
+    <string name="beep_error">蜂鸣器设置失败</string>
+    <string name="frequent_error">频点设置失败</string>
+    <string name="antenna_error">天线设置失败</string>
+    <string name="set_success">设置成功</string>
+    <string name="openport_success">连接成功</string>
+    <string name="openport_failed">连接失败</string>
+    <string name="get_success">读取成功</string>
+    <string name="get_failed">读取失败</string>
+    <string name="write_failed">写数据失败</string>
+    <string name="write_success">写数据成功</string>
+    <string name="info_result">执行结果:</string>
+    <string name="btn_openrf">强打</string>
+    <string name="btn_closerf">关闭</string>
+    <string name="txt_temp">温度:</string>
+    <string name="txt_returnloss">回损:</string>
+    <string name="txt_read">测量</string>
+    <string name="info_select_tid">写EPC号的标签ID必须是TID</string>
+    <string name="lowpower">低功耗模式:</string>
+    <string name="openlowpower">打开低功耗</string>
+    <string name="closelowpower">关闭低功耗</string>
+    <string name="btStoping">停止中</string>
+    <string name="btn_answer">应答模式</string>
+    <string name="btn_active">实时模式</string>
+    <string name="timeInterval">间隔时间:</string>
+    <string name="txt_storage">存储</string>
+    <string name="txt_inport_excel">导出excel所需权限</string>
+    <string name="read_card_being">读卡中,请先停止读卡</string>
+    <string name="app_set_export">导出Excel</string>
+    <string name="app_set_clear">清空</string>
+    <string name="app_set_about">关于</string>
+    <string name="toast_export_clear">请在读卡页面操作</string>
+    <string name="about_scan_version">版本： </string>
+    <string name="toast_exit">再按一次退出程序</string>
+    <!--TODO:2023-12-27-->
+    <string name="code_format">编码格式:</string>
+    <!--TODO:end-->
+    <string-array name="low_select">
+        <item>关</item>
+        <item>开</item>
+    </string-array>
+    <string-array name="men_select">
+        <item>保留区</item>
+        <item>EPC区</item>
+        <item>TID区</item>
+        <item>用户区</item>
+    </string-array>
+    <string-array name="men_s">
+        <item>S0</item>
+        <item>S1</item>
+        <item>S2</item>
+        <item>S3</item>
+        <item>Auto</item>
+    </string-array>
+    <string-array name="men_q">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+        <item>7</item>
+        <item>8</item>
+        <item>9</item>
+        <item>10</item>
+        <item>11</item>
+        <item>12</item>
+        <item>13</item>
+        <item>14</item>
+        <item>15</item>
+    </string-array>
+    <string-array name="men_tid">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+        <item>7</item>
+        <item>8</item>
+        <item>9</item>
+        <item>10</item>
+        <item>11</item>
+        <item>12</item>
+        <item>13</item>
+        <item>14</item>
+        <item>15</item>
+        <item>16</item>
+        <item>17</item>
+        <item>18</item>
+        <item>19</item>
+        <item>20</item>
+        <item>21</item>
+        <item>22</item>
+        <item>23</item>
+        <item>24</item>
+        <item>25</item>
+        <item>26</item>
+        <item>27</item>
+        <item>28</item>
+        <item>29</item>
+        <item>30</item>
+        <item>31</item>
+        <item>32</item>
+    </string-array>
+    <string-array name="men_time">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+        <item>7</item>
+        <item>8</item>
+        <item>9</item>
+        <item>10</item>
+        <item>11</item>
+        <item>12</item>
+        <item>13</item>
+        <item>14</item>
+        <item>15</item>
+        <item>16</item>
+        <item>17</item>
+        <item>18</item>
+        <item>19</item>
+        <item>20</item>
+        <item>21</item>
+        <item>22</item>
+        <item>23</item>
+        <item>24</item>
+        <item>25</item>
+        <item>26</item>
+        <item>27</item>
+        <item>28</item>
+        <item>29</item>
+        <item>30</item>
+        <item>31</item>
+        <item>32</item>
+        <item>33</item>
+        <item>34</item>
+        <item>35</item>
+        <item>36</item>
+        <item>37</item>
+        <item>38</item>
+        <item>39</item>
+        <item>40</item>
+        <item>41</item>
+        <item>42</item>
+        <item>43</item>
+        <item>44</item>
+        <item>45</item>
+        <item>46</item>
+        <item>47</item>
+        <item>48</item>
+        <item>49</item>
+        <item>50</item>
+        <item>51</item>
+        <item>52</item>
+        <item>53</item>
+        <item>54</item>
+        <item>55</item>
+        <item>56</item>
+        <item>57</item>
+        <item>58</item>
+        <item>59</item>
+        <item>60</item>
+        <item>61</item>
+        <item>62</item>
+        <item>63</item>
+        <item>64</item>
+        <item>65</item>
+        <item>66</item>
+        <item>67</item>
+        <item>68</item>
+        <item>69</item>
+        <item>70</item>
+        <item>71</item>
+        <item>72</item>
+        <item>73</item>
+        <item>74</item>
+        <item>75</item>
+        <item>76</item>
+        <item>77</item>
+        <item>78</item>
+        <item>79</item>
+        <item>80</item>
+        <item>81</item>
+        <item>82</item>
+        <item>83</item>
+        <item>84</item>
+        <item>85</item>
+        <item>86</item>
+        <item>87</item>
+        <item>88</item>
+        <item>89</item>
+        <item>90</item>
+        <item>91</item>
+        <item>92</item>
+        <item>93</item>
+        <item>94</item>
+        <item>95</item>
+        <item>96</item>
+        <item>97</item>
+        <item>98</item>
+        <item>99</item>
+        <item>100</item>
+    </string-array>
+    <string name="open_warning">必须在操作之前打开设备！</string>
+    <string name="wordptr_empty_warning">起始地址不能为空！</string>
+    <string name="length_empty_warning">长度不能为空！</string>
+    <string name="pwd_empty_warning">密码不能为空！</string>
+    <string name="content_empty_warning">写入数据的内容不能为空！</string>
+    <string name="length_content_warning">长度和内容不匹配！</string>
+    <string name="str_lenght_odd_warning">每个数据的长度都不能奇数！</string>
+    <string name="data_ilegal">非法数据！（空的或长度是奇数？）</string>
+    <string-array name="Fre_select">
+        <item>902.75 MHz</item>
+        <item>903.25 MHz</item>
+        <item>903.75 MHz</item>
+        <item>904.25 MHz</item>
+        <item>904.75 MHz</item>
+        <item>905.25 MHz</item>
+        <item>905.75 MHz</item>
+        <item>906.25 MHz</item>
+        <item>906.75 MHz</item>
+        <item>907.25 MHz</item>
+        <item>907.75 MHz</item>
+        <item>908.25 MHz</item>
+        <item>908.75 MHz</item>
+        <item>909.25 MHz</item>
+        <item>909.75 MHz</item>
+        <item>910.25 MHz</item>
+        <item>910.75 MHz</item>
+        <item>911.25 MHz</item>
+        <item>911.75 MHz</item>
+        <item>912.25 MHz</item>
+        <item>912.75 MHz</item>
+        <item>913.25 MHz</item>
+        <item>913.75 MHz</item>
+        <item>914.25 MHz</item>
+        <item>914.75 MHz</item>
+        <item>915.25 MHz</item>
+        <item>915.75 MHz</item>
+        <item>916.25 MHz</item>
+        <item>916.75 MHz</item>
+        <item>917.25 MHz</item>
+        <item>917.75 MHz</item>
+        <item>918.25 MHz</item>
+        <item>918.75 MHz</item>
+        <item>919.25 MHz</item>
+        <item>919.75 MHz</item>
+        <item>920.25 MHz</item>
+        <item>920.75 MHz</item>
+        <item>921.25 MHz</item>
+        <item>921.75 MHz</item>
+        <item>922.25 MHz</item>
+        <item>922.75 MHz</item>
+        <item>923.25 MHz</item>
+        <item>923.75 MHz</item>
+        <item>924.25 MHz</item>
+        <item>924.75 MHz</item>
+        <item>925.25 MHz</item>
+        <item>925.75 MHz</item>
+        <item>926.25 MHz</item>
+        <item>926.75 MHz</item>
+        <item>927.25 MHz</item>
+    </string-array>
+    <string-array name="Power_select">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+        <item>7</item>
+        <item>8</item>
+        <item>9</item>
+        <item>10</item>
+        <item>11</item>
+        <item>12</item>
+        <item>13</item>
+        <item>14</item>
+        <item>15</item>
+        <item>16</item>
+        <item>17</item>
+        <item>18</item>
+        <item>19</item>
+        <item>20</item>
+        <item>21</item>
+        <item>22</item>
+        <item>23</item>
+        <item>24</item>
+        <item>25</item>
+        <item>26</item>
+        <item>27</item>
+        <item>28</item>
+        <item>29</item>
+        <item>30</item>
+        <!--TODO:2024-01-22:平板UHF设置功率限制最高为30-->
+        <item>31</item>
+        <item>32</item>
+        <item>33</item>
+    </string-array>
+    <!--TODO:2023-12-27-->
+    <string-array name="CodeFormat_select">
+        <item>HEX</item>
+        <item>ASCII</item>
+    </string-array>
+    <!--TODO：END-->
+    <string-array name="beep_select">
+        <item>Off</item>
+        <item>On</item>
+    </string-array>
+    <string name="title_activity_connect232">Connect232</string>
+</resources>

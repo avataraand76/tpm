@@ -495,7 +495,10 @@ const RfidRadarPanel = ({
         ) {
           scanInputRef.current.focus();
         }
-      }, 1000);
+        // 250ms chứ không phải 1s: ô này mất focus mỗi lần overlay "đã tìm thấy" hiện
+        // rồi user chạm màn hình. Dữ liệu máy quét đổ vào trong lúc đó sẽ rơi ra ngoài,
+        // nên khoảng chờ lấy lại focus chính là độ trễ người dùng nhìn thấy.
+      }, 250);
       return () => clearInterval(interval);
     }
   }, [step]);
@@ -536,13 +539,17 @@ const RfidRadarPanel = ({
     const rawValue = e.target.value;
     setScanInput(rawValue); // Cập nhật state để debug nếu cần
 
+    // Viết hoa một lần cho cả vòng lặp. Trước đây nằm trong forEach nên với 180 máy
+    // là 180 lần dựng lại bản sao của cả bộ đệm quét, mỗi lần dữ liệu đổ vào.
+    const upperValue = rawValue.toUpperCase();
+
     // Kiểm tra tất cả các targets chưa tìm thấy
     targets.forEach((target) => {
       const targetRfid = target.targetRfid.toUpperCase();
       const isAlreadyFound = foundTargets.has(targetRfid);
 
       // Nếu chưa tìm thấy và khớp với dữ liệu quét
-      if (!isAlreadyFound && rawValue.toUpperCase().includes(targetRfid)) {
+      if (!isAlreadyFound && upperValue.includes(targetRfid)) {
         // Phát âm thanh cảnh báo
         playSound();
 

@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="fill_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal" 
+    android:layout_marginLeft="5dp"
+    android:layout_marginRight="5dp">
+
+    <TextView
+        android:id="@+id/tv_freq"
+        android:layout_width="0dip"
+        android:layout_height="wrap_content"
+        android:layout_weight="1.5"
+        android:gravity="center_vertical|center"
+        android:text=""/>
+
+    <View
+        android:layout_width="1.5dip"
+        android:layout_height="fill_parent"
+        android:background="#A6A6A6" />
+
+    <TextView
+        android:id="@+id/tv_Rssi"
+        android:layout_width="0dip"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:gravity="center_vertical|center"
+        android:text="" />
+    <View
+        android:layout_width="1.5dip"
+        android:layout_height="fill_parent"
+        android:background="#A6A6A6" />
+
+    <TextView
+        android:id="@+id/tv_avg"
+        android:layout_width="0dip"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:gravity="center_vertical|center"
+        android:text="" />
+    <View
+        android:layout_width="1.5dip"
+        android:layout_height="fill_parent"
+        android:background="#A6A6A6" />
+
+    <TextView
+        android:id="@+id/tv_min"
+        android:layout_width="0dip"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:gravity="center_vertical|center"
+        android:text="" />
+    <View
+        android:layout_width="1.5dip"
+        android:layout_height="fill_parent"
+        android:background="#A6A6A6" />
+
+    <TextView
+        android:id="@+id/tv_max"
+        android:layout_width="0dip"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:gravity="center_vertical|center"
+        android:text="" />
+    <View
+        android:layout_width="1.5dip"
+        android:layout_height="fill_parent"
+        android:background="#A6A6A6" />
+
+
+
+    <TextView
+        android:id="@+id/tv_count"
+        android:layout_width="0dip"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:gravity="center_vertical|center"
+        android:text="" />
+
+</LinearLayout>

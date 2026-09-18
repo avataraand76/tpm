@@ -1,0 +1,669 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+  xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:app="http://schemas.android.com/apk/res-auto"
+  android:layout_width="match_parent"
+  android:layout_height="match_parent"
+  android:background="#F2F4F8"
+  android:orientation="vertical"
+>
+  <RelativeLayout
+    android:layout_width="match_parent"
+    android:layout_height="60dp"
+    android:background="#FFFFFF"
+    android:elevation="4dp"
+    android:paddingHorizontal="16dp"
+  >
+    <ImageButton
+      android:id="@+id/btnBack"
+      android:layout_width="48dp"
+      android:layout_height="48dp"
+      android:layout_alignParentStart="true"
+      android:layout_centerVertical="true"
+      android:background="?attr/selectableItemBackgroundBorderless"
+      android:contentDescription="Back"
+      android:src="@drawable/ic_arrow_back"
+      app:tint="#333333"
+    />
+
+    <TextView
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:layout_centerInParent="true"
+      android:text="Cấu hình RFID / RFID Settings"
+      android:textColor="#333333"
+      android:textSize="18sp"
+      android:textStyle="bold"
+    />
+  </RelativeLayout>
+
+  <ScrollView
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:scrollbarThumbVertical="@android:color/darker_gray"
+  >
+    <LinearLayout
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:animateLayoutChanges="true"
+      android:orientation="vertical"
+      android:paddingBottom="40dp"
+      android:paddingTop="16dp"
+    >
+      <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingBottom="8dp"
+        android:paddingStart="16dp"
+        android:text="CẤU HÌNH HỆ THỐNG / SYSTEM SETTINGS"
+        android:textColor="#2196F3"
+        android:textSize="12sp"
+        android:textStyle="bold"
+      />
+      <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#FFFFFF"
+        android:orientation="vertical"
+      >
+        <RelativeLayout
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:padding="16dp"
+        >
+          <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:layout_toStartOf="@+id/swService"
+            android:orientation="vertical"
+          >
+            <TextView
+              android:layout_width="wrap_content"
+              android:layout_height="wrap_content"
+              android:text="Trạng thái dịch vụ / Service Status "
+              android:textColor="#333333"
+              android:textSize="16sp"
+              android:textStyle="bold"
+            />
+            <TextView
+              android:layout_width="wrap_content"
+              android:layout_height="wrap_content"
+              android:text="Cho phép quét ngầm và tự động điền"
+              android:textColor="#757575"
+              android:textSize="14sp"
+            />
+          </LinearLayout>
+          <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/swService"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:checked="false"
+          />
+        </RelativeLayout>
+
+        <View
+          android:layout_width="match_parent"
+          android:layout_height="1dp"
+          android:background="#E0E0E0"
+          android:layout_marginHorizontal="16dp"
+        />
+
+        <RelativeLayout
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:padding="16dp"
+        >
+          <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:layout_toStartOf="@+id/swSound"
+            android:orientation="vertical"
+          >
+            <TextView
+              android:layout_width="wrap_content"
+              android:layout_height="wrap_content"
+              android:text="Âm thanh thông báo / Beep Sound"
+              android:textColor="#333333"
+              android:textSize="16sp"
+              android:textStyle="bold"
+            />
+            <TextView
+              android:layout_width="wrap_content"
+              android:layout_height="wrap_content"
+              android:text="Phát tiếng kêu khi quét thành công"
+              android:textColor="#757575"
+              android:textSize="14sp"
+            />
+          </LinearLayout>
+          <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/swSound"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:checked="true"
+          />
+        </RelativeLayout>
+      </LinearLayout>
+
+      <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingBottom="8dp"
+        android:paddingStart="16dp"
+        android:text="CẤU HÌNH CƠ BẢN / BASIC SETTINGS"
+        android:textColor="#2196F3"
+        android:textSize="12sp"
+        android:textStyle="bold"
+      />
+
+      <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#FFFFFF"
+        android:orientation="vertical"
+      >
+        <LinearLayout
+          android:id="@+id/rowPower"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:clickable="true"
+          android:focusable="true"
+          android:foreground="?attr/selectableItemBackground"
+          android:orientation="vertical"
+          android:padding="16dp"
+        >
+          <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Công suất phát / RF Power"
+            android:textColor="#333333"
+            android:textSize="16sp"
+            android:textStyle="bold"
+          />
+          <TextView
+            android:id="@+id/txtPowerSummary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="30 dBm"
+            android:textColor="#757575"
+            android:textSize="14sp"
+          />
+          <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="Càng cao đọc càng xa, nhưng bắt về cả trăm thẻ xung quanh nên lâu gặp đúng thẻ cần tìm."
+            android:textColor="#8A8A8A"
+            android:textSize="13sp"
+            android:lineSpacingExtra="2dp"
+          />
+        </LinearLayout>
+
+        <View
+          android:layout_width="match_parent"
+          android:layout_height="1dp"
+          android:background="#E0E0E0"
+          android:layout_marginHorizontal="16dp"
+        />
+
+        <LinearLayout
+          android:id="@+id/rowRegion"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:clickable="true"
+          android:focusable="true"
+          android:foreground="?attr/selectableItemBackground"
+          android:orientation="vertical"
+          android:padding="16dp"
+        >
+          <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Vùng tần số / Region"
+            android:textColor="#333333"
+            android:textSize="16sp"
+            android:textStyle="bold"
+          />
+          <TextView
+            android:id="@+id/txtRegionSummary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Vietnam (918-923 MHz)"
+            android:textColor="#757575"
+            android:textSize="14sp"
+          />
+          <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="Dải tần phát sóng, phải đúng quy định nơi sử dụng."
+            android:textColor="#8A8A8A"
+            android:textSize="13sp"
+            android:lineSpacingExtra="2dp"
+          />
+        </LinearLayout>
+
+        <View
+          android:layout_width="match_parent"
+          android:layout_height="1dp"
+          android:background="#E0E0E0"
+          android:layout_marginHorizontal="16dp"
+        />
+
+        <LinearLayout
+          android:id="@+id/rowTrigger"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:clickable="true"
+          android:focusable="true"
+          android:foreground="?attr/selectableItemBackground"
+          android:orientation="vertical"
+          android:padding="16dp"
+        >
+          <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Chế độ nút bấm / Trigger Mode"
+            android:textColor="#333333"
+            android:textSize="16sp"
+            android:textStyle="bold"
+          />
+          <TextView
+            android:id="@+id/txtTriggerSummary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Giữ để quét / Hold to scan"
+            android:textColor="#757575"
+            android:textSize="14sp"
+          />
+          <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="Immediate: bóp cò một lần để bắt đầu, bóp lần nữa để dừng.
+            \nHold: giữ cò thì quét, thả ra là dừng."
+            android:textColor="#8A8A8A"
+            android:textSize="13sp"
+            android:lineSpacingExtra="2dp"
+          />
+        </LinearLayout>
+        <View
+          android:layout_width="match_parent"
+          android:layout_height="1dp"
+          android:background="#E0E0E0"
+          android:layout_marginHorizontal="16dp"
+        />
+        <LinearLayout
+          android:id="@+id/rowScanMode"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:clickable="true"
+          android:focusable="true"
+          android:foreground="?attr/selectableItemBackground"
+          android:orientation="vertical"
+          android:padding="16dp"
+        >
+          <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Chế độ quét / Scan Mode"
+            android:textColor="#333333"
+            android:textSize="16sp"
+            android:textStyle="bold"
+          />
+          <TextView
+            android:id="@+id/txtScanModeSummary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Quét nhiều thẻ / Multi-tag"
+            android:textColor="#757575"
+            android:textSize="14sp"
+          />
+          <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="Single: đọc được một thẻ là tự dừng, hợp khi tra cứu từng máy.
+            \nMulti: quét liên tục, dùng để kiểm kê và dò tìm."
+            android:textColor="#8A8A8A"
+            android:textSize="13sp"
+            android:lineSpacingExtra="2dp"
+          />
+        </LinearLayout>
+      </LinearLayout>
+
+      <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingBottom="8dp"
+        android:paddingStart="16dp"
+        android:paddingTop="24dp"
+        android:text="THÔNG SỐ QUÉT / INVENTORY PARAMETERS"
+        android:textColor="#2196F3"
+        android:textSize="12sp"
+        android:textStyle="bold"
+      />
+
+      <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#FFFFFF"
+        android:orientation="vertical"
+      >
+        <LinearLayout
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:orientation="horizontal"
+          android:padding="16dp"
+          android:weightSum="2"
+        >
+          <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+          >
+            <TextView
+              android:layout_width="wrap_content"
+              android:layout_height="wrap_content"
+              android:text="Q Value (0-15)"
+              android:textColor="#333333"
+              android:textStyle="bold"
+              android:textSize="14sp"
+            />
+            <Spinner
+              android:id="@+id/spnQValue"
+              android:layout_width="match_parent"
+              android:layout_height="40dp"
+            />
+          </LinearLayout>
+          <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+          >
+            <TextView
+              android:layout_width="wrap_content"
+              android:layout_height="wrap_content"
+              android:text="Session (0-3)"
+              android:textColor="#333333"
+              android:textStyle="bold"
+              android:textSize="14sp"
+            />
+            <Spinner
+              android:id="@+id/spnSession"
+              android:layout_width="match_parent"
+              android:layout_height="40dp"
+            />
+          </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:orientation="vertical"
+          android:paddingHorizontal="16dp"
+          android:paddingBottom="16dp"
+        >
+          <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="0dp"
+            android:text="Q Value - Mỗi vòng điểm danh được chia thành 2^Q khe, mỗi thẻ bốc ngẫu nhiên một khe để trả lời. Nên đặt xấp xỉ số thẻ trong tầm: khoảng 16 thẻ chọn 4, 32 thẻ chọn 5, 128 thẻ chọn 7. Đặt cao quá thì phí thời gian đếm khe rỗng, thấp quá thì thẻ chen nhau nên phải đọc lại."
+            android:textColor="#8A8A8A"
+            android:textSize="13sp"
+            android:lineSpacingExtra="2dp"
+          />
+          <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="Session - Thẻ vừa đọc xong sẽ im lặng bao lâu trước khi trả lời lại. 
+            \nSố 0 thẻ trả lời lại ngay.
+            \nSố 1 (500ms-5s) thẻ trả lời trong khoảng 500ms-5s. Lý tưởng cho việc kiểm kê tần suất cao trong môi trường động (ví dụ: băng chuyền,...).
+            \nSố 2/3 giữ im lâu ít nhất 2s sau khi quét, quét hết một đám đông thẻ nhanh hơn nhiều - nên dùng khi kiểm kê (ví dụ: kho,...)."
+            android:textColor="#8A8A8A"
+            android:textSize="13sp"
+            android:lineSpacingExtra="2dp"
+          />
+        </LinearLayout>
+
+        <View
+          android:layout_width="match_parent"
+          android:layout_height="1dp"
+          android:background="#E0E0E0"
+          android:layout_marginHorizontal="16dp"
+        />
+
+        <LinearLayout
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:orientation="horizontal"
+          android:padding="16dp"
+          android:weightSum="2"
+        >
+          <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+          >
+            <TextView
+              android:layout_width="wrap_content"
+              android:layout_height="wrap_content"
+              android:text="TID Pointer (0-32)"
+              android:textColor="#333333"
+              android:textStyle="bold"
+              android:textSize="14sp"
+            />
+            <EditText
+              android:id="@+id/edtTidPtr"
+              android:layout_width="match_parent"
+              android:layout_height="wrap_content"
+              android:hint="Offset"
+              android:inputType="number"
+              android:textSize="14sp"
+            />
+          </LinearLayout>
+          <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+          >
+            <TextView
+              android:layout_width="wrap_content"
+              android:layout_height="wrap_content"
+              android:text="TID Length (0-32)"
+              android:textColor="#333333"
+              android:textStyle="bold"
+              android:textSize="14sp"
+            />
+            <EditText
+              android:id="@+id/edtTidLen"
+              android:layout_width="match_parent"
+              android:layout_height="wrap_content"
+              android:hint="Length"
+              android:inputType="number"
+              android:textSize="14sp"
+            />
+          </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:orientation="vertical"
+          android:paddingHorizontal="16dp"
+          android:paddingBottom="16dp"
+        >
+          <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="0dp"
+            android:text="Vùng nhớ TID chứa mã do nhà sản xuất thẻ ghi sẵn, không xoá được. Hiện hai ô này CHƯA CÓ TÁC DỤNG: phần mềm luôn đặt TID Length = 0 nên vùng TID không được đọc. Hai ô này cũng chỉ được lưu khi thoát bằng nút quay lại ở góc trên."
+            android:textColor="#8A8A8A"
+            android:textSize="13sp"
+            android:lineSpacingExtra="2dp"
+          />
+        </LinearLayout>
+
+        <View
+          android:layout_width="match_parent"
+          android:layout_height="1dp"
+          android:background="#E0E0E0"
+          android:layout_marginHorizontal="16dp"
+        />
+
+        <LinearLayout
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:orientation="vertical"
+          android:padding="16dp"
+        >
+          <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content">
+            <TextView
+              android:layout_width="wrap_content"
+              android:layout_height="wrap_content"
+              android:text="Thời gian quét / Max Scan Time (x100ms)"
+              android:textColor="#333333"
+              android:textStyle="bold"
+              android:textSize="14sp"
+            />
+            <TextView
+              android:id="@+id/txtMaxScanTimeValue"
+              android:layout_width="wrap_content"
+              android:layout_height="wrap_content"
+              android:layout_alignParentEnd="true"
+              android:text="20"
+              android:textColor="#2196F3"
+              android:textStyle="bold"
+            />
+          </RelativeLayout>
+          <SeekBar
+            android:id="@+id/seekMaxScanTime"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:max="255"
+            android:progress="20"
+          />
+          <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="Thời lượng tối đa cho một lần thực hiện thao tác kiểm kê. Trong khoảng thời gian này, thiết bị đọc liên tục phát năng lượng và nhận tín hiệu phản hồi từ thẻ.
+            \n0ms: Thường biểu thị một lần truy vấn đơn lẻ, dừng lại sau khi đọc xong các thẻ đang được quét.
+            \n100-500ms: Phù hợp với thẻ đang di chuyển hoặc thiết bị đọc cầm tay, đòi hỏi tốc độ làm mới nhanh để đảm bảo hiệu suất theo thời gian thực.
+            \n1000-25500ms: Phù hợp với kiểm kê tại chỗ/tĩnh (ví dụ: kiểm tra kho, thiết bị đọc cố định), đảm bảo đủ thời gian để quét được tất cả các thẻ."
+            android:textColor="#8A8A8A"
+            android:textSize="13sp"
+            android:lineSpacingExtra="2dp"
+          />
+        </LinearLayout>
+
+        <View
+          android:layout_width="match_parent"
+          android:layout_height="1dp"
+          android:background="#E0E0E0"
+          android:layout_marginHorizontal="16dp"
+        />
+
+        <LinearLayout
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:orientation="vertical"
+          android:padding="16dp"
+        >
+          <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content">
+            <TextView
+              android:layout_width="wrap_content"
+              android:layout_height="wrap_content"
+              android:text="Khoảng nghỉ / Interval (ms)"
+              android:textColor="#333333"
+              android:textStyle="bold"
+              android:textSize="14sp"
+            />
+            <TextView
+              android:id="@+id/txtIntervalValue"
+              android:layout_width="wrap_content"
+              android:layout_height="wrap_content"
+              android:layout_alignParentEnd="true"
+              android:text="0 ms"
+              android:textColor="#2196F3"
+              android:textStyle="bold"
+            />
+          </RelativeLayout>
+          <SeekBar
+            android:id="@+id/seekInterval"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:max="100"
+            android:progress="0"
+          />
+          <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="Thời gian nghỉ giữa hai vòng quét.
+            \n0ms: Không có khoảng nghỉ, hoạt động liên tục. Hiệu suất cao nhất, nhưng cũng tiêu thụ nhiều điện năng và sinh nhiệt nhiều nhất.
+            \n10-100ms: Cân bằng giữa hiệu suất và mức tiêu thụ điện năng, phù hợp với hầu hết các kịch bản vận hành liên tục.
+            \n>100ms: Giảm đáng kể mức tiêu thụ điện năng, lý tưởng cho các thiết bị chạy bằng pin, nhưng làm giảm tốc độ cập nhật dữ liệu."
+            android:textColor="#8A8A8A"
+            android:textSize="13sp"
+            android:lineSpacingExtra="2dp"
+          />
+        </LinearLayout>
+      </LinearLayout>
+
+      <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingBottom="8dp"
+        android:paddingStart="16dp"
+        android:paddingTop="24dp"
+        android:text="KHÔI PHỤC / RESET"
+        android:textColor="#2196F3"
+        android:textSize="12sp"
+        android:textStyle="bold"
+      />
+
+      <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#FFFFFF"
+        android:orientation="vertical"
+        android:padding="16dp"
+      >
+        <Button
+          android:id="@+id/btnResetDefaults"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:backgroundTint="#FF5722"
+          android:text="KHÔI PHỤC MẶC ĐỊNH"
+          android:textColor="#FFFFFF"
+          android:textSize="16sp"
+        />
+
+        <TextView
+          android:id="@+id/txtResetSummary"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:layout_marginTop="10dp"
+          android:lineSpacingExtra="2dp"
+          android:textColor="#8A8A8A"
+          android:textSize="13sp"
+        />
+      </LinearLayout>
+    </LinearLayout>
+  </ScrollView>
+</LinearLayout>
