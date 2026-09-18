@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:icon="@drawable/menu_btn_setting"
+        android:title="test"
+        app:showAsAction="always">
+
+        <menu>
+            <item
+                android:id="@+id/menu_btn_export"
+                android:orderInCategory="80"
+                android:title="@string/app_set_export"
+                app:showAsAction="never" />
+
+            <!--TODO:2023-12-26：转ASCII -->
+            <!--<item
+                android:id="@+id/menu_btn_toAscii"
+                android:orderInCategory="80"
+                android:title="转ASCII码"
+                app:showAsAction="never" />-->
+            <!--TODO:end-->
+
+            <item
+                android:id="@+id/menu_btn_about"
+                android:orderInCategory="80"
+                android:title="@string/app_set_about"
+                app:showAsAction="never" />
+
+        </menu>
+
+    </item>
+
+
+    <!--showAsAction这个属性的值有：-->
+    <!--1、always：使菜单项一直显示在ToolBar上。-->
+    <!--2、ifRoom：如果有足够的空间，这个值会使菜单项显示在ToolBar上。-->
+    <!--3、never：使菜单项永远都不出现在ToolBar上,在…的子项中显示。-->
+    <!--4、withText：使菜单项和它的图标，菜单文本一起显示。-->
+</menu>

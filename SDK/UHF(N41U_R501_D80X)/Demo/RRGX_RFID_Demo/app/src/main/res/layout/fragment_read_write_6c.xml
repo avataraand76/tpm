@@ -1,0 +1,227 @@
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/scrollView1"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent">
+
+    <LinearLayout
+        android:layout_width="fill_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="@dimen/rm_6c_et_height"
+                android:layout_weight="1"
+                android:gravity="right|center"
+                android:text="@string/info_result" />
+
+            <TextView
+                android:id="@+id/rw_result"
+                android:layout_width="0dp"
+                android:layout_height="@dimen/rm_6c_et_height"
+                android:layout_weight="2"
+                android:gravity="center"
+                android:textColor="#cc0000"
+                android:textSize="15sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="fill_parent"
+            android:layout_height="match_parent">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="@dimen/rm_6c_et_height"
+                android:layout_weight="1"
+                android:gravity="right|center"
+                android:text="@string/txtepc" />
+
+            <Spinner
+                android:id="@+id/epc_spinner"
+                android:layout_width="0dp"
+                android:layout_height="@dimen/rm_6c_et_height"
+                android:layout_weight="2"
+                android:dropDownVerticalOffset="40dp"
+                android:spinnerMode="dropdown"
+                android:gravity="left" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="fill_parent"
+            android:layout_height="match_parent">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="@dimen/rm_6c_et_height"
+                android:layout_weight="1"
+                android:gravity="right|center"
+                android:text="@string/bankid" />
+
+            <Spinner
+                android:id="@+id/mem_spinner"
+                android:layout_width="0dp"
+                android:layout_height="@dimen/rm_6c_et_height"
+                android:layout_weight="2"
+                android:dropDownVerticalOffset="40dp"
+                android:spinnerMode="dropdown"
+                android:gravity="left" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="fill_parent"
+            android:layout_height="match_parent">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="@dimen/rm_6c_et_height"
+                android:layout_weight="1"
+                android:gravity="right|center"
+                android:text="@string/memptr" />
+
+            <EditText
+                android:id="@+id/et_wordptr"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="2"
+                android:gravity="left"
+                android:inputType="numberSigned"
+                android:text="0" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="fill_parent"
+            android:layout_height="match_parent">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="@dimen/rm_6c_et_height"
+                android:layout_weight="1"
+                android:gravity="right|center"
+                android:text="@string/memlen" />
+
+            <EditText
+                android:id="@+id/et_length"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="2"
+                android:gravity="left"
+                android:inputType="numberSigned"
+                android:text="6" />
+
+        </LinearLayout>
+
+
+        <LinearLayout
+            android:layout_width="fill_parent"
+            android:layout_height="match_parent">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="@dimen/rm_6c_et_height"
+                android:layout_weight="1"
+                android:gravity="right|center"
+                android:text="@string/pwdstr" />
+
+            <EditText
+                android:id="@+id/et_pwd"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="2"
+                android:gravity="left"
+                android:hint="00000000" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="fill_parent"
+            android:layout_height="match_parent">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="@dimen/rm_6c_et_height"
+                android:layout_weight="1"
+                android:gravity="right|center"
+                android:text="@string/writestr" />
+
+            <EditText
+                android:id="@+id/et_content_6c"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="2"
+                android:gravity="left"
+                android:inputType="textMultiLine"
+                android:text="E2034121EA12BCED32498765" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="fill_parent"
+            android:layout_height="match_parent">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="@dimen/rm_6c_et_height"
+                android:layout_weight="1"
+                android:gravity="right|center"
+                android:text="@string/readstr" />
+
+            <EditText
+                android:id="@+id/et_read_6c"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="2"
+                android:gravity="left"
+                android:inputType="textMultiLine"
+                android:singleLine="false"
+                android:text="" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="fill_parent"
+            android:layout_height="match_parent">
+
+            <Button
+                android:id="@+id/button_read_6c"
+                android:layout_width="0dp"
+                android:layout_height="@dimen/button_height"
+                android:layout_margin="3dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_weight="1"
+                android:background="@drawable/color_button_selector"
+                android:textColor="@color/white"
+                android:text="@string/butnread" />
+
+            <Button
+                android:id="@+id/button_write_6c"
+                android:layout_width="0dp"
+                android:layout_height="@dimen/button_height"
+                android:layout_margin="3dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_weight="1"
+                android:background="@drawable/color_button_selector"
+                android:textColor="@color/white"
+                android:text="@string/butnwrite" />
+
+            <Button
+                android:id="@+id/button_write_epc"
+                android:layout_width="0dp"
+                android:layout_height="@dimen/button_height"
+                android:layout_margin="3dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_weight="1"
+                android:background="@drawable/color_button_selector"
+                android:textColor="@color/white"
+                android:text="@string/butnwriteepc" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>

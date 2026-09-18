@@ -1,0 +1,386 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <drawable name="clr_normal">#666666</drawable>
+    <drawable name="clr_pressed">#333333</drawable>
+    <drawable name="list_normal">#00000000</drawable>
+    <drawable name="list_pressed">#FF333333</drawable>
+    <string name="app_name">UHF</string>
+    <string name="menu_settings">Settings</string>
+    <string name="action_settings">Settings</string>
+    <string name="hello_world">Hello world!</string>
+    <string name="version">Version:</string>
+    <string name="dmin">MinFre:</string>
+    <string name="band">Band:</string>
+    <string name="dmax">MaxFre:</string>
+    <string name="power">Power:</string>
+    <string name="scantime">MaxScanTime:</string>
+    <string name="Connect">Connect</string>
+    <string name="SerialPort">SerialPort:</string>
+    <string name="BaudRate">BaudRate:</string>
+    <string name="idno">ID</string>
+    <string name="epcid">ID:</string>
+    <string name="times">Times</string>
+    <string name="rssi">RSSI</string>
+    <string name="ant1">ANT1</string>
+    <string name="ant2">ANT2</string>
+    <string name="ant3">ANT3</string>
+    <string name="ant4">ANT4</string>
+    <string name="ant5">ANT5</string>
+    <string name="ant6">ANT6</string>
+    <string name="ant7">ANT7</string>
+    <string name="ant8">ANT8</string>
+    <string name="number">Number:</string>
+    <string name="ttime">Time:</string>
+    <string name="speed">Speed:</string>
+    <string name="btscan">Inventory</string>
+    <string name="btscan_in">Export Excel</string>
+    <string name="btstop">Stop</string>
+    <string name="basicparam">Basic Parameter</string>
+    <string name="scanparam">Inventory Parameter</string>
+    <string name="qvalue">Q:</string>
+    <string name="session">Session:</string>
+    <string name="tidptr">TID Ptr:</string>
+    <string name="tidlen">TID Len:</string>
+    <string name="beepstr">Beep:</string>
+    <string name="getstr">Get</string>
+    <string name="setstr">Set</string>
+    <string name="txtepc">ID:</string>
+    <string name="bankid">Bank:</string>
+    <string name="memptr">Ptr:</string>
+    <string name="memlen">Len:</string>
+    <string name="pwdstr">Access Pwd:</string>
+    <string name="readstr">ReadData:</string>
+    <string name="writestr">WriteData:</string>
+    <string name="butnread">Read</string>
+    <string name="butnwrite">Write</string>
+    <string name="butnwriteepc">WriteEPC</string>
+    <string name="tab_scan">Read</string>
+    <string name="tab_rw">R/W</string>
+    <string name="tab_param">Set</string>
+    <string name="power_error">Power set failed</string>
+    <string name="beep_error">Beep set failed</string>
+    <string name="frequent_error">Frequency set failed</string>
+    <string name="antenna_error">Antenna set failed</string>
+    <string name="get_success">Read Success</string>
+    <string name="get_failed">Read Failed</string>
+    <string name="btn_getstr">Get</string>
+    <string name="btn_setstr">Set</string>
+    <string name="btn_openrf">Open RF</string>
+    <string name="btn_closerf">Close RF</string>
+    <string name="txt_temp">Temperature</string>
+    <string name="txt_returnloss">Return Loss:</string>
+    <string name="txt_read">Read</string>
+    <string name="write_failed">Write Failed</string>
+    <string name="write_success">Write Success</string>
+    <string name="info_result">Result:</string>
+    <string name="info_select_tid">Tag ID must be TID!</string>
+    <string name="lowpower">Low Power Mode:</string>
+    <string name="openlowpower">open Low Power Mode</string>
+    <string name="closelowpower">close Low Power Mode</string>
+    <string name="btStoping">Stoping</string>
+    <string name="btn_answer">Answer Mode</string>
+    <string name="btn_active">Active Mode</string>
+    <string name="timeInterval">Interval:</string>
+    <string name="txt_storage">storage</string>
+    <string name="txt_inport_excel">Required permissions for exporting excel</string>
+    <string name="read_card_being">Read card, please stop reading card first</string>
+    <string name="app_set_export">Export to Excel</string>
+    <string name="app_set_clear">Clear</string>
+    <string name="app_set_about">About</string>
+    <string name="toast_export_clear">Please operate on the card reading page!</string>
+    <string name="about_scan_version">version: </string>
+    <string name="toast_exit">Press again to exit the program</string>
+    <!--TODO:2023-12-27-->
+    <string name="code_format">Code Format:</string>
+    <!--TODO:end-->
+    <string-array name="low_select">
+        <item>Close</item>
+        <item>Open</item>
+    </string-array>
+    <string-array name="men_select">
+        <item>Reserve</item>
+        <item>EPC</item>
+        <item>TID</item>
+        <item>User</item>
+    </string-array>
+    <string-array name="men_s">
+        <item>S0</item>
+        <item>S1</item>
+        <item>S2</item>
+        <item>S3</item>
+        <item>Auto</item>
+    </string-array>
+    <string-array name="men_s_nation">
+        <item>S0</item>
+        <item>S1</item>
+        <item>S2</item>
+        <item>S3</item>
+
+    </string-array>
+    <string-array name="men_q">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+        <item>7</item>
+        <item>8</item>
+        <item>9</item>
+        <item>10</item>
+        <item>11</item>
+        <item>12</item>
+        <item>13</item>
+        <item>14</item>
+        <item>15</item>
+    </string-array>
+    <string-array name="men_tid">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+        <item>7</item>
+        <item>8</item>
+        <item>9</item>
+        <item>10</item>
+        <item>11</item>
+        <item>12</item>
+        <item>13</item>
+        <item>14</item>
+        <item>15</item>
+        <item>16</item>
+        <item>17</item>
+        <item>18</item>
+        <item>19</item>
+        <item>20</item>
+        <item>21</item>
+        <item>22</item>
+        <item>23</item>
+        <item>24</item>
+        <item>25</item>
+        <item>26</item>
+        <item>27</item>
+        <item>28</item>
+        <item>29</item>
+        <item>30</item>
+        <item>31</item>
+        <item>32</item>
+    </string-array>
+    <string-array name="men_time">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+        <item>7</item>
+        <item>8</item>
+        <item>9</item>
+        <item>10</item>
+        <item>11</item>
+        <item>12</item>
+        <item>13</item>
+        <item>14</item>
+        <item>15</item>
+        <item>16</item>
+        <item>17</item>
+        <item>18</item>
+        <item>19</item>
+        <item>20</item>
+        <item>21</item>
+        <item>22</item>
+        <item>23</item>
+        <item>24</item>
+        <item>25</item>
+        <item>26</item>
+        <item>27</item>
+        <item>28</item>
+        <item>29</item>
+        <item>30</item>
+        <item>31</item>
+        <item>32</item>
+        <item>33</item>
+        <item>34</item>
+        <item>35</item>
+        <item>36</item>
+        <item>37</item>
+        <item>38</item>
+        <item>39</item>
+        <item>40</item>
+        <item>41</item>
+        <item>42</item>
+        <item>43</item>
+        <item>44</item>
+        <item>45</item>
+        <item>46</item>
+        <item>47</item>
+        <item>48</item>
+        <item>49</item>
+        <item>50</item>
+        <item>51</item>
+        <item>52</item>
+        <item>53</item>
+        <item>54</item>
+        <item>55</item>
+        <item>56</item>
+        <item>57</item>
+        <item>58</item>
+        <item>59</item>
+        <item>60</item>
+        <item>61</item>
+        <item>62</item>
+        <item>63</item>
+        <item>64</item>
+        <item>65</item>
+        <item>66</item>
+        <item>67</item>
+        <item>68</item>
+        <item>69</item>
+        <item>70</item>
+        <item>71</item>
+        <item>72</item>
+        <item>73</item>
+        <item>74</item>
+        <item>75</item>
+        <item>76</item>
+        <item>77</item>
+        <item>78</item>
+        <item>79</item>
+        <item>80</item>
+        <item>81</item>
+        <item>82</item>
+        <item>83</item>
+        <item>84</item>
+        <item>85</item>
+        <item>86</item>
+        <item>87</item>
+        <item>88</item>
+        <item>89</item>
+        <item>90</item>
+        <item>91</item>
+        <item>92</item>
+        <item>93</item>
+        <item>94</item>
+        <item>95</item>
+        <item>96</item>
+        <item>97</item>
+        <item>98</item>
+        <item>99</item>
+        <item>100</item>
+    </string-array>
+    <string name="open_warning">You must open the device before your oprate!</string>
+    <string name="wordptr_empty_warning">WordPtr can not be empty!</string>
+    <string name="length_empty_warning">Length can not be empty!</string>
+    <string name="pwd_empty_warning">Password can not be empty!</string>
+    <string name="content_empty_warning">Write data need content not be empty!</string>
+    <string name="length_content_warning">Length and content does not match!</string>
+    <string name="str_lenght_odd_warning">Length of every data can not be odd!</string>
+    <string name="data_ilegal">Data illegal!(empty or length is odd?)</string>
+    <string-array name="Fre_select">
+        <item>902.75 MHz</item>
+        <item>903.25 MHz</item>
+        <item>903.75 MHz</item>
+        <item>904.25 MHz</item>
+        <item>904.75 MHz</item>
+        <item>905.25 MHz</item>
+        <item>905.75 MHz</item>
+        <item>906.25 MHz</item>
+        <item>906.75 MHz</item>
+        <item>907.25 MHz</item>
+        <item>907.75 MHz</item>
+        <item>908.25 MHz</item>
+        <item>908.75 MHz</item>
+        <item>909.25 MHz</item>
+        <item>909.75 MHz</item>
+        <item>910.25 MHz</item>
+        <item>910.75 MHz</item>
+        <item>911.25 MHz</item>
+        <item>911.75 MHz</item>
+        <item>912.25 MHz</item>
+        <item>912.75 MHz</item>
+        <item>913.25 MHz</item>
+        <item>913.75 MHz</item>
+        <item>914.25 MHz</item>
+        <item>914.75 MHz</item>
+        <item>915.25 MHz</item>
+        <item>915.75 MHz</item>
+        <item>916.25 MHz</item>
+        <item>916.75 MHz</item>
+        <item>917.25 MHz</item>
+        <item>917.75 MHz</item>
+        <item>918.25 MHz</item>
+        <item>918.75 MHz</item>
+        <item>919.25 MHz</item>
+        <item>919.75 MHz</item>
+        <item>920.25 MHz</item>
+        <item>920.75 MHz</item>
+        <item>921.25 MHz</item>
+        <item>921.75 MHz</item>
+        <item>922.25 MHz</item>
+        <item>922.75 MHz</item>
+        <item>923.25 MHz</item>
+        <item>923.75 MHz</item>
+        <item>924.25 MHz</item>
+        <item>924.75 MHz</item>
+        <item>925.25 MHz</item>
+        <item>925.75 MHz</item>
+        <item>926.25 MHz</item>
+        <item>926.75 MHz</item>
+        <item>927.25 MHz</item>
+    </string-array>
+    <string-array name="Power_select">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+        <item>7</item>
+        <item>8</item>
+        <item>9</item>
+        <item>10</item>
+        <item>11</item>
+        <item>12</item>
+        <item>13</item>
+        <item>14</item>
+        <item>15</item>
+        <item>16</item>
+        <item>17</item>
+        <item>18</item>
+        <item>19</item>
+        <item>20</item>
+        <item>21</item>
+        <item>22</item>
+        <item>23</item>
+        <item>24</item>
+        <item>25</item>
+        <item>26</item>
+        <item>27</item>
+        <item>28</item>
+        <item>29</item>
+        <item>30</item>
+        <item>31</item>
+        <item>32</item>
+        <item>33</item>
+    </string-array>
+    <!--TODO：2023-12-27-->
+    <string-array name="CodeFormat_select">
+        <item>HEX</item>
+        <item>ASCII</item>
+    </string-array>
+    <!--TODO：end-->
+    <string-array name="beep_select">
+        <item>Off</item>
+        <item>On</item>
+    </string-array>
+    <string name="title_activity_connect232">Connect232</string>
+    <string name="set_success">Set Success</string>
+    <string name="openport_success">Connect Success</string>
+    <string name="openport_failed">Connect Failed</string>
+</resources>

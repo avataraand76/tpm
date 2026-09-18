@@ -1,0 +1,152 @@
+package com.tina.rfidadapterapp;
+
+import android.accessibilityservice.AccessibilityService;
+import android.accessibilityservice.AccessibilityServiceInfo;
+import android.content.BroadcastReceiver;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.os.Build;
+import android.os.Bundle;
+import android.util.Log;
+import android.view.KeyEvent;
+import android.view.accessibility.AccessibilityEvent;
+import android.view.accessibility.AccessibilityNodeInfo;
+import java.util.LinkedList;
+import java.util.Queue;
+import android.os.Handler;
+import android.os.Looper;
+
+public class TriggerAccessibilityService extends AccessibilityService {
+    private final Queue<String> epcQueue = new LinkedList<>();
+    private boolean isProcessingQueue = false;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private boolean isKeyPressed = false;
+
+    @Override
+    protected void onServiceConnected() {
+        super.onServiceConnected();
+
+        IntentFilter filter = new IntentFilter();
+        filter.addAction("RFID_UI_UPDATE");
+        filter.addAction(RFIDForegroundService.ACTION_TRIGGER_PHYSICAL);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(rfidDataReceiver, filter, Context.RECEIVER_EXPORTED);
+        } else {
+            registerReceiver(rfidDataReceiver, filter);
+        }
+
+        AccessibilityServiceInfo info = getServiceInfo();
+        if (info == null) return;
+        info.flags |= AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS;
+        setServiceInfo(info);
+    }
+    @Override
+    public boolean onKeyEvent(KeyEvent event) {
+        if (event.getKeyCode() == 619 || event.getKeyCode() == 305 || event.getKeyCode() == 621 || event.getKeyCode() == 622 || event.getKeyCode() == 623) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                if (!isKeyPressed) {
+                    isKeyPressed = true;
+                    Intent i = new Intent(RFIDForegroundService.ACTION_TRIGGER_PHYSICAL);
+                    i.setPackage(getPackageName());
+                    i.putExtra("pressed", true);
+                    sendBroadcast(i);
+                }
+            } else if (event.getAction() == KeyEvent.ACTION_UP) {
+                isKeyPressed = false;
+                Intent i = new Intent(RFIDForegroundService.ACTION_TRIGGER_PHYSICAL);
+                i.setPackage(getPackageName());
+                i.putExtra("pressed", false);
+                sendBroadcast(i);
+            }
+            return true;
+        }
+        return false;
+    }
+    private String lastPastedEpc = "";
+    private long lastPasteTime = 0;
+    private final BroadcastReceiver rfidDataReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+
+            if ("RFID_UI_UPDATE".equals(action)) {
+                String epc = intent.getStringExtra("epc");
+
+                if (epc != null) {
+                    epcQueue.add(epc);
+                    processQueue();
+                }
+            }
+        }
+    };
+    private void processQueue() {
+        if (isProcessingQueue || epcQueue.isEmpty()) return;
+
+        isProcessingQueue = true;
+        String epc = epcQueue.poll();
+
+        if (epc != null) {
+            pasteEpcToFocusNode(epc);
+            lastPastedEpc = epc;
+        }
+        mainHandler.postDelayed(() -> {
+            isProcessingQueue = false;
+            processQueue();
+        }, 200);
+    }
+    private void pasteEpcToFocusNode(String text) {
+        try {
+            AccessibilityNodeInfo rootNode = getRootInActiveWindow();
+            if (rootNode == null) return;
+
+            AccessibilityNodeInfo focusNode = findActualFocus(rootNode);
+
+            if (focusNode != null) {
+                CharSequence currentText = focusNode.getText();
+                String existingText = (currentText == null) ? "" : currentText.toString();
+
+                String newText = existingText + text + "\n";
+
+                Bundle arguments = new Bundle();
+                arguments.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, newText);
+
+                boolean success = focusNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments);
+
+                if (!success) {
+                    ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                    if (clipboard != null) {
+                        ClipData clip = ClipData.newPlainText("EPC", text + "\n");
+                        clipboard.setPrimaryClip(clip);
+                        focusNode.performAction(AccessibilityNodeInfo.ACTION_PASTE);
+                    }
+                }
+                focusNode.recycle();
+            }
+            rootNode.recycle();
+        } catch (Exception e) {
+            Log.e("ACC", "Inject text error: " + e.getMessage());
+        }
+    }
+
+    private AccessibilityNodeInfo findActualFocus(AccessibilityNodeInfo node) {
+        if (node == null) return null;
+        if (node.isFocused()) return node;
+
+        for (int i = 0; i < node.getChildCount(); i++) {
+            AccessibilityNodeInfo child = node.getChild(i);
+            AccessibilityNodeInfo result = findActualFocus(child);
+            if (result != null) return result;
+        }
+        return null;
+    }
+
+    @Override
+    public void onAccessibilityEvent(AccessibilityEvent event) {}
+
+    @Override
+    public void onInterrupt() {}
+}

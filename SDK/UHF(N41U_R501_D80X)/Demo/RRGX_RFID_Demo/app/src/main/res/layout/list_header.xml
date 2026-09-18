@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/tag_type"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal">
+
+    <!--总共宽度320-->
+    <!--占1/5,android:layout_width="55dp"-->
+    <TextView
+        android:id="@+id/id_text"
+        android:layout_width="wrap_content"
+        android:layout_height="40dp"
+        android:layout_weight="1.7"
+        android:background="@drawable/layer"
+        android:gravity="center_vertical|center_horizontal"
+        android:singleLine="true"
+        android:text="@string/idno"
+        android:textColor="#ff444444"
+        android:textSize="18sp" />
+
+    <!--占2/5,android:layout_width="150dp"-->
+    <TextView
+        android:id="@+id/epc_text"
+        android:layout_width="wrap_content"
+        android:layout_height="40dp"
+        android:layout_weight="4.6"
+        android:background="@drawable/layer"
+        android:gravity="center"
+        android:singleLine="true"
+        android:text="EPC"
+        android:textColor="#ff333333"
+        android:textSize="18sp" />
+
+    <!--占1/5,android:layout_width="55dp"-->
+    <TextView
+        android:id="@+id/times_text"
+        android:layout_width="wrap_content"
+        android:layout_height="40dp"
+        android:layout_weight="1.7"
+        android:background="@drawable/layer"
+        android:gravity="center"
+        android:singleLine="true"
+        android:text="@string/times"
+        android:textColor="#ff333333"
+        android:textSize="18sp" />
+
+    <!--占1/5,android:layout_width="60dp"-->
+    <TextView
+        android:id="@+id/rssi_text"
+        android:layout_width="wrap_content"
+        android:layout_height="40dp"
+        android:layout_weight="1.8"
+        android:background="@drawable/layer"
+        android:gravity="center"
+        android:singleLine="true"
+        android:text="@string/rssi"
+        android:textColor="#ff333333"
+        android:textSize="18sp" />
+</LinearLayout>
