@@ -91,6 +91,7 @@ const excelHeaderMapping = {
   Serial: "serial_machine",
   "Loại máy": "type_machine",
   "Đặc tính": "attribute_machine",
+  "Phân loại": "name_category",
   "Model máy": "model_machine",
   "Hãng sản xuất": "manufacturer",
   "Nhà cung cấp": "supplier",
@@ -242,6 +243,7 @@ const TicketManagementPage = () => {
   });
 
   // State for autocomplete options (using objects like MachineListPage)
+  const [formCategories, setFormCategories] = useState([]);
   const [formMachineTypes, setFormMachineTypes] = useState([]);
   const [formAttributes, setFormAttributes] = useState([]);
   const [formManufacturers, setFormManufacturers] = useState([]);
@@ -984,12 +986,14 @@ const TicketManagementPage = () => {
 
   const fetchFormData = async () => {
     try {
-      const [typesRes, manuRes, suppRes] = await Promise.all([
+      const [categoriesRes, typesRes, manuRes, suppRes] = await Promise.all([
+        api.machines.getCategories(),
         api.machines.getMachineTypes(),
         api.machines.getMachineManufacturers(),
         api.machines.getMachineSuppliers(),
       ]);
 
+      if (categoriesRes && categoriesRes.success) setFormCategories(categoriesRes.data);
       if (typesRes.success) setFormMachineTypes(typesRes.data);
       if (manuRes.success) setFormManufacturers(manuRes.data);
       if (suppRes.success) setFormSuppliers(suppRes.data);
@@ -1191,17 +1195,19 @@ const TicketManagementPage = () => {
 
   const handleDownloadSampleExcel = async () => {
     try {
-      // 1. Lấy danh sách loại máy, hãng sản xuất, đặc tính và nhà cung cấp từ API ADMIN
+      // 1. Lấy danh sách loại máy, hãng sản xuất, đặc tính, nhà cung cấp và phân loại
       const [
         typeMachineResult,
         manufacturerResult,
         attributeResult,
         supplierResult,
+        categoryResult,
       ] = await Promise.all([
         api.admin.getMachineTypes(),
         api.admin.getMachineManufacturers(),
         api.admin.getMachineAttributes(),
         api.admin.getMachineSuppliers(),
+        api.machines.getCategories(),
       ]);
 
       // Đảm bảo có ít nhất 1 dòng để tránh lỗi validation
@@ -1225,6 +1231,11 @@ const TicketManagementPage = () => {
           ? supplierResult.data.map((item) => item.name)
           : ["Nhà cung cấp mẫu"];
 
+      const categoryList =
+        categoryResult && categoryResult.success && categoryResult.data.length > 0
+          ? categoryResult.data.map((item) => item.name || item.name_category)
+          : ["Máy móc thiết bị", "Phụ tùng vật tư"];
+
       // 2. Tải file Excel mẫu
       const response = await fetch("/Mau_Excel_MayMoc.xlsx");
       if (!response.ok) throw new Error("Không thể tải file Excel mẫu");
@@ -1236,17 +1247,12 @@ const TicketManagementPage = () => {
 
       // --- BƯỚC 4: CẬP NHẬT SHEET "LoaiMayMoc" ---
       let loaiMayMocSheet = workbook.getWorksheet("LoaiMayMoc");
-      if (!loaiMayMocSheet) {
-        loaiMayMocSheet = workbook.addWorksheet("LoaiMayMoc");
+      if (loaiMayMocSheet) {
+        workbook.removeWorksheet(loaiMayMocSheet.id);
       }
-
-      // Xóa dữ liệu cũ sạch sẽ
-      if (loaiMayMocSheet.rowCount > 0) {
-        loaiMayMocSheet.spliceRows(1, loaiMayMocSheet.rowCount);
-      }
+      loaiMayMocSheet = workbook.addWorksheet("LoaiMayMoc");
 
       // Thêm dữ liệu mới vào: cột A = Loại máy, cột B = Đặc tính
-      // Đảm bảo có đủ số dòng bằng với số lượng lớn hơn giữa typeMachineList và attributeList
       const maxRows = Math.max(typeMachineList.length, attributeList.length);
       for (let i = 0; i < maxRows; i++) {
         const type = i < typeMachineList.length ? typeMachineList[i] : "";
@@ -1256,14 +1262,10 @@ const TicketManagementPage = () => {
 
       // --- BƯỚC 5: CẬP NHẬT SHEET "HangSX" ---
       let hangSXSheet = workbook.getWorksheet("HangSX");
-      if (!hangSXSheet) {
-        hangSXSheet = workbook.addWorksheet("HangSX");
+      if (hangSXSheet) {
+        workbook.removeWorksheet(hangSXSheet.id);
       }
-
-      // Xóa dữ liệu cũ sạch sẽ
-      if (hangSXSheet.rowCount > 0) {
-        hangSXSheet.spliceRows(1, hangSXSheet.rowCount);
-      }
+      hangSXSheet = workbook.addWorksheet("HangSX");
 
       // Thêm dữ liệu mới vào
       manufacturerList.forEach((manufacturer) => {
@@ -1272,18 +1274,26 @@ const TicketManagementPage = () => {
 
       // --- BƯỚC 6: CẬP NHẬT SHEET "NhaCungCap" ---
       let nhaCungCapSheet = workbook.getWorksheet("NhaCungCap");
-      if (!nhaCungCapSheet) {
-        nhaCungCapSheet = workbook.addWorksheet("NhaCungCap");
+      if (nhaCungCapSheet) {
+        workbook.removeWorksheet(nhaCungCapSheet.id);
       }
-
-      // Xóa dữ liệu cũ sạch sẽ
-      if (nhaCungCapSheet.rowCount > 0) {
-        nhaCungCapSheet.spliceRows(1, nhaCungCapSheet.rowCount);
-      }
+      nhaCungCapSheet = workbook.addWorksheet("NhaCungCap");
 
       // Thêm dữ liệu mới vào cột A
       supplierList.forEach((supplier) => {
         nhaCungCapSheet.addRow([supplier]);
+      });
+
+      // --- BƯỚC 6.5: CẬP NHẬT SHEET "PhanLoai" ---
+      let phanLoaiSheet = workbook.getWorksheet("PhanLoai");
+      if (phanLoaiSheet) {
+        workbook.removeWorksheet(phanLoaiSheet.id);
+      }
+      phanLoaiSheet = workbook.addWorksheet("PhanLoai");
+
+      // Thêm dữ liệu mới vào cột A
+      categoryList.forEach((category) => {
+        phanLoaiSheet.addRow([category]);
       });
 
       // --- BƯỚC 7 (QUAN TRỌNG): GÁN LẠI VALIDATION CHO SHEET CHÍNH ---
@@ -1326,10 +1336,25 @@ const TicketManagementPage = () => {
           };
         }
 
-        // 7.3. Validation cho cột E (Hãng sản xuất)
+        // 7.3. Validation cho cột D (Phân loại)
+        const validationFormulaCategory = `'PhanLoai'!$A$1:$A$${categoryList.length}`;
+        for (let i = startRow; i <= endRow; i++) {
+          const cell = mainSheet.getCell(`D${i}`);
+          cell.dataValidation = {
+            type: "list",
+            allowBlank: true,
+            operator: "equal",
+            showErrorMessage: true,
+            errorTitle: "Lỗi nhập liệu",
+            error: "Vui lòng chọn Phân loại từ danh sách có sẵn.",
+            formulae: [validationFormulaCategory],
+          };
+        }
+
+        // 7.4. Validation cho cột F (Hãng sản xuất)
         const validationFormulaManufacturer = `'HangSX'!$A$1:$A$${manufacturerList.length}`;
         for (let i = startRow; i <= endRow; i++) {
-          const cell = mainSheet.getCell(`E${i}`);
+          const cell = mainSheet.getCell(`F${i}`);
           cell.dataValidation = {
             type: "list",
             allowBlank: true,
@@ -1341,10 +1366,10 @@ const TicketManagementPage = () => {
           };
         }
 
-        // 7.4. Validation cho cột F (Nhà cung cấp)
+        // 7.5. Validation cho cột G (Nhà cung cấp)
         const validationFormulaSupplier = `'NhaCungCap'!$A$1:$A$${supplierList.length}`;
         for (let i = startRow; i <= endRow; i++) {
-          const cell = mainSheet.getCell(`F${i}`);
+          const cell = mainSheet.getCell(`G${i}`);
           cell.dataValidation = {
             type: "list",
             allowBlank: true,
@@ -1428,7 +1453,6 @@ const TicketManagementPage = () => {
 
         const machinesToImport = json.map((row) => {
           const newRow = {};
-          newRow.name_category = "Máy móc thiết bị";
 
           for (const vietnameseHeader in excelHeaderMapping) {
             const englishKey = excelHeaderMapping[vietnameseHeader];
@@ -1496,6 +1520,15 @@ const TicketManagementPage = () => {
             } else if (dateString instanceof Date) {
               newRow.date_of_use = dateString;
             }
+          }
+
+          // 5. Xử lý Phân loại (name_category):
+          // - Ưu tiên giá trị đọc từ cột "Phân loại" trong file Excel
+          if (newRow.name_category && typeof newRow.name_category === "string") {
+            newRow.name_category = newRow.name_category.trim();
+          } else {
+            // Nếu để trống, backend sẽ tự động tra cứu phân loại từ CSDL theo Loại máy
+            newRow.name_category = null;
           }
 
           return newRow;
@@ -4046,12 +4079,44 @@ const TicketManagementPage = () => {
                 />
               </Grid>
               <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  fullWidth
-                  label="Phân loại"
-                  value="Máy móc thiết bị"
-                  disabled={true}
-                  sx={DISABLED_VIEW_SX}
+                <Autocomplete
+                  options={formCategories}
+                  getOptionLabel={(option) =>
+                    typeof option === "string"
+                      ? option
+                      : option.name || option.name_category || ""
+                  }
+                  value={
+                    formCategories.find(
+                      (c) =>
+                        (c.name || c.name_category) ===
+                        newMachineData.name_category
+                    ) ||
+                    (newMachineData.name_category
+                      ? { name: newMachineData.name_category }
+                      : null)
+                  }
+                  onChange={(event, newValue) => {
+                    const catName = newValue
+                      ? typeof newValue === "string"
+                        ? newValue
+                        : newValue.name || newValue.name_category || ""
+                      : "";
+                    handleCreateMachineInputChange("name_category", catName);
+                  }}
+                  disabled={!canCreateOrImportMachines}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Phân loại"
+                      required
+                      sx={
+                        !canCreateOrImportMachines
+                          ? DISABLED_VIEW_SX
+                          : {}
+                      }
+                    />
+                  )}
                 />
               </Grid>
 

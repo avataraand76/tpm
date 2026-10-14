@@ -64,8 +64,8 @@ const useAppQRScanner = (videoRef, onScanAsync) => {
       return backCamera
         ? backCamera.id
         : cameraList.length > 0
-        ? cameraList[cameraList.length - 1].id
-        : "environment";
+          ? cameraList[cameraList.length - 1].id
+          : "environment";
     } catch (e) {
       console.error("Error listing cameras:", e);
       return "environment";
@@ -240,11 +240,11 @@ const MachineQRScanner = ({
       if (
         parts.length < 2 ||
         (parts[0].toUpperCase() !== "MAY" &&
-          parts[0].toUpperCase() !== "PHUKIEN")
+          parts[0].toUpperCase() !== "PHUTUNG")
       ) {
         setOverlayState({
           status: "error",
-          message: "Mã QR không hợp lệ (Format: [MAY/PHUKIEN]-[SERIAL]).",
+          message: "Mã QR không hợp lệ (Format: [MAY/PHUTUNG]-[SERIAL]).",
         });
         // Tự động reset sau 2 giây để quét tiếp
         setTimeout(() => {
@@ -355,10 +355,10 @@ const MachineQRScanner = ({
   const cameraStatusText = logic.isInitializing
     ? "Đang khởi động camera..."
     : logic.error
-    ? logic.error // Hiển thị lỗi từ hook
-    : logic.isScanningActive
-    ? "Di chuyển camera đến mã QR..."
-    : "Camera đã dừng.";
+      ? logic.error // Hiển thị lỗi từ hook
+      : logic.isScanningActive
+        ? "Di chuyển camera đến mã QR..."
+        : "Camera đã dừng.";
 
   return (
     <Dialog

@@ -827,7 +827,7 @@ create table if not exists tb_maintenance_schedule_detail
 );
 
 -- MARK: insert data
-insert into tb_category (name_category) values ('Máy móc thiết bị'), ('Phụ kiện');
+insert into tb_category (name_category) values ('Máy móc thiết bị'), ('Phụ tùng vật tư');
 
 insert into tb_department (name_department, id_phong_ban) values 
 ('Bộ phận cơ điện', 14), 

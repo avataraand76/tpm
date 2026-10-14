@@ -200,11 +200,11 @@ const UpdateRfidPage = () => {
 
   const tableContainerRef = useRef(null);
 
-  // Hàm xử lý prefix (MAY-, PHUKIEN-)
+  // Hàm xử lý prefix (MAY-, PHUTUNG-)
   const cleanInputCode = (s) => {
     const upper = s.trim().toUpperCase();
-    // Nếu bạn muốn giữ logic cắt MAY-/PHUKIEN- cho Serial
-    if (upper.startsWith("MAY-") || upper.startsWith("PHUKIEN-")) {
+    // Nếu bạn muốn giữ logic cắt MAY-/PHUTUNG- cho Serial
+    if (upper.startsWith("MAY-") || upper.startsWith("PHUTUNG-")) {
       return upper.split("-").slice(1).join("-");
     }
     return upper;
@@ -504,10 +504,7 @@ const UpdateRfidPage = () => {
           titleSx={{ textTransform: "uppercase" }}
         />
 
-        <Paper
-          elevation={0}
-          sx={{ ...preset.softCard, p: { xs: 2, sm: 4 } }}
-        >
+        <Paper elevation={0} sx={{ ...preset.softCard, p: { xs: 2, sm: 4 } }}>
           <Stack direction="column" spacing={3}>
             {/* HÀNG 1: NHẬP LIỆU VÀ NÚT BẤM */}
             <Grid container spacing={2} alignItems="flex-start">
@@ -528,7 +525,7 @@ const UpdateRfidPage = () => {
                   color="text.secondary"
                   sx={{ mt: 1, display: "block" }}
                 >
-                  Hệ thống tự xử lý MAY- hoặc PHUKIEN- và loại bỏ dòng trùng
+                  Hệ thống tự xử lý MAY- hoặc PHUTUNG- và loại bỏ dòng trùng
                   lặp.
                 </Typography>
               </Grid>
@@ -938,15 +935,15 @@ const UpdateRfidPage = () => {
                               backgroundColor: row.notFound
                                 ? alpha(muiColors.red["A700"], 0.05) // Màu đỏ nhạt
                                 : row.isDuplicateRfid
-                                ? alpha(colors.red.dark, 0.05) // Màu đỏ nhạt cho RFID trùng
-                                : "inherit",
+                                  ? alpha(colors.red.dark, 0.05) // Màu đỏ nhạt cho RFID trùng
+                                  : "inherit",
                               transition: "all 0.2s ease",
                               "&:hover": {
                                 bgcolor: row.notFound
                                   ? alpha(muiColors.red["A700"], 0.1)
                                   : row.isDuplicateRfid
-                                  ? alpha(colors.red.dark, 0.1)
-                                  : alpha(colors.brand.main, 0.03),
+                                    ? alpha(colors.red.dark, 0.1)
+                                    : alpha(colors.brand.main, 0.03),
                               },
                             }}
                           >

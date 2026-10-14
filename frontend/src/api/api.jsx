@@ -245,6 +245,10 @@ export const api = {
       const response = await httpConnect.get("/api/machine-suppliers");
       return response.data;
     },
+    getCategories: async () => {
+      const response = await httpConnect.get("/api/categories");
+      return response.data;
+    },
   },
 
   // MARK: DEPARTMENTS

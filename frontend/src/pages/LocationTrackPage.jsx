@@ -276,7 +276,8 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
                   : hasDataCell
                     ? row.bg
                     : "transparent",
-                color: hasDataCell || cellSelected ? row.color : colors.grey[300],
+                color:
+                  hasDataCell || cellSelected ? row.color : colors.grey[300],
                 fontWeight: hasDataCell || cellSelected ? "bold" : "normal",
                 boxShadow: cellSelected
                   ? `inset 0 0 0 2px ${row.color}`
@@ -287,7 +288,8 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
                       ? alpha(row.color, 0.25)
                       : colors.grey[100],
                   boxShadow: `inset 0 0 0 2px ${row.color}`,
-                  color: hasDataCell || cellSelected ? row.color : colors.grey[600],
+                  color:
+                    hasDataCell || cellSelected ? row.color : colors.grey[600],
                 },
               }}
             >
@@ -304,7 +306,8 @@ const StatusMatrixTable = ({ data, loading, onCellClick, activeFilters }) => {
               sx={{
                 cursor: "pointer",
                 fontWeight: "bold",
-                color: hasDataRow || cellSelected ? row.color : colors.grey[400],
+                color:
+                  hasDataRow || cellSelected ? row.color : colors.grey[400],
                 backgroundColor: cellSelected
                   ? alpha(row.color, 0.2)
                   : hasDataRow
@@ -568,6 +571,7 @@ const LocationTrackPage = () => {
   const filterCardRef = useRef(null);
   const tableCardRef = useRef(null);
   // State for filter dropdown data
+  const [categoryOptions, setCategoryOptions] = useState([]);
   const [typeOptions, setTypeOptions] = useState([]);
   const [attributeOptions, setAttributeOptions] = useState([]);
   const [modelOptions, setModelOptions] = useState([]);
@@ -579,6 +583,7 @@ const LocationTrackPage = () => {
 
   // State for selected filter values
   const [filters, setFilters] = useState({
+    name_categories: [],
     type_machines: [],
     attribute_machines: [],
     model_machines: [],
@@ -595,7 +600,11 @@ const LocationTrackPage = () => {
   // trạng thái, thay vì dấu "-" như MachineListPage.
   const getStatusInfo = (statusKey) =>
     statusInfo(statusKey, {
-      fallback: (k) => ({ bg: hexA(colors.grey[500], "22"), color: colors.grey[500], label: k }),
+      fallback: (k) => ({
+        bg: hexA(colors.grey[500], "22"),
+        color: colors.grey[500],
+        label: k,
+      }),
     });
 
   const formatDate = (dateString) => {
@@ -795,6 +804,7 @@ const LocationTrackPage = () => {
         contextParams.department_uuid = selectedDepartment.uuid_department;
       } else {
         // Nếu chưa chọn gì cả, reset options và thoát
+        setCategoryOptions([]);
         setTypeOptions([]);
         setAttributeOptions([]);
         setModelOptions([]);
@@ -807,6 +817,7 @@ const LocationTrackPage = () => {
       const makeParams = (field) => ({
         field,
         ...contextParams, // Spread context (location/department uuid)
+        name_categories: currentFilters.name_categories || [],
         type_machines: currentFilters.type_machines || [],
         attribute_machines: currentFilters.attribute_machines || [],
         model_machines: currentFilters.model_machines || [],
@@ -818,8 +829,9 @@ const LocationTrackPage = () => {
 
       try {
         // 3. Gọi API song song
-        const [typeRes, attrRes, modelRes, manuRes, supplierRes] =
+        const [catRes, typeRes, attrRes, modelRes, manuRes, supplierRes] =
           await Promise.all([
+            api.machines.getDistinctValues(makeParams("name_category")),
             api.machines.getDistinctValues(makeParams("type_machine")),
             api.machines.getDistinctValues(makeParams("attribute_machine")),
             api.machines.getDistinctValues(makeParams("model_machine")),
@@ -829,6 +841,7 @@ const LocationTrackPage = () => {
             // api.machines.getDistinctValues(makeParams("name_location")),
           ]);
 
+        if (catRes.success) setCategoryOptions(catRes.data);
         if (typeRes.success) setTypeOptions(typeRes.data);
         if (attrRes.success) setAttributeOptions(attrRes.data);
         if (modelRes.success) setModelOptions(modelRes.data);
@@ -1367,7 +1380,7 @@ const LocationTrackPage = () => {
             >
               <CardContent>
                 <Typography variant="h6" fontWeight="bold" gutterBottom>
-                  Thống kê theo loại máy
+                  Thống kê theo loại máy và phụ tùng vật tư
                 </Typography>
                 <List dense sx={{ pt: 0, pb: 1, width: "100%" }}>
                   {typeStats
@@ -1619,6 +1632,46 @@ const LocationTrackPage = () => {
                   />
                 </Grid>
               )}
+
+              {/* Filter: Phân loại */}
+              <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                <Autocomplete
+                  multiple
+                  size="small"
+                  options={
+                    categoryOptions.length > 0
+                      ? categoryOptions
+                      : ["Máy móc thiết bị", "Phụ tùng vật tư"]
+                  }
+                  value={filters.name_categories}
+                  onChange={handleAutocompleteFilterChange("name_categories")}
+                  disableCloseOnSelect
+                  renderTags={(value, getTagProps) =>
+                    value.map((option, index) => (
+                      <Chip
+                        {...getTagProps({ index })}
+                        key={option}
+                        label={option}
+                        size="small"
+                      />
+                    ))
+                  }
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Phân loại"
+                      sx={{
+                        "& .MuiOutlinedInput-root": {
+                          borderRadius: `${radii.md}px`,
+                        },
+                      }}
+                    />
+                  )}
+                  ListboxProps={{
+                    style: { maxHeight: 300 },
+                  }}
+                />
+              </Grid>
 
               {/* Filter: Sử dụng khí nén */}
               <Grid size={{ xs: 12, sm: 6, md: 4 }}>
@@ -1948,7 +2001,10 @@ const LocationTrackPage = () => {
                 >
                   {!selectedDepartment ? (
                     // Hiển thị khi chưa chọn đơn vị
-                    <Alert severity="info" sx={{ m: 1, borderRadius: `${radii.sm}px` }}>
+                    <Alert
+                      severity="info"
+                      sx={{ m: 1, borderRadius: `${radii.sm}px` }}
+                    >
                       Vui lòng chọn đơn vị ở bước 1.
                     </Alert>
                   ) : loadingLocations ? (
@@ -1989,7 +2045,10 @@ const LocationTrackPage = () => {
                               "&.Mui-selected": {
                                 backgroundColor: alpha(colors.brand.main, 0.15), // Nền tím nhạt
                                 "&:hover": {
-                                  backgroundColor: alpha(colors.brand.main, 0.2), // Đậm hơn khi hover
+                                  backgroundColor: alpha(
+                                    colors.brand.main,
+                                    0.2
+                                  ), // Đậm hơn khi hover
                                 },
                               },
                             }}

@@ -635,6 +635,8 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
       current_status,
       is_borrowed_or_rented_or_borrowed_out,
       has_air_volume,
+      name_categories,
+      is_spare_part,
       sortBy,
       sortOrder,
     } = req.query;
@@ -853,6 +855,18 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
       whereConditions.push(`(m.air_volume IS NOT NULL AND m.air_volume != '')`);
     }
 
+    // 11. Category filter (Phân loại / Phụ tùng vật tư)
+    if (name_categories && name_categories.length > 0) {
+      whereConditions.push(`c.name_category IN (?)`);
+      const catValues = Array.isArray(name_categories)
+        ? name_categories
+        : [name_categories];
+      countParams.push(catValues);
+      dataParams.push(catValues);
+    } else if (is_spare_part === "true" || is_spare_part === true) {
+      whereConditions.push(`c.name_category = 'Phụ tùng vật tư'`);
+    }
+
     const whereClause =
       whereConditions.length > 0
         ? `WHERE ${whereConditions.join(" AND ")}`
@@ -1005,6 +1019,8 @@ app.get(
         manufacturers,
         suppliers,
         name_locations,
+        name_categories,
+        is_spare_part,
         has_air_volume,
       } = req.query;
 
@@ -1023,10 +1039,29 @@ app.get(
                  LEFT JOIN tb_department td ON td.id_department = tl.id_department
                  LEFT JOIN tb_machine_location ml ON ml.id_location = tl.id_location
                  LEFT JOIN tb_machine m ON m.id_machine = ml.id_machine`;
+        joins.push("LEFT JOIN tb_category c ON c.id_category = m.id_category");
 
         whereConditions.push(
           "tl.name_location IS NOT NULL AND tl.name_location != ''"
         );
+      } else if (field === "name_category") {
+        query = `SELECT DISTINCT c.name_category as value 
+                 FROM tb_category c
+                 JOIN tb_machine m ON m.id_category = c.id_category`;
+        joins.push(
+          "LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine"
+        );
+        joins.push(
+          "LEFT JOIN tb_location tl ON tl.id_location = ml.id_location"
+        );
+        joins.push(
+          "LEFT JOIN tb_department td ON td.id_department = tl.id_department"
+        );
+
+        whereConditions.push(
+          "c.name_category IS NOT NULL AND c.name_category != ''"
+        );
+        whereConditions.push("m.current_status != 'temporary'");
       } else {
         query = `SELECT DISTINCT m.${field} as value FROM tb_machine m`;
         joins.push(
@@ -1038,6 +1073,7 @@ app.get(
         joins.push(
           "LEFT JOIN tb_department td ON td.id_department = tl.id_department"
         );
+        joins.push("LEFT JOIN tb_category c ON c.id_category = m.id_category");
 
         whereConditions.push(`m.${field} IS NOT NULL AND m.${field} != ''`);
         whereConditions.push("m.current_status != 'temporary'");
@@ -1054,6 +1090,17 @@ app.get(
       }
 
       // 3. CASCADING FILTERS (Áp dụng nếu không phải là field đang query)
+
+      // -> Phân loại
+      if (field !== "name_category" && hasValue(name_categories)) {
+        whereConditions.push(`c.name_category IN (?)`);
+        params.push(toArray(name_categories));
+      } else if (
+        field !== "name_category" &&
+        (is_spare_part === "true" || is_spare_part === true)
+      ) {
+        whereConditions.push(`c.name_category = 'Phụ tùng vật tư'`);
+      }
 
       // -> Loại máy
       if (field !== "type_machine" && hasValue(type_machines)) {
@@ -1214,6 +1261,31 @@ app.get("/api/machine-suppliers", authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching machine suppliers:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+// GET /api/categories - Get all categories
+app.get("/api/categories", authenticateToken, async (req, res) => {
+  try {
+    const [categories] = await tpmConnection.query(
+      `SELECT 
+        uuid_category as uuid,
+        name_category as name,
+        id_category
+      FROM tb_category
+      ORDER BY id_category ASC`
+    );
+    res.json({
+      success: true,
+      data: categories,
+    });
+  } catch (error) {
+    console.error("Error fetching categories:", error);
     res.status(500).json({
       success: false,
       message: "Internal server error",
@@ -3097,6 +3169,7 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
       pressure,
       voltage,
       air_volume,
+      name_category,
     } = req.body;
 
     // Check if machine exists + lấy id_machine & RFID hiện tại để ghi lịch sử khi đổi RFID
@@ -3185,6 +3258,27 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
     // Get user ID from token
     const userId = req.user.id;
 
+    // Tra cứu id_category nếu có truyền name_category
+    let id_category = undefined;
+    if (name_category !== undefined) {
+      if (name_category && String(name_category).trim() !== "") {
+        const [cat] = await tpmConnection.query(
+          "SELECT id_category FROM tb_category WHERE name_category = ? LIMIT 1",
+          [String(name_category).trim()]
+        );
+        if (cat.length > 0) {
+          id_category = cat[0].id_category;
+        } else {
+          return res.status(404).json({
+            success: false,
+            message: `Phân loại '${name_category}' không tồn tại.`,
+          });
+        }
+      } else {
+        id_category = null;
+      }
+    }
+
     // Update machine
     await tpmConnection.query(
       `
@@ -3213,6 +3307,7 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         pressure = ?,
         voltage = ?,
         air_volume = ?,
+        id_category = CASE WHEN ? = 1 THEN ? ELSE id_category END,
         updated_by = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE uuid_machine = ?
@@ -3241,6 +3336,8 @@ app.put("/api/machines/:uuid", authenticateToken, async (req, res) => {
         pressure || null,
         voltage || null,
         air_volume || null,
+        id_category !== undefined ? 1 : 0,
+        id_category !== undefined ? id_category : null,
         userId, // updated_by
         uuid,
       ]
@@ -3398,10 +3495,51 @@ app.post("/api/machines/batch-import", authenticateToken, async (req, res) => {
     const successes = [];
     const machinesToInsert = [];
 
-    // --- BƯỚC 0: TIỀN XỬ LÝ DỮ LIỆU (GÁN DEFAULT CATEGORY) ---
-    // Duyệt qua tất cả các máy, nếu thiếu phân loại thì gán mặc định
+    // --- BƯỚC 0: TIỀN XỬ LÝ DỮ LIỆU (TỰ ĐỘNG TRA CỨU PHÂN LOẠI TỪ CSDL NẾU THIẾU) ---
+    const typesNeedingCategory = [
+      ...new Set(
+        machines
+          .filter((m) => !m.name_category || !m.name_category.toString().trim())
+          .map((m) => (m.type_machine ? String(m.type_machine).trim() : null))
+          .filter(Boolean)
+      ),
+    ];
+
+    const typeToCategoryMap = new Map();
+    if (typesNeedingCategory.length > 0) {
+      const [typeCatRows] = await connection.query(
+        `SELECT 
+          m.type_machine, 
+          c.name_category, 
+          COUNT(*) as cnt
+        FROM tb_machine m
+        JOIN tb_category c ON m.id_category = c.id_category
+        WHERE m.type_machine IN (?)
+        GROUP BY m.type_machine, c.name_category
+        ORDER BY cnt DESC`,
+        [typesNeedingCategory]
+      );
+
+      typeCatRows.forEach((row) => {
+        if (!typeToCategoryMap.has(row.type_machine)) {
+          typeToCategoryMap.set(row.type_machine, row.name_category);
+        }
+      });
+    }
+
+    // Gán phân loại:
+    // 1. Ưu tiên giá trị đọc từ file Excel
+    // 2. Nếu để trống, tự động tra cứu từ dữ liệu thực tế trong CSDL
+    // 3. Nếu là loại máy mới chưa có trong CSDL: nếu tên bắt đầu bằng "Bộ " thì gán "Phụ tùng vật tư", ngược lại mặc định "Máy móc thiết bị"
     machines.forEach((m) => {
-      if (!m.name_category || m.name_category.toString().trim() === "") {
+      const type = m.type_machine ? String(m.type_machine).trim() : "";
+      if (m.name_category && m.name_category.toString().trim() !== "") {
+        m.name_category = m.name_category.toString().trim();
+      } else if (type && typeToCategoryMap.has(type)) {
+        m.name_category = typeToCategoryMap.get(type);
+      } else if (type && type.startsWith("Bộ ")) {
+        m.name_category = "Phụ tùng vật tư";
+      } else {
         m.name_category = "Máy móc thiết bị";
       }
     });
@@ -7770,6 +7908,8 @@ app.get(
         current_status,
         is_borrowed_or_rented_or_borrowed_out,
         has_air_volume,
+        name_categories,
+        is_spare_part,
       } = req.query;
 
       // 1. Get internal location ID
@@ -7916,6 +8056,18 @@ app.get(
         );
       }
 
+      // 9. Category filter (Phân loại / Phụ tùng vật tư)
+      if (name_categories && name_categories.length > 0) {
+        whereConditions.push(`c.name_category IN (?)`);
+        const catValues = Array.isArray(name_categories)
+          ? name_categories
+          : [name_categories];
+        filterParams.push(catValues);
+        dataParams.push(catValues);
+      } else if (is_spare_part === "true" || is_spare_part === true) {
+        whereConditions.push(`c.name_category = 'Phụ tùng vật tư'`);
+      }
+
       const filterClause =
         whereConditions.length > 0
           ? `AND ${whereConditions.join(" AND ")}`
@@ -7926,6 +8078,7 @@ app.get(
         SELECT COUNT(*) as total
         FROM tb_machine_location ml
         JOIN tb_machine m ON m.id_machine = ml.id_machine
+        LEFT JOIN tb_category c ON c.id_category = m.id_category
         WHERE ml.id_location = ?
         ${filterClause}
       `;
@@ -8154,6 +8307,8 @@ app.get(
         current_status,
         is_borrowed_or_rented_or_borrowed_out,
         has_air_volume,
+        name_categories,
+        is_spare_part,
       } = req.query;
 
       // 1. Get internal department ID
@@ -8307,6 +8462,18 @@ app.get(
         );
       }
 
+      // 8. Category filter (Phân loại / Phụ tùng vật tư)
+      if (name_categories && name_categories.length > 0) {
+        whereConditions.push(`c.name_category IN (?)`);
+        const catValues = Array.isArray(name_categories)
+          ? name_categories
+          : [name_categories];
+        filterParams.push(catValues);
+        dataParams.push(catValues);
+      } else if (is_spare_part === "true" || is_spare_part === true) {
+        whereConditions.push(`c.name_category = 'Phụ tùng vật tư'`);
+      }
+
       const filterClause =
         whereConditions.length > 0
           ? `AND ${whereConditions.join(" AND ")}`
@@ -8318,6 +8485,7 @@ app.get(
         FROM tb_machine m
         JOIN tb_machine_location ml ON m.id_machine = ml.id_machine
         JOIN tb_location tl ON ml.id_location = tl.id_location
+        LEFT JOIN tb_category c ON c.id_category = m.id_category
         WHERE tl.id_department = ?
         ${filterClause}
       `;
@@ -14223,13 +14391,13 @@ cron.schedule("00 15 * * 6", autoCreateInventoryCheck, {
 //   timezone: "Asia/Ho_Chi_Minh",
 // });
 
-// 17:00-17:30 thứ 2-6 làm mới snapshot kiểm kê
-cron.schedule("00,10,20,30 17 * * 1-5", autoRefreshInventorySnapshot, {
+// 16:00-17:50 thứ 2-6 làm mới snapshot kiểm kê
+cron.schedule("*/10 16-17 * * 1-5", autoRefreshInventorySnapshot, {
   timezone: "Asia/Ho_Chi_Minh",
 });
 
-// 16:00-16:30 thứ 7 làm mới snapshot kiểm kê
-cron.schedule("00,10,20,30 16 * * 6", autoRefreshInventorySnapshot, {
+// 13:00-16:50 thứ 7 làm mới snapshot kiểm kê
+cron.schedule("*/10 13-16 * * 6", autoRefreshInventorySnapshot, {
   timezone: "Asia/Ho_Chi_Minh",
 });
 
