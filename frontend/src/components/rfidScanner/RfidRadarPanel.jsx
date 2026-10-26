@@ -539,45 +539,65 @@ const RfidRadarPanel = ({
     const rawValue = e.target.value;
     setScanInput(rawValue); // Cập nhật state để debug nếu cần
 
-    // Viết hoa một lần cho cả vòng lặp. Trước đây nằm trong forEach nên với 180 máy
-    // là 180 lần dựng lại bản sao của cả bộ đệm quét, mỗi lần dữ liệu đổ vào.
+    // Viết hoa một lần cho cả vòng lặp.
     const upperValue = rawValue.toUpperCase();
 
-    // Kiểm tra tất cả các targets chưa tìm thấy
+    // Gom tất cả các targets khớp trong đợt dữ liệu này để cập nhật state một lần
+    const newlyMatched = [];
     targets.forEach((target) => {
       const targetRfid = target.targetRfid.toUpperCase();
       const isAlreadyFound = foundTargets.has(targetRfid);
 
-      // Nếu chưa tìm thấy và khớp với dữ liệu quét
       if (!isAlreadyFound && upperValue.includes(targetRfid)) {
-        // Phát âm thanh cảnh báo
-        playSound();
-
-        if (skipResolveApi && preSelectedLocationUuid && onBatchConfirm) {
-          // Batch mode: tích lũy vào danh sách tạm, chờ user bấm xác nhận
-          setFoundTargets((prev) => new Set([...prev, targetRfid]));
-          setCurrentFoundTarget(target);
-          setBatchFoundList((prev) => {
-            const alreadyIn = prev.some(
-              (item) => item.target.targetRfid.toUpperCase() === targetRfid
-            );
-            if (alreadyIn) return prev;
-            return [...prev, { target, locationUuid: preSelectedLocationUuid }];
-          });
-        } else if (skipResolveApi && onReplaceRfid) {
-          openReplaceDialogByTarget(target, "scan");
-        } else if (skipResolveApi && onFoundMachineInventory) {
-          // Chế độ kiểm kê thông thường: hiện dialog chọn vị trí
-          setPendingFoundTarget(target);
-          setSelectedLocationUuid("");
-          setOpenLocationDialog(true);
-        } else {
-          // Chế độ thông thường: hiện overlay toàn màn hình
-          setFoundTargets((prev) => new Set([...prev, targetRfid]));
-          setCurrentFoundTarget(target);
-        }
+        newlyMatched.push(target);
       }
     });
+
+    if (newlyMatched.length > 0) {
+      playSound();
+
+      if (skipResolveApi && preSelectedLocationUuid && onBatchConfirm) {
+        // Batch mode: gom cập nhật vào danh sách tạm
+        setFoundTargets((prev) => {
+          const next = new Set(prev);
+          newlyMatched.forEach((t) => next.add(t.targetRfid.toUpperCase()));
+          return next;
+        });
+        setCurrentFoundTarget(newlyMatched[newlyMatched.length - 1]);
+        setBatchFoundList((prev) => {
+          const existingRfids = new Set(
+            prev.map((item) => item.target.targetRfid.toUpperCase())
+          );
+          const additions = [];
+          for (const item of newlyMatched) {
+            const rfid = item.targetRfid.toUpperCase();
+            if (!existingRfids.has(rfid)) {
+              existingRfids.add(rfid);
+              additions.push({
+                target: item,
+                locationUuid: preSelectedLocationUuid,
+              });
+            }
+          }
+          return additions.length > 0 ? [...prev, ...additions] : prev;
+        });
+      } else if (skipResolveApi && onReplaceRfid) {
+        openReplaceDialogByTarget(newlyMatched[0], "scan");
+      } else if (skipResolveApi && onFoundMachineInventory) {
+        // Chế độ kiểm kê thông thường: hiện dialog chọn vị trí cho máy đầu tiên
+        setPendingFoundTarget(newlyMatched[0]);
+        setSelectedLocationUuid("");
+        setOpenLocationDialog(true);
+      } else {
+        // Chế độ thông thường: hiện overlay toàn màn hình
+        setFoundTargets((prev) => {
+          const next = new Set(prev);
+          newlyMatched.forEach((t) => next.add(t.targetRfid.toUpperCase()));
+          return next;
+        });
+        setCurrentFoundTarget(newlyMatched[newlyMatched.length - 1]);
+      }
+    }
 
     // Tùy chọn: Giới hạn độ dài bộ nhớ đệm.
     if (rawValue.length > 5000) {

@@ -34,9 +34,9 @@ public class TriggerAccessibilityService extends AccessibilityService {
     private static final long CLIPBOARD_SETTLE_MS = 40;
     private static final String PERF_TAG = "RFID_PERF";
     /** Không tìm thấy ô nhập thì chờ ngần này rồi thử lại, thay vì vứt mã đi. */
-    private static final long RETRY_DELAY_MS = 120;
-    /** Tối đa chừng này lần thử lại (~2,4 giây) rồi mới chịu bỏ. */
-    private static final int MAX_RETRY = 20;
+    private static final long RETRY_DELAY_MS = 80;
+    /** Tối đa chừng này lần thử lại (~640ms) rồi mới chịu bỏ, tránh delay kéo dài. */
+    private static final int MAX_RETRY = 8;
 
     private final Deque<String> epcQueue = new ArrayDeque<>();
     private boolean flushScheduled = false;
@@ -51,6 +51,7 @@ public class TriggerAccessibilityService extends AccessibilityService {
         IntentFilter filter = new IntentFilter();
         filter.addAction("RFID_UI_UPDATE");
         filter.addAction("RFID_CLEAR_UI");
+        filter.addAction(RFIDForegroundService.ACTION_STOP_QUEUE);
         filter.addAction(RFIDForegroundService.ACTION_TRIGGER_PHYSICAL);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -95,9 +96,9 @@ public class TriggerAccessibilityService extends AccessibilityService {
             if ("RFID_UI_UPDATE".equals(action)) {
                 String epc = intent.getStringExtra("epc");
                 if (epc != null) enqueue(epc);
-            } else if ("RFID_CLEAR_UI".equals(action)) {
-                // Bấm Clear thì bỏ luôn các thẻ còn chờ ghi.
-                clearQueue();
+            } else if ("RFID_CLEAR_UI".equals(action) || RFIDForegroundService.ACTION_STOP_QUEUE.equals(action)) {
+                // Khi bấm Clear hoặc Dừng quét: lập tức hủy hàng đợi và mọi timer đang delay
+                clearQueueAndPending();
             }
         }
     };
@@ -110,10 +111,14 @@ public class TriggerAccessibilityService extends AccessibilityService {
         scheduleFlush();
     }
 
-    private void clearQueue() {
+    private void clearQueueAndPending() {
         synchronized (epcQueue) {
             epcQueue.clear();
         }
+        flushScheduled = false;
+        retryCount = 0;
+        mainHandler.removeCallbacksAndMessages(null);
+        Log.d(PERF_TAG, "Queue cleared and pending flushes cancelled");
     }
 
     private void scheduleFlush() {
@@ -285,8 +290,10 @@ public class TriggerAccessibilityService extends AccessibilityService {
 
         for (int i = 0; i < node.getChildCount(); i++) {
             AccessibilityNodeInfo child = node.getChild(i);
+            if (child == null) continue;
             AccessibilityNodeInfo result = findFocusByWalking(child);
             if (result != null) return result;
+            child.recycle();
         }
         return null;
     }

@@ -48,6 +48,8 @@ public class RFIDForegroundService extends Service implements TagCallback {
             "RFID_TAG_COUNT";
     public static final String ACTION_CLEAR_SESSION =
             "RFID_CLEAR_SESSION";
+    public static final String ACTION_STOP_QUEUE =
+            "com.tina.rfidadapterapp.STOP_QUEUE";
 
     @Override
     public void onCreate() {
@@ -77,6 +79,12 @@ public class RFIDForegroundService extends Service implements TagCallback {
         FileLogger.save(this, "Service onDestroy");
         isScanning = false;
         isServiceConnected = false;
+
+        try {
+            Intent stopQueueIntent = new Intent(ACTION_STOP_QUEUE);
+            stopQueueIntent.setPackage(getPackageName());
+            sendBroadcast(stopQueueIntent);
+        } catch (Exception ignored) {}
 
         if (Reader.rrlib != null) {
             Reader.rrlib.StopRead();
@@ -201,6 +209,11 @@ public class RFIDForegroundService extends Service implements TagCallback {
         Reader.rrlib.StopRead();
         isScanning = false;
         sendBroadcastStatus("RFID_SCAN_STATUS", "scanning", false);
+
+        // Hủy ngay lập tức mọi dữ liệu còn tồn đọng trong hàng đợi Accessibility
+        Intent stopQueueIntent = new Intent(ACTION_STOP_QUEUE);
+        stopQueueIntent.setPackage(getPackageName());
+        sendBroadcast(stopQueueIntent);
     }
     private void toggleScanning() {
         if (isScanning) stopScan();
