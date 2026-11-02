@@ -276,11 +276,10 @@ const EvidenceImageFrame = ({ src, title, onRemove }) => {
           alignItems: "flex-end",
           justifyContent: "space-between",
           p: 0.5,
-          background:
-            `linear-gradient(to top, ${alpha(colors.black, 0.65)}, ${alpha(
-              colors.black,
-              0
-            )} 50%)`,
+          background: `linear-gradient(to top, ${alpha(colors.black, 0.65)}, ${alpha(
+            colors.black,
+            0
+          )} 50%)`,
           opacity: 0,
           transition: "opacity 0.2s",
           "&:hover": { opacity: 1 },
@@ -290,7 +289,11 @@ const EvidenceImageFrame = ({ src, title, onRemove }) => {
           <IconButton
             size="small"
             onClick={() => setModalOpen(true)}
-            sx={{ color: colors.white, bgcolor: alpha(colors.black, 0.4), p: 0.5 }}
+            sx={{
+              color: colors.white,
+              bgcolor: alpha(colors.black, 0.4),
+              p: 0.5,
+            }}
           >
             <ZoomOutMap fontSize="small" />
           </IconButton>
@@ -300,7 +303,11 @@ const EvidenceImageFrame = ({ src, title, onRemove }) => {
             href={toDriveViewUrl(src)}
             target="_blank"
             rel="noreferrer"
-            sx={{ color: colors.white, bgcolor: alpha(colors.black, 0.4), p: 0.5 }}
+            sx={{
+              color: colors.white,
+              bgcolor: alpha(colors.black, 0.4),
+              p: 0.5,
+            }}
           >
             <OpenInNew fontSize="small" />
           </IconButton>
@@ -309,7 +316,11 @@ const EvidenceImageFrame = ({ src, title, onRemove }) => {
           <IconButton
             size="small"
             onClick={onRemove}
-            sx={{ color: colors.white, bgcolor: alpha(colors.red.main, 0.7), p: 0.5 }}
+            sx={{
+              color: colors.white,
+              bgcolor: alpha(colors.red.main, 0.7),
+              p: 0.5,
+            }}
           >
             <DeleteOutline fontSize="small" />
           </IconButton>
@@ -577,7 +588,11 @@ const BulkRfidDialog = ({ open, onClose, year, month, onOpenHistory }) => {
       maxWidth="max-content"
       fullWidth
       PaperProps={{
-        sx: { borderRadius: `${radii.lg}px`, minHeight: "75vh", maxHeight: "90vh" },
+        sx: {
+          borderRadius: `${radii.lg}px`,
+          minHeight: "75vh",
+          maxHeight: "90vh",
+        },
       }}
     >
       <DialogTitle
@@ -609,10 +624,7 @@ const BulkRfidDialog = ({ open, onClose, year, month, onOpenHistory }) => {
         <Grid container spacing={3} sx={{ height: "100%", mt: 1 }}>
           {/* Input side */}
           <Grid size={{ xs: 12, md: 4 }}>
-            <Paper
-              variant="outlined"
-              sx={{ p: 2.5, height: "100%" }}
-            >
+            <Paper variant="outlined" sx={{ p: 2.5, height: "100%" }}>
               <Typography
                 variant="subtitle2"
                 fontWeight={700}
@@ -2085,10 +2097,7 @@ const MaintenanceHistoryDialog = ({
 
       <DialogContent sx={{ p: 3, bgcolor: colors.grey[50] }}>
         {/* ── Section A: Lý lịch thiết bị ── */}
-        <Paper
-          elevation={0}
-          sx={{ ...preset.panel, mb: 2, mt: 2 }}
-        >
+        <Paper elevation={0} sx={{ ...preset.panel, mb: 2, mt: 2 }}>
           <Box
             sx={{
               background: gradients.brandBar,
@@ -2237,7 +2246,11 @@ const MaintenanceHistoryDialog = ({
               <Typography
                 variant="body2"
                 fontWeight={700}
-                sx={{ mb: 0.75, fontSize: fontSizes.small, color: colors.grey[700] }}
+                sx={{
+                  mb: 0.75,
+                  fontSize: fontSizes.small,
+                  color: colors.grey[700],
+                }}
               >
                 a. Lịch xích sửa chữa
               </Typography>
@@ -2322,7 +2335,10 @@ const MaintenanceHistoryDialog = ({
                     >
                       <Typography
                         variant="body2"
-                        sx={{ fontSize: fontSizes.body, whiteSpace: "pre-wrap" }}
+                        sx={{
+                          fontSize: fontSizes.body,
+                          whiteSpace: "pre-wrap",
+                        }}
                       >
                         {machine.note}
                       </Typography>
@@ -2337,7 +2353,11 @@ const MaintenanceHistoryDialog = ({
               <Typography
                 variant="body2"
                 fontWeight={700}
-                sx={{ mb: 0.75, fontSize: fontSizes.small, color: colors.grey[700] }}
+                sx={{
+                  mb: 0.75,
+                  fontSize: fontSizes.small,
+                  color: colors.grey[700],
+                }}
               >
                 b. Nội dung xem xét bảo dưỡng
               </Typography>
@@ -2354,7 +2374,9 @@ const MaintenanceHistoryDialog = ({
                         sx={{
                           fontSize: 14,
                           mt: 0.25,
-                          color: item.is_check ? colors.green.main : colors.grey[400],
+                          color: item.is_check
+                            ? colors.green.main
+                            : colors.grey[400],
                           flexShrink: 0,
                         }}
                       />
@@ -2362,7 +2384,9 @@ const MaintenanceHistoryDialog = ({
                         variant="body2"
                         sx={{
                           fontSize: fontSizes.body,
-                          color: item.is_check ? colors.green.main : "text.primary",
+                          color: item.is_check
+                            ? colors.green.main
+                            : "text.primary",
                           textDecoration: item.is_check
                             ? "line-through"
                             : "none",
@@ -2387,10 +2411,7 @@ const MaintenanceHistoryDialog = ({
         </Paper>
 
         {/* ── Section B: Thông tin đơn vị quản lý thiết bị ── */}
-        <Paper
-          elevation={0}
-          sx={{ ...preset.panel, mb: 2 }}
-        >
+        <Paper elevation={0} sx={{ ...preset.panel, mb: 2 }}>
           <Box
             sx={{
               background: `linear-gradient(90deg,${muiColors.blueGrey[600]},${muiColors.blueGrey[400]})`,
@@ -2431,10 +2452,7 @@ const MaintenanceHistoryDialog = ({
         </Paper>
 
         {/* ── Section C: Bảng tổng hợp lịch bảo dưỡng ── */}
-        <Paper
-          elevation={0}
-          sx={preset.panel}
-        >
+        <Paper elevation={0} sx={preset.panel}>
           <Box
             sx={{
               background: `linear-gradient(90deg,${colors.teal.main},${colors.teal.light})`,
@@ -2623,10 +2641,7 @@ const MaintenanceHistoryDialog = ({
         </Paper>
 
         {/* ── Section D: Lịch sử sửa chữa máy móc thiết bị ── */}
-        <Paper
-          elevation={0}
-          sx={{ ...preset.panel, mt: 2 }}
-        >
+        <Paper elevation={0} sx={{ ...preset.panel, mt: 2 }}>
           <Box
             sx={{
               background: `linear-gradient(90deg,${colors.purple.deep},${colors.purple.magenta})`,
@@ -2814,10 +2829,7 @@ const MaintenanceHistoryDialog = ({
         </Paper>
 
         {/* ── Section E: Hình ảnh bảo dưỡng ── */}
-        <Paper
-          elevation={0}
-          sx={{ ...preset.panel, mt: 2 }}
-        >
+        <Paper elevation={0} sx={{ ...preset.panel, mt: 2 }}>
           <Box
             sx={{
               background: `linear-gradient(90deg,${colors.orange.dark},${colors.orange.main})`,
@@ -3003,7 +3015,10 @@ const MaintenanceHistoryDialog = ({
                     borderRadius: `${radii.md}px`,
                     borderColor: colors.blue.dark,
                     color: colors.blue.dark,
-                    "&:hover": { borderColor: muiColors.blue[900], bgcolor: colors.blue.wash },
+                    "&:hover": {
+                      borderColor: muiColors.blue[900],
+                      bgcolor: colors.blue.wash,
+                    },
                     fontWeight: 600,
                     width: { xs: "100%", sm: "auto" },
                   }}
@@ -3276,7 +3291,10 @@ const MachineCard = React.memo(({ machine, onClick }) => {
         transition: "all 0.2s ease",
         height: "100%",
         cursor: "pointer",
-        bgcolor: machine.status === "confirm_completed" ? colors.grey[50] : colors.white,
+        bgcolor:
+          machine.status === "confirm_completed"
+            ? colors.grey[50]
+            : colors.white,
         "&:hover": {
           boxShadow: shadow(4, 20, shadowRgb.brand, 0.2),
           transform: "translateY(-2px)",
@@ -3458,14 +3476,18 @@ const MachineCard = React.memo(({ machine, onClick }) => {
                   <CheckCircle
                     sx={{
                       fontSize: 11,
-                      color: item.is_check ? colors.green.main : colors.grey[400],
+                      color: item.is_check
+                        ? colors.green.main
+                        : colors.grey[400],
                       flexShrink: 0,
                     }}
                   />
                   <Typography
                     variant="caption"
                     sx={{
-                      color: item.is_check ? colors.green.main : "text.secondary",
+                      color: item.is_check
+                        ? colors.green.main
+                        : "text.secondary",
                       textDecoration: item.is_check ? "line-through" : "none",
                       ...preset.ellipsis,
                       fontSize: fontSizes.label,
@@ -3497,7 +3519,11 @@ const MachineCard = React.memo(({ machine, onClick }) => {
           >
             <Typography
               variant="caption"
-              sx={{ color: accents.brand.from, fontWeight: 700, fontSize: fontSizes.small }}
+              sx={{
+                color: accents.brand.from,
+                fontWeight: 700,
+                fontSize: fontSizes.small,
+              }}
             >
               Ngày {machine.day}/{machine.month}/{machine.year}
             </Typography>
@@ -3754,7 +3780,13 @@ const GroupedByDay = ({
                 <Typography
                   variant="body2"
                   fontWeight={700}
-                  sx={{ color: isT ? colors.white : isP ? colors.grey[500] : accents.brand.from }}
+                  sx={{
+                    color: isT
+                      ? colors.white
+                      : isP
+                        ? colors.grey[500]
+                        : accents.brand.from,
+                  }}
                 >
                   {day}
                 </Typography>
@@ -3766,7 +3798,11 @@ const GroupedByDay = ({
                     variant="subtitle2"
                     fontWeight={700}
                     sx={{
-                      color: isT ? accents.brand.from : isP ? colors.grey[500] : "inherit",
+                      color: isT
+                        ? accents.brand.from
+                        : isP
+                          ? colors.grey[500]
+                          : "inherit",
                     }}
                   >
                     Ngày {day}/{currentMonth}/{currentYear}
@@ -3832,7 +3868,10 @@ const GroupedByDay = ({
 
 // ==================== Filter helpers ====================
 const FILTER_INPUT_SX = {
-  "& .MuiOutlinedInput-root": { borderRadius: `${radii.md}px`, fontSize: fontSizes.body },
+  "& .MuiOutlinedInput-root": {
+    borderRadius: `${radii.md}px`,
+    fontSize: fontSizes.body,
+  },
 };
 
 const FilterSelect = ({
@@ -4237,13 +4276,31 @@ const MaintenanceSchedulePage = () => {
   };
 
   // ── Derive unique options (cascading) ──
+  const validScheduleData = useMemo(() => {
+    return (scheduleData || []).filter((item) => {
+      if (item.status === "pending" || !item.status) {
+        try {
+          if (!item.maintenance_content_detail) return false;
+          const parsed =
+            typeof item.maintenance_content_detail === "string"
+              ? JSON.parse(item.maintenance_content_detail)
+              : item.maintenance_content_detail;
+          return Array.isArray(parsed) && parsed.length > 0;
+        } catch {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [scheduleData]);
+
   const allDepartments = [
-    ...new Set(scheduleData.map((i) => i.name_department).filter(Boolean)),
+    ...new Set(validScheduleData.map((i) => i.name_department).filter(Boolean)),
   ].sort();
 
   const allLocations = [
     ...new Set(
-      scheduleData
+      validScheduleData
         .filter(
           (i) =>
             filterDepartments.length === 0 ||
@@ -4255,12 +4312,12 @@ const MaintenanceSchedulePage = () => {
   ].sort();
 
   const allTypes = [
-    ...new Set(scheduleData.map((i) => i.type_machine).filter(Boolean)),
+    ...new Set(validScheduleData.map((i) => i.type_machine).filter(Boolean)),
   ].sort();
 
   const allAttributes = [
     ...new Set(
-      scheduleData
+      validScheduleData
         .filter((i) => !filterType || i.type_machine === filterType)
         .map((i) => i.attribute_machine)
         .filter(Boolean)
@@ -4269,7 +4326,7 @@ const MaintenanceSchedulePage = () => {
 
   const allModels = [
     ...new Set(
-      scheduleData
+      validScheduleData
         .filter((i) => !filterType || i.type_machine === filterType)
         .filter(
           (i) => !filterAttribute || i.attribute_machine === filterAttribute
@@ -4280,11 +4337,11 @@ const MaintenanceSchedulePage = () => {
   ].sort();
 
   const allManufacturers = [
-    ...new Set(scheduleData.map((i) => i.manufacturer).filter(Boolean)),
+    ...new Set(validScheduleData.map((i) => i.manufacturer).filter(Boolean)),
   ].sort();
 
   const allSuppliers = [
-    ...new Set(scheduleData.map((i) => i.supplier).filter(Boolean)),
+    ...new Set(validScheduleData.map((i) => i.supplier).filter(Boolean)),
   ].sort();
 
   // Cascade resets
@@ -4321,7 +4378,7 @@ const MaintenanceSchedulePage = () => {
 
   // ── Apply all filters → passed to CalendarCard ──
   const deptLocationFiltered = useMemo(() => {
-    return scheduleData.filter((item) => {
+    return validScheduleData.filter((item) => {
       if (
         filterDepartments.length > 0 &&
         !filterDepartments.includes(item.name_department)
@@ -4338,7 +4395,7 @@ const MaintenanceSchedulePage = () => {
       return true;
     });
   }, [
-    scheduleData,
+    validScheduleData,
     filterDepartments,
     filterLocation,
     filterType,
@@ -4574,7 +4631,9 @@ const MaintenanceSchedulePage = () => {
                     justifyContent="space-between"
                   >
                     <Stack direction="row" alignItems="center" spacing={1}>
-                      <CalendarMonth sx={{ fontSize: 20, color: accents.brand.from }} />
+                      <CalendarMonth
+                        sx={{ fontSize: 20, color: accents.brand.from }}
+                      />
                       <Typography variant="subtitle1" fontWeight={700}>
                         Lịch & Bộ lọc
                       </Typography>
@@ -4658,7 +4717,9 @@ const MaintenanceSchedulePage = () => {
                     <Search
                       sx={{
                         fontSize: 14,
-                        color: machineCodeInput ? accents.brand.from : "text.disabled",
+                        color: machineCodeInput
+                          ? accents.brand.from
+                          : "text.disabled",
                         mr: 0.5,
                       }}
                     />
@@ -4666,7 +4727,9 @@ const MaintenanceSchedulePage = () => {
                       variant="caption"
                       fontWeight={600}
                       sx={{
-                        color: machineCodeInput ? accents.brand.from : "text.secondary",
+                        color: machineCodeInput
+                          ? accents.brand.from
+                          : "text.secondary",
                         textTransform: "uppercase",
                         letterSpacing: "0.04em",
                         fontSize: fontSizes.label,
@@ -4816,8 +4879,7 @@ const MaintenanceSchedulePage = () => {
                                     sx={{
                                       py: 1,
                                       px: 1.5,
-                                      borderBottom:
-                                        `1px solid ${alpha(colors.black, 0.04)}`,
+                                      borderBottom: `1px solid ${alpha(colors.black, 0.04)}`,
                                     }}
                                   >
                                     <Stack spacing={0.25}>
@@ -4882,7 +4944,10 @@ const MaintenanceSchedulePage = () => {
                       }}
                     >
                       {machineCodeLoading ? (
-                        <CircularProgress size={16} sx={{ color: accents.brand.from }} />
+                        <CircularProgress
+                          size={16}
+                          sx={{ color: accents.brand.from }}
+                        />
                       ) : (
                         <Search sx={{ fontSize: 18 }} />
                       )}
@@ -4904,12 +4969,10 @@ const MaintenanceSchedulePage = () => {
                       fontWeight: 600,
                       fontSize: fontSizes.small,
                       py: 1,
-                      background:
-                        gradients.teal45,
+                      background: gradients.teal45,
                       boxShadow: shadow(3, 10, shadowRgb.teal, 0.25),
                       "&:hover": {
-                        background:
-                          `linear-gradient(45deg, ${colors.teal.dark} 0%, ${colors.teal.main} 100%)`,
+                        background: `linear-gradient(45deg, ${colors.teal.dark} 0%, ${colors.teal.main} 100%)`,
                         boxShadow: shadow(5, 14, shadowRgb.teal, 0.35),
                       },
                     }}
@@ -4978,7 +5041,9 @@ const MaintenanceSchedulePage = () => {
                     <FilterAlt
                       sx={{
                         fontSize: 14,
-                        color: hasActiveFilter ? accents.brand.from : "text.disabled",
+                        color: hasActiveFilter
+                          ? accents.brand.from
+                          : "text.disabled",
                         mr: 0.5,
                       }}
                     />
@@ -4986,7 +5051,9 @@ const MaintenanceSchedulePage = () => {
                       variant="caption"
                       fontWeight={600}
                       sx={{
-                        color: hasActiveFilter ? accents.brand.from : "text.secondary",
+                        color: hasActiveFilter
+                          ? accents.brand.from
+                          : "text.secondary",
                         flex: 1,
                       }}
                     >
@@ -5187,7 +5254,8 @@ const MaintenanceSchedulePage = () => {
                               cursor: "pointer",
                               transition: "all 0.15s ease",
                               "&:hover": {
-                                bgcolor: opt.bg || alpha(colors.brand.main, 0.08),
+                                bgcolor:
+                                  opt.bg || alpha(colors.brand.main, 0.08),
                                 borderColor: opt.border || accents.brand.from,
                               },
                             }}
@@ -5394,7 +5462,10 @@ const MaintenanceSchedulePage = () => {
                           <Typography
                             variant="caption"
                             color="text.secondary"
-                            sx={{ fontSize: fontSizes.caption, lineHeight: 1.1 }}
+                            sx={{
+                              fontSize: fontSizes.caption,
+                              lineHeight: 1.1,
+                            }}
                           >
                             {s.label}
                           </Typography>
@@ -5433,8 +5504,7 @@ const MaintenanceSchedulePage = () => {
                         pct: pctDone,
                         value: doneCount,
                         color: MAINT_STATUS_CONFIG.completed.color,
-                        gradient:
-                          `linear-gradient(90deg, ${muiColors.blue[300]} 0%, ${colors.blue.dark} 100%)`,
+                        gradient: `linear-gradient(90deg, ${muiColors.blue[300]} 0%, ${colors.blue.dark} 100%)`,
                       },
                       {
                         label: "Tiến độ hoàn thành",
@@ -5442,8 +5512,7 @@ const MaintenanceSchedulePage = () => {
                         value: confirmedMachines,
                         color: MAINT_STATUS_CONFIG.confirm_completed.color,
 
-                        gradient:
-                          `linear-gradient(90deg, ${muiColors.green[400]} 0%, ${colors.green.main} 100%)`,
+                        gradient: `linear-gradient(90deg, ${muiColors.green[400]} 0%, ${colors.green.main} 100%)`,
                       },
                     ];
                     return (
@@ -5605,7 +5674,11 @@ const MaintenanceSchedulePage = () => {
                         size="small"
                         startIcon={<FilterAltOff fontSize="small" />}
                         onClick={clearFilters}
-                        sx={{ mt: 1.5, borderRadius: `${radii.md}px`, color: accents.brand.from }}
+                        sx={{
+                          mt: 1.5,
+                          borderRadius: `${radii.md}px`,
+                          color: accents.brand.from,
+                        }}
                       >
                         Xóa bộ lọc
                       </Button>

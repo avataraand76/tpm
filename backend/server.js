@@ -1720,13 +1720,46 @@ app.get("/api/machines/search", authenticateToken, async (req, res) => {
     ];
 
     if (maintenance_year && maintenance_month) {
+      const monthNum = parseInt(maintenance_month);
+      const MONTH_COLS = [
+        "january",
+        "february",
+        "march",
+        "april",
+        "may",
+        "june",
+        "july",
+        "august",
+        "september",
+        "october",
+        "november",
+        "december",
+      ];
+      const monthCol = MONTH_COLS[monthNum - 1] || "january";
       joins.push(
-        `JOIN tb_maintenance_schedule_detail msd ON msd.id_machine = m.id_machine`
+        `JOIN tb_maintenance_schedule_detail msd ON msd.id_machine = m.id_machine`,
+        `LEFT JOIN tb_machine_type mt ON mt.name_machine_type = m.type_machine`,
+        `LEFT JOIN tb_machine_attribute ma ON ma.name_machine_attribute = NULLIF(m.attribute_machine, '')`,
+        `LEFT JOIN tb_maintenance_content_machine_type_attribute mcata 
+          ON mcata.id_machine_type = mt.id_machine_type 
+          AND mcata.id_machine_attribute <=> ma.id_machine_attribute`,
+        `LEFT JOIN tb_maintenance_schedule ms 
+          ON ms.id_machine_type = mt.id_machine_type 
+          AND ms.id_machine_attribute <=> ma.id_machine_attribute`
       );
       whereConditions.push(`msd.year = ?`);
       whereConditions.push(`msd.month = ?`);
+      whereConditions.push(`(
+        msd.status != 'pending'
+        OR (
+          ms.id_machine_type IS NOT NULL
+          AND mcata.id_machine_type IS NOT NULL
+          AND (mcata.maintenance_content LIKE '%: 1%' OR mcata.maintenance_content LIKE '%:1%')
+          AND ms.${monthCol} = 1
+        )
+      )`);
       searchParams.push(parseInt(maintenance_year));
-      searchParams.push(parseInt(maintenance_month));
+      searchParams.push(monthNum);
     }
 
     // Lọc theo phòng ban (nếu có - cho điều chuyển nội bộ)
@@ -10223,6 +10256,27 @@ app.post("/api/admin/maintenance-schedule", async (req, res) => {
       );
     }
 
+    // Xóa các bản ghi lịch bảo dưỡng pending cho các tháng bị bỏ chọn của loại máy này
+    const disabledMonthNumbers = MONTH_COLS.map((col, idx) =>
+      m[col] ? null : idx + 1
+    ).filter(Boolean);
+
+    if (disabledMonthNumbers.length > 0) {
+      await tpmConnection.query(
+        `DELETE msd FROM tb_maintenance_schedule_detail msd
+         JOIN tb_machine m ON m.id_machine = msd.id_machine
+         JOIN tb_machine_type mt ON mt.name_machine_type = m.type_machine
+         LEFT JOIN tb_machine_attribute ma ON ma.name_machine_attribute = NULLIF(m.attribute_machine, '')
+         WHERE msd.status = 'pending'
+           AND msd.month IN (?)
+           AND mt.id_machine_type = ?
+           AND ma.id_machine_attribute <=> ?`,
+        [disabledMonthNumbers, id_machine_type, attrValue]
+      );
+    }
+
+    await cleanupObsoleteMaintenanceScheduleDetails();
+
     res.json({ success: true, message: "Lưu lịch bảo dưỡng thành công" });
   } catch (error) {
     console.error("Error saving maintenance schedule:", error);
@@ -10335,6 +10389,49 @@ app.post("/api/admin/maintenance-matrix", async (req, res) => {
         [id_machine_type, attrValue, contentJson, userId, userId]
       );
     }
+
+    const hasAnyContent = Object.values(maintenance_content || {}).some(
+      (v) => v === 1 || v === "1" || v === true
+    );
+
+    if (!hasAnyContent) {
+      // Nếu bỏ chọn toàn bộ nội dung bảo dưỡng, xóa các bản ghi pending của loại máy này
+      await tpmConnection.query(
+        `DELETE msd FROM tb_maintenance_schedule_detail msd
+         JOIN tb_machine m ON m.id_machine = msd.id_machine
+         JOIN tb_machine_type mt ON mt.name_machine_type = m.type_machine
+         LEFT JOIN tb_machine_attribute ma ON ma.name_machine_attribute = NULLIF(m.attribute_machine, '')
+         WHERE msd.status = 'pending'
+           AND mt.id_machine_type = ?
+           AND ma.id_machine_attribute <=> ?`,
+        [id_machine_type, attrValue]
+      );
+    } else {
+      // Nếu có nội dung được chọn, cập nhật lại checklist cho các bản ghi pending hiện có
+      const activeItems = Object.entries(maintenance_content)
+        .filter(([, val]) => val === 1 || val === "1" || val === true)
+        .map(([name]) => ({
+          name,
+          is_check: 0,
+          checked_by: null,
+          checked_at: null,
+        }));
+      const newContentDetailJson = JSON.stringify(activeItems);
+
+      await tpmConnection.query(
+        `UPDATE tb_maintenance_schedule_detail msd
+         JOIN tb_machine m ON m.id_machine = msd.id_machine
+         JOIN tb_machine_type mt ON mt.name_machine_type = m.type_machine
+         LEFT JOIN tb_machine_attribute ma ON ma.name_machine_attribute = NULLIF(m.attribute_machine, '')
+         SET msd.maintenance_content_detail = ?
+         WHERE msd.status = 'pending'
+           AND mt.id_machine_type = ?
+           AND ma.id_machine_attribute <=> ?`,
+        [newContentDetailJson, id_machine_type, attrValue]
+      );
+    }
+
+    await cleanupObsoleteMaintenanceScheduleDetails();
 
     res.json({ success: true, message: "Lưu cấu hình thành công" });
   } catch (error) {
@@ -14403,6 +14500,57 @@ cron.schedule("*/10 13-16 * * 6", autoRefreshInventorySnapshot, {
 
 // MARK: MAINTENANCE SCHEDULE DETAIL
 
+// Dọn dẹp các dòng lịch bảo dưỡng pending không còn hợp lệ (bị bỏ chọn nội dung hoặc bỏ chọn tháng)
+async function cleanupObsoleteMaintenanceScheduleDetails() {
+  try {
+    const [result] = await tpmConnection.query(`
+      DELETE msd FROM tb_maintenance_schedule_detail msd
+      JOIN tb_machine m ON m.id_machine = msd.id_machine
+      LEFT JOIN tb_machine_type mt ON mt.name_machine_type = m.type_machine
+      LEFT JOIN tb_machine_attribute ma ON ma.name_machine_attribute = NULLIF(m.attribute_machine, '')
+      LEFT JOIN tb_maintenance_content_machine_type_attribute mcata 
+        ON mcata.id_machine_type = mt.id_machine_type 
+        AND mcata.id_machine_attribute <=> ma.id_machine_attribute
+      LEFT JOIN tb_maintenance_schedule ms 
+        ON ms.id_machine_type = mt.id_machine_type 
+        AND ms.id_machine_attribute <=> ma.id_machine_attribute
+      WHERE msd.status = 'pending'
+        AND (
+          ms.id_machine_type IS NULL 
+          OR mcata.id_machine_type IS NULL
+          OR (mcata.maintenance_content NOT LIKE '%: 1%' AND mcata.maintenance_content NOT LIKE '%:1%')
+          OR (CASE msd.month
+            WHEN 1 THEN ms.january
+            WHEN 2 THEN ms.february
+            WHEN 3 THEN ms.march
+            WHEN 4 THEN ms.april
+            WHEN 5 THEN ms.may
+            WHEN 6 THEN ms.june
+            WHEN 7 THEN ms.july
+            WHEN 8 THEN ms.august
+            WHEN 9 THEN ms.september
+            WHEN 10 THEN ms.october
+            WHEN 11 THEN ms.november
+            WHEN 12 THEN ms.december
+            ELSE 0
+          END) != 1
+        )
+    `);
+    if (result.affectedRows > 0) {
+      console.log(
+        `[MaintenanceSchedule] Đã dọn dẹp ${result.affectedRows} dòng lịch bảo dưỡng pending không còn hợp lệ.`
+      );
+    }
+    return result.affectedRows;
+  } catch (error) {
+    console.error(
+      "[MaintenanceSchedule] Lỗi khi dọn dẹp lịch bảo dưỡng không hợp lệ:",
+      error
+    );
+    return 0;
+  }
+}
+
 const MONTH_COLUMNS = [
   { col: "january", num: 1 },
   { col: "february", num: 2 },
@@ -14419,6 +14567,7 @@ const MONTH_COLUMNS = [
 ];
 
 async function autoCreateMaintenanceScheduleDetail() {
+  await cleanupObsoleteMaintenanceScheduleDetails();
   const connection = await tpmConnection.getConnection();
   try {
     const now = new Date();
@@ -14900,6 +15049,7 @@ app.post(
 
 // Phân bổ lại máy chưa bảo dưỡng (pending) từ các ngày đã qua trong tháng vào các ngày làm việc còn lại
 async function autoRedistributeOverdueMaintenanceInMonth() {
+  await cleanupObsoleteMaintenanceScheduleDetails();
   const connection = await tpmConnection.getConnection();
   try {
     const now = new Date();
@@ -14959,12 +15109,38 @@ async function autoRedistributeOverdueMaintenanceInMonth() {
       `SELECT msd.id_maintenance_schedule_detail, msd.id_machine, msd.day
        FROM tb_maintenance_schedule_detail msd
        JOIN tb_machine m ON m.id_machine = msd.id_machine
+       LEFT JOIN tb_machine_type mt ON mt.name_machine_type = m.type_machine
+       LEFT JOIN tb_machine_attribute ma ON ma.name_machine_attribute = NULLIF(m.attribute_machine, '')
+       LEFT JOIN tb_maintenance_content_machine_type_attribute mcata 
+         ON mcata.id_machine_type = mt.id_machine_type 
+         AND mcata.id_machine_attribute <=> ma.id_machine_attribute
+       LEFT JOIN tb_maintenance_schedule ms 
+         ON ms.id_machine_type = mt.id_machine_type 
+         AND ms.id_machine_attribute <=> ma.id_machine_attribute
        WHERE msd.year = ? AND msd.month = ? AND msd.day < ? AND msd.status = 'pending'
          AND m.current_status NOT IN ('liquidation', 'temporary')
          AND (
            m.is_borrowed_or_rented_or_borrowed_out IS NULL
            OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return', 'borrowed_out')
          )
+         AND ms.id_machine_type IS NOT NULL
+         AND mcata.id_machine_type IS NOT NULL
+         AND (mcata.maintenance_content LIKE '%: 1%' OR mcata.maintenance_content LIKE '%:1%')
+         AND (CASE msd.month
+           WHEN 1 THEN ms.january
+           WHEN 2 THEN ms.february
+           WHEN 3 THEN ms.march
+           WHEN 4 THEN ms.april
+           WHEN 5 THEN ms.may
+           WHEN 6 THEN ms.june
+           WHEN 7 THEN ms.july
+           WHEN 8 THEN ms.august
+           WHEN 9 THEN ms.september
+           WHEN 10 THEN ms.october
+           WHEN 11 THEN ms.november
+           WHEN 12 THEN ms.december
+           ELSE 0
+         END) = 1
        ORDER BY msd.day ASC, msd.id_machine ASC`,
       [currentYear, currentMonth, today]
     );
@@ -15213,7 +15389,38 @@ app.get("/api/maintenance-schedule-detail", async (req, res) => {
       LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
       LEFT JOIN tb_location l ON l.id_location = ml.id_location
       LEFT JOIN tb_department d ON d.id_department = l.id_department
+      LEFT JOIN tb_machine_type mt ON mt.name_machine_type = m.type_machine
+      LEFT JOIN tb_machine_attribute ma ON ma.name_machine_attribute = NULLIF(m.attribute_machine, '')
+      LEFT JOIN tb_maintenance_content_machine_type_attribute mcata 
+        ON mcata.id_machine_type = mt.id_machine_type 
+        AND mcata.id_machine_attribute <=> ma.id_machine_attribute
+      LEFT JOIN tb_maintenance_schedule ms 
+        ON ms.id_machine_type = mt.id_machine_type 
+        AND ms.id_machine_attribute <=> ma.id_machine_attribute
       WHERE ${whereClause}
+        AND (
+          msd.status != 'pending'
+          OR (
+            ms.id_machine_type IS NOT NULL
+            AND mcata.id_machine_type IS NOT NULL
+            AND (mcata.maintenance_content LIKE '%: 1%' OR mcata.maintenance_content LIKE '%:1%')
+            AND (CASE msd.month
+              WHEN 1 THEN ms.january
+              WHEN 2 THEN ms.february
+              WHEN 3 THEN ms.march
+              WHEN 4 THEN ms.april
+              WHEN 5 THEN ms.may
+              WHEN 6 THEN ms.june
+              WHEN 7 THEN ms.july
+              WHEN 8 THEN ms.august
+              WHEN 9 THEN ms.september
+              WHEN 10 THEN ms.october
+              WHEN 11 THEN ms.november
+              WHEN 12 THEN ms.december
+              ELSE 0
+            END) = 1
+          )
+        )
       ORDER BY msd.month, msd.day, m.type_machine, m.attribute_machine`,
       params
     );
@@ -15520,22 +15727,50 @@ app.get(
 
       const [srows] = await tpmConnection.query(
         `SELECT
-           id_maintenance_schedule_detail,
-           uuid_maintenance_schedule_detail,
-           year,
-           month,
-           day,
-           status,
-           maintenance_content_detail,
-           maintenance_breakdown_detail,
-           attached_file
-         FROM tb_maintenance_schedule_detail
-         WHERE id_machine = ? AND year = ? AND month = ?
+           msd.id_maintenance_schedule_detail,
+           msd.uuid_maintenance_schedule_detail,
+           msd.year,
+           msd.month,
+           msd.day,
+           msd.status,
+           msd.maintenance_content_detail,
+           msd.maintenance_breakdown_detail,
+           msd.attached_file,
+           (mcata.maintenance_content LIKE '%: 1%' OR mcata.maintenance_content LIKE '%:1%') AS has_content_active,
+           (CASE msd.month
+             WHEN 1 THEN ms.january
+             WHEN 2 THEN ms.february
+             WHEN 3 THEN ms.march
+             WHEN 4 THEN ms.april
+             WHEN 5 THEN ms.may
+             WHEN 6 THEN ms.june
+             WHEN 7 THEN ms.july
+             WHEN 8 THEN ms.august
+             WHEN 9 THEN ms.september
+             WHEN 10 THEN ms.october
+             WHEN 11 THEN ms.november
+             WHEN 12 THEN ms.december
+             ELSE 0
+           END) AS is_month_active
+         FROM tb_maintenance_schedule_detail msd
+         JOIN tb_machine m ON m.id_machine = msd.id_machine
+         LEFT JOIN tb_machine_type mt ON mt.name_machine_type = m.type_machine
+         LEFT JOIN tb_machine_attribute ma ON ma.name_machine_attribute = NULLIF(m.attribute_machine, '')
+         LEFT JOIN tb_maintenance_content_machine_type_attribute mcata 
+           ON mcata.id_machine_type = mt.id_machine_type 
+           AND mcata.id_machine_attribute <=> ma.id_machine_attribute
+         LEFT JOIN tb_maintenance_schedule ms 
+           ON ms.id_machine_type = mt.id_machine_type 
+           AND ms.id_machine_attribute <=> ma.id_machine_attribute
+         WHERE msd.id_machine = ? AND msd.year = ? AND msd.month = ?
          LIMIT 1`,
         [machine.id_machine, curY, curM]
       );
 
-      if (!srows.length) {
+      if (
+        !srows.length ||
+        (srows[0].status === "pending" && !srows[0].is_month_active)
+      ) {
         return res.status(404).json({
           success: false,
           code: "NO_SCHEDULE",
@@ -15555,17 +15790,7 @@ app.get(
 
       const current = srows[0];
 
-      const [contentCheck] = await tpmConnection.query(
-        `SELECT COUNT(*) AS cnt
-         FROM tb_maintenance_schedule_detail
-         WHERE id_machine = ?
-           AND maintenance_content_detail IS NOT NULL
-           AND TRIM(maintenance_content_detail) NOT IN ('', '[]', 'null')`,
-        [machine.id_machine]
-      );
-      const hasContent = (contentCheck[0]?.cnt || 0) > 0;
-
-      if (!hasContent) {
+      if (current.status === "pending" && !current.has_content_active) {
         return res.status(404).json({
           success: false,
           code: "NO_CONTENT",
@@ -15661,23 +15886,51 @@ app.get(
 
       const [srows] = await tpmConnection.query(
         `SELECT
-           id_maintenance_schedule_detail,
-           uuid_maintenance_schedule_detail,
-           year,
-           month,
-           day,
-           status,
-           maintenance_content_detail,
-           maintenance_breakdown_detail,
-           attached_file
-         FROM tb_maintenance_schedule_detail
-         WHERE id_machine = ? AND year = ? AND month = ?
+           msd.id_maintenance_schedule_detail,
+           msd.uuid_maintenance_schedule_detail,
+           msd.year,
+           msd.month,
+           msd.day,
+           msd.status,
+           msd.maintenance_content_detail,
+           msd.maintenance_breakdown_detail,
+           msd.attached_file,
+           (mcata.maintenance_content LIKE '%: 1%' OR mcata.maintenance_content LIKE '%:1%') AS has_content_active,
+           (CASE msd.month
+             WHEN 1 THEN ms.january
+             WHEN 2 THEN ms.february
+             WHEN 3 THEN ms.march
+             WHEN 4 THEN ms.april
+             WHEN 5 THEN ms.may
+             WHEN 6 THEN ms.june
+             WHEN 7 THEN ms.july
+             WHEN 8 THEN ms.august
+             WHEN 9 THEN ms.september
+             WHEN 10 THEN ms.october
+             WHEN 11 THEN ms.november
+             WHEN 12 THEN ms.december
+             ELSE 0
+           END) AS is_month_active
+         FROM tb_maintenance_schedule_detail msd
+         JOIN tb_machine m ON m.id_machine = msd.id_machine
+         LEFT JOIN tb_machine_type mt ON mt.name_machine_type = m.type_machine
+         LEFT JOIN tb_machine_attribute ma ON ma.name_machine_attribute = NULLIF(m.attribute_machine, '')
+         LEFT JOIN tb_maintenance_content_machine_type_attribute mcata 
+           ON mcata.id_machine_type = mt.id_machine_type 
+           AND mcata.id_machine_attribute <=> ma.id_machine_attribute
+         LEFT JOIN tb_maintenance_schedule ms 
+           ON ms.id_machine_type = mt.id_machine_type 
+           AND ms.id_machine_attribute <=> ma.id_machine_attribute
+         WHERE msd.id_machine = ? AND msd.year = ? AND msd.month = ?
          LIMIT 1`,
         [machine.id_machine, curY, curM]
       );
 
       // Kiểm tra có lịch bảo dưỡng hay không
-      if (!srows.length) {
+      if (
+        !srows.length ||
+        (srows[0].status === "pending" && !srows[0].is_month_active)
+      ) {
         return res.status(404).json({
           success: false,
           code: "NO_SCHEDULE",
@@ -15697,18 +15950,8 @@ app.get(
 
       const current = srows[0];
 
-      // Kiểm tra có nội dung bảo dưỡng hay không (qua tất cả bản ghi của máy)
-      const [contentCheck] = await tpmConnection.query(
-        `SELECT COUNT(*) AS cnt
-         FROM tb_maintenance_schedule_detail
-         WHERE id_machine = ?
-           AND maintenance_content_detail IS NOT NULL
-           AND TRIM(maintenance_content_detail) NOT IN ('', '[]', 'null')`,
-        [machine.id_machine]
-      );
-      const hasContent = (contentCheck[0]?.cnt || 0) > 0;
-
-      if (!hasContent) {
+      // Kiểm tra có nội dung bảo dưỡng hay không
+      if (current.status === "pending" && !current.has_content_active) {
         return res.status(404).json({
           success: false,
           code: "NO_CONTENT",
@@ -15815,18 +16058,50 @@ app.post(
       if (machineIds.length > 0) {
         const [schedules] = await tpmConnection.query(
           `SELECT
-             id_maintenance_schedule_detail,
-             uuid_maintenance_schedule_detail,
-             id_machine,
-             year,
-             month,
-             day,
-             status,
-             maintenance_content_detail,
-             maintenance_breakdown_detail,
-             attached_file
-           FROM tb_maintenance_schedule_detail
-           WHERE id_machine IN (?) AND year = ? AND month = ?`,
+             msd.id_maintenance_schedule_detail,
+             msd.uuid_maintenance_schedule_detail,
+             msd.id_machine,
+             msd.year,
+             msd.month,
+             msd.day,
+             msd.status,
+             msd.maintenance_content_detail,
+             msd.maintenance_breakdown_detail,
+             msd.attached_file
+           FROM tb_maintenance_schedule_detail msd
+           JOIN tb_machine m ON m.id_machine = msd.id_machine
+           LEFT JOIN tb_machine_type mt ON mt.name_machine_type = m.type_machine
+           LEFT JOIN tb_machine_attribute ma ON ma.name_machine_attribute = NULLIF(m.attribute_machine, '')
+           LEFT JOIN tb_maintenance_content_machine_type_attribute mcata 
+             ON mcata.id_machine_type = mt.id_machine_type 
+             AND mcata.id_machine_attribute <=> ma.id_machine_attribute
+           LEFT JOIN tb_maintenance_schedule ms 
+             ON ms.id_machine_type = mt.id_machine_type 
+             AND ms.id_machine_attribute <=> ma.id_machine_attribute
+           WHERE msd.id_machine IN (?) AND msd.year = ? AND msd.month = ?
+             AND (
+               msd.status != 'pending'
+               OR (
+                 ms.id_machine_type IS NOT NULL
+                 AND mcata.id_machine_type IS NOT NULL
+                 AND (mcata.maintenance_content LIKE '%: 1%' OR mcata.maintenance_content LIKE '%:1%')
+                 AND (CASE msd.month
+                   WHEN 1 THEN ms.january
+                   WHEN 2 THEN ms.february
+                   WHEN 3 THEN ms.march
+                   WHEN 4 THEN ms.april
+                   WHEN 5 THEN ms.may
+                   WHEN 6 THEN ms.june
+                   WHEN 7 THEN ms.july
+                   WHEN 8 THEN ms.august
+                   WHEN 9 THEN ms.september
+                   WHEN 10 THEN ms.october
+                   WHEN 11 THEN ms.november
+                   WHEN 12 THEN ms.december
+                   ELSE 0
+                 END) = 1
+               )
+             )`,
           [machineIds, targetYear, targetMonth]
         );
         await resolveBreakdownUsers(schedules);
@@ -16267,11 +16542,42 @@ app.get("/api/reports/monthly-summary", authenticateToken, async (req, res) => {
       LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
       LEFT JOIN tb_location l ON l.id_location = ml.id_location
       LEFT JOIN tb_department d ON d.id_department = l.id_department
+      LEFT JOIN tb_machine_type mt ON mt.name_machine_type = m.type_machine
+      LEFT JOIN tb_machine_attribute ma ON ma.name_machine_attribute = NULLIF(m.attribute_machine, '')
+      LEFT JOIN tb_maintenance_content_machine_type_attribute mcata 
+        ON mcata.id_machine_type = mt.id_machine_type 
+        AND mcata.id_machine_attribute <=> ma.id_machine_attribute
+      LEFT JOIN tb_maintenance_schedule ms 
+        ON ms.id_machine_type = mt.id_machine_type 
+        AND ms.id_machine_attribute <=> ma.id_machine_attribute
       WHERE msd.year = ? AND msd.month = ?
         AND m.current_status NOT IN ('liquidation', 'temporary')
         AND (
           m.is_borrowed_or_rented_or_borrowed_out IS NULL
           OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return', 'borrowed_out')
+        )
+        AND (
+          msd.status != 'pending'
+          OR (
+            ms.id_machine_type IS NOT NULL
+            AND mcata.id_machine_type IS NOT NULL
+            AND (mcata.maintenance_content LIKE '%: 1%' OR mcata.maintenance_content LIKE '%:1%')
+            AND (CASE msd.month
+              WHEN 1 THEN ms.january
+              WHEN 2 THEN ms.february
+              WHEN 3 THEN ms.march
+              WHEN 4 THEN ms.april
+              WHEN 5 THEN ms.may
+              WHEN 6 THEN ms.june
+              WHEN 7 THEN ms.july
+              WHEN 8 THEN ms.august
+              WHEN 9 THEN ms.september
+              WHEN 10 THEN ms.october
+              WHEN 11 THEN ms.november
+              WHEN 12 THEN ms.december
+              ELSE 0
+            END) = 1
+          )
         )
       ORDER BY d.id_department ASC`,
       [targetYear, targetMonth]
@@ -16521,12 +16827,44 @@ app.get("/api/reports/monthly-summary", authenticateToken, async (req, res) => {
         LEFT JOIN tb_department d ON d.id_department = l.id_department
         LEFT JOIN (
           SELECT
-            id_machine,
+            msd.id_machine,
             COUNT(*) as total_tasks,
-            SUM(CASE WHEN status IN ('completed', 'confirm_completed') THEN 1 ELSE 0 END) as done_tasks
-          FROM tb_maintenance_schedule_detail
-          WHERE year = ? AND month = ?
-          GROUP BY id_machine
+            SUM(CASE WHEN msd.status IN ('completed', 'confirm_completed') THEN 1 ELSE 0 END) as done_tasks
+          FROM tb_maintenance_schedule_detail msd
+          JOIN tb_machine m_inner ON m_inner.id_machine = msd.id_machine
+          LEFT JOIN tb_machine_type mt ON mt.name_machine_type = m_inner.type_machine
+          LEFT JOIN tb_machine_attribute ma ON ma.name_machine_attribute = NULLIF(m_inner.attribute_machine, '')
+          LEFT JOIN tb_maintenance_content_machine_type_attribute mcata 
+            ON mcata.id_machine_type = mt.id_machine_type 
+            AND mcata.id_machine_attribute <=> ma.id_machine_attribute
+          LEFT JOIN tb_maintenance_schedule ms_check 
+            ON ms_check.id_machine_type = mt.id_machine_type 
+            AND ms_check.id_machine_attribute <=> ma.id_machine_attribute
+          WHERE msd.year = ? AND msd.month = ?
+            AND (
+              msd.status != 'pending'
+              OR (
+                ms_check.id_machine_type IS NOT NULL
+                AND mcata.id_machine_type IS NOT NULL
+                AND (mcata.maintenance_content LIKE '%: 1%' OR mcata.maintenance_content LIKE '%:1%')
+                AND (CASE msd.month
+                  WHEN 1 THEN ms_check.january
+                  WHEN 2 THEN ms_check.february
+                  WHEN 3 THEN ms_check.march
+                  WHEN 4 THEN ms_check.april
+                  WHEN 5 THEN ms_check.may
+                  WHEN 6 THEN ms_check.june
+                  WHEN 7 THEN ms_check.july
+                  WHEN 8 THEN ms_check.august
+                  WHEN 9 THEN ms_check.september
+                  WHEN 10 THEN ms_check.october
+                  WHEN 11 THEN ms_check.november
+                  WHEN 12 THEN ms_check.december
+                  ELSE 0
+                END) = 1
+              )
+            )
+          GROUP BY msd.id_machine
         ) ms ON ms.id_machine = m.id_machine
         WHERE (m.current_status IS NULL OR m.current_status <> 'temporary')
       ) sub
