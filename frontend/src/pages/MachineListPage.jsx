@@ -1570,15 +1570,23 @@ const MachineListPage = () => {
           const updatedMachine = result.data;
 
           // 2. Cập nhật state 'machines' (danh sách trong bảng)
-          //    bằng cách thay thế máy cũ bằng máy mới.
-          //    Việc này KHÔNG gây tải lại (loading) và giữ nguyên vị trí cuộn.
+          //    bằng cách thay thế máy cũ bằng máy mới, đồng thời ẩn nếu máy đã trả/thanh lý.
           setMachines((prevMachines) =>
-            prevMachines.map(
-              (machine) =>
+            prevMachines
+              .map((machine) =>
                 machine.uuid_machine === updatedMachine.uuid_machine
                   ? updatedMachine // Thay thế máy đã sửa
                   : machine // Giữ nguyên các máy khác
-            )
+              )
+              .filter(
+                (machine) =>
+                  machine.current_status !== "liquidation" &&
+                  machine.current_status !== "temporary" &&
+                  machine.is_borrowed_or_rented_or_borrowed_out !==
+                    "borrowed_return" &&
+                  machine.is_borrowed_or_rented_or_borrowed_out !==
+                    "rented_return"
+              )
           );
 
           // 3. Tải lại Stats (việc này nhanh và không ảnh hưởng đến bảng)

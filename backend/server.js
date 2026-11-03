@@ -646,8 +646,13 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
     let countParams = [];
     let dataParams = [];
 
-    // 0. Loại bỏ máy có current_status = 'temporary' (tạm thời)
-    whereConditions.push(`m.current_status != 'temporary'`);
+    // 0. Tạm thời ẩn các máy: tạm thời, thanh lý, trả mượn, trả thuê
+    whereConditions.push(
+      `m.current_status NOT IN ('temporary', 'liquidation')`
+    );
+    whereConditions.push(
+      `(m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))`
+    );
 
     // 1. Search filter
     if (search) {
@@ -920,7 +925,7 @@ app.get("/api/machines", authenticateToken, async (req, res) => {
     const countQuery = `
       SELECT 
         COUNT(*) as real_total,
-        COUNT(*) - SUM(CASE WHEN is_borrowed_or_rented_or_borrowed_out = 'borrowed_return' THEN 1 ELSE 0 END) - SUM(CASE WHEN is_borrowed_or_rented_or_borrowed_out = 'rented_return' THEN 1 ELSE 0 END) - SUM(CASE WHEN current_status = 'liquidation' THEN 1 ELSE 0 END) as display_total
+        COUNT(*) as display_total
       FROM tb_machine m
       LEFT JOIN tb_category c ON c.id_category = m.id_category
       LEFT JOIN tb_machine_location ml ON ml.id_machine = m.id_machine
@@ -1044,6 +1049,12 @@ app.get(
         whereConditions.push(
           "tl.name_location IS NOT NULL AND tl.name_location != ''"
         );
+        whereConditions.push(
+          "m.current_status NOT IN ('temporary', 'liquidation')"
+        );
+        whereConditions.push(
+          "(m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))"
+        );
       } else if (field === "name_category") {
         query = `SELECT DISTINCT c.name_category as value 
                  FROM tb_category c
@@ -1061,7 +1072,12 @@ app.get(
         whereConditions.push(
           "c.name_category IS NOT NULL AND c.name_category != ''"
         );
-        whereConditions.push("m.current_status != 'temporary'");
+        whereConditions.push(
+          "m.current_status NOT IN ('temporary', 'liquidation')"
+        );
+        whereConditions.push(
+          "(m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))"
+        );
       } else {
         query = `SELECT DISTINCT m.${field} as value FROM tb_machine m`;
         joins.push(
@@ -1076,7 +1092,12 @@ app.get(
         joins.push("LEFT JOIN tb_category c ON c.id_category = m.id_category");
 
         whereConditions.push(`m.${field} IS NOT NULL AND m.${field} != ''`);
-        whereConditions.push("m.current_status != 'temporary'");
+        whereConditions.push(
+          "m.current_status NOT IN ('temporary', 'liquidation')"
+        );
+        whereConditions.push(
+          "(m.is_borrowed_or_rented_or_borrowed_out IS NULL OR m.is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))"
+        );
       }
 
       // 2. CONTEXT FILTERS (Luôn áp dụng nếu có - Đây là sự khác biệt chính)
@@ -1563,7 +1584,7 @@ app.get("/api/machines/stats-by-type", authenticateToken, async (req, res) => {
       FROM tb_machine
       WHERE type_machine IS NOT NULL 
         AND type_machine != '' 
-        AND current_status != 'temporary'
+        AND current_status NOT IN ('temporary', 'liquidation')
         AND (is_borrowed_or_rented_or_borrowed_out IS NULL 
              OR is_borrowed_or_rented_or_borrowed_out NOT IN ('borrowed_return', 'rented_return'))
       GROUP BY type_machine
@@ -14538,13 +14559,13 @@ async function cleanupObsoleteMaintenanceScheduleDetails() {
     `);
     if (result.affectedRows > 0) {
       console.log(
-        `[MaintenanceSchedule] Đã dọn dẹp ${result.affectedRows} dòng lịch bảo dưỡng pending không còn hợp lệ.`
+        `[CleanupMaintenanceSchedule] Đã dọn dẹp ${result.affectedRows} dòng lịch bảo dưỡng pending không còn hợp lệ.`
       );
     }
     return result.affectedRows;
   } catch (error) {
     console.error(
-      "[MaintenanceSchedule] Lỗi khi dọn dẹp lịch bảo dưỡng không hợp lệ:",
+      "[CleanupMaintenanceSchedule] Lỗi khi dọn dẹp lịch bảo dưỡng không hợp lệ:",
       error
     );
     return 0;
