@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">RFID Scanner</string>
+    <string name="shortcut_settings">Cài đặt RFID</string>
+    <string name="shortcut_test">Kiểm tra quét</string>
+    <string name="accessibility_desc">Bắt phím cò của máy PDA để bật/tắt quét RFID ở mọi màn hình, và ghi mã thẻ vào ô nhập đang chọn khi TPM không mở qua app.</string>
+</resources>

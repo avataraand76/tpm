@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Menu khi nhấn giữ icon TPM. Có thể kéo từng mục ra màn hình chính thành icon riêng. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="rfid_settings_static"
+        android:enabled="true"
+        android:icon="@mipmap/ic_settings_launcher"
+        android:shortcutShortLabel="@string/shortcut_settings">
+        <intent
+            android:action="android.intent.action.MAIN"
+            android:targetPackage="com.tina.rfidadapterapp"
+            android:targetClass="com.tina.rfidadapterapp.ui.SettingsActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="rfid_test_static"
+        android:enabled="true"
+        android:icon="@mipmap/ic_settings_launcher"
+        android:shortcutShortLabel="@string/shortcut_test">
+        <intent
+            android:action="android.intent.action.MAIN"
+            android:targetPackage="com.tina.rfidadapterapp"
+            android:targetClass="com.tina.rfidadapterapp.ui.TestScanActivity" />
+    </shortcut>
+</shortcuts>

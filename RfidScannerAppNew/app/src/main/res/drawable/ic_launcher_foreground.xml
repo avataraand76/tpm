@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Logo của web TPM (frontend/public/vite.svg), chuyển sang VectorDrawable.
+     Hai dải màu dùng toạ độ tuyệt đối: SVG gốc tính theo % khung bao của từng hình. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.2335"
+        android:scaleY="0.2335"
+        android:translateX="24.1"
+        android:translateY="24.0">
+        <path android:pathData="M255.153 37.938L134.897 252.976c-2.483 4.44-8.862 4.466-11.382.048L.875 37.958c-2.746-4.814 1.371-10.646 6.827-9.67l120.385 21.517a6.537 6.537 0 0 0 2.322-.004l117.867-21.483c5.438-.991 9.574 4.796 6.877 9.62Z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="-4.0"
+                    android:startY="44.9"
+                    android:endX="147.8"
+                    android:endY="207.7">
+                    <item android:offset="0" android:color="#FF41D1FF" />
+                    <item android:offset="1" android:color="#FFBD34FE" />
+                </gradient>
+            </aapt:attr>
+        </path>
+        <path android:pathData="M185.432.063L96.44 17.501a3.268 3.268 0 0 0-2.634 3.014l-5.474 92.456a3.268 3.268 0 0 0 3.997 3.378l24.777-5.718c2.318-.535 4.413 1.507 3.936 3.838l-7.361 36.047c-.495 2.426 1.782 4.5 4.151 3.78l15.304-4.649c2.372-.72 4.652 1.36 4.15 3.788l-11.698 56.621c-.732 3.542 3.979 5.473 5.943 2.437l1.313-2.028l72.516-144.72c1.215-2.423-.88-5.186-3.54-4.672l-25.505 4.922c-2.396.462-4.435-1.770-3.759-4.114l16.646-57.705c.677-2.35-1.37-4.583-3.769-4.113Z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="139.6"
+                    android:startY="4.4"
+                    android:endX="147.8"
+                    android:endY="191.8">
+                    <item android:offset="0" android:color="#FFFFEA83" />
+                    <item android:offset="0.08333" android:color="#FFFFDD35" />
+                    <item android:offset="1" android:color="#FFFFA800" />
+                </gradient>
+            </aapt:attr>
+        </path>
+    </group>
+</vector>

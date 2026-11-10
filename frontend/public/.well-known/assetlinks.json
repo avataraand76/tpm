@@ -1,0 +1,16 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.use_as_origin"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.tina.rfidadapterapp",
+      "sha256_cert_fingerprints": [
+        "7E:08:58:CC:BF:D1:5F:29:73:3D:38:72:E4:E3:0E:03:BF:BD:83:C6:C1:2D:58:6C:30:41:2D:2A:28:DA:73:52",
+        "B1:92:61:54:9B:E0:76:C9:48:B8:87:6C:67:E8:67:4E:7E:08:6D:C5:C4:40:56:59:E8:F5:15:0A:D2:96:84:85"
+      ]
+    }
+  }
+]

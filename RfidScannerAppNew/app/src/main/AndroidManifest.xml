@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <!-- Android 14 yêu cầu một quyền "connected device" đi kèm loại dịch vụ connectedDevice. -->
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <queries>
+        <intent>
+            <action android:name="android.support.customtabs.action.CustomTabsService" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
+
+        <!-- Icon "TPM" (lối vào DUY NHẤT trong launcher): mở trang TPM dạng TWA.
+             Không khai báo icon launcher thứ hai cho Cài đặt: launcher của máy PDA khi tự
+             thêm icon lúc cài app đã cho cả hai icon cùng trỏ vào TPM. Cài đặt RFID mở bằng
+             icon bánh răng (nút trong app tạo ra), nhấn giữ icon TPM, hoặc bấm thông báo. -->
+        <activity
+            android:name=".twa.TwaActivity"
+            android:exported="true"
+            android:label="TPM"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
+        </activity>
+
+        <activity
+            android:name=".ui.SettingsActivity"
+            android:exported="true"
+            android:icon="@mipmap/ic_settings_launcher"
+            android:roundIcon="@mipmap/ic_settings_launcher"
+            android:label="Cài đặt RFID" />
+
+        <activity
+            android:name=".ui.TestScanActivity"
+            android:exported="true"
+            android:label="Kiểm tra quét" />
+
+        <service
+            android:name=".ScanService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <service
+            android:name=".KeyService"
+            android:exported="false"
+            android:label="RFID – phím cò"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_config" />
+        </service>
+
+        <!-- Bắt buộc để Chrome mở được kênh postMessage với app. -->
+        <service
+            android:name="androidx.browser.customtabs.PostMessageService"
+            android:exported="true" />
+
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

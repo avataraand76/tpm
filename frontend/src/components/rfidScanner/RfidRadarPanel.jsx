@@ -123,7 +123,8 @@ const RfidRadarPanel = ({
   const [targets, setTargets] = useState([]);
 
   // State xử lý quét
-  const [scanInput, setScanInput] = useState("");
+  const [scanPreview, setScanPreview] = useState("");
+  const previewTimerRef = useRef(null);
   const [foundTargets, setFoundTargets] = useState(new Set()); // Set các RFID đã tìm thấy
   const [currentFoundTarget, setCurrentFoundTarget] = useState(null); // Target vừa tìm thấy để hiển thị overlay
 
@@ -157,6 +158,23 @@ const RfidRadarPanel = ({
 
   // Refs
   const scanInputRef = useRef(null);
+  const setScanInput = useCallback((v) => {
+    const el = scanInputRef.current;
+    if (el && el.value !== v) el.value = v;
+    if (v === "") {
+      clearTimeout(previewTimerRef.current);
+      previewTimerRef.current = null;
+      setScanPreview("");
+      return;
+    }
+    if (!previewTimerRef.current) {
+      previewTimerRef.current = setTimeout(() => {
+        previewTimerRef.current = null;
+        setScanPreview((scanInputRef.current?.value || "").slice(-50));
+      }, 300);
+    }
+  }, []);
+  useEffect(() => () => clearTimeout(previewTimerRef.current), []);
   const newRfidInputRef = useRef(null);
   const audioRef = useRef(null);
   const openLocationDialogRef = useRef(false);
@@ -797,7 +815,10 @@ const RfidRadarPanel = ({
             sx={{ animation: "pulse 0.5s infinite", cursor: "pointer" }}
           >
             <CheckCircle sx={{ fontSize: 180, color: colors.white }} />
-            <Typography variant="h1" sx={{ color: colors.white, fontWeight: "900" }}>
+            <Typography
+              variant="h1"
+              sx={{ color: colors.white, fontWeight: "900" }}
+            >
               TÌM THẤY!
             </Typography>
             <Typography
@@ -1406,21 +1427,25 @@ const RfidRadarPanel = ({
           <Box sx={{ position: "relative" }}>
             <textarea
               ref={scanInputRef}
-              value={scanInput}
+              defaultValue=""
               onChange={handleStreamInput}
+              wrap="off"
               style={{
                 opacity: 0,
                 position: "absolute",
                 top: "-2000px",
                 width: "1px",
                 height: "1px",
+                whiteSpace: "pre",
+                overflow: "hidden",
+                resize: "none",
               }}
               autoComplete="off"
               spellCheck="false"
             />
             <RfidScanZone
               variant={uiVariant}
-              scanPreview={scanInput.slice(-50)}
+              scanPreview={scanPreview}
               onFocusScan={() => scanInputRef.current?.focus()}
             />
           </Box>
