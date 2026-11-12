@@ -1573,10 +1573,11 @@ const MachineListPage = () => {
           //    bằng cách thay thế máy cũ bằng máy mới, đồng thời ẩn nếu máy đã trả/thanh lý.
           setMachines((prevMachines) =>
             prevMachines
-              .map((machine) =>
-                machine.uuid_machine === updatedMachine.uuid_machine
-                  ? updatedMachine // Thay thế máy đã sửa
-                  : machine // Giữ nguyên các máy khác
+              .map(
+                (machine) =>
+                  machine.uuid_machine === updatedMachine.uuid_machine
+                    ? updatedMachine // Thay thế máy đã sửa
+                    : machine // Giữ nguyên các máy khác
               )
               .filter(
                 (machine) =>
@@ -1921,9 +1922,20 @@ const MachineListPage = () => {
         search: searchTerm,
       };
 
-      // Map các bộ lọc hiện tại vào params
+      // Giữ cùng thứ tự sắp xếp với bảng
+      if (sortConfig.key) {
+        apiParams.sortBy = sortConfig.key;
+        apiParams.sortOrder = sortConfig.direction;
+      }
+
+      // Map các bộ lọc hiện tại vào params (giống fetchMachines)
       Object.keys(filters).forEach((key) => {
-        if (filters[key] && filters[key].length > 0) {
+        if (key === "has_air_volume") {
+          // Boolean filter: không có .length nên phải xử lý riêng
+          if (filters.has_air_volume) {
+            apiParams.has_air_volume = true;
+          }
+        } else if (filters[key] && filters[key].length > 0) {
           if (key === "borrow_status") {
             apiParams["is_borrowed_or_rented_or_borrowed_out"] = filters[key];
           } else {
